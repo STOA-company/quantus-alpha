@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # App settings
     ENV: str = ENV
     DEBUG: bool = os.getenv('DEBUG', 'False').lower() == 'true'
-    PROJECT_NAME: str = "Alphafinder API"
+    PROJECT_NAME: str = "Alphafinder API 1.0"
     API_V1_STR: str = "/api/v1"
     DATA_DIR: str = os.getenv('DATA_DIR', './data')
 
