@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -33,16 +34,18 @@ class SQLAlchemy:
             bind=self._engine,
         )
 
-        @app.on_event("startup")
-        def startup():
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            # Startup
             self._engine.connect()
             logging.info("DB connected.")
-
-        @app.on_event("shutdown")
-        def shutdown():
+            yield
+            # Shutdown
             self._session.close_all()
             self._engine.dispose()
             logging.info("DB disconnected.")
+
+        app.router.lifespan_context = lifespan
 
     def init_db(self, **kwargs):
         """Initialize DB without FastAPI instance"""
