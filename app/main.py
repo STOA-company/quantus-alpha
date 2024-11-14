@@ -1,10 +1,14 @@
 from fastapi import FastAPI
-from app.api.v1.api import api_router
 from app.core.config import settings
+from app.api import routers
 
-app = FastAPI(title=settings.PROJECT_NAME)
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    description="Alphafinder API Documentation",
+    version="1.0.0",
+)
+app.include_router(routers.router)
 
-app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():
