@@ -15,6 +15,7 @@ db_config = get_database_config()
 db.init_app(app, **db_config.__dict__)
 
 
+
 @app.get("/")
 def root():
     return {"message": "Welcome to the Financial Data API !!"}
@@ -27,3 +28,4 @@ async def health_check(session: Session = Depends(db.get_db)):
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         return {"status": "unhealthy", "database": str(e)}
+
