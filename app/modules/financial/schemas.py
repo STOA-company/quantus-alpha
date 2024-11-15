@@ -33,6 +33,8 @@ class FinancialDataResponse(BaseModel):
     )
     
 class IncomeStatementDetail(BaseModel):
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
     period_q: str = Field(max_length=20)
     rev: float
     cost_of_sales: float
@@ -53,11 +55,11 @@ class IncomeStatementDetail(BaseModel):
     net_income_not_control: float
 
 class IncomeStatementResponse(BaseModel):
-    code: str = Field(max_length=20)
-    name: str = Field(max_length=100)
     statements: List[IncomeStatementDetail]
 
 class CashFlowDetail(BaseModel):
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
     period_q: str = Field(max_length=20)
     operating_cashflow: float
     non_controlling_changes: float
@@ -74,11 +76,11 @@ class CashFlowDetail(BaseModel):
     cash_increment: float
 
 class CashFlowResponse(BaseModel):
-    code: str = Field(max_length=20)
-    name: str = Field(max_length=100)
     statements: List[CashFlowDetail]
     
 class FinPosDetail(BaseModel):
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
     period_q: str = Field(max_length=20)
     total_asset: float
     current_asset: float
@@ -116,6 +118,4 @@ class FinPosDetail(BaseModel):
     
 
 class FinPosResponse(BaseModel):
-    code: str
-    name: str
     statements: List[FinPosDetail]

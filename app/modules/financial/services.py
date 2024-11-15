@@ -16,6 +16,7 @@ from app.modules.financial.schemas import (
     CashFlowResponse,
     CashFlowDetail
 )
+from app.modules.common.schemas import ResponseDTO
 
 logger = logging.getLogger(__name__)
 
@@ -45,19 +46,35 @@ class FinancialService:
     def _get_date_conditions(self, start_date: Optional[date], end_date: Optional[date]) -> Dict:
         """
         날짜 조건 생성
+        기본값으로 최근 3년간의 데이터만 반환
+        period_q 형식: 'YYYYQQ' (예: '202401', '202402', ...)
         """
+        from datetime import datetime
+        
         conditions = {}
-        if start_date:
-            conditions["period_q__gte"] = start_date.strftime("%Y")
-        if end_date:
-            conditions["period_q__lte"] = end_date.strftime("%Y")
+        current_year = datetime.now().year
+        
+        # 시작일이 지정되지 않은 경우 3년 전의 1분기로 설정
+        if not start_date:
+            conditions["period_q__gte"] = f"{current_year - 3}01"
+        else:
+            conditions["period_q__gte"] = start_date.strftime("%Y01")
+            
+        # 종료일이 지정되지 않은 경우 현재 연도의 4분기로 설정
+        if not end_date:
+            conditions["period_q__lte"] = f"{current_year}04"
+        else:
+            conditions["period_q__lte"] = end_date.strftime("%Y04")
+            
         return conditions
 
     async def get_income_data(
         self, 
         ctry: Country, 
         ticker: str,
-    ) -> IncomeStatementResponse:
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> ResponseDTO[List[IncomeStatementDetail]]:
         """
         손익계산서 데이터 조회
         """
@@ -66,7 +83,7 @@ class FinancialService:
             if not table_name:
                 raise HTTPException(status_code=400, detail="존재하지 않는 국가입니다.")
 
-            conditions = {"Code": ticker}
+            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
 
             result = self.db._select(
                 table=table_name,
@@ -81,7 +98,13 @@ class FinancialService:
                     detail=f"{ticker} 종목에 대한 손익계산 데이터가 존재하지 않습니다."
                 )
 
-            return self._process_income_statement_result(result)
+            statements = self._process_income_statement_result(result)
+            
+            return ResponseDTO[List[IncomeStatementDetail]](
+                status="success",
+                message="손익계산서 데이터를 성공적으로 조회했습니다.",
+                data=statements
+            )
 
         except HTTPException:
             raise
@@ -89,7 +112,7 @@ class FinancialService:
             logger.error(f"Unexpected error in get_income_data: {str(e)}")
             raise HTTPException(status_code=500, detail="내부 서버 오류")
 
-    def _process_income_statement_result(self, result) -> IncomeStatementResponse:
+    def _process_income_statement_result(self, result) -> List[IncomeStatementDetail]:
         """
         손익계산 결과 처리
         """
@@ -102,26 +125,20 @@ class FinancialService:
         ]
         
         statements = []
-        first_row = None
         
         for row in result:
             row_dict = dict(zip(columns, row))
-            if not first_row:
-                first_row = row_dict
-            
             statements.append(self._create_income_statement_detail(row_dict))
 
-        return IncomeStatementResponse(
-            code=first_row["Code"],
-            name=first_row["Name"],
-            statements=statements
-        )
+        return statements
 
     def _create_income_statement_detail(self, row_dict: Dict) -> IncomeStatementDetail:
         """
         손익계산서 상세 정보 생성
         """
         return IncomeStatementDetail(
+            code=row_dict["Code"],
+            name=row_dict["Name"],
             period_q=row_dict["period_q"],
             rev=self._to_decimal(row_dict["rev"]),
             cost_of_sales=self._to_decimal(row_dict["cost_of_sales"]),
@@ -146,7 +163,9 @@ class FinancialService:
         self, 
         ctry: Country, 
         ticker: str,
-    ) -> CashFlowResponse:
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> ResponseDTO[List[CashFlowDetail]]:
         """
         국가별 현금흐름 데이터 조회
         """
@@ -155,7 +174,7 @@ class FinancialService:
             if not table_name:
                 raise HTTPException(status_code=400, detail="존재하지 않는 국가입니다.")
 
-            conditions = {"Code": ticker}
+            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
 
             result = self.db._select(
                 table=table_name,
@@ -170,7 +189,13 @@ class FinancialService:
                     detail=f"{ticker} 종목에 대한 현금흐름 데이터가 존재하지 않습니다."
                 )
 
-            return self._process_cashflow_result(result)
+            statements = self._process_cashflow_result(result)
+            
+            return ResponseDTO[List[CashFlowDetail]](
+                status="success",
+                message="현금흐름표 데이터를 성공적으로 조회했습니다.",
+                data=statements
+            )
 
         except HTTPException:
             raise
@@ -178,7 +203,7 @@ class FinancialService:
             logger.error(f"Unexpected error in get_cashflow_data: {str(e)}")
             raise HTTPException(status_code=500, detail="내부 서버 오류")
 
-    def _process_cashflow_result(self, result) -> CashFlowResponse:
+    def _process_cashflow_result(self, result) -> List[CashFlowDetail]:
         """
         현금흐름 결과 처리
         """
@@ -192,26 +217,19 @@ class FinancialService:
         ]
 
         statements = []
-        first_row = None
-        
         for row in result:
             row_dict = dict(zip(columns, row))
-            if not first_row:
-                first_row = row_dict
-            
             statements.append(self._create_cashflow_detail(row_dict))
 
-        return CashFlowResponse(
-            code=first_row["Code"],
-            name=first_row["Name"],
-            statements=statements
-        )
+        return statements
 
     def _create_cashflow_detail(self, row_dict: Dict) -> CashFlowDetail:
         """
         현금흐름 상세 정보 생성
         """
         return CashFlowDetail(
+            code=row_dict["Code"],
+            name=row_dict["Name"],
             period_q=row_dict["period_q"],
             operating_cashflow=self._to_decimal(row_dict["operating_cashflow"]),
             non_controlling_changes=self._to_decimal(row_dict["non_controlling_changes"]),
@@ -269,7 +287,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None
-    ) -> FinPosResponse:
+    ) -> ResponseDTO[List[FinPosDetail]]:
         """
         재무상태표 데이터 조회
         """
@@ -293,7 +311,13 @@ class FinancialService:
                     detail=f"{ticker} 종목에 대한 재무상태표 데이터가 존재하지 않습니다."
                 )
 
-            return self._process_finpos_result(result)
+            statements = self._process_finpos_result(result)
+            
+            return ResponseDTO[List[FinPosDetail]](
+                status="success",
+                message="재무상태표 데이터를 성공적으로 조회했습니다.",
+                data=statements
+            )
 
         except HTTPException:
             raise
@@ -301,7 +325,7 @@ class FinancialService:
             logger.error(f"Unexpected error in get_finpos_data: {str(e)}")
             raise HTTPException(status_code=500, detail="내부 서버 오류")
 
-    def _process_finpos_result(self, result) -> FinPosResponse:
+    def _process_finpos_result(self, result) -> List[FinPosDetail]:
         """
         재무상태표 결과 처리
         """
@@ -322,26 +346,19 @@ class FinancialService:
         ]
         
         statements = []
-        first_row = None
-        
         for row in result:
             row_dict = dict(zip(columns, row))
-            if not first_row:
-                first_row = row_dict
-            
             statements.append(self._create_finpos_detail(row_dict))
 
-        return FinPosResponse(
-            code=first_row["Code"],
-            name=first_row["Name"],
-            statements=statements
-        )
+        return statements
 
     def _create_finpos_detail(self, row_dict: Dict) -> FinPosDetail:
         """
         재무상태표 상세 정보 생성
         """
         return FinPosDetail(
+            code=row_dict["Code"],
+            name=row_dict["Name"],
             period_q=row_dict["period_q"],
             total_asset=self._to_decimal(row_dict["total_asset"]),
             current_asset=self._to_decimal(row_dict["current_asset"]),
@@ -390,3 +407,8 @@ def get_financial_service(
     common_service: CommonService = Depends(get_common_service)
 ) -> FinancialService:
     return FinancialService(common_service=common_service)
+
+
+
+
+

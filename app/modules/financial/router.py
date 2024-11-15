@@ -1,7 +1,10 @@
+from datetime import date
 from app.modules.common.enum import Country
+from app.modules.common.schemas import ResponseDTO
 from fastapi import APIRouter, Depends
 from app.modules.financial.services import FinancialService, get_financial_service
-from .schemas import CashFlowResponse, FinPosResponse, IncomeStatementResponse
+from .schemas import CashFlowDetail, CashFlowResponse, FinPosDetail, FinPosResponse, IncomeStatementDetail, IncomeStatementResponse
+from typing import List, Optional
 
 router = APIRouter()
 
@@ -41,38 +44,62 @@ router = APIRouter()
 #     df = await service.read_financial_data("cashflow", ctry, ticker)
 #     return {"data": df.to_dict(orient="records")}
 
-@router.get("/income", response_model=IncomeStatementResponse, summary="손익계산서 분기별 조회")
+@router.get(
+    "/income", 
+    response_model=ResponseDTO[List[IncomeStatementDetail]], 
+    summary="손익계산서 분기별 조회"
+)
 async def get_income_data(
     ctry: Country,
     ticker: str,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-) -> IncomeStatementResponse:
+) -> ResponseDTO[List[IncomeStatementDetail]]:
     result = await financial_service.get_income_data(
         ctry=ctry,
         ticker=ticker,
+        start_date=start_date,
+        end_date=end_date,
     )
     return result
 
-@router.get("/cashflow", response_model=CashFlowResponse, summary="현금흐름 분기별 조회")
+@router.get(
+    "/cashflow", 
+    response_model=ResponseDTO[List[CashFlowDetail]], 
+    summary="현금흐름 분기별 조회"
+)
 async def get_cashflow_data(
     ctry: Country,
     ticker: str,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-) -> CashFlowResponse:
+) -> ResponseDTO[List[CashFlowDetail]]:
     result = await financial_service.get_cashflow_data(
         ctry=ctry,
-        ticker=ticker
+        ticker=ticker,
+        start_date=start_date,
+        end_date=end_date,
     )
     return result
 
-@router.get("/finpos", response_model=FinPosResponse, summary="재무제표 분기별 조회")
+@router.get(
+    "/finpos", 
+    response_model=ResponseDTO[List[FinPosDetail]], 
+    summary="재무제표 분기별 조회"
+)
 async def get_finpos_data(
     ctry: Country,
     ticker: str,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-) -> FinPosResponse:
+) -> ResponseDTO[List[FinPosDetail]]:
     result = await financial_service.get_finpos_data(
         ctry=ctry,
-        ticker=ticker
+        ticker=ticker,
+        start_date=start_date,
+        end_date=end_date,
     )
     return result
