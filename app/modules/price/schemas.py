@@ -27,3 +27,20 @@ class VolumeDataItem(BaseModel):
     date: str
     name: str
     volume: int
+
+
+class StockKrFactorItem(BaseModel):
+    ticker: str
+    name: str
+    prev_close: float
+    week_52_high: float
+    week_52_low: float
+    all_time_high: float
+    all_time_low: float
+    momentum_1m: float
+    momentum_3m: float
+    momentum_6m: float
+    momentum_12m: float
+    rate_of_change_10d: float
+    rate_of_change_30d: float
+    rate_of_change_60d: float
