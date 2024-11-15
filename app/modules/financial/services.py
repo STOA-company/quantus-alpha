@@ -1,34 +1,19 @@
 from typing import Optional, Dict, List, Any
 from datetime import date
 from app.modules.common.services import CommonService, get_common_service
+from app.modules.financial.schemas import (
+    IncomeStatementResponse, 
+    IncomeStatementDetail,
+    CashFlowResponse,
+    CashFlowDetail
+)
 from fastapi import HTTPException, Depends
 import logging
 from app.database.crud import database
 from app.modules.common.enum import Country
-from pydantic import BaseModel, Field
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
-
-class FinancialDataResponse(BaseModel):
-    data: List[Dict[str, Any]] = Field(
-        ...,
-        example=[{
-            "code": "005930",
-            "name": "삼성전자",
-            "period": "2023Q4",
-            "revenue": 1000000000000,
-            "operating_income": 100000000000,
-            "net_income": 80000000000,
-            "gross_profit": 300000000000,
-            "operating_margin": 10.0,
-            "net_margin": 8.0,
-            "rnd_ratio": 8.5,
-            "yoy_revenue_growth": 5.2,
-            "yoy_operating_income_growth": 7.1,
-            "yoy_net_income_growth": 6.8,
-            "currency": "KRW"
-        }]
-    )
 
 class FinancialService:
     def __init__(self, common_service: CommonService):
@@ -38,9 +23,15 @@ class FinancialService:
             Country.KR: "KOR_income",
             Country.US: "USA_income"
         }
+        self.cashflow_tables = {
+            Country.KR: "KOR_cashflow",
+            Country.US: "USA_cashflow"
+        }
 
     def _convert_row_to_dict(self, row, ctry: Country) -> Dict[str, Any]:
-        """SQLAlchemy Row를 딕셔너리로 변환"""
+        """
+        SQLAlchemy Row를 딕셔너리로 변환
+        """
         try:
             return {
                 'code': str(row.code),
@@ -60,15 +51,18 @@ class FinancialService:
             logger.debug(f"Row data: {row}")
             raise
 
+    # 재무제표 데이터 전체 조회
     async def read_financial_data(
         self, 
         ctry: Country, 
         ticker: str, 
         start_date: Optional[date] = None,
         end_date: Optional[date] = None
-    ) -> FinancialDataResponse:
+    ) -> IncomeStatementResponse:
         """
         국가별 재무제표 데이터를 조회하고 반환합니다.
+        
+        TODO) Figma 디자인 비교 후 필요한 response로 변경하는 작업 필요, 추후 성능개선 작업 예정
         """
         try:
             table_name = self.income_tables.get(ctry)
@@ -103,47 +97,49 @@ class FinancialService:
                       'pbt', 'corp_tax_cost', 'profit_continuing_ops', 'net_income_total', 
                       'net_income', 'net_income_not_control']
             
-            financial_data = []
+            statements = []
+            first_row = None
+            
             for row in result:
                 row_dict = dict(zip(columns, row))
-                financial_data.append({
-                    "code": row_dict["Code"],
-                    "name": row_dict["Name"],
-                    "period": row_dict["period_q"],
-                    "revenue": row_dict["rev"],
-                    "costOfSales": row_dict["cost_of_sales"],
-                    "grossProfit": row_dict["gross_profit"],
-                    "sellAdminCost": row_dict["sell_admin_cost"],
-                    "rndExpense": row_dict["rnd_expense"],
-                    "operatingIncome": row_dict["operating_income"],
-                    "otherRevGains": row_dict["other_rev_gains"],
-                    "otherExpLosses": row_dict["other_exp_losses"],
-                    "equityMethodGain": row_dict["equity method gain"],
-                    "finProfit": row_dict["fin_profit"],
-                    "finCost": row_dict["fin_cost"],
-                    "pbt": row_dict["pbt"],
-                    "corpTaxCost": row_dict["corp_tax_cost"],
-                    "profitContinuingOps": row_dict["profit_continuing_ops"],
-                    "netIncomeTotal": row_dict["net_income_total"],
-                    "netIncome": row_dict["net_income"],
-                    "netIncomeNotControl": row_dict["net_income_not_control"]
-                })
+                if not first_row:
+                    first_row = row_dict
+                
+                statements.append(IncomeStatementDetail(
+                    period=row_dict["period_q"],
+                    revenue=Decimal(str(row_dict["rev"] or 0)),
+                    costOfSales=Decimal(str(row_dict["cost_of_sales"] or 0)),
+                    grossProfit=Decimal(str(row_dict["gross_profit"] or 0)),
+                    sellAdminCost=Decimal(str(row_dict["sell_admin_cost"] or 0)),
+                    rndExpense=Decimal(str(row_dict["rnd_expense"] or 0)),
+                    operatingIncome=Decimal(str(row_dict["operating_income"] or 0)),
+                    otherRevGains=Decimal(str(row_dict["other_rev_gains"] or 0)),
+                    otherExpLosses=Decimal(str(row_dict["other_exp_losses"] or 0)),
+                    equityMethodGain=Decimal(str(row_dict["equity method gain"] or 0)),
+                    finProfit=Decimal(str(row_dict["fin_profit"] or 0)),
+                    finCost=Decimal(str(row_dict["fin_cost"] or 0)),
+                    pbt=Decimal(str(row_dict["pbt"] or 0)),
+                    corpTaxCost=Decimal(str(row_dict["corp_tax_cost"] or 0)),
+                    profitContinuingOps=Decimal(str(row_dict["profit_continuing_ops"] or 0)),
+                    netIncomeTotal=Decimal(str(row_dict["net_income_total"] or 0)),
+                    netIncome=Decimal(str(row_dict["net_income"] or 0)),
+                    netIncomeNotControl=Decimal(str(row_dict["net_income_not_control"] or 0))
+                ))
 
-            return FinancialDataResponse(
-                data=financial_data
+            return IncomeStatementResponse(
+                code=first_row["Code"],
+                name=first_row["Name"],
+                statements=statements
             )
 
-        except HTTPException:
-            raise
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Internal server error: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail="Internal server error")
 
-    async def get_latest_quarter(self, ctry: Country, ticker: str) -> str:
-        """가장 최근 분기 데이터 조회"""
+    async def _get_latest_quarter(self, ctry: Country, ticker: str) -> str:
+        """
+        가장 최근 분기 데이터 조회
+        """
         try:
             table_name = self.income_tables.get(ctry)
             if not table_name:
@@ -175,11 +171,93 @@ class FinancialService:
                 detail=f"Internal server error: {str(e)}"
             )
 
+    # 현금흐름 데이터 전체 조회
+    async def get_cashflow_data(
+        self, 
+        ctry: Country, 
+        ticker: str,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None
+    ) -> CashFlowResponse:
+        """
+        국가별 현금흐름 데이터를 조회하고 반환합니다.
+        
+        TODO) Figma 디자인 비교 후 필요한 response로 변경하는 작업 필요, 추후 성능개선 작업 예정
+        """
+        try:
+            table_name = self.cashflow_tables.get(ctry)
+            if not table_name:
+                raise HTTPException(status_code=400, detail="Invalid country code")
 
-    # async def read_financial_data(self, data_type: str, ctry: str, ticker: str):
-    #     file_path = os.path.join(settings.DATA_DIR, ctry, "financial_updated", data_type, f"{ticker}.parquet")
-    #     return await self.common_service.read_local_file(file_path)
+            conditions = {
+                "Code": ticker
+            }
+            
+            if start_date:
+                conditions["period_q__gte"] = start_date.strftime("%Y")
+            if end_date:
+                conditions["period_q__lte"] = end_date.strftime("%Y")
 
+            result = self.db._select(
+                table=table_name,
+                order='period_q',
+                ascending=False,
+                **conditions
+            )
+
+            if not result:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"No cashflow data found for ticker {ticker} in {ctry.value.upper()}"
+                )
+
+            columns = [
+                'Code', 'Name', 'period_q', 
+                'operating_cashflow', 'non_controlling_changes', 
+                'working_capital_changes', 'finance_cashflow', 
+                'dividends', 'investing_cashflow', 'depreciation',
+                'free_cash_flow1', 'free_cash_flow2', 'cash_earnings',
+                'capex', 'other_cash_flows', 'cash_increment'
+            ]
+
+            statements = []
+            first_row = None
+            
+            for row in result:
+                row_dict = dict(zip(columns, row))
+                if not first_row:
+                    first_row = row_dict
+                
+                statements.append(CashFlowDetail(
+                    period=row_dict["period_q"],
+                    operatingCashflow=Decimal(str(row_dict["operating_cashflow"] or 0)),
+                    nonControllingChanges=Decimal(str(row_dict["non_controlling_changes"] or 0)),
+                    workingCapitalChanges=Decimal(str(row_dict["working_capital_changes"] or 0)),
+                    financeCashflow=Decimal(str(row_dict["finance_cashflow"] or 0)),
+                    dividends=Decimal(str(row_dict["dividends"] or 0)),
+                    investingCashflow=Decimal(str(row_dict["investing_cashflow"] or 0)),
+                    depreciation=Decimal(str(row_dict["depreciation"] or 0)),
+                    freeCashFlow1=Decimal(str(row_dict["free_cash_flow1"] or 0)),
+                    freeCashFlow2=Decimal(str(row_dict["free_cash_flow2"] or 0)),
+                    cashEarnings=Decimal(str(row_dict["cash_earnings"] or 0)),
+                    capex=Decimal(str(row_dict["capex"] or 0)),
+                    otherCashFlows=Decimal(str(row_dict["other_cash_flows"] or 0)),
+                    cashIncrement=Decimal(str(row_dict["cash_increment"] or 0))
+                ))
+
+            return CashFlowResponse(
+                code=first_row["Code"],
+                name=first_row["Name"],
+                statements=statements
+            )
+
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
+            
+            
+    
+    
 
 def get_financial_service(
     common_service: CommonService = Depends(get_common_service)
