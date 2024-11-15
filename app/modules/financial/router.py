@@ -52,8 +52,8 @@ router = APIRouter()
 async def get_income_data(
     ctry: Country,
     ticker: str,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> ResponseDTO[List[IncomeStatementDetail]]:
     result = await financial_service.get_income_data(
@@ -72,8 +72,8 @@ async def get_income_data(
 async def get_cashflow_data(
     ctry: Country,
     ticker: str,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> ResponseDTO[List[CashFlowDetail]]:
     result = await financial_service.get_cashflow_data(
@@ -92,8 +92,8 @@ async def get_cashflow_data(
 async def get_finpos_data(
     ctry: Country,
     ticker: str,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> ResponseDTO[List[FinPosDetail]]:
     result = await financial_service.get_finpos_data(

@@ -43,28 +43,23 @@ class FinancialService:
             Country.US: "USA_finpos"
         }
 
-    def _get_date_conditions(self, start_date: Optional[date], end_date: Optional[date]) -> Dict:
+    def _get_date_conditions(self, start_date: Optional[str], end_date: Optional[str]) -> Dict:
         """
         날짜 조건 생성
-        기본값으로 최근 3년간의 데이터만 반환
-        period_q 형식: 'YYYYQQ' (예: '202401', '202402', ...)
+        start_date (Optional[str]): YYYYMM 형식의 시작일
+        end_date (Optional[str]): YYYYMM 형식의 종료일
         """
         from datetime import datetime
         
         conditions = {}
         current_year = datetime.now().year
         
-        # 시작일이 지정되지 않은 경우 3년 전의 1분기로 설정
         if not start_date:
             conditions["period_q__gte"] = f"{current_year - 3}01"
-        else:
-            conditions["period_q__gte"] = start_date.strftime("%Y01")
-            
-        # 종료일이 지정되지 않은 경우 현재 연도의 4분기로 설정
-        if not end_date:
             conditions["period_q__lte"] = f"{current_year}04"
         else:
-            conditions["period_q__lte"] = end_date.strftime("%Y04")
+            conditions["period_q__gte"] = f"{start_date[:4]}01"
+            conditions["period_q__lte"] = f"{end_date[:4]}04" if end_date else f"{current_year}04"
             
         return conditions
 
