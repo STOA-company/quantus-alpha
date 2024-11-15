@@ -33,7 +33,7 @@ class FinancialDataResponse(BaseModel):
     )
     
 class IncomeStatementDetail(BaseModel):
-    period: str
+    period_q: str = Field(max_length=20)
     revenue: Decimal
     costOfSales: Decimal
     grossProfit: Decimal
@@ -58,7 +58,7 @@ class IncomeStatementResponse(BaseModel):
     statements: List[IncomeStatementDetail]
 
 class CashFlowDetail(BaseModel):
-    period: str
+    period_q: str = Field(max_length=20)
     operatingCashflow: Decimal
     nonControllingChanges: Decimal
     workingCapitalChanges: Decimal
@@ -77,3 +77,45 @@ class CashFlowResponse(BaseModel):
     code: str
     name: str
     statements: List[CashFlowDetail]
+    
+class FinPosDetail(BaseModel):
+    period_q: str = Field(max_length=20)
+    total_asset: float
+    current_asset: float
+    stock_asset: float
+    trade_and_other_receivables: float
+    cash_asset: float
+    assets_held_for_sale: float
+    non_current_asset: float
+    tangible_asset: float
+    intangible_asset: float
+    investment_asset: float
+    non_current_trade_and_other_receivables: float
+    deferred_tax_asset: float
+    extra_intangible: float
+    total_dept: float
+    current_dept: float
+    trade_and_other_payables: float
+    liabilities_held_for_sale: float
+    non_current_liability: float
+    debenture: float
+    non_current_trade_and_other_payables: float
+    deferred_tax_liability: float
+    equity: float
+    total_equity: float
+    controlling_equity: float
+    capital: float
+    preferred_cap_stock: float
+    cap_stock_common: float
+    new_cap_security: float
+    capital_surplus: float
+    other_capital: float
+    comp_income: float
+    retained_earnings: float
+    non_ctrl_shrhld_eq: float
+    
+
+class FinPosResponse(BaseModel):
+    code: str
+    name: str
+    statements: List[FinPosDetail]
