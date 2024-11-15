@@ -34,48 +34,48 @@ class FinancialDataResponse(BaseModel):
     
 class IncomeStatementDetail(BaseModel):
     period_q: str = Field(max_length=20)
-    revenue: Decimal
-    costOfSales: Decimal
-    grossProfit: Decimal
-    sellAdminCost: Decimal
-    rndExpense: Decimal
-    operatingIncome: Decimal
-    otherRevGains: Decimal
-    otherExpLosses: Decimal
-    equityMethodGain: Decimal
-    finProfit: Decimal
-    finCost: Decimal
-    pbt: Decimal
-    corpTaxCost: Decimal
-    profitContinuingOps: Decimal
-    netIncomeTotal: Decimal
-    netIncome: Decimal
-    netIncomeNotControl: Decimal
+    rev: float
+    cost_of_sales: float
+    gross_profit: float
+    sell_admin_cost: float
+    rnd_expense: float
+    operating_income: float
+    other_rev_gains: float
+    other_exp_losses: float
+    equity_method_gain: float
+    fin_profit: float
+    fin_cost: float
+    pbt: float
+    corp_tax_cost: float
+    profit_continuing_ops: float
+    net_income_total: float
+    net_income: float
+    net_income_not_control: float
 
 class IncomeStatementResponse(BaseModel):
-    code: str
-    name: str
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
     statements: List[IncomeStatementDetail]
 
 class CashFlowDetail(BaseModel):
     period_q: str = Field(max_length=20)
-    operatingCashflow: Decimal
-    nonControllingChanges: Decimal
-    workingCapitalChanges: Decimal
-    financeCashflow: Decimal
-    dividends: Decimal
-    investingCashflow: Decimal
-    depreciation: Decimal
-    freeCashFlow1: Decimal
-    freeCashFlow2: Decimal
-    cashEarnings: Decimal
-    capex: Decimal
-    otherCashFlows: Decimal
-    cashIncrement: Decimal
+    operating_cashflow: float
+    non_controlling_changes: float
+    working_capital_changes: float
+    finance_cashflow: float
+    dividends: float
+    investing_cashflow: float
+    depreciation: float
+    free_cash_flow1: float
+    free_cash_flow2: float
+    cash_earnings: float
+    capex: float
+    other_cash_flows: float
+    cash_increment: float
 
 class CashFlowResponse(BaseModel):
-    code: str
-    name: str
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
     statements: List[CashFlowDetail]
     
 class FinPosDetail(BaseModel):
