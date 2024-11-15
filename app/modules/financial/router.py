@@ -1,9 +1,7 @@
-from datetime import date
-from typing import Optional, Dict, List, Any
 from app.modules.common.enum import Country
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from app.modules.financial.services import FinancialService, get_financial_service
-from .schemas import FinancialDataResponse
+from .schemas import CashFlowResponse, FinancialDataResponse, IncomeStatementResponse
 
 router = APIRouter()
 
@@ -43,14 +41,26 @@ router = APIRouter()
 #     df = await service.read_financial_data("cashflow", ctry, ticker)
 #     return {"data": df.to_dict(orient="records")}
 
-@router.get("", response_model=FinancialDataResponse)
+@router.get("/income", response_model=IncomeStatementResponse, summary="재무제표 분기별 조회")
 async def get_income_data(
     ctry: Country,
     ticker: str,
     financial_service: FinancialService = Depends(get_financial_service),
-) -> FinancialDataResponse:
+) -> IncomeStatementResponse:
     result = await financial_service.read_financial_data(
         ctry=ctry,
         ticker=ticker,
     )
-    return {"data": result.data}
+    return result
+
+@router.get("/cashflow", response_model=CashFlowResponse, summary="현금흐름 분기별 조회")
+async def get_cashflow_data(
+    ctry: Country,
+    ticker: str,
+    financial_service: FinancialService = Depends(get_financial_service),
+) -> CashFlowResponse:
+    result = await financial_service.get_cashflow_data(
+        ctry=ctry,
+        ticker=ticker
+    )
+    return result
