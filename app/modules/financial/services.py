@@ -1,8 +1,12 @@
-from typing import Optional, Dict, List, Any
 from datetime import date
-from fastapi import HTTPException, Depends
-import logging
 from decimal import Decimal
+from typing import Optional, Dict, List, Any
+import logging
+
+from fastapi import HTTPException, Depends
+
+from app.database.crud import database
+from app.modules.common.enum import Country
 from app.modules.common.services import CommonService, get_common_service
 from app.modules.financial.schemas import (
     FinPosDetail,
@@ -12,8 +16,6 @@ from app.modules.financial.schemas import (
     CashFlowResponse,
     CashFlowDetail
 )
-from app.database.crud import database
-from app.modules.common.enum import Country
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +53,10 @@ class FinancialService:
             conditions["period_q__lte"] = end_date.strftime("%Y")
         return conditions
 
-    async def read_financial_data(
+    async def get_income_data(
         self, 
         ctry: Country, 
-        ticker: str, 
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        ticker: str,
     ) -> IncomeStatementResponse:
         """
         손익계산서 데이터 조회
@@ -66,7 +66,7 @@ class FinancialService:
             if not table_name:
                 raise HTTPException(status_code=400, detail="존재하지 않는 국가입니다.")
 
-            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+            conditions = {"Code": ticker}
 
             result = self.db._select(
                 table=table_name,
@@ -78,7 +78,7 @@ class FinancialService:
             if not result:
                 raise HTTPException(
                     status_code=404, 
-                    detail=f"{ticker} 종목에 대한 익계산 데이터가 존재하지 않습니다."
+                    detail=f"{ticker} 종목에 대한 손익계산 데이터가 존재하지 않습니다."
                 )
 
             return self._process_income_statement_result(result)
@@ -86,7 +86,7 @@ class FinancialService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Unexpected error in read_financial_data: {str(e)}")
+            logger.error(f"Unexpected error in get_income_data: {str(e)}")
             raise HTTPException(status_code=500, detail="내부 서버 오류")
 
     def _process_income_statement_result(self, result) -> IncomeStatementResponse:
@@ -122,32 +122,30 @@ class FinancialService:
         손익계산서 상세 정보 생성
         """
         return IncomeStatementDetail(
-            period=row_dict["period_q"],
-            revenue=self._to_decimal(row_dict["rev"]),
-            costOfSales=self._to_decimal(row_dict["cost_of_sales"]),
-            grossProfit=self._to_decimal(row_dict["gross_profit"]),
-            sellAdminCost=self._to_decimal(row_dict["sell_admin_cost"]),
-            rndExpense=self._to_decimal(row_dict["rnd_expense"]),
-            operatingIncome=self._to_decimal(row_dict["operating_income"]),
-            otherRevGains=self._to_decimal(row_dict["other_rev_gains"]),
-            otherExpLosses=self._to_decimal(row_dict["other_exp_losses"]),
-            equityMethodGain=self._to_decimal(row_dict["equity method gain"]),
-            finProfit=self._to_decimal(row_dict["fin_profit"]),
-            finCost=self._to_decimal(row_dict["fin_cost"]),
+            period_q=row_dict["period_q"],
+            rev=self._to_decimal(row_dict["rev"]),
+            cost_of_sales=self._to_decimal(row_dict["cost_of_sales"]),
+            gross_profit=self._to_decimal(row_dict["gross_profit"]),
+            sell_admin_cost=self._to_decimal(row_dict["sell_admin_cost"]),
+            rnd_expense=self._to_decimal(row_dict["rnd_expense"]),
+            operating_income=self._to_decimal(row_dict["operating_income"]),
+            other_rev_gains=self._to_decimal(row_dict["other_rev_gains"]),
+            other_exp_losses=self._to_decimal(row_dict["other_exp_losses"]),
+            equity_method_gain=self._to_decimal(row_dict["equity method gain"]),
+            fin_profit=self._to_decimal(row_dict["fin_profit"]),
+            fin_cost=self._to_decimal(row_dict["fin_cost"]),
             pbt=self._to_decimal(row_dict["pbt"]),
-            corpTaxCost=self._to_decimal(row_dict["corp_tax_cost"]),
-            profitContinuingOps=self._to_decimal(row_dict["profit_continuing_ops"]),
-            netIncomeTotal=self._to_decimal(row_dict["net_income_total"]),
-            netIncome=self._to_decimal(row_dict["net_income"]),
-            netIncomeNotControl=self._to_decimal(row_dict["net_income_not_control"])
+            corp_tax_cost=self._to_decimal(row_dict["corp_tax_cost"]),
+            profit_continuing_ops=self._to_decimal(row_dict["profit_continuing_ops"]),
+            net_income_total=self._to_decimal(row_dict["net_income_total"]),
+            net_income=self._to_decimal(row_dict["net_income"]),
+            net_income_not_control=self._to_decimal(row_dict["net_income_not_control"])
         )
 
     async def get_cashflow_data(
         self, 
         ctry: Country, 
         ticker: str,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None
     ) -> CashFlowResponse:
         """
         국가별 현금흐름 데이터 조회
@@ -157,7 +155,7 @@ class FinancialService:
             if not table_name:
                 raise HTTPException(status_code=400, detail="존재하지 않는 국가입니다.")
 
-            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+            conditions = {"Code": ticker}
 
             result = self.db._select(
                 table=table_name,
@@ -214,20 +212,20 @@ class FinancialService:
         현금흐름 상세 정보 생성
         """
         return CashFlowDetail(
-            period=row_dict["period_q"],
-            operatingCashflow=self._to_decimal(row_dict["operating_cashflow"]),
-            nonControllingChanges=self._to_decimal(row_dict["non_controlling_changes"]),
-            workingCapitalChanges=self._to_decimal(row_dict["working_capital_changes"]),
-            financeCashflow=self._to_decimal(row_dict["finance_cashflow"]),
+            period_q=row_dict["period_q"],
+            operating_cashflow=self._to_decimal(row_dict["operating_cashflow"]),
+            non_controlling_changes=self._to_decimal(row_dict["non_controlling_changes"]),
+            working_capital_changes=self._to_decimal(row_dict["working_capital_changes"]),
+            finance_cashflow=self._to_decimal(row_dict["finance_cashflow"]),
             dividends=self._to_decimal(row_dict["dividends"]),
-            investingCashflow=self._to_decimal(row_dict["investing_cashflow"]),
+            investing_cashflow=self._to_decimal(row_dict["investing_cashflow"]),
             depreciation=self._to_decimal(row_dict["depreciation"]),
-            freeCashFlow1=self._to_decimal(row_dict["free_cash_flow1"]),
-            freeCashFlow2=self._to_decimal(row_dict["free_cash_flow2"]),
-            cashEarnings=self._to_decimal(row_dict["cash_earnings"]),
+            free_cash_flow1=self._to_decimal(row_dict["free_cash_flow1"]),
+            free_cash_flow2=self._to_decimal(row_dict["free_cash_flow2"]),
+            cash_earnings=self._to_decimal(row_dict["cash_earnings"]),
             capex=self._to_decimal(row_dict["capex"]),
-            otherCashFlows=self._to_decimal(row_dict["other_cash_flows"]),
-            cashIncrement=self._to_decimal(row_dict["cash_increment"])
+            other_cash_flows=self._to_decimal(row_dict["other_cash_flows"]),
+            cash_increment=self._to_decimal(row_dict["cash_increment"])
         )
 
     async def _get_latest_quarter(self, ctry: Country, ticker: str) -> str:

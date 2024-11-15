@@ -1,7 +1,7 @@
 from app.modules.common.enum import Country
 from fastapi import APIRouter, Depends
 from app.modules.financial.services import FinancialService, get_financial_service
-from .schemas import CashFlowResponse, FinPosResponse, FinancialDataResponse, IncomeStatementResponse
+from .schemas import CashFlowResponse, FinPosResponse, IncomeStatementResponse
 
 router = APIRouter()
 
@@ -47,7 +47,7 @@ async def get_income_data(
     ticker: str,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> IncomeStatementResponse:
-    result = await financial_service.read_financial_data(
+    result = await financial_service.get_income_data(
         ctry=ctry,
         ticker=ticker,
     )
