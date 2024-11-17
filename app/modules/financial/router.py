@@ -44,6 +44,7 @@ router = APIRouter()
 #     df = await service.read_financial_data("cashflow", ctry, ticker)
 #     return {"data": df.to_dict(orient="records")}
 
+# TODO) 전체적으로 필요한 response로 변경 필요
 @router.get(
     "/income", 
     response_model=ResponseDTO[List[IncomeStatementDetail]], 
