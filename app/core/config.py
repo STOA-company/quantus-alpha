@@ -62,20 +62,18 @@ class DevConfig(DatabaseConfig):
 
 
 class ProdConfig(DatabaseConfig):
-    # TODO: 수정 필요
     def __init__(self):
         super().__init__(
-            DB_URL="mysql://prod_user:prod_password@prod-database.xxx.region.rds.amazonaws.com:3306/prod_db",
+            DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=False,
         )
 
 
 class TestConfig(DatabaseConfig):
-    # TODO: 수정 필요
     def __init__(self):
         super().__init__(
-            DB_URL="mysql://test_user:test_password@test-database.xxx.region.rds.amazonaws.com:3306/test_db",
+            DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=True,
         )
