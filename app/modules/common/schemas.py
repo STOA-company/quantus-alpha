@@ -1,5 +1,6 @@
-from pydantic import BaseModel
-from typing import List, Generic, Optional, TypeVar
+
+from pydantic import BaseModel, Field
+from typing import List, Dict, Any, Generic, Optional, TypeVar
 
 T = TypeVar("T")
 
@@ -17,8 +18,6 @@ class PaginationSchema(BaseModel):
 
 class ListResponseSchema(ResponseSchema, Generic[T]):
     data: List[T]
-    pagination: PaginationSchema
-
 
 class BaseResponse(BaseModel, Generic[T]):
     status: str
