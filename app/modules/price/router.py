@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from app.modules.common.schemas import BaseResponse
 from app.modules.price.services import PriceService, get_price_service
-from app.modules.price.schemas import PriceDataItem, VolumeDataItem
+from app.modules.price.schemas import PriceDataItem, StockKrFactor, VolumeDataItem
 from datetime import date
 from typing import Annotated, List, Optional
 from app.modules.common.enum import Country
@@ -20,7 +20,7 @@ async def get_price_data(
     """
     Get price data for a specific country and ticker from database.
     """
-    return await service.read_price_data(ctry, ticker, start_date, end_date)
+    return await service.read_price_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
 
 
 @router.get("/volume", response_model=BaseResponse[List[VolumeDataItem]])  # 여기를 수정
@@ -34,4 +34,13 @@ async def get_volume_data(
     """
     Get volume data for a specific country and ticker from database.
     """
-    return await service.read_volume_data(ctry, ticker, start_date, end_date)
+    return await service.read_volume_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+
+
+@router.get("/factors", response_model=BaseResponse[List[StockKrFactor]])
+async def get_stock_kr_factors(
+    ctry: Annotated[Country, Query(..., description="Country code (kr/us)")],
+    ticker: Annotated[str, Query(..., description="Stock ticker symbol")],
+    service: PriceService = Depends(get_price_service),
+):
+    return await service.read_stock_factors(ctry=ctry, ticker=ticker)
