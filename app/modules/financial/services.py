@@ -16,7 +16,7 @@ from app.modules.financial.schemas import (
     CashFlowResponse,
     CashFlowDetail
 )
-from app.modules.common.schemas import ResponseDTO
+from app.modules.common.schemas import BaseResponse
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
-    ) -> ResponseDTO[List[IncomeStatementDetail]]:
+    ) -> BaseResponse[List[IncomeStatementDetail]]:
         """
         손익계산서 데이터 조회
         """
@@ -95,7 +95,7 @@ class FinancialService:
 
             statements = self._process_income_statement_result(result)
             
-            return ResponseDTO[List[IncomeStatementDetail]](
+            return BaseResponse[List[IncomeStatementDetail]](
                 status="success",
                 message="손익계산서 데이터를 성공적으로 조회했습니다.",
                 data=statements
@@ -160,7 +160,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
-    ) -> ResponseDTO[List[CashFlowDetail]]:
+    ) -> BaseResponse[List[CashFlowDetail]]:
         """
         국가별 현금흐름 데이터 조회
         """
@@ -186,7 +186,7 @@ class FinancialService:
 
             statements = self._process_cashflow_result(result)
             
-            return ResponseDTO[List[CashFlowDetail]](
+            return BaseResponse[List[CashFlowDetail]](
                 status="success",
                 message="현금흐름표 데이터를 성공적으로 조회했습니다.",
                 data=statements
@@ -282,7 +282,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None
-    ) -> ResponseDTO[List[FinPosDetail]]:
+    ) -> BaseResponse[List[FinPosDetail]]:
         """
         재무상태표 데이터 조회
         """
@@ -308,7 +308,7 @@ class FinancialService:
 
             statements = self._process_finpos_result(result)
             
-            return ResponseDTO[List[FinPosDetail]](
+            return BaseResponse[List[FinPosDetail]](
                 status="success",
                 message="재무상태표 데이터를 성공적으로 조회했습니다.",
                 data=statements

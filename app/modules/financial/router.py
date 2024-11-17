@@ -1,6 +1,6 @@
 from datetime import date
 from app.modules.common.enum import Country
-from app.modules.common.schemas import ResponseDTO
+from app.modules.common.schemas import BaseResponse
 from fastapi import APIRouter, Depends
 from app.modules.financial.services import FinancialService, get_financial_service
 from .schemas import CashFlowDetail, CashFlowResponse, FinPosDetail, FinPosResponse, IncomeStatementDetail, IncomeStatementResponse
@@ -47,7 +47,7 @@ router = APIRouter()
 # TODO) 전체적으로 필요한 response로 변경 필요
 @router.get(
     "/income", 
-    response_model=ResponseDTO[List[IncomeStatementDetail]], 
+    response_model=BaseResponse[List[IncomeStatementDetail]], 
     summary="손익계산서 분기별 조회"
 )
 async def get_income_data(
@@ -56,7 +56,7 @@ async def get_income_data(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-) -> ResponseDTO[List[IncomeStatementDetail]]:
+) -> BaseResponse[List[IncomeStatementDetail]]:
     result = await financial_service.get_income_data(
         ctry=ctry,
         ticker=ticker,
@@ -67,7 +67,7 @@ async def get_income_data(
 
 @router.get(
     "/cashflow", 
-    response_model=ResponseDTO[List[CashFlowDetail]], 
+    response_model=BaseResponse[List[CashFlowDetail]], 
     summary="현금흐름 분기별 조회"
 )
 async def get_cashflow_data(
@@ -76,7 +76,7 @@ async def get_cashflow_data(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-) -> ResponseDTO[List[CashFlowDetail]]:
+) -> BaseResponse[List[CashFlowDetail]]:
     result = await financial_service.get_cashflow_data(
         ctry=ctry,
         ticker=ticker,
@@ -87,7 +87,7 @@ async def get_cashflow_data(
 
 @router.get(
     "/finpos", 
-    response_model=ResponseDTO[List[FinPosDetail]], 
+    response_model=BaseResponse[List[FinPosDetail]], 
     summary="재무제표 분기별 조회"
 )
 async def get_finpos_data(
@@ -96,7 +96,7 @@ async def get_finpos_data(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-) -> ResponseDTO[List[FinPosDetail]]:
+) -> BaseResponse[List[FinPosDetail]]:
     result = await financial_service.get_finpos_data(
         ctry=ctry,
         ticker=ticker,
