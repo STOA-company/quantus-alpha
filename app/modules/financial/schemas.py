@@ -119,3 +119,24 @@ class FinPosDetail(BaseModel):
 
 class FinPosResponse(BaseModel):
     statements: List[FinPosDetail]
+    
+class RevenueStatement(BaseModel):
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
+    period_q: str = Field(max_length=20)
+    rev: float
+    gross_profit: float
+
+class OperatingProfitStatement(BaseModel):
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
+    period_q: str = Field(max_length=20)
+    operating_income: float
+
+class NetIncomeStatement(BaseModel):
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
+    period_q: str = Field(max_length=20)
+    net_income: float
+    net_income_not_control: float
+    net_income_total: float
