@@ -5,7 +5,7 @@ import logging
 from app.modules.common.enum import Country
 from app.database.crud import database
 from app.modules.common.schemas import BaseResponse
-from app.modules.price.schemas import PriceDataItem, StockKrFactorItem, VolumeDataItem
+from app.modules.price.schemas import PriceDataItem, StockKrFactorItem
 
 logger = logging.getLogger(__name__)
 
@@ -13,22 +13,23 @@ logger = logging.getLogger(__name__)
 class PriceService:
     def __init__(self):
         self.database = database
-        self.price_columns = [
+        self.base_columns = [
             "Date",  # datetime
             "Ticker",  # varchar(7)
-            "Name",  # varchar(100)
             "Open",  # float
             "High",  # float
             "Low",  # float
             "Close",  # float
-        ]
-        self.volume_columns = [
-            "Date",  # datetime
-            "Ticker",  # varchar(7)
             "Volume",  # int
-            "Name",  # varchar(100)
         ]
-        self.MAX_DAYS = 365
+        self.country_specific_columns = {
+            Country.KR: ["Name"],
+            Country.US: [],
+        }
+
+    def _get_columns_for_country(self, ctry: Country) -> List[str]:
+        """국가별 적절한 컬럼 리스트 반환"""
+        return self.base_columns + self.country_specific_columns.get(ctry, [])
 
     def _get_date_range(self, start_date: Optional[date], end_date: Optional[date]) -> Tuple[date, date]:
         """날짜 범위를 계산하고 검증"""
@@ -36,10 +37,6 @@ class PriceService:
             end_date = date.today()
         if start_date is None:
             start_date = end_date - timedelta(days=30)
-
-        date_diff = (end_date - start_date).days
-        if date_diff > self.MAX_DAYS:
-            start_date = end_date - timedelta(days=self.MAX_DAYS)
 
         return start_date, end_date
 
@@ -51,36 +48,31 @@ class PriceService:
             "Date__lte": datetime.combine(end_date, datetime.max.time()),
         }
 
-    def _convert_to_price_item(self, row) -> PriceDataItem:
+    def _convert_to_price_item(self, row, ctry: Country) -> PriceDataItem:
         """SQLAlchemy Row를 PriceDataItem으로 변환"""
         try:
+            open_price = float(getattr(row, "Open", 0) or 0)
+            close_price = float(getattr(row, "Close", 0) or 0)
+
+            daily_price_change_rate = round((close_price - open_price) / open_price * 100, 2)
+
             date_str = getattr(row, "Date").strftime("%Y-%m-%d") if getattr(row, "Date") else None
+
+            name = str(getattr(row, "Name", "") or "") if ctry == Country.KR else ""
+
             return PriceDataItem(
                 date=date_str,
                 ticker=str(getattr(row, "Ticker", "") or ""),
-                name=str(getattr(row, "Name", "") or ""),
-                open=float(getattr(row, "Open", 0) or 0),
+                name=name,
+                open=open_price,
                 high=float(getattr(row, "High", 0) or 0),
                 low=float(getattr(row, "Low", 0) or 0),
-                close=float(getattr(row, "Close", 0) or 0),
+                close=close_price,
+                volume=int(getattr(row, "Volume", 0) or 0),
+                daily_price_change_rate=daily_price_change_rate,
             )
         except Exception as e:
             logger.error(f"Error converting row to PriceDataItem: {e}")
-            logger.debug(f"Row data: {row}")
-            raise
-
-    def _convert_to_volume_item(self, row) -> VolumeDataItem:
-        """SQLAlchemy Row를 VolumeDataItem으로 변환"""
-        try:
-            date_str = getattr(row, "Date").strftime("%Y-%m-%d") if getattr(row, "Date") else None
-            return VolumeDataItem(
-                date=date_str,
-                ticker=str(getattr(row, "Ticker", "") or ""),
-                name=str(getattr(row, "Name", "") or ""),
-                volume=int(getattr(row, "Volume", 0) or 0),
-            )
-        except Exception as e:
-            logger.error(f"Error converting row to VolumeDataItem: {e}")
             logger.debug(f"Row data: {row}")
             raise
 
@@ -119,7 +111,8 @@ class PriceService:
         try:
             start_date, end_date = self._get_date_range(start_date, end_date)
             conditions = self._get_query_conditions(ticker, start_date, end_date)
-            result = await self._execute_query(ctry, conditions, self.price_columns)
+            columns = self._get_columns_for_country(ctry)
+            result = await self._execute_query(ctry, conditions, columns)
 
             if not result:
                 return BaseResponse(status="error", message=f"No price data found for {ticker}", data=None)
@@ -127,7 +120,7 @@ class PriceService:
             price_data = []
             for row in result:
                 try:
-                    price_item = self._convert_to_price_item(row)
+                    price_item = self._convert_to_price_item(row, ctry)
                     price_data.append(price_item)
                 except Exception as e:
                     logger.warning(f"Failed to convert row: {str(e)}")
@@ -141,43 +134,6 @@ class PriceService:
         except Exception as e:
             logger.error(f"Unexpected error in read_price_data: {str(e)}")
             return BaseResponse(status="error", message=f"Internal server error: {str(e)}", data=None)
-
-    async def read_volume_data(
-        self, ctry: Country, ticker: str, start_date: Optional[date] = None, end_date: Optional[date] = None
-    ) -> BaseResponse[List[VolumeDataItem]]:  # 제네릭 타입 명시
-        try:
-            start_date, end_date = self._get_date_range(start_date, end_date)
-            conditions = self._get_query_conditions(ticker, start_date, end_date)
-            result = await self._execute_query(ctry, conditions, self.volume_columns)
-
-            if not result:
-                return BaseResponse[List[VolumeDataItem]](
-                    status="error", message=f"No volume data found for {ticker}", data=None
-                )
-
-            volume_data: List[VolumeDataItem] = []
-            for row in result:
-                try:
-                    volume_item = self._convert_to_volume_item(row)
-                    volume_data.append(volume_item)
-                except Exception as e:
-                    logger.warning(f"Failed to convert row: {str(e)}")
-                    continue
-
-            if not volume_data:
-                return BaseResponse[List[VolumeDataItem]](
-                    status="error", message="No valid data found after conversion", data=None
-                )
-
-            return BaseResponse[List[VolumeDataItem]](
-                status="success", message="Data retrieved successfully", data=volume_data
-            )
-
-        except Exception as e:
-            logger.error(f"Unexpected error in read_volume_data: {str(e)}")
-            return BaseResponse[List[VolumeDataItem]](
-                status="error", message=f"Internal server error: {str(e)}", data=None
-            )
 
     async def read_stock_factors(self, ctry: Country, ticker: str) -> BaseResponse[List[StockKrFactorItem]]:
         conditions = self._get_query_conditions(ticker)

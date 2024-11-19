@@ -20,13 +20,8 @@ class PriceDataItem(BaseModel):
     high: float
     low: float
     close: float
-
-
-class VolumeDataItem(BaseModel):
-    ticker: str
-    date: str
-    name: str
     volume: int
+    daily_price_change_rate: float
 
 
 class StockKrFactorItem(BaseModel):
