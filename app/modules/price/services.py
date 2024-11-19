@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 from typing import List, Optional, Tuple
 from sqlalchemy.exc import SQLAlchemyError
 import logging
-from app.modules.common.enum import Country
+from app.modules.common.enum import Country, Frequency
 from app.database.crud import database
 from app.modules.common.schemas import BaseResponse
 from app.modules.price.schemas import PriceDataItem, StockKrFactorItem
@@ -48,7 +48,7 @@ class PriceService:
             "Date__lte": datetime.combine(end_date, datetime.max.time()),
         }
 
-    def _convert_to_price_item(self, row, ctry: Country) -> PriceDataItem:
+    def _convert_to_price_item(self, row, ctry: Country, frequency: Frequency) -> PriceDataItem:
         """SQLAlchemy Row를 PriceDataItem으로 변환"""
         try:
             open_price = float(getattr(row, "Open", 0) or 0)
@@ -56,12 +56,12 @@ class PriceService:
 
             daily_price_change_rate = round((close_price - open_price) / open_price * 100, 2)
 
-            date_str = getattr(row, "Date").strftime("%Y-%m-%d") if getattr(row, "Date") else None
+            date = getattr(row, "Date") if getattr(row, "Date") else None
 
             name = str(getattr(row, "Name", "") or "") if ctry == Country.KR else ""
 
-            return PriceDataItem(
-                date=date_str,
+            price_data_item = PriceDataItem(
+                date=date,
                 ticker=str(getattr(row, "Ticker", "") or ""),
                 name=name,
                 open=open_price,
@@ -71,6 +71,7 @@ class PriceService:
                 volume=int(getattr(row, "Volume", 0) or 0),
                 daily_price_change_rate=daily_price_change_rate,
             )
+            return price_data_item
         except Exception as e:
             logger.error(f"Error converting row to PriceDataItem: {e}")
             logger.debug(f"Row data: {row}")
@@ -95,10 +96,16 @@ class PriceService:
             rate_of_change_60d=float(getattr(row, "Rate_Of_Change_60d", 0) or 0),
         )
 
-    async def _execute_query(self, ctry: Country, conditions: dict, columns: List[str]) -> BaseResponse:
+    async def _execute_query(
+        self, ctry: Country, conditions: dict, columns: List[str], frequency: Frequency
+    ) -> BaseResponse:
         """데이터베이스 쿼리 실행"""
+        frequency_mapping = {
+            Frequency.DAILY: "1d",
+            Frequency.MINUTE: "1m",
+        }
         try:
-            table_name = f"stock_{ctry.value}_1d"
+            table_name = f"stock_{ctry.value}_{frequency_mapping[frequency]}"
             result = self.database._select(table=table_name, columns=columns, order="Date", ascending=True, **conditions)
             return result
         except SQLAlchemyError as e:
@@ -106,13 +113,18 @@ class PriceService:
             raise
 
     async def read_price_data(
-        self, ctry: Country, ticker: str, start_date: Optional[date] = None, end_date: Optional[date] = None
+        self,
+        ctry: Country,
+        ticker: str,
+        frequency: Frequency,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
     ) -> BaseResponse[List[PriceDataItem]]:
         try:
             start_date, end_date = self._get_date_range(start_date, end_date)
             conditions = self._get_query_conditions(ticker, start_date, end_date)
             columns = self._get_columns_for_country(ctry)
-            result = await self._execute_query(ctry, conditions, columns)
+            result = await self._execute_query(ctry=ctry, conditions=conditions, columns=columns, frequency=frequency)
 
             if not result:
                 return BaseResponse(status="error", message=f"No price data found for {ticker}", data=None)
@@ -120,7 +132,7 @@ class PriceService:
             price_data = []
             for row in result:
                 try:
-                    price_item = self._convert_to_price_item(row, ctry)
+                    price_item = self._convert_to_price_item(row=row, ctry=ctry, frequency=frequency)
                     price_data.append(price_item)
                 except Exception as e:
                     logger.warning(f"Failed to convert row: {str(e)}")
