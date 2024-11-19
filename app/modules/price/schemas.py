@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
 
@@ -14,7 +15,7 @@ class PriceDataResponse(BaseModel):
 
 class PriceDataItem(BaseModel):
     ticker: str
-    date: str
+    date: datetime
     name: str
     open: float
     high: float
