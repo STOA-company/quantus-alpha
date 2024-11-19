@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Optional, Dict, List, Any
 import logging
 
+from app.enum.financial import FinancialSelect
 from fastapi import HTTPException, Depends
 
 from app.database.crud import database
@@ -14,7 +15,10 @@ from app.modules.financial.schemas import (
     IncomeStatementResponse, 
     IncomeStatementDetail,
     CashFlowResponse,
-    CashFlowDetail
+    CashFlowDetail,
+    NetIncomeStatement,
+    OperatingProfitStatement,
+    RevenueStatement
 )
 from app.modules.common.schemas import BaseResponse
 
@@ -62,13 +66,13 @@ class FinancialService:
             conditions["period_q__lte"] = f"{end_date[:4]}04" if end_date else f"{current_year}04"
             
         return conditions
-
+    
     async def get_income_data(
         self, 
         ctry: Country, 
         ticker: str,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> BaseResponse[List[IncomeStatementDetail]]:
         """
         손익계산서 데이터 조회
@@ -107,6 +111,75 @@ class FinancialService:
             logger.error(f"Unexpected error in get_income_data: {str(e)}")
             raise HTTPException(status_code=500, detail="내부 서버 오류")
 
+    async def get_income_performance_data(
+        self, 
+        ctry: Country, 
+        ticker: str,
+        select: Optional[FinancialSelect] = FinancialSelect.REVENUE,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> BaseResponse[List[IncomeStatementDetail] | List[RevenueStatement] | List[OperatingProfitStatement] | List[NetIncomeStatement]]:
+        """
+        손익계산서 데이터 조회
+        """
+        try:
+            table_name = self.income_tables.get(ctry)
+            if not table_name:
+                raise HTTPException(status_code=400, detail="존재하지 않는 국가입니다.")
+
+            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+
+            result = self.db._select(
+                table=table_name,
+                order='period_q',
+                ascending=False,
+                **conditions
+            )
+
+            if not result:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"{ticker} 종목에 대한 손익계산 데이터가 존재하지 않습니다."
+                )
+
+            statements = self._process_income_performance_statement_result(select, result)
+            
+            return BaseResponse[List[RevenueStatement] | List[OperatingProfitStatement] | List[NetIncomeStatement]](
+                status="success",
+                message="손익계산서 데이터를 성공적으로 조회했습니다.",
+                data=statements
+            )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in get_income_data: {str(e)}")
+            raise HTTPException(status_code=500, detail="내부 서버 오류")
+
+    def _process_income_performance_statement_result(self, select: Optional[FinancialSelect], result) -> List[RevenueStatement] | List[OperatingProfitStatement] | List[NetIncomeStatement]:
+        """
+        손익계산 결과 처리
+        """
+        if select == FinancialSelect.REVENUE:
+            columns = ['Code', 'Name', 'period_q', 'rev', 'gross_profit']
+        elif select == FinancialSelect.OPERATING_PROFIT:
+            columns = ['Code', 'Name', 'period_q', 'operating_income']
+        elif select == FinancialSelect.NET_INCOME:
+            columns = ['Code', 'Name', 'period_q', 'net_income', 'net_income_not_control', 'net_income_total']
+        
+        statements = []
+        
+        for row in result:
+            row_dict = dict(zip(columns, row))
+            if select == FinancialSelect.REVENUE:
+                statements.append(self._create_revenue_statement(row_dict))
+            elif select == FinancialSelect.OPERATING_PROFIT:
+                statements.append(self._create_operating_profit_statement(row_dict))
+            elif select == FinancialSelect.NET_INCOME:
+                statements.append(self._create_net_income_statement(row_dict))
+
+        return statements
+    
     def _process_income_statement_result(self, result) -> List[IncomeStatementDetail]:
         """
         손익계산 결과 처리
@@ -152,6 +225,42 @@ class FinancialService:
             net_income_total=self._to_decimal(row_dict["net_income_total"]),
             net_income=self._to_decimal(row_dict["net_income"]),
             net_income_not_control=self._to_decimal(row_dict["net_income_not_control"])
+        )
+        
+    def _create_revenue_statement(self, row_dict: Dict) -> RevenueStatement:
+        """
+        실적 - 매출 데이터 생성
+        """
+        return RevenueStatement(
+            code=row_dict["Code"],
+            name=row_dict["Name"],
+            period_q=row_dict["period_q"],
+            rev=self._to_decimal(row_dict["rev"]),
+            gross_profit=self._to_decimal(row_dict["gross_profit"])
+        )
+        
+    def _create_operating_profit_statement(self, row_dict: Dict) -> OperatingProfitStatement:
+        """
+        실적 - 영업이익 데이터 생성
+        """
+        return OperatingProfitStatement(
+            code=row_dict["Code"],
+            name=row_dict["Name"],
+            period_q=row_dict["period_q"],
+            operating_income=self._to_decimal(row_dict["operating_income"])
+        )
+    
+    def _create_net_income_statement(self, row_dict: Dict) -> NetIncomeStatement:
+        """
+        실적 - 당기순이익 데이터 생성
+        """
+        return NetIncomeStatement(
+            code=row_dict["Code"],
+            name=row_dict["Name"],
+            period_q=row_dict["period_q"],
+            net_income=self._to_decimal(row_dict["net_income"]),
+            net_income_not_control=self._to_decimal(row_dict["net_income_not_control"]),
+            net_income_total=self._to_decimal(row_dict["net_income_total"])
         )
 
     async def get_cashflow_data(
