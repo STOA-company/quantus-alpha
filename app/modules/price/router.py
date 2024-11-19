@@ -4,7 +4,7 @@ from app.modules.price.services import PriceService, get_price_service
 from app.modules.price.schemas import PriceDataItem
 from datetime import date
 from typing import Annotated, List, Optional
-from app.modules.common.enum import Country
+from app.modules.common.enum import Country, Frequency
 
 router = APIRouter()
 
@@ -13,6 +13,7 @@ router = APIRouter()
 async def get_price_data(
     ctry: Annotated[Country, Query(description="Country code (kr/us)")],
     ticker: Annotated[str, Query(description="Stock ticker symbol")],
+    frequency: Annotated[Frequency, Query(description="Frequency (daily/minute)")],
     start_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     service: PriceService = Depends(get_price_service),
@@ -20,7 +21,9 @@ async def get_price_data(
     """
     Get price data for a specific country and ticker from database.
     """
-    return await service.read_price_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+    return await service.read_price_data(
+        ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, frequency=frequency
+    )
 
 
 # @router.get("/volume", response_model=BaseResponse[List[VolumeDataItem]])  # 여기를 수정
