@@ -1,67 +1,58 @@
 from datetime import date
+from app.enum.financial import FinancialSelect
 from app.modules.common.enum import Country
 from app.modules.common.schemas import BaseResponse
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, Path
 from app.modules.financial.services import FinancialService, get_financial_service
-from .schemas import CashFlowDetail, CashFlowResponse, FinPosDetail, FinPosResponse, IncomeStatementDetail, IncomeStatementResponse
-from typing import List, Optional
+from .schemas import CashFlowDetail, FinPosDetail, IncomeStatementDetail, NetIncomeStatement, OperatingProfitStatement, RevenueStatement
+from typing import List, Optional, Annotated, Union
 
 router = APIRouter()
 
-# @router.get("/income", response_model=FinancialDataResponse)
-# async def get_income_data(
-#     ctry: str = Query(..., description="Country code"),
-#     ticker: str = Query(..., description="Stock ticker symbol"),
-#     service: FinancialService = Depends(get_financial_service)
-# ):
-#     """
-#     Get income statement data for a specific country and ticker.
-#     """
-#     df = await service.read_financial_data("income", ctry, ticker)
-#     return {"data": df.to_dict(orient="records")}
-
-# @router.get("/finpos", response_model=FinancialDataResponse)
-# async def get_finpos_data(
-#     ctry: str = Query(..., description="Country code"),
-#     ticker: str = Query(..., description="Stock ticker symbol"),
-#     service: FinancialService = Depends(get_financial_service)
-# ):
-#     """
-#     Get financial position data for a specific country and ticker.
-#     """
-#     df = await service.read_financial_data("finpos", ctry, ticker)
-#     return {"data": df.to_dict(orient="records")}
-
-# @router.get("/cashflow", response_model=FinancialDataResponse)
-# async def get_cashflow_data(
-#     ctry: str = Query(..., description="Country code"),
-#     ticker: str = Query(..., description="Stock ticker symbol"),
-#     service: FinancialService = Depends(get_financial_service)
-# ):
-#     """
-#     Get cash flow data for a specific country and ticker.
-#     """
-#     df = await service.read_financial_data("cashflow", ctry, ticker)
-#     return {"data": df.to_dict(orient="records")}
-
-# TODO) 전체적으로 필요한 response로 변경 필요
 @router.get(
     "/income", 
     response_model=BaseResponse[List[IncomeStatementDetail]], 
     summary="손익계산서 분기별 조회"
 )
 async def get_income_data(
-    ctry: Country,
-    ticker: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    financial_service: FinancialService = Depends(get_financial_service),
-) -> BaseResponse[List[IncomeStatementDetail]]:
+    ctry: Annotated[Country, Query(description="국가 코드")],
+    ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+    start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
+    end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
+    financial_service: FinancialService = Depends(get_financial_service)
+):
     result = await financial_service.get_income_data(
         ctry=ctry,
         ticker=ticker,
         start_date=start_date,
-        end_date=end_date,
+        end_date=end_date
+    )
+    return result
+
+@router.get(
+    "/income-performance", 
+    response_model=Union[
+        BaseResponse[List[RevenueStatement]], 
+        BaseResponse[List[OperatingProfitStatement]], 
+        BaseResponse[List[NetIncomeStatement]], 
+        BaseResponse[List[IncomeStatementDetail]]
+    ], 
+    summary="실적 부분 조회 api"
+)
+async def get_income_data(
+    ctry: Annotated[Country, Query(description="국가 코드")],
+    ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+    select: Annotated[Optional[FinancialSelect], Query(description="조회 항목 선택 (revenue - 기본, operating_profit, net_income)")] = FinancialSelect.REVENUE,
+    start_date: Annotated[Optional[date], Query(description="시작일자 (YYYYMM)")] = None,
+    end_date: Annotated[Optional[date], Query(description="종료일자 (YYYYMM)")] = None,
+    financial_service: FinancialService = Depends(get_financial_service)
+):
+    result = await financial_service.get_income_performance_data(
+        ctry=ctry,
+        ticker=ticker,
+        select=select,
+        start_date=start_date,
+        end_date=end_date
     )
     return result
 
@@ -71,10 +62,10 @@ async def get_income_data(
     summary="현금흐름 분기별 조회"
 )
 async def get_cashflow_data(
-    ctry: Country,
-    ticker: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
+    ctry: Annotated[Country, Query(description="국가 코드")],
+    ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+    start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
+    end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[List[CashFlowDetail]]:
     result = await financial_service.get_cashflow_data(
@@ -91,10 +82,10 @@ async def get_cashflow_data(
     summary="재무제표 분기별 조회"
 )
 async def get_finpos_data(
-    ctry: Country,
-    ticker: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
+    ctry: Annotated[Country, Query(description="국가 코드")],
+    ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+    start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
+    end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[List[FinPosDetail]]:
     result = await financial_service.get_finpos_data(
