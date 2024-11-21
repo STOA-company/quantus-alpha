@@ -1,8 +1,8 @@
 from datetime import date
 from decimal import Decimal
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List
 import logging
-
+import pandas as pd
 from app.enum.financial import FinancialSelect
 from fastapi import HTTPException, Depends
 
@@ -11,18 +11,16 @@ from app.modules.common.enum import Country
 from app.modules.common.services import CommonService, get_common_service
 from app.modules.financial.schemas import (
     FinPosDetail,
-    FinPosResponse,
-    IncomeStatementResponse, 
     IncomeStatementDetail,
-    CashFlowResponse,
     CashFlowDetail,
     NetIncomeStatement,
     OperatingProfitStatement,
-    RevenueStatement
+    RevenueStatement,
 )
-from app.modules.common.schemas import BaseResponse
+from app.modules.common.schemas import BaseResponse, PandasStatistics
 
 logger = logging.getLogger(__name__)
+
 
 class FinancialService:
     def __init__(self, common_service: CommonService):
@@ -34,18 +32,9 @@ class FinancialService:
         """
         테이블 설정
         """
-        self.income_tables = {
-            Country.KR: "KOR_income",
-            Country.US: "USA_income"
-        }
-        self.cashflow_tables = {
-            Country.KR: "KOR_cashflow",
-            Country.US: "USA_cashflow"
-        }
-        self.finpos_tables = {
-            Country.KR: "KOR_finpos",
-            Country.US: "USA_finpos"
-        }
+        self.income_tables = {Country.KR: "KOR_income", Country.US: "USA_income"}
+        self.cashflow_tables = {Country.KR: "KOR_cashflow", Country.US: "USA_cashflow"}
+        self.finpos_tables = {Country.KR: "KOR_finpos", Country.US: "USA_finpos"}
 
     def _get_date_conditions(self, start_date: Optional[str], end_date: Optional[str]) -> Dict:
         """
@@ -54,22 +43,22 @@ class FinancialService:
         end_date (Optional[str]): YYYYMM 형식의 종료일
         """
         from datetime import datetime
-        
+
         conditions = {}
         current_year = datetime.now().year
-        
+
         if not start_date:
             conditions["period_q__gte"] = f"{current_year - 3}01"
             conditions["period_q__lte"] = f"{current_year}04"
         else:
             conditions["period_q__gte"] = f"{start_date[:4]}01"
             conditions["period_q__lte"] = f"{end_date[:4]}04" if end_date else f"{current_year}04"
-            
+
         return conditions
-    
+
     async def get_income_data(
-        self, 
-        ctry: Country, 
+        self,
+        ctry: Country,
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -84,25 +73,15 @@ class FinancialService:
 
             conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
 
-            result = self.db._select(
-                table=table_name,
-                order='period_q',
-                ascending=False,
-                **conditions
-            )
+            result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
 
             if not result:
-                raise HTTPException(
-                    status_code=404, 
-                    detail=f"{ticker} 종목에 대한 손익계산 데이터가 존재하지 않습니다."
-                )
+                raise HTTPException(status_code=404, detail=f"{ticker} 종목에 대한 손익계산 데이터가 존재하지 않습니다.")
 
             statements = self._process_income_statement_result(result)
-            
+
             return BaseResponse[List[IncomeStatementDetail]](
-                status="success",
-                message="손익계산서 데이터를 성공적으로 조회했습니다.",
-                data=statements
+                status="success", message="손익계산서 데이터를 성공적으로 조회했습니다.", data=statements
             )
 
         except HTTPException:
@@ -112,13 +91,15 @@ class FinancialService:
             raise HTTPException(status_code=500, detail="내부 서버 오류")
 
     async def get_income_performance_data(
-        self, 
-        ctry: Country, 
+        self,
+        ctry: Country,
         ticker: str,
         select: Optional[FinancialSelect] = FinancialSelect.REVENUE,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
-    ) -> BaseResponse[List[IncomeStatementDetail] | List[RevenueStatement] | List[OperatingProfitStatement] | List[NetIncomeStatement]]:
+    ) -> BaseResponse[
+        List[IncomeStatementDetail] | List[RevenueStatement] | List[OperatingProfitStatement] | List[NetIncomeStatement]
+    ]:
         """
         손익계산서 데이터 조회
         """
@@ -129,25 +110,15 @@ class FinancialService:
 
             conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
 
-            result = self.db._select(
-                table=table_name,
-                order='period_q',
-                ascending=False,
-                **conditions
-            )
+            result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
 
             if not result:
-                raise HTTPException(
-                    status_code=404, 
-                    detail=f"{ticker} 종목에 대한 손익계산 데이터가 존재하지 않습니다."
-                )
+                raise HTTPException(status_code=404, detail=f"{ticker} 종목에 대한 손익계산 데이터가 존재하지 않습니다.")
 
             statements = self._process_income_performance_statement_result(select, result)
-            
+
             return BaseResponse[List[RevenueStatement] | List[OperatingProfitStatement] | List[NetIncomeStatement]](
-                status="success",
-                message="손익계산서 데이터를 성공적으로 조회했습니다.",
-                data=statements
+                status="success", message="손익계산서 데이터를 성공적으로 조회했습니다.", data=statements
             )
 
         except HTTPException:
@@ -156,19 +127,21 @@ class FinancialService:
             logger.error(f"Unexpected error in get_income_data: {str(e)}")
             raise HTTPException(status_code=500, detail="내부 서버 오류")
 
-    def _process_income_performance_statement_result(self, select: Optional[FinancialSelect], result) -> List[RevenueStatement] | List[OperatingProfitStatement] | List[NetIncomeStatement]:
+    def _process_income_performance_statement_result(
+        self, select: Optional[FinancialSelect], result
+    ) -> List[RevenueStatement] | List[OperatingProfitStatement] | List[NetIncomeStatement]:
         """
         손익계산 결과 처리
         """
         if select == FinancialSelect.REVENUE:
-            columns = ['Code', 'Name', 'period_q', 'rev', 'gross_profit']
+            columns = ["Code", "Name", "period_q", "rev", "gross_profit"]
         elif select == FinancialSelect.OPERATING_PROFIT:
-            columns = ['Code', 'Name', 'period_q', 'operating_income']
+            columns = ["Code", "Name", "period_q", "operating_income"]
         elif select == FinancialSelect.NET_INCOME:
-            columns = ['Code', 'Name', 'period_q', 'net_income', 'net_income_not_control', 'net_income_total']
-        
+            columns = ["Code", "Name", "period_q", "net_income", "net_income_not_control", "net_income_total"]
+
         statements = []
-        
+
         for row in result:
             row_dict = dict(zip(columns, row))
             if select == FinancialSelect.REVENUE:
@@ -179,21 +152,36 @@ class FinancialService:
                 statements.append(self._create_net_income_statement(row_dict))
 
         return statements
-    
+
     def _process_income_statement_result(self, result) -> List[IncomeStatementDetail]:
         """
         손익계산 결과 처리
         """
         columns = [
-            'Code', 'Name', 'period_q', 'rev', 'cost_of_sales', 'gross_profit', 
-            'sell_admin_cost', 'rnd_expense', 'operating_income', 'other_rev_gains', 
-            'other_exp_losses', 'equity method gain', 'fin_profit', 'fin_cost', 
-            'pbt', 'corp_tax_cost', 'profit_continuing_ops', 'net_income_total', 
-            'net_income', 'net_income_not_control'
+            "Code",
+            "Name",
+            "period_q",
+            "rev",
+            "cost_of_sales",
+            "gross_profit",
+            "sell_admin_cost",
+            "rnd_expense",
+            "operating_income",
+            "other_rev_gains",
+            "other_exp_losses",
+            "equity method gain",
+            "fin_profit",
+            "fin_cost",
+            "pbt",
+            "corp_tax_cost",
+            "profit_continuing_ops",
+            "net_income_total",
+            "net_income",
+            "net_income_not_control",
         ]
-        
+
         statements = []
-        
+
         for row in result:
             row_dict = dict(zip(columns, row))
             statements.append(self._create_income_statement_detail(row_dict))
@@ -224,9 +212,9 @@ class FinancialService:
             profit_continuing_ops=self._to_decimal(row_dict["profit_continuing_ops"]),
             net_income_total=self._to_decimal(row_dict["net_income_total"]),
             net_income=self._to_decimal(row_dict["net_income"]),
-            net_income_not_control=self._to_decimal(row_dict["net_income_not_control"])
+            net_income_not_control=self._to_decimal(row_dict["net_income_not_control"]),
         )
-        
+
     def _create_revenue_statement(self, row_dict: Dict) -> RevenueStatement:
         """
         실적 - 매출 데이터 생성
@@ -236,9 +224,9 @@ class FinancialService:
             name=row_dict["Name"],
             period_q=row_dict["period_q"],
             rev=self._to_decimal(row_dict["rev"]),
-            gross_profit=self._to_decimal(row_dict["gross_profit"])
+            gross_profit=self._to_decimal(row_dict["gross_profit"]),
         )
-        
+
     def _create_operating_profit_statement(self, row_dict: Dict) -> OperatingProfitStatement:
         """
         실적 - 영업이익 데이터 생성
@@ -247,9 +235,9 @@ class FinancialService:
             code=row_dict["Code"],
             name=row_dict["Name"],
             period_q=row_dict["period_q"],
-            operating_income=self._to_decimal(row_dict["operating_income"])
+            operating_income=self._to_decimal(row_dict["operating_income"]),
         )
-    
+
     def _create_net_income_statement(self, row_dict: Dict) -> NetIncomeStatement:
         """
         실적 - 당기순이익 데이터 생성
@@ -260,12 +248,12 @@ class FinancialService:
             period_q=row_dict["period_q"],
             net_income=self._to_decimal(row_dict["net_income"]),
             net_income_not_control=self._to_decimal(row_dict["net_income_not_control"]),
-            net_income_total=self._to_decimal(row_dict["net_income_total"])
+            net_income_total=self._to_decimal(row_dict["net_income_total"]),
         )
 
     async def get_cashflow_data(
-        self, 
-        ctry: Country, 
+        self,
+        ctry: Country,
         ticker: str,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
@@ -280,25 +268,15 @@ class FinancialService:
 
             conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
 
-            result = self.db._select(
-                table=table_name,
-                order='period_q',
-                ascending=False,
-                **conditions
-            )
+            result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
 
             if not result:
-                raise HTTPException(
-                    status_code=404, 
-                    detail=f"{ticker} 종목에 대한 현금흐름 데이터가 존재하지 않습니다."
-                )
+                raise HTTPException(status_code=404, detail=f"{ticker} 종목에 대한 현금흐름 데이터가 존재하지 않습니다.")
 
             statements = self._process_cashflow_result(result)
-            
+
             return BaseResponse[List[CashFlowDetail]](
-                status="success",
-                message="현금흐름표 데이터를 성공적으로 조회했습니다.",
-                data=statements
+                status="success", message="현금흐름표 데이터를 성공적으로 조회했습니다.", data=statements
             )
 
         except HTTPException:
@@ -312,12 +290,22 @@ class FinancialService:
         현금흐름 결과 처리
         """
         columns = [
-            'Code', 'Name', 'period_q', 
-            'operating_cashflow', 'non_controlling_changes', 
-            'working_capital_changes', 'finance_cashflow', 
-            'dividends', 'investing_cashflow', 'depreciation',
-            'free_cash_flow1', 'free_cash_flow2', 'cash_earnings',
-            'capex', 'other_cash_flows', 'cash_increment'
+            "Code",
+            "Name",
+            "period_q",
+            "operating_cashflow",
+            "non_controlling_changes",
+            "working_capital_changes",
+            "finance_cashflow",
+            "dividends",
+            "investing_cashflow",
+            "depreciation",
+            "free_cash_flow1",
+            "free_cash_flow2",
+            "cash_earnings",
+            "capex",
+            "other_cash_flows",
+            "cash_increment",
         ]
 
         statements = []
@@ -347,7 +335,7 @@ class FinancialService:
             cash_earnings=self._to_decimal(row_dict["cash_earnings"]),
             capex=self._to_decimal(row_dict["capex"]),
             other_cash_flows=self._to_decimal(row_dict["other_cash_flows"]),
-            cash_increment=self._to_decimal(row_dict["cash_increment"])
+            cash_increment=self._to_decimal(row_dict["cash_increment"]),
         )
 
     async def _get_latest_quarter(self, ctry: Country, ticker: str) -> str:
@@ -360,37 +348,22 @@ class FinancialService:
                 raise HTTPException(status_code=400, detail="Invalid country code")
 
             result = self.db._select(
-                table=table_name,
-                columns=['period_q'],
-                order='period_q',
-                ascending=False,
-                limit=1,
-                Code=ticker
+                table=table_name, columns=["period_q"], order="period_q", ascending=False, limit=1, Code=ticker
             )
-            
+
             if not result:
-                raise HTTPException(
-                    status_code=404, 
-                    detail=f"No data found for {ticker}"
-                )
-                
+                raise HTTPException(status_code=404, detail=f"No data found for {ticker}")
+
             return result[0][0]
-            
+
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Error getting latest quarter: {e}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Internal server error: {str(e)}"
-            )
-            
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
     async def get_finpos_data(
-        self, 
-        ctry: Country, 
-        ticker: str,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        self, ctry: Country, ticker: str, start_date: Optional[date] = None, end_date: Optional[date] = None
     ) -> BaseResponse[List[FinPosDetail]]:
         """
         재무상태표 데이터 조회
@@ -402,25 +375,17 @@ class FinancialService:
 
             conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
 
-            result = self.db._select(
-                table=table_name,
-                order='period_q',
-                ascending=False,
-                **conditions
-            )
+            result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
 
             if not result:
                 raise HTTPException(
-                    status_code=404, 
-                    detail=f"{ticker} 종목에 대한 재무상태표 데이터가 존재하지 않습니다."
+                    status_code=404, detail=f"{ticker} 종목에 대한 재무상태표 데이터가 존재하지 않습니다."
                 )
 
             statements = self._process_finpos_result(result)
-            
+
             return BaseResponse[List[FinPosDetail]](
-                status="success",
-                message="재무상태표 데이터를 성공적으로 조회했습니다.",
-                data=statements
+                status="success", message="재무상태표 데이터를 성공적으로 조회했습니다.", data=statements
             )
 
         except HTTPException:
@@ -434,21 +399,44 @@ class FinancialService:
         재무상태표 결과 처리
         """
         columns = [
-            'Code', 'Name', 'period_q', 'total_asset', 'current_asset',
-            'stock_asset', 'trade_and_other_receivables', 'cash_asset',
-            'assets_held_for_sale', 'non_current_asset', 'tangible_asset',
-            'intangible_asset', 'investment_asset', 
-            'non_current_trade_and_other_receivables', 'deferred_tax_asset',
-            'extra_intangible', 'total_dept', 'current_dept',
-            'trade_and_other_payables', 'liabilities_held_for_sale',
-            'non_current_liability', 'debenture',
-            'non_current_trade_and_other_payables', 'deferred_tax_liability',
-            'equity', 'total_equity', 'controlling_equity', 'capital',
-            'preferred_cap_stock', 'cap_stock_common', 'new_cap_security',
-            'capital_surplus', 'other_capital', 'comp_income',
-            'retained_earnings', 'non_ctrl_shrhld_eq'
+            "Code",
+            "Name",
+            "period_q",
+            "total_asset",
+            "current_asset",
+            "stock_asset",
+            "trade_and_other_receivables",
+            "cash_asset",
+            "assets_held_for_sale",
+            "non_current_asset",
+            "tangible_asset",
+            "intangible_asset",
+            "investment_asset",
+            "non_current_trade_and_other_receivables",
+            "deferred_tax_asset",
+            "extra_intangible",
+            "total_dept",
+            "current_dept",
+            "trade_and_other_payables",
+            "liabilities_held_for_sale",
+            "non_current_liability",
+            "debenture",
+            "non_current_trade_and_other_payables",
+            "deferred_tax_liability",
+            "equity",
+            "total_equity",
+            "controlling_equity",
+            "capital",
+            "preferred_cap_stock",
+            "cap_stock_common",
+            "new_cap_security",
+            "capital_surplus",
+            "other_capital",
+            "comp_income",
+            "retained_earnings",
+            "non_ctrl_shrhld_eq",
         ]
-        
+
         statements = []
         for row in result:
             row_dict = dict(zip(columns, row))
@@ -496,7 +484,7 @@ class FinancialService:
             other_capital=self._to_decimal(row_dict["other_capital"]),
             comp_income=self._to_decimal(row_dict["comp_income"]),
             retained_earnings=self._to_decimal(row_dict["retained_earnings"]),
-            non_ctrl_shrhld_eq=self._to_decimal(row_dict["non_ctrl_shrhld_eq"])
+            non_ctrl_shrhld_eq=self._to_decimal(row_dict["non_ctrl_shrhld_eq"]),
         )
 
     @staticmethod
@@ -506,13 +494,486 @@ class FinancialService:
         """
         return Decimal(str(value or 0))
 
+    ############################손익계산서 시계열 분석 pandas##############################
+    async def get_income_analysis(
+        self,
+        ctry: Country,
+        ticker: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> PandasStatistics[List[IncomeStatementDetail]]:
+        """
+        손익계산서 시계열 분석
+        """
+        try:
+            result = PandasStatistics(status="200", message="Success", data=[], statistics={})
 
-def get_financial_service(
-    common_service: CommonService = Depends(get_common_service)
-) -> FinancialService:
+            income_data = await self.get_income_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+
+            result.data = income_data.data
+            df = self._create_income_dataframe(result.data)
+            if df.empty:
+                return result
+
+            result.statistics = self._calculate_income_statistics(df)
+            return result
+
+        except Exception as e:
+            logger.error(f"Unexpected error in get_income_timeseries_analysis: {str(e)}")
+            raise HTTPException(status_code=500, detail="내부 서버 오류")
+
+    def _create_income_dataframe(self, data: List[IncomeStatementDetail]) -> pd.DataFrame:
+        """
+        손익계산서 데이터를 DataFrame으로 변환
+        """
+        df = pd.DataFrame([item.dict() for item in data])
+        if df.empty:
+            return df
+
+        df["period_q"] = pd.to_datetime(df["period_q"], format="%Y%m")
+        return df.sort_values("period_q")
+
+    def _calculate_income_statistics(self, df: pd.DataFrame) -> Dict:
+        """
+        손익계산서 통계 계산
+        """
+        time_series_stats = {
+            "trend_analysis": self._calculate_trend_analysis(df),
+            "seasonal_analysis": self._calculate_seasonal_analysis(df),
+            "rolling_metrics": self._calculate_rolling_metrics(df),
+            "volatility": self._calculate_volatility_metrics(df),
+            "ttm_analysis": self._calculate_ttm_analysis(df),
+            "profitability_trends": self._calculate_profitability_trends(df),
+        }
+
+        basic_stats = self._calculate_basic_statistics(df)
+
+        return {"basic_statistics": basic_stats, "time_series_analysis": time_series_stats}
+
+    def _calculate_trend_analysis(self, df: pd.DataFrame) -> Dict:
+        """
+        추세 분석 (성장률 계산)
+        """
+        return {
+            "revenue_growth": {
+                "qoq": float(df["rev"].pct_change().iloc[-1] * 100) if len(df) > 1 else None,
+                "yoy": float(df["rev"].pct_change(4).iloc[-1] * 100) if len(df) > 4 else None,
+                "cagr": float(((df["rev"].iloc[-1] / df["rev"].iloc[0]) ** (4 / len(df)) - 1) * 100)
+                if len(df) > 4 and df["rev"].iloc[0] != 0
+                else None,
+            },
+            "operating_income_growth": {
+                "qoq": float(df["operating_income"].pct_change().iloc[-1] * 100) if len(df) > 1 else None,
+                "yoy": float(df["operating_income"].pct_change(4).iloc[-1] * 100) if len(df) > 4 else None,
+            },
+        }
+
+    def _calculate_seasonal_analysis(self, df: pd.DataFrame) -> Dict:
+        """
+        계절성 분석 (분기별 평균)
+        """
+        return {
+            "quarterly_average": {
+                f"Q{q}": float(df[df["period_q"].dt.quarter == q]["rev"].mean())
+                if not df[df["period_q"].dt.quarter == q].empty
+                else None
+                for q in range(1, 5)
+            }
+        }
+
+    def _calculate_rolling_metrics(self, df: pd.DataFrame) -> Dict:
+        """
+        이동평균 지표 계산
+        """
+        return {
+            "revenue_ma": float(df["rev"].rolling(window=4).mean().iloc[-1]) if len(df) >= 4 else None,
+            "operating_income_ma": float(df["operating_income"].rolling(window=4).mean().iloc[-1])
+            if len(df) >= 4
+            else None,
+        }
+
+    def _calculate_volatility_metrics(self, df: pd.DataFrame) -> Dict:
+        """
+        변동성 지표 계산
+        """
+        return {
+            "revenue_std": float(df["rev"].std()),
+            "revenue_cv": float(df["rev"].std() / df["rev"].mean()) if df["rev"].mean() != 0 else None,
+        }
+
+    def _calculate_ttm_analysis(self, df: pd.DataFrame) -> Dict:
+        """
+        TTM(Trailing Twelve Months) 분석
+        """
+        return {
+            "revenue_ttm": float(df["rev"].tail(4).sum()) if len(df) >= 4 else None,
+            "operating_income_ttm": float(df["operating_income"].tail(4).sum()) if len(df) >= 4 else None,
+            "net_income_ttm": float(df["net_income"].tail(4).sum()) if len(df) >= 4 else None,
+        }
+
+    def _calculate_profitability_trends(self, df: pd.DataFrame) -> Dict:
+        """
+        수익성 지표 추이 계산
+        """
+        return {
+            "gross_margin": [float(x) if pd.notnull(x) else None for x in (df["gross_profit"] / df["rev"] * 100)],
+            "operating_margin": [float(x) if pd.notnull(x) else None for x in (df["operating_income"] / df["rev"] * 100)],
+            "net_margin": [float(x) if pd.notnull(x) else None for x in (df["net_income"] / df["rev"] * 100)],
+        }
+
+    def _calculate_basic_statistics(self, df: pd.DataFrame) -> Dict:
+        """
+        기본 통계량 계산
+        """
+        basic_stats = df.select_dtypes(include=["float64", "int64"]).describe()
+        return {
+            col: {index: float(value) if pd.notnull(value) else None for index, value in series.items()}
+            for col, series in basic_stats.items()
+        }
+
+    ############################현금흐름 시계열 분석 pandas##############################
+    async def get_cashflow_analysis(
+        self,
+        ctry: Country,
+        ticker: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> PandasStatistics[List[CashFlowDetail]]:
+        """
+        현금흐름 시계열 분석
+        """
+        try:
+            result = PandasStatistics(status="200", message="Success", data=[], statistics={})
+
+            cashflow_data = await self.get_cashflow_data(
+                ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
+            )
+
+            result.data = cashflow_data.data
+            df = self._create_cashflow_dataframe(result.data)
+            if df.empty:
+                return result
+
+            result.statistics = self._calculate_cashflow_statistics(df)
+            return result
+
+        except Exception as e:
+            logger.error(f"Unexpected error in get_cashflow_timeseries_analysis: {str(e)}")
+            raise HTTPException(status_code=500, detail="내부 서버 오류")
+
+    def _create_cashflow_dataframe(self, data: List[CashFlowDetail]) -> pd.DataFrame:
+        """
+        현금흐름 데이터를 DataFrame으로 변환
+        """
+        df = pd.DataFrame([item.dict() for item in data])
+        if df.empty:
+            return df
+
+        df["period_q"] = pd.to_datetime(df["period_q"], format="%Y%m")
+        return df.sort_values("period_q")
+
+    def _calculate_cashflow_statistics(self, df: pd.DataFrame) -> Dict:
+        """
+        현금흐름 통계 계산
+        """
+        time_series_stats = {
+            "trend_analysis": self._calculate_cashflow_trend_analysis(df),
+            "seasonal_analysis": self._calculate_cashflow_seasonal_analysis(df),
+            "rolling_metrics": self._calculate_cashflow_rolling_metrics(df),
+            "volatility": self._calculate_cashflow_volatility_metrics(df),
+            "ttm_analysis": self._calculate_cashflow_ttm_analysis(df),
+            "efficiency_metrics": self._calculate_cashflow_efficiency_metrics(df),
+        }
+
+        basic_stats = self._calculate_basic_statistics(df)
+
+        return {"basic_statistics": basic_stats, "time_series_analysis": time_series_stats}
+
+    def _calculate_cashflow_trend_analysis(self, df: pd.DataFrame) -> Dict:
+        """
+        현금흐름 추세 분석
+        """
+        return {
+            "operating_cashflow_growth": {
+                "qoq": float(df["operating_cashflow"].pct_change().iloc[-1] * 100) if len(df) > 1 else None,
+                "yoy": float(df["operating_cashflow"].pct_change(4).iloc[-1] * 100) if len(df) > 4 else None,
+                "cagr": float(
+                    ((df["operating_cashflow"].iloc[-1] / df["operating_cashflow"].iloc[0]) ** (4 / len(df)) - 1) * 100
+                )
+                if len(df) > 4 and df["operating_cashflow"].iloc[0] != 0
+                else None,
+            },
+            "free_cashflow_growth": {
+                "qoq": float(df["free_cash_flow1"].pct_change().iloc[-1] * 100) if len(df) > 1 else None,
+                "yoy": float(df["free_cash_flow1"].pct_change(4).iloc[-1] * 100) if len(df) > 4 else None,
+            },
+        }
+
+    def _calculate_cashflow_seasonal_analysis(self, df: pd.DataFrame) -> Dict:
+        """
+        현금흐름 계절성 분석
+        """
+        return {
+            "quarterly_average": {
+                f"Q{q}": {
+                    "operating_cashflow": float(df[df["period_q"].dt.quarter == q]["operating_cashflow"].mean())
+                    if not df[df["period_q"].dt.quarter == q].empty
+                    else None,
+                    "free_cash_flow": float(df[df["period_q"].dt.quarter == q]["free_cash_flow1"].mean())
+                    if not df[df["period_q"].dt.quarter == q].empty
+                    else None,
+                }
+                for q in range(1, 5)
+            }
+        }
+
+    def _calculate_cashflow_rolling_metrics(self, df: pd.DataFrame) -> Dict:
+        """
+        현금흐름 이동평균 지표
+        """
+        return {
+            "operating_cashflow_ma": float(df["operating_cashflow"].rolling(window=4).mean().iloc[-1])
+            if len(df) >= 4
+            else None,
+            "free_cash_flow_ma": float(df["free_cash_flow1"].rolling(window=4).mean().iloc[-1]) if len(df) >= 4 else None,
+            "investing_cashflow_ma": float(df["investing_cashflow"].rolling(window=4).mean().iloc[-1])
+            if len(df) >= 4
+            else None,
+            "finance_cashflow_ma": float(df["finance_cashflow"].rolling(window=4).mean().iloc[-1])
+            if len(df) >= 4
+            else None,
+        }
+
+    def _calculate_cashflow_volatility_metrics(self, df: pd.DataFrame) -> Dict:
+        """
+        현금흐름 변동성 지표
+        """
+        return {
+            "operating_cashflow_std": float(df["operating_cashflow"].std()),
+            "operating_cashflow_cv": float(df["operating_cashflow"].std() / df["operating_cashflow"].mean())
+            if df["operating_cashflow"].mean() != 0
+            else None,
+            "free_cash_flow_std": float(df["free_cash_flow1"].std()),
+            "free_cash_flow_cv": float(df["free_cash_flow1"].std() / df["free_cash_flow1"].mean())
+            if df["free_cash_flow1"].mean() != 0
+            else None,
+        }
+
+    def _calculate_cashflow_ttm_analysis(self, df: pd.DataFrame) -> Dict:
+        """
+        현금흐름 TTM 분석
+        """
+        return {
+            "operating_cashflow_ttm": float(df["operating_cashflow"].tail(4).sum()) if len(df) >= 4 else None,
+            "free_cash_flow_ttm": float(df["free_cash_flow1"].tail(4).sum()) if len(df) >= 4 else None,
+            "investing_cashflow_ttm": float(df["investing_cashflow"].tail(4).sum()) if len(df) >= 4 else None,
+            "finance_cashflow_ttm": float(df["finance_cashflow"].tail(4).sum()) if len(df) >= 4 else None,
+            "capex_ttm": float(df["capex"].tail(4).sum()) if len(df) >= 4 else None,
+        }
+
+    def _calculate_cashflow_efficiency_metrics(self, df: pd.DataFrame) -> Dict:
+        """
+        현금흐름 효율성 지표
+        """
+        return {
+            "operating_to_investing_ratio": [
+                float(x) if pd.notnull(x) and y != 0 else None
+                for x, y in zip(df["operating_cashflow"], df["investing_cashflow"].abs())
+            ],
+            "capex_to_operating_ratio": [
+                float(x) if pd.notnull(x) and y != 0 else None
+                for x, y in zip(df["capex"].abs(), df["operating_cashflow"])
+            ],
+            "free_cash_flow_to_operating_ratio": [
+                float(x) if pd.notnull(x) and y != 0 else None
+                for x, y in zip(df["free_cash_flow1"], df["operating_cashflow"])
+            ],
+        }
+
+    ############################재무상태표 시계열 분석 pandas##############################
+    async def get_finpos_analysis(
+        self,
+        ctry: Country,
+        ticker: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> PandasStatistics[List[FinPosDetail]]:
+        """
+        재무상태표 시계열 분석
+        """
+        try:
+            result = PandasStatistics(status="200", message="Success", data=[], statistics={})
+
+            finpos_data = await self.get_finpos_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+
+            result.data = finpos_data.data
+            df = self._create_finpos_dataframe(result.data)
+            if df.empty:
+                return result
+
+            result.statistics = self._calculate_finpos_statistics(df)
+            return result
+
+        except Exception as e:
+            logger.error(f"Unexpected error in get_finpos_timeseries_analysis: {str(e)}")
+            raise HTTPException(status_code=500, detail="내부 서버 오류")
+
+    def _create_finpos_dataframe(self, data: List[FinPosDetail]) -> pd.DataFrame:
+        """
+        재무상태표 데이터를 DataFrame으로 변환
+        """
+        df = pd.DataFrame([item.dict() for item in data])
+        if df.empty:
+            return df
+
+        df["period_q"] = pd.to_datetime(df["period_q"], format="%Y%m")
+        return df.sort_values("period_q")
+
+    def _calculate_finpos_statistics(self, df: pd.DataFrame) -> Dict:
+        """
+        재무상태표 통계 계산
+        """
+        time_series_stats = {
+            "trend_analysis": self._calculate_finpos_trend_analysis(df),
+            "seasonal_analysis": self._calculate_finpos_seasonal_analysis(df),
+            "rolling_metrics": self._calculate_finpos_rolling_metrics(df),
+            "volatility": self._calculate_finpos_volatility_metrics(df),
+            "ttm_analysis": self._calculate_finpos_ttm_analysis(df),
+            "financial_ratios": self._calculate_finpos_financial_ratios(df),
+        }
+
+        # 재무상태표용 기본 통계로 수정
+        basic_stats = {
+            "total_asset": {
+                "mean": float(df["total_asset"].mean()),
+                "median": float(df["total_asset"].median()),
+                "std": float(df["total_asset"].std()),
+                "min": float(df["total_asset"].min()),
+                "max": float(df["total_asset"].max()),
+                "latest": float(df["total_asset"].iloc[0]),
+            },
+            "total_equity": {
+                "mean": float(df["total_equity"].mean()),
+                "median": float(df["total_equity"].median()),
+                "std": float(df["total_equity"].std()),
+                "min": float(df["total_equity"].min()),
+                "max": float(df["total_equity"].max()),
+                "latest": float(df["total_equity"].iloc[0]),
+            },
+            "total_dept": {
+                "mean": float(df["total_dept"].mean()),
+                "median": float(df["total_dept"].median()),
+                "std": float(df["total_dept"].std()),
+                "min": float(df["total_dept"].min()),
+                "max": float(df["total_dept"].max()),
+                "latest": float(df["total_dept"].iloc[0]),
+            },
+        }
+
+        return {"basic_statistics": basic_stats, "time_series_analysis": time_series_stats}
+
+    def _calculate_finpos_trend_analysis(self, df: pd.DataFrame) -> Dict:
+        """
+        재무상태표 추세 분석
+        """
+        return {
+            "total_asset_growth": {
+                "qoq": float(df["total_asset"].pct_change().iloc[-1] * 100) if len(df) > 1 else None,
+                "yoy": float(df["total_asset"].pct_change(4).iloc[-1] * 100) if len(df) > 4 else None,
+                "cagr": float(((df["total_asset"].iloc[-1] / df["total_asset"].iloc[0]) ** (4 / len(df)) - 1) * 100)
+                if len(df) > 4 and df["total_asset"].iloc[0] != 0
+                else None,
+            },
+            "equity_growth": {
+                "qoq": float(df["equity"].pct_change().iloc[-1] * 100) if len(df) > 1 else None,
+                "yoy": float(df["equity"].pct_change(4).iloc[-1] * 100) if len(df) > 4 else None,
+            },
+        }
+
+    def _calculate_finpos_seasonal_analysis(self, df: pd.DataFrame) -> Dict:
+        """
+        재무상태표 계절성 분석
+        """
+        return {
+            "quarterly_average": {
+                f"Q{q}": {
+                    "total_asset": float(df[df["period_q"].dt.quarter == q]["total_asset"].mean())
+                    if not df[df["period_q"].dt.quarter == q].empty
+                    else None,
+                    "total_equity": float(df[df["period_q"].dt.quarter == q]["total_equity"].mean())
+                    if not df[df["period_q"].dt.quarter == q].empty
+                    else None,
+                }
+                for q in range(1, 5)
+            }
+        }
+
+    def _calculate_finpos_rolling_metrics(self, df: pd.DataFrame) -> Dict:
+        """
+        재무상태표 이동평균 지표
+        """
+        return {
+            "total_asset_ma": float(df["total_asset"].rolling(window=4).mean().iloc[-1]) if len(df) >= 4 else None,
+            "total_equity_ma": float(df["total_equity"].rolling(window=4).mean().iloc[-1]) if len(df) >= 4 else None,
+            "current_asset_ma": float(df["current_asset"].rolling(window=4).mean().iloc[-1]) if len(df) >= 4 else None,
+            "current_dept_ma": float(df["current_dept"].rolling(window=4).mean().iloc[-1]) if len(df) >= 4 else None,
+        }
+
+    def _calculate_finpos_volatility_metrics(self, df: pd.DataFrame) -> Dict:
+        """
+        재무상태표 변동성 지표
+        """
+        return {
+            "total_asset_std": float(df["total_asset"].std()),
+            "total_equity_std": float(df["total_equity"].std()),
+            "current_asset_std": float(df["current_asset"].std()),
+            "current_dept_std": float(df["current_dept"].std()),
+        }
+
+    def _calculate_finpos_ttm_analysis(self, df: pd.DataFrame) -> Dict:
+        """
+        재무상태표 TTM 분석
+        """
+        return {
+            "total_asset_ttm": float(df["total_asset"].tail(4).sum()) if len(df) >= 4 else None,
+            "total_equity_ttm": float(df["total_equity"].tail(4).sum()) if len(df) >= 4 else None,
+            "current_asset_ttm": float(df["current_asset"].tail(4).sum()) if len(df) >= 4 else None,
+            "current_dept_ttm": float(df["current_dept"].tail(4).sum()) if len(df) >= 4 else None,
+        }
+
+    def _calculate_finpos_financial_ratios(self, df: pd.DataFrame) -> Dict:
+        """
+        재무상태표 재무비율 계산
+        - 유동비율 (current ratio)
+        - 당좌비율 (quick ratio)
+        - 현금비율 (cash ratio)
+        - 부채비율 (debt to equity ratio)
+        - 자기자본비율 (equity ratio)
+        """
+        return {
+            # 유동비율 = 유동자산 / 유동부채 × 100
+            "current_ratio": [
+                float(x) if pd.notnull(x) and y != 0 else None for x, y in zip(df["current_asset"], df["current_dept"])
+            ],
+            # 당좌비율 = (유동자산 - 재고자산) / 유동부채 × 100
+            "quick_ratio": [
+                float(x) if pd.notnull(x) and y != 0 else None
+                for x, y in zip(df["current_asset"] - df["stock_asset"], df["current_dept"])
+            ],
+            # 현금비율 = 현금성자산 / 유동부채 × 100
+            "cash_ratio": [
+                float(x) if pd.notnull(x) and y != 0 else None for x, y in zip(df["cash_asset"], df["current_dept"])
+            ],
+            # 부채비율 = 총부채 / 자기자본 × 100
+            "debt_to_equity_ratio": [
+                float(x) if pd.notnull(x) and y != 0 else None for x, y in zip(df["total_dept"], df["total_equity"])
+            ],
+            # 자기자본비율 = 자기자본 / 총자산 × 100
+            "equity_ratio": [
+                float(x) if pd.notnull(x) and y != 0 else None for x, y in zip(df["total_equity"], df["total_asset"])
+            ],
+        }
+
+
+def get_financial_service(common_service: CommonService = Depends(get_common_service)) -> FinancialService:
     return FinancialService(common_service=common_service)
-
-
-
-
-
