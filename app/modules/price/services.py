@@ -118,6 +118,7 @@ class PriceService:
             date_ranges.append((current_date, chunk_end))
             current_date = chunk_end + timedelta(days=1)
 
+
         return date_ranges
 
     async def _fetch_chunk(
@@ -188,7 +189,7 @@ class PriceService:
 
         except Exception as e:
             logger.error(f"Error processing price data: {str(e)}")
-            raise
+
 
     async def _fetch_data_parallel(
         self, ctry: Country, ticker: str, start_date: date, end_date: date, frequency: Frequency
@@ -223,6 +224,7 @@ class PriceService:
     ) -> BaseResponse[List[PriceDataItem]]:
         """가격 데이터 조회"""
         try:
+
             # 1. 날짜 범위 설정
             start_date, end_date = self._get_date_range(start_date, end_date, frequency)
             logger.info(f"Date range: {start_date} to {end_date}")
@@ -261,11 +263,13 @@ class PriceService:
                 df = await self._fetch_data_parallel(ctry, ticker, start_date, end_date, frequency)
                 logger.info(f"Fetched {len(df) if not df.empty else 0} records from DB")
 
+
                 # 6. 새로운 데이터 캐싱
                 if not df.empty and strategy != CacheStrategy.NO_CACHE:
                     ttl = self._get_cache_ttl(strategy)
                     logger.info(f"Caching new data with TTL: {ttl}")
                     self._cache.set(cache_key, df, ttl)
+                    
 
             # 7. 결과 확인
             if df.empty:
