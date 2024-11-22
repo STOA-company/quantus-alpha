@@ -62,3 +62,29 @@ class InvalidCountryException(FinancialException):
 class InvalidTickerException(FinancialException):
     def __init__(self, ticker: str):
         super().__init__(message="유효하지 않은 종목 코드입니다", status_code=400, error_code="INVALID_TICKER")
+
+
+class FinancialException(CustomException):
+    """재무 관련 기본 예외"""
+
+    pass
+
+
+class DataNotFoundException(FinancialException):
+    """데이터를 찾을 수 없는 경우의 예외"""
+
+    def __init__(self, ticker: str, data_type: str):
+        super().__init__(
+            message=f"{ticker} 종목에 대한 {data_type} 데이터가 존재하지 않습니다.",
+            status_code=404,
+            error_code="DATA_NOT_FOUND",
+        )
+
+
+class AnalysisException(FinancialException):
+    """분석 중 발생하는 예외"""
+
+    def __init__(self, analysis_type: str, detail: str):
+        super().__init__(
+            message=f"{analysis_type} 분석 중 오류가 발생했습니다: {detail}", status_code=500, error_code="ANALYSIS_ERROR"
+        )

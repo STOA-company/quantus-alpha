@@ -23,6 +23,8 @@ from app.core.exception.custom import (
     InvalidTokenException,
     UserNotFoundException,
     UserAlreadyExistsException,
+    DataNotFoundException,
+    AnalysisException,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,6 +97,14 @@ async def invalid_ticker_exception_handler(request: Request, exc: InvalidTickerE
     return _make_simple_error_response(request, exc)
 
 
+async def data_not_found_exception_handler(request: Request, exc: DataNotFoundException) -> JSONResponse:
+    return _make_simple_error_response(request, exc)
+
+
+async def analysis_exception_handler(request: Request, exc: AnalysisException) -> JSONResponse:
+    return _make_simple_error_response(request, exc)
+
+
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     return _make_json_resp(
         status_code=exc.status_code,
@@ -144,6 +154,15 @@ def initialize(app: FastAPI) -> None:
     app.add_exception_handler(CustomException, custom_exception_handler)
     app.add_exception_handler(AuthException, auth_exception_handler)
     app.add_exception_handler(UserException, user_exception_handler)
+    app.add_exception_handler(TokenExpiredException, token_expired_exception_handler)
+    app.add_exception_handler(InvalidTokenException, invalid_token_exception_handler)
+    app.add_exception_handler(UserNotFoundException, user_not_found_exception_handler)
+    app.add_exception_handler(UserAlreadyExistsException, user_already_exists_exception_handler)
+    app.add_exception_handler(NoFinancialDataException, no_financial_data_exception_handler)
+    app.add_exception_handler(InvalidCountryException, invalid_country_exception_handler)
+    app.add_exception_handler(InvalidTickerException, invalid_ticker_exception_handler)
+    app.add_exception_handler(DataNotFoundException, data_not_found_exception_handler)
+    app.add_exception_handler(AnalysisException, analysis_exception_handler)
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
     app.add_exception_handler(SQLAlchemyError, sqlalchemy_error_handler)

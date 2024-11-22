@@ -1,8 +1,8 @@
+import pandas as pd
+from app.core.logging.config import get_logger
 from datetime import date
 from decimal import Decimal
 from typing import Optional, Dict, List
-import logging
-import pandas as pd
 from app.enum.financial import FinancialSelect
 from fastapi import HTTPException, Depends
 
@@ -18,8 +18,9 @@ from app.modules.financial.schemas import (
     RevenueStatement,
 )
 from app.modules.common.schemas import BaseResponse, PandasStatistics
+from app.core.exception.custom import DataNotFoundException, InvalidCountryException, AnalysisException
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class FinancialService:
@@ -63,32 +64,34 @@ class FinancialService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
     ) -> BaseResponse[List[IncomeStatementDetail]]:
-        """
-        손익계산서 데이터 조회
-        """
+        """손익계산서 데이터 조회"""
         try:
             table_name = self.income_tables.get(ctry)
             if not table_name:
-                raise HTTPException(status_code=400, detail="존재하지 않는 국가입니다.")
+                logger.warning(f"Invalid country code: {ctry}")
+                raise InvalidCountryException()
 
             conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
 
+            logger.debug(f"Querying income data for {ticker} with conditions: {conditions}")
             result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
 
             if not result:
-                raise HTTPException(status_code=404, detail=f"{ticker} 종목에 대한 손익계산 데이터가 존재하지 않습니다.")
+                logger.warning(f"No income data found for ticker: {ticker}")
+                raise DataNotFoundException(ticker=ticker, data_type="손익계산")
 
             statements = self._process_income_statement_result(result)
 
+            logger.info(f"Successfully retrieved income data for {ticker}")
             return BaseResponse[List[IncomeStatementDetail]](
                 status="success", message="손익계산서 데이터를 성공적으로 조회했습니다.", data=statements
             )
 
-        except HTTPException:
+        except (InvalidCountryException, DataNotFoundException):
             raise
         except Exception as e:
-            logger.error(f"Unexpected error in get_income_data: {str(e)}")
-            raise HTTPException(status_code=500, detail="내부 서버 오류")
+            logger.error(f"Unexpected error in get_income_data: {str(e)}", exc_info=True)
+            raise AnalysisException(analysis_type="손익계산서 조회", detail=str(e))
 
     async def get_income_performance_data(
         self,
@@ -502,25 +505,27 @@ class FinancialService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
     ) -> PandasStatistics[List[IncomeStatementDetail]]:
-        """
-        손익계산서 시계열 분석
-        """
+        """손익계산서 시계열 분석"""
+        logger.info(f"Starting income analysis for {ticker}")
+
         try:
             result = PandasStatistics(status="200", message="Success", data=[], statistics={})
-
             income_data = await self.get_income_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
 
             result.data = income_data.data
             df = self._create_income_dataframe(result.data)
+
             if df.empty:
+                logger.warning(f"Empty DataFrame for ticker: {ticker}")
                 return result
 
             result.statistics = self._calculate_income_statistics(df)
+            logger.info(f"Successfully completed income analysis for {ticker}")
             return result
 
         except Exception as e:
-            logger.error(f"Unexpected error in get_income_timeseries_analysis: {str(e)}")
-            raise HTTPException(status_code=500, detail="내부 서버 오류")
+            logger.error(f"Error during income analysis for {ticker}: {str(e)}", exc_info=True)
+            raise AnalysisException(analysis_type="손익계산서 시계열", detail=str(e))
 
     def _create_income_dataframe(self, data: List[IncomeStatementDetail]) -> pd.DataFrame:
         """
