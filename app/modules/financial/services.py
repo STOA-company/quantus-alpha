@@ -1,21 +1,20 @@
 import pandas as pd
 from app.core.logging.config import get_logger
 from datetime import date
-from decimal import Decimal
-from typing import Optional, Dict, List
-from app.enum.financial import FinancialSelect
+from decimal import Decimal, InvalidOperation
+from typing import Optional, Dict, List, Tuple
 from fastapi import HTTPException, Depends
+import math
 
 from app.database.crud import database
 from app.modules.common.enum import Country
 from app.modules.common.services import CommonService, get_common_service
 from app.modules.financial.schemas import (
     FinPosDetail,
+    IncomePerformanceResponse,
+    IncomeStatement,
     IncomeStatementDetail,
     CashFlowDetail,
-    NetIncomeStatement,
-    OperatingProfitStatement,
-    RevenueStatement,
 )
 from app.modules.common.schemas import BaseResponse, PandasStatistics
 from app.core.exception.custom import DataNotFoundException, InvalidCountryException, AnalysisException
@@ -97,14 +96,11 @@ class FinancialService:
         self,
         ctry: Country,
         ticker: str,
-        select: Optional[FinancialSelect] = FinancialSelect.REVENUE,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-    ) -> BaseResponse[
-        List[IncomeStatementDetail] | List[RevenueStatement] | List[OperatingProfitStatement] | List[NetIncomeStatement]
-    ]:
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> BaseResponse[IncomePerformanceResponse]:
         """
-        손익계산서 데이터 조회
+        실적 데이터 조회
         """
         try:
             table_name = self.income_tables.get(ctry)
@@ -118,43 +114,93 @@ class FinancialService:
             if not result:
                 raise HTTPException(status_code=404, detail=f"{ticker} 종목에 대한 손익계산 데이터가 존재하지 않습니다.")
 
-            statements = self._process_income_performance_statement_result(select, result)
+            quarterly_data, yearly_data = self._process_income_performance_statement_result(result)
+            performance_data = IncomePerformanceResponse(quarterly=quarterly_data, yearly=yearly_data)
 
-            return BaseResponse[List[RevenueStatement] | List[OperatingProfitStatement] | List[NetIncomeStatement]](
-                status="success", message="손익계산서 데이터를 성공적으로 조회했습니다.", data=statements
+            return BaseResponse[IncomePerformanceResponse](
+                status="success", message="실적 데이터를 성공적으로 조회했습니다.", data=performance_data
             )
 
-        except HTTPException:
-            raise
+        except HTTPException as http_error:
+            raise http_error
         except Exception as e:
             logger.error(f"Unexpected error in get_income_data: {str(e)}")
             raise HTTPException(status_code=500, detail="내부 서버 오류")
 
-    def _process_income_performance_statement_result(
-        self, select: Optional[FinancialSelect], result
-    ) -> List[RevenueStatement] | List[OperatingProfitStatement] | List[NetIncomeStatement]:
+    def _process_income_performance_statement_result(self, result) -> Tuple[List[IncomeStatement], List[IncomeStatement]]:
         """
-        손익계산 결과 처리
+        실적 결과 처리 - 분기별 및 연도별 데이터를 분리하여 처리
         """
-        if select == FinancialSelect.REVENUE:
-            columns = ["Code", "Name", "period_q", "rev", "gross_profit"]
-        elif select == FinancialSelect.OPERATING_PROFIT:
-            columns = ["Code", "Name", "period_q", "operating_income"]
-        elif select == FinancialSelect.NET_INCOME:
-            columns = ["Code", "Name", "period_q", "net_income", "net_income_not_control", "net_income_total"]
+        all_columns = [
+            "Code",
+            "Name",
+            "period_q",
+            "rev",
+            "cost_of_sales",
+            "gross_profit",
+            "sell_admin_cost",
+            "rnd_expense",
+            "operating_income",
+            "other_rev_gains",
+            "other_exp_losses",
+            "equity method gain",
+            "fin_profit",
+            "fin_cost",
+            "pbt",
+            "corp_tax_cost",
+            "profit_continuing_ops",
+            "net_income_total",
+            "net_income",
+            "net_income_not_control",
+        ]
 
-        statements = []
+        df = pd.DataFrame(result, columns=all_columns)
 
-        for row in result:
-            row_dict = dict(zip(columns, row))
-            if select == FinancialSelect.REVENUE:
-                statements.append(self._create_revenue_statement(row_dict))
-            elif select == FinancialSelect.OPERATING_PROFIT:
-                statements.append(self._create_operating_profit_statement(row_dict))
-            elif select == FinancialSelect.NET_INCOME:
-                statements.append(self._create_net_income_statement(row_dict))
+        required_columns = [
+            "Code",
+            "Name",
+            "period_q",
+            "rev",
+            "gross_profit",
+            "operating_income",
+            "net_income",
+            "net_income_not_control",
+            "net_income_total",
+        ]
+        df = df[required_columns]
 
-        return statements
+        df["year"] = df["period_q"].astype(str).str[:4]
+
+        yearly_sum = (
+            df.groupby(["Code", "Name", "year"])
+            .agg(
+                {
+                    "rev": "sum",
+                    "gross_profit": "sum",
+                    "operating_income": "sum",
+                    "net_income": "sum",
+                    "net_income_not_control": "sum",
+                    "net_income_total": "sum",
+                }
+            )
+            .reset_index()
+        )
+
+        yearly_sum["period_q"] = yearly_sum["year"] + "00"
+        yearly_sum = yearly_sum.drop("year", axis=1)
+
+        quarterly_statements = []
+        for _, row in df.iterrows():
+            quarterly_statements.append(self._create_comprehensive_income_statement(row))
+
+        yearly_statements = []
+        for _, row in yearly_sum.iterrows():
+            yearly_statements.append(self._create_comprehensive_income_statement(row))
+
+        quarterly_statements.sort(key=lambda x: x.period_q, reverse=True)
+        yearly_statements.sort(key=lambda x: x.period_q, reverse=True)
+
+        return quarterly_statements, yearly_statements
 
     def _process_income_statement_result(self, result) -> List[IncomeStatementDetail]:
         """
@@ -218,40 +264,29 @@ class FinancialService:
             net_income_not_control=self._to_decimal(row_dict["net_income_not_control"]),
         )
 
-    def _create_revenue_statement(self, row_dict: Dict) -> RevenueStatement:
+    def _create_comprehensive_income_statement(self, row_dict: Dict) -> IncomeStatement:
         """
-        실적 - 매출 데이터 생성
+        모든 실적 정보를 포함하는 통합 Statement 생성
         """
-        return RevenueStatement(
-            code=row_dict["Code"],
-            name=row_dict["Name"],
-            period_q=row_dict["period_q"],
-            rev=self._to_decimal(row_dict["rev"]),
-            gross_profit=self._to_decimal(row_dict["gross_profit"]),
-        )
 
-    def _create_operating_profit_statement(self, row_dict: Dict) -> OperatingProfitStatement:
-        """
-        실적 - 영업이익 데이터 생성
-        """
-        return OperatingProfitStatement(
-            code=row_dict["Code"],
-            name=row_dict["Name"],
-            period_q=row_dict["period_q"],
-            operating_income=self._to_decimal(row_dict["operating_income"]),
-        )
+        def safe_get_value(key: str) -> Decimal:
+            try:
+                return self._to_decimal(row_dict[key])
+            except Exception as e:
+                logger.warning(f"Error converting {key}: {str(e)}")
+                return Decimal("0")
 
-    def _create_net_income_statement(self, row_dict: Dict) -> NetIncomeStatement:
-        """
-        실적 - 당기순이익 데이터 생성
-        """
-        return NetIncomeStatement(
+        return IncomeStatement(
             code=row_dict["Code"],
             name=row_dict["Name"],
             period_q=row_dict["period_q"],
-            net_income=self._to_decimal(row_dict["net_income"]),
-            net_income_not_control=self._to_decimal(row_dict["net_income_not_control"]),
-            net_income_total=self._to_decimal(row_dict["net_income_total"]),
+            rev=safe_get_value("rev"),
+            gross_profit=safe_get_value("gross_profit"),
+            operating_income=safe_get_value("operating_income"),
+            net_income=safe_get_value("net_income"),
+            net_income_not_control=safe_get_value("net_income_not_control"),
+            net_income_total=safe_get_value("net_income_total"),
+            is_yearly=False,
         )
 
     async def get_cashflow_data(
@@ -490,12 +525,28 @@ class FinancialService:
             non_ctrl_shrhld_eq=self._to_decimal(row_dict["non_ctrl_shrhld_eq"]),
         )
 
-    @staticmethod
-    def _to_decimal(value) -> Decimal:
+    def _to_decimal(self, value) -> Decimal:
         """
-        값을 Decimal로 변환
+        값을 Decimal로 변환하고 JSON 직렬화 가능한 값으로 처리
         """
-        return Decimal(str(value or 0))
+        try:
+            if value is None or (isinstance(value, str) and not value.strip()):
+                return Decimal("0")
+            if isinstance(value, (float, Decimal)):
+                if isinstance(value, float) and math.isnan(value):
+                    return Decimal("0")
+                if isinstance(value, Decimal) and value.is_nan():
+                    return Decimal("0")
+                if isinstance(value, float) and math.isinf(value):
+                    return Decimal("0")
+                if isinstance(value, Decimal) and value.is_infinite():
+                    return Decimal("0")
+
+            return Decimal(str(value))
+
+        except (ValueError, TypeError, InvalidOperation):
+            logger.warning(f"Failed to convert value to Decimal: {value}")
+            return Decimal("0")
 
     ############################손익계산서 시계열 분석 pandas##############################
     async def get_income_analysis(
@@ -618,7 +669,7 @@ class FinancialService:
 
     def _calculate_profitability_trends(self, df: pd.DataFrame) -> Dict:
         """
-        수익성 지표 추이 계산
+        수익성 표 추이 계산
         """
         return {
             "gross_margin": [float(x) if pd.notnull(x) else None for x in (df["gross_profit"] / df["rev"] * 100)],
