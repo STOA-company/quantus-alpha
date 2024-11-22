@@ -14,15 +14,22 @@ class PriceDataResponse(BaseModel):
 
 
 class PriceDataItem(BaseModel):
-    ticker: str
     date: datetime
-    name: str
     open: float
     high: float
     low: float
     close: float
     volume: int
     daily_price_change_rate: float
+
+
+class ResponsePriceDataItem(BaseModel):
+    name: str
+    ticker: str
+    week52_highest: float
+    week52_lowest: float
+    last_day_close: float
+    price_data: List[PriceDataItem]
 
 
 class StockKrFactorItem(BaseModel):

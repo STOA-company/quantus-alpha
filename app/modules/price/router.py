@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, Query
 from app.modules.common.schemas import BaseResponse
 from app.modules.price.services import PriceService, get_price_service
-from app.modules.price.schemas import PriceDataItem
+from app.modules.price.schemas import ResponsePriceDataItem
 from datetime import date
-from typing import Annotated, List, Optional
+from typing import Annotated, Optional
 from app.modules.common.enum import Country, Frequency
 
 router = APIRouter()
 
 
-@router.get("/", response_model=BaseResponse[List[PriceDataItem]])
+@router.get("/", response_model=BaseResponse[ResponsePriceDataItem])
 async def get_price_data(
     ctry: Annotated[Country, Query(description="Country code (kr/us)")],
     ticker: Annotated[str, Query(description="Stock ticker symbol")],
