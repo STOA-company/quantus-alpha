@@ -21,6 +21,7 @@ async def get_price_data(
     """
     Get price data for a specific country and ticker from database.
     """
+
     if ctry == Country.KR and frequency == Frequency.MINUTE:
         return BaseResponse(status="error", message="Minute frequency is not supported for KR", data=None)
 

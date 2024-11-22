@@ -188,7 +188,29 @@ class PriceService:
 
         except Exception as e:
             logger.error(f"Error processing price data: {str(e)}")
-            raise
+
+    async def _fetch_data_parallel(
+        self, ctry: Country, ticker: str, start_date: date, end_date: date, frequency: Frequency
+    ) -> pd.DataFrame:
+        """청크 단위 병렬 데이터 조회"""
+        date_ranges = self._split_date_ranges(start_date, end_date)
+        semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_REQUESTS)
+
+        async def fetch_with_semaphore(date_range):
+            async with semaphore:
+                return await self._fetch_chunk(ctry, ticker, date_range, frequency)
+
+        chunks = await asyncio.gather(*(fetch_with_semaphore(date_range) for date_range in date_ranges))
+
+        if not chunks:
+            return pd.DataFrame(columns=self._get_columns_for_country(ctry))
+
+        combined_df = pd.concat(chunks, ignore_index=True)
+
+        if not combined_df.empty:
+            combined_df = combined_df.drop_duplicates(subset=["Date", "Ticker"]).sort_values("Date")
+
+        return combined_df
 
     async def _fetch_data_parallel(
         self, ctry: Country, ticker: str, start_date: date, end_date: date, frequency: Frequency
