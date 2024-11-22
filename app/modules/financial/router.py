@@ -2,7 +2,7 @@ from datetime import date
 from app.enum.financial import FinancialSelect
 from app.modules.common.enum import Country
 from app.modules.common.schemas import BaseResponse, PandasStatistics
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from app.modules.financial.services import FinancialService, get_financial_service
 from .schemas import (
     CashFlowDetail,
@@ -37,10 +37,14 @@ async def get_income_performance_data(
     end_date: Annotated[Optional[date], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ):
-    result = await financial_service.get_income_performance_data(
-        ctry=ctry, ticker=ticker, select=select, start_date=start_date, end_date=end_date
-    )
-    return result
+    try:
+        result = await financial_service.get_income_performance_data(
+            ctry=ctry, ticker=ticker, select=select, start_date=start_date, end_date=end_date
+        )
+        return result
+
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
 
 
 @router.get("/income", response_model=BaseResponse[List[IncomeStatementDetail]], summary="손익계산서 분기별 조회")
@@ -51,8 +55,14 @@ async def get_income_data(
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ):
-    result = await financial_service.get_income_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
-    return result
+    try:
+        result = await financial_service.get_income_data(
+            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
+        )
+        return result
+
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
 
 
 @router.get("/cashflow", response_model=BaseResponse[List[CashFlowDetail]], summary="현금흐름 분기별 조회")
@@ -63,13 +73,17 @@ async def get_cashflow_data(
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[List[CashFlowDetail]]:
-    result = await financial_service.get_cashflow_data(
-        ctry=ctry,
-        ticker=ticker,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    return result
+    try:
+        result = await financial_service.get_cashflow_data(
+            ctry=ctry,
+            ticker=ticker,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return result
+
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
 
 
 @router.get("/finpos", response_model=BaseResponse[List[FinPosDetail]], summary="재무제표 분기별 조회")
@@ -80,13 +94,17 @@ async def get_finpos_data(
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[List[FinPosDetail]]:
-    result = await financial_service.get_finpos_data(
-        ctry=ctry,
-        ticker=ticker,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    return result
+    try:
+        result = await financial_service.get_finpos_data(
+            ctry=ctry,
+            ticker=ticker,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return result
+
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
 
 
 @router.get(
@@ -100,11 +118,15 @@ async def get_income_analysis(
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-):
-    result = await financial_service.get_income_analysis(
-        ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
-    )
-    return result
+) -> PandasStatistics[List[IncomeStatementDetail]]:
+    try:
+        result = await financial_service.get_income_analysis(
+            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
+        )
+        return result
+
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
 
 
 @router.get(
@@ -118,11 +140,15 @@ async def get_cashflow_analysis(
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-):
-    result = await financial_service.get_cashflow_analysis(
-        ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
-    )
-    return result
+) -> PandasStatistics[List[CashFlowDetail]]:
+    try:
+        result = await financial_service.get_cashflow_analysis(
+            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
+        )
+        return result
+
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
 
 
 @router.get(
@@ -136,8 +162,12 @@ async def get_finpos_analysis(
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-):
-    result = await financial_service.get_finpos_analysis(
-        ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
-    )
-    return result
+) -> PandasStatistics[List[FinPosDetail]]:
+    try:
+        result = await financial_service.get_finpos_analysis(
+            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
+        )
+        return result
+
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
