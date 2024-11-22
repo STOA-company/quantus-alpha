@@ -1,8 +1,11 @@
 from datetime import date
+import logging
+from fastapi import Request
+from app.core.exception.handler import exception_handler
 from app.enum.financial import FinancialSelect
 from app.modules.common.enum import Country
 from app.modules.common.schemas import BaseResponse, PandasStatistics
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query
 from app.modules.financial.services import FinancialService, get_financial_service
 from .schemas import (
     CashFlowDetail,
@@ -14,6 +17,7 @@ from .schemas import (
 )
 from typing import List, Optional, Annotated, Union
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -28,6 +32,7 @@ router = APIRouter()
     summary="실적 부분 조회 api",
 )
 async def get_income_performance_data(
+    request: Request,
     ctry: Annotated[Country, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     select: Annotated[
@@ -44,67 +49,74 @@ async def get_income_performance_data(
         return result
 
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
+        logger.error(f"Income performance data 조회 실패: {str(error)}, ticker: {ticker}, country: {ctry}")
+        return await exception_handler(request, error)
 
 
-@router.get("/income", response_model=BaseResponse[List[IncomeStatementDetail]], summary="손익계산서 분기별 조회")
-async def get_income_data(
-    ctry: Annotated[Country, Query(description="국가 코드")],
-    ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
-    start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
-    end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
-    financial_service: FinancialService = Depends(get_financial_service),
-):
-    try:
-        result = await financial_service.get_income_data(
-            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
-        )
-        return result
+# @router.get("/income", response_model=BaseResponse[List[IncomeStatementDetail]], summary="손익계산서 분기별 조회")
+# async def get_income_data(
+#     request: Request,
+#     ctry: Annotated[Country, Query(description="국가 코드")],
+#     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+#     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
+#     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
+#     financial_service: FinancialService = Depends(get_financial_service),
+# ):
+#     try:
+#         result = await financial_service.get_income_data(
+#             ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
+#         )
+#         return result
 
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
-
-
-@router.get("/cashflow", response_model=BaseResponse[List[CashFlowDetail]], summary="현금흐름 분기별 조회")
-async def get_cashflow_data(
-    ctry: Annotated[Country, Query(description="국가 코드")],
-    ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
-    start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
-    end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
-    financial_service: FinancialService = Depends(get_financial_service),
-) -> BaseResponse[List[CashFlowDetail]]:
-    try:
-        result = await financial_service.get_cashflow_data(
-            ctry=ctry,
-            ticker=ticker,
-            start_date=start_date,
-            end_date=end_date,
-        )
-        return result
-
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
+#     except Exception as error:
+#         logger.error(f"Income statement 조회 실패: {str(error)}, ticker: {ticker}, country: {ctry}")
+#         return await exception_handler(request, error)
 
 
-@router.get("/finpos", response_model=BaseResponse[List[FinPosDetail]], summary="재무제표 분기별 조회")
-async def get_finpos_data(
-    ctry: Annotated[Country, Query(description="국가 코드")],
-    ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
-    start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
-    end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
-    financial_service: FinancialService = Depends(get_financial_service),
-) -> BaseResponse[List[FinPosDetail]]:
-    try:
-        result = await financial_service.get_finpos_data(
-            ctry=ctry,
-            ticker=ticker,
-            start_date=start_date,
-            end_date=end_date,
-        )
-        return result
+# @router.get("/cashflow", response_model=BaseResponse[List[CashFlowDetail]], summary="현금흐름 분기별 조회")
+# async def get_cashflow_data(
+#     request: Request,
+#     ctry: Annotated[Country, Query(description="국가 코드")],
+#     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+#     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
+#     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
+#     financial_service: FinancialService = Depends(get_financial_service),
+# ) -> BaseResponse[List[CashFlowDetail]]:
+#     try:
+#         result = await financial_service.get_cashflow_data(
+#             ctry=ctry,
+#             ticker=ticker,
+#             start_date=start_date,
+#             end_date=end_date,
+#         )
+#         return result
 
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
+#     except Exception as error:
+#         logger.error(f"Cashflow 조회 실패: {str(error)}, ticker: {ticker}, country: {ctry}")
+#         return await exception_handler(request, error)
+
+
+# @router.get("/finpos", response_model=BaseResponse[List[FinPosDetail]], summary="재무제표 분기별 조회")
+# async def get_finpos_data(
+#     request: Request,
+#     ctry: Annotated[Country, Query(description="국가 코드")],
+#     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+#     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
+#     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
+#     financial_service: FinancialService = Depends(get_financial_service),
+# ) -> BaseResponse[List[FinPosDetail]]:
+#     try:
+#         result = await financial_service.get_finpos_data(
+#             ctry=ctry,
+#             ticker=ticker,
+#             start_date=start_date,
+#             end_date=end_date,
+#         )
+#         return result
+
+#     except Exception as error:
+#         logger.error(f"Financial position 조회 실패: {str(error)}, ticker: {ticker}, country: {ctry}")
+#         return await exception_handler(request, error)
 
 
 @router.get(
@@ -113,6 +125,7 @@ async def get_finpos_data(
     summary="손익계산서 pandas 사용한 분석",
 )
 async def get_income_analysis(
+    request: Request,
     ctry: Annotated[Country, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
@@ -126,7 +139,8 @@ async def get_income_analysis(
         return result
 
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
+        logger.error(f"Income analysis 조회 실패: {str(error)}, ticker: {ticker}, country: {ctry}")
+        return await exception_handler(request, error)
 
 
 @router.get(
@@ -135,6 +149,7 @@ async def get_income_analysis(
     summary="현금흐름 pandas 사용한 분석",
 )
 async def get_cashflow_analysis(
+    request: Request,
     ctry: Annotated[Country, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
@@ -148,7 +163,8 @@ async def get_cashflow_analysis(
         return result
 
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
+        logger.error(f"Cashflow analysis 조회 실패: {str(error)}, ticker: {ticker}, country: {ctry}")
+        return await exception_handler(request, error)
 
 
 @router.get(
@@ -157,6 +173,7 @@ async def get_cashflow_analysis(
     summary="재무상태표 pandas 사용한 분석",
 )
 async def get_finpos_analysis(
+    request: Request,
     ctry: Annotated[Country, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
@@ -170,4 +187,5 @@ async def get_finpos_analysis(
         return result
 
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
+        logger.error(f"Financial position analysis 조회 실패: {str(error)}, ticker: {ticker}, country: {ctry}")
+        return await exception_handler(request, error)
