@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+
 class ChunkResult:
     """청크 결과를 담는 클래스"""
 
@@ -27,6 +28,7 @@ class ChunkResult:
 
 
 @dataclass
+
 class PriceServiceConfig:
     """주가 데이터 서비스 설정"""
 
@@ -36,9 +38,11 @@ class PriceServiceConfig:
             Frequency.MINUTE: "1m",
         }
     )
+
     MINUTE_CHUNK_SIZE_DAYS: int = 1
     DAILY_CHUNK_SIZE_DAYS: int = 30
     MAX_CONCURRENT_REQUESTS: int = 10
+
 
     # 캐시 TTL 설정
     CACHE_TTL: Dict[str, int] = field(
@@ -268,6 +272,7 @@ class PriceService:
         start_date = end_date - timedelta(days=365)
         df = await self.db_handler.fetch_data(ctry, ticker, (start_date, end_date), Frequency.DAILY)
 
+
         if df.empty:
             return 0.0, 0.0
 
@@ -300,6 +305,7 @@ class PriceService:
             df = await self._get_cached_or_fetch_data(
                 cache_key, ctry, ticker, (query_start_date, query_end_date), frequency
             )
+
             if df is None or df.empty:
                 return BaseResponse(status="error", message=f"No price data found for {ticker}", data=None)
 
@@ -326,6 +332,7 @@ class PriceService:
         start_date, end_date = date_range
 
         # 캐시 확인 (기존 코드와 동일)
+
         cached_df = self._cache.get(cache_key)
         if cached_df is not None:
             logger.info("Cache hit!")
@@ -374,6 +381,7 @@ class PriceService:
             logger.error(f"Error caching data: {str(e)}")
 
         logger.info(f"Fetched {len(df)} records from database")
+
         return df
 
 
