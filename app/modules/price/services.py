@@ -16,6 +16,17 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class ChunkResult:
+    """청크 결과를 담는 클래스"""
+
+    df: pd.DataFrame
+    start_date: date
+    end_date: date
+    success: bool
+    error: Optional[str] = None
+
+
+@dataclass
 class PriceServiceConfig:
     """주가 데이터 서비스 설정"""
 
@@ -25,8 +36,9 @@ class PriceServiceConfig:
             Frequency.MINUTE: "1m",
         }
     )
-    CHUNK_SIZE_DAYS: int = 1
-    MAX_CONCURRENT_REQUESTS: int = 20
+    MINUTE_CHUNK_SIZE_DAYS: int = 1
+    DAILY_CHUNK_SIZE_DAYS: int = 30
+    MAX_CONCURRENT_REQUESTS: int = 10
 
     # 캐시 TTL 설정
     CACHE_TTL: Dict[str, int] = field(
@@ -37,7 +49,6 @@ class PriceServiceConfig:
             "ONE_HOUR": 60 * 60,
         }
     )
-    RECENT_DATA_DAYS: int = 4
 
     # 컬럼 설정
     BASE_COLUMNS: List[str] = field(default_factory=lambda: ["Date", "Ticker", "Open", "High", "Low", "Close", "Volume"])
@@ -142,7 +153,7 @@ class DatabaseHandler:
         """테이블 이름 생성"""
         return f"stock_{ctry.value}_{self.config.FREQUENCY_MAPPING[frequency]}"
 
-    @lru_cache(maxsize=100)
+    @lru_cache(maxsize=1000)
     def get_columns_for_country(self, ctry: Country) -> List[str]:
         """국가별 컬럼 리스트 반환"""
         return self.config.BASE_COLUMNS + self.config.COUNTRY_SPECIFIC_COLUMNS.get(ctry, [])
@@ -171,6 +182,52 @@ class DatabaseHandler:
             logger.error(f"Error fetching data: {str(e)}")
             return pd.DataFrame(columns=self.get_columns_for_country(ctry))
 
+    async def fetch_data_in_chunks(
+        self,
+        ctry: Country,
+        ticker: str,
+        date_range: Tuple[date, date],
+        frequency: Frequency,
+        chunk_size_days: int,
+        max_retries: int = 3,
+    ) -> List[ChunkResult]:
+        """청크 단위로 데이터 조회"""
+        start_date, end_date = date_range
+        chunks = self._create_date_chunks(start_date, end_date, chunk_size_days)
+
+        # 세마포어를 사용하여 동시 요청 수 제한
+        semaphore = asyncio.Semaphore(self.config.MAX_CONCURRENT_REQUESTS)
+
+        async def fetch_chunk(chunk_start: date, chunk_end: date) -> ChunkResult:
+            async with semaphore:
+                for attempt in range(max_retries):
+                    try:
+                        df = await self.fetch_data(ctry, ticker, (chunk_start, chunk_end), frequency)
+                        return ChunkResult(df, chunk_start, chunk_end, True)
+                    except Exception as e:
+                        if attempt == max_retries - 1:  # 마지막 시도였다면
+                            logger.error(
+                                f"Failed to fetch chunk {chunk_start}-{chunk_end} after {max_retries} attempts: {str(e)}"
+                            )
+                            return ChunkResult(pd.DataFrame(), chunk_start, chunk_end, False, str(e))
+                        await asyncio.sleep(1 * (attempt + 1))  # 지수 백오프
+
+        # 모든 청크에 대해 비동기로 데이터 조회
+        tasks = [fetch_chunk(chunk_start, chunk_end) for chunk_start, chunk_end in chunks]
+        return await asyncio.gather(*tasks)
+
+    def _create_date_chunks(self, start_date: date, end_date: date, chunk_size_days: int) -> List[Tuple[date, date]]:
+        """날짜 범위를 청크로 분할"""
+        chunks = []
+        current_start = start_date
+
+        while current_start < end_date:
+            chunk_end = min(current_start + timedelta(days=chunk_size_days - 1), end_date)
+            chunks.append((current_start, chunk_end))
+            current_start = chunk_end + timedelta(days=1)
+
+        return chunks
+
 
 class PriceService:
     """주가 데이터 서비스"""
@@ -180,6 +237,10 @@ class PriceService:
         self._cache = MemoryCache()
         self.db_handler = DatabaseHandler(self.config, database)
         self.data_processor = DataProcessor(self.config)
+
+    def _get_chunk_size(self, frequency: Frequency) -> int:
+        """주기에 따른 청크 크기 반환"""
+        return self.config.MINUTE_CHUNK_SIZE_DAYS if frequency == Frequency.MINUTE else self.config.DAILY_CHUNK_SIZE_DAYS
 
     def _get_date_range(
         self, start_date: Optional[date], end_date: Optional[date], frequency: Frequency
@@ -234,13 +295,11 @@ class PriceService:
         """가격 데이터 조회"""
         try:
             query_start_date, query_end_date = self._get_date_range(start_date, end_date, frequency)
-            cache_key = f"{ctry.value}_{frequency.value}_{ticker}"
 
-            # await 추가
+            cache_key = f"{ctry.value}_{frequency.value}_{ticker}"
             df = await self._get_cached_or_fetch_data(
                 cache_key, ctry, ticker, (query_start_date, query_end_date), frequency
             )
-
             if df is None or df.empty:
                 return BaseResponse(status="error", message=f"No price data found for {ticker}", data=None)
 
@@ -263,15 +322,14 @@ class PriceService:
     async def _get_cached_or_fetch_data(
         self, cache_key: str, ctry: Country, ticker: str, date_range: Tuple[date, date], frequency: Frequency
     ) -> Optional[pd.DataFrame]:
-        """캐시된 데이터 확인 또는 새로운 데이터 조회"""
+        """캐시된 데이터 확인 또는 청크 단위로 새로운 데이터 조회"""
         start_date, end_date = date_range
 
-        # 캐시 확인
+        # 캐시 확인 (기존 코드와 동일)
         cached_df = self._cache.get(cache_key)
         if cached_df is not None:
             logger.info("Cache hit!")
             try:
-                # DataFrame으로 변환
                 if isinstance(cached_df, dict):
                     cached_df = pd.DataFrame(cached_df)
 
@@ -286,22 +344,36 @@ class PriceService:
             except Exception as e:
                 logger.error(f"Error processing cached data: {str(e)}")
 
-        # 새로운 데이터 조회
-        logger.info("Fetching data from database...")
-        df = await self.db_handler.fetch_data(ctry, ticker, date_range, frequency)
-        if not df.empty:
-            df = self.data_processor.preprocess_dataframe(df)
+        # 청크 단위로 새로운 데이터 조회
+        logger.info("Fetching data from database in chunks...")
+        chunk_size = self._get_chunk_size(frequency)
+        chunk_results = await self.db_handler.fetch_data_in_chunks(ctry, ticker, date_range, frequency, chunk_size)
 
-            try:
-                # DataFrame을 딕셔너리로 변환하여 캐시 저장
-                cache_data = df.to_dict("records")
-                self._cache.set(cache_key, cache_data, self.config.CACHE_TTL["ONE_HOUR"])
-                logger.info(f"Cached {len(df)} records")
-            except Exception as e:
-                logger.error(f"Error caching data: {str(e)}")
+        # 실패한 청크가 있는지 확인
+        failed_chunks = [result for result in chunk_results if not result.success]
+        if failed_chunks:
+            chunk_errors = [f"{result.start_date}-{result.end_date}: {result.error}" for result in failed_chunks]
+            logger.error(f"Failed to fetch some chunks: {chunk_errors}")
+            return None
 
-            logger.info(f"Fetched {len(df)} records from database")
+        # 모든 청크 데이터 합치기
+        dfs = [result.df for result in chunk_results if not result.df.empty]
+        if not dfs:
+            return pd.DataFrame()
 
+        df = pd.concat(dfs, ignore_index=True)
+        df = df.sort_values("Date").reset_index(drop=True)
+        df = self.data_processor.preprocess_dataframe(df)
+
+        try:
+            # DataFrame을 딕셔너리로 변환하여 캐시 저장
+            cache_data = df.to_dict("records")
+            self._cache.set(cache_key, cache_data, self.config.CACHE_TTL["ONE_HOUR"])
+            logger.info(f"Cached {len(df)} records")
+        except Exception as e:
+            logger.error(f"Error caching data: {str(e)}")
+
+        logger.info(f"Fetched {len(df)} records from database")
         return df
 
 
