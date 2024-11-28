@@ -23,7 +23,7 @@ async def get_price_data(
     """
 
     if ctry == Country.KR and frequency == Frequency.MINUTE:
-        return BaseResponse(status="error", message="Minute frequency is not supported for KR", data=None)
+        return BaseResponse(status_code=400, message="Minute frequency is not supported for KR", data=None)
 
     return await service.read_price_data(
         ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, frequency=frequency

@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-
 class ChunkResult:
     """청크 결과를 담는 클래스"""
 
@@ -28,7 +27,6 @@ class ChunkResult:
 
 
 @dataclass
-
 class PriceServiceConfig:
     """주가 데이터 서비스 설정"""
 
@@ -42,7 +40,6 @@ class PriceServiceConfig:
     MINUTE_CHUNK_SIZE_DAYS: int = 1
     DAILY_CHUNK_SIZE_DAYS: int = 30
     MAX_CONCURRENT_REQUESTS: int = 10
-
 
     # 캐시 TTL 설정
     CACHE_TTL: Dict[str, int] = field(
@@ -272,7 +269,6 @@ class PriceService:
         start_date = end_date - timedelta(days=365)
         df = await self.db_handler.fetch_data(ctry, ticker, (start_date, end_date), Frequency.DAILY)
 
-
         if df.empty:
             return 0.0, 0.0
 
@@ -307,7 +303,7 @@ class PriceService:
             )
 
             if df is None or df.empty:
-                return BaseResponse(status="error", message=f"No price data found for {ticker}", data=None)
+                return BaseResponse(status_code=404, message=f"No price data found for {ticker}", data=None)
 
             # 52주 데이터 조회
             week52_data = await self.get_52week_data(ctry, ticker, query_end_date)
@@ -316,14 +312,14 @@ class PriceService:
             price_data = self.data_processor.process_price_data(df, ctry, frequency, week52_data, query_end_date)
 
             if not price_data:
-                return BaseResponse(status="error", message="No valid data found after conversion", data=None)
+                return BaseResponse(status_code=404, message="No valid data found after conversion", data=None)
 
-            return BaseResponse(status="success", message="Data retrieved successfully", data=price_data)
+            return BaseResponse(status_code=200, message="Data retrieved successfully", data=price_data)
 
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
             logger.exception("Full traceback:")
-            return BaseResponse(status="error", message=f"Internal server error: {str(e)}", data=None)
+            return BaseResponse(status_code=500, message=f"Internal server error: {str(e)}", data=None)
 
     async def _get_cached_or_fetch_data(
         self, cache_key: str, ctry: Country, ticker: str, date_range: Tuple[date, date], frequency: Frequency
