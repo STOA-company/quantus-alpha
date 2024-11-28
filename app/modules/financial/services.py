@@ -83,7 +83,7 @@ class FinancialService:
 
             logger.info(f"Successfully retrieved income data for {ticker}")
             return BaseResponse[List[IncomeStatementDetail]](
-                status="success", message="손익계산서 데이터를 성공적으로 조회했습니다.", data=statements
+                status_code=200, message="손익계산서 데이터를 성공적으로 조회했습니다.", data=statements
             )
 
         except (InvalidCountryException, DataNotFoundException):
@@ -118,7 +118,7 @@ class FinancialService:
             performance_data = IncomePerformanceResponse(quarterly=quarterly_data, yearly=yearly_data)
 
             return BaseResponse[IncomePerformanceResponse](
-                status="success", message="실적 데이터를 성공적으로 조회했습니다.", data=performance_data
+                status_code=200, message="실적 데이터를 성공적으로 조회했습니다.", data=performance_data
             )
 
         except HTTPException as http_error:
@@ -314,7 +314,7 @@ class FinancialService:
             statements = self._process_cashflow_result(result)
 
             return BaseResponse[List[CashFlowDetail]](
-                status="success", message="현금흐름표 데이터를 성공적으로 조회했습니다.", data=statements
+                status_code=200, message="현금흐름표 데이터를 성공적으로 조회했습니다.", data=statements
             )
 
         except HTTPException:
@@ -423,7 +423,7 @@ class FinancialService:
             statements = self._process_finpos_result(result)
 
             return BaseResponse[List[FinPosDetail]](
-                status="success", message="재무상태표 데이터를 성공적으로 조회했습니다.", data=statements
+                status_code=200, message="재무상태표 데이터를 성공적으로 조회했습니다.", data=statements
             )
 
         except HTTPException:
@@ -560,7 +560,7 @@ class FinancialService:
         logger.info(f"Starting income analysis for {ticker}")
 
         try:
-            result = PandasStatistics(status="200", message="Success", data=[], statistics={})
+            result = PandasStatistics(status_code=200, message="Success", data=[], statistics={})
             income_data = await self.get_income_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
 
             result.data = income_data.data
@@ -699,7 +699,7 @@ class FinancialService:
         현금흐름 시계열 분석
         """
         try:
-            result = PandasStatistics(status="200", message="Success", data=[], statistics={})
+            result = PandasStatistics(status_code=200, message="Success", data=[], statistics={})
 
             cashflow_data = await self.get_cashflow_data(
                 ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
@@ -858,7 +858,7 @@ class FinancialService:
         재무상태표 시계열 분석
         """
         try:
-            result = PandasStatistics(status="200", message="Success", data=[], statistics={})
+            result = PandasStatistics(status_code=200, message="Success", data=[], statistics={})
 
             finpos_data = await self.get_finpos_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
 

@@ -27,7 +27,7 @@ class HealthCheckDetails(BaseModel):
 
 
 class HealthCheckResponse(BaseModel):
-    status: str
+    status_code: int
     database: str
     details: HealthCheckDetails
 
@@ -43,12 +43,10 @@ async def health_check():
         tables = database.meta_data.tables.keys()
 
         return HealthCheckResponse(
-            status="healthy",
+            status_code=200,
             database="connected",
             details=HealthCheckDetails(tables_loaded=len(list(tables)), connection_test="successful"),
         )
     except Exception as e:
         error_message = f"Database connection error: {str(e)}"
-        raise HTTPException(
-            status_code=503, detail={"status": "unhealthy", "database": "disconnected", "error": error_message}
-        )
+        raise HTTPException(status_code=503, detail={"status": "503", "database": "disconnected", "error": error_message})
