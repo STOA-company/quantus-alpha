@@ -5,7 +5,7 @@ T = TypeVar("T")
 
 
 class ResponseSchema(BaseModel):
-    status: str
+    status_code: int
     message: str
 
 
@@ -20,13 +20,13 @@ class ListResponseSchema(ResponseSchema, Generic[T]):
 
 
 class BaseResponse(BaseModel, Generic[T]):
-    status: str
+    status_code: int
     message: str
     data: Optional[T] = None
 
 
 class PandasStatistics(BaseModel, Generic[T]):
-    status: str
+    status_code: int
     message: str
     data: Optional[T] = None
     statistics: Optional[dict] = None
