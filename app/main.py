@@ -22,7 +22,10 @@ def root():
     return {"message": "Welcome to the Financial Data API !!"}
 
 
-origins = ["http://43.203.148.73"]
+origins = [
+    "http://43.203.148.73",
+    "http://localhost:3000",
+]
 
 app.add_middleware(
     CORSMiddleware,  # type: ignore
