@@ -30,11 +30,19 @@ class FinancialService:
 
     def _setup_tables(self):
         """
-        테이블 설정
+        테이블 설정 - 국가 코드를 기반으로 동적으로 테이블 이름 생성
         """
-        self.income_tables = {Country.KR: "KOR_income", Country.US: "USA_income"}
-        self.cashflow_tables = {Country.KR: "KOR_cashflow", Country.US: "USA_cashflow"}
-        self.finpos_tables = {Country.KR: "KOR_finpos", Country.US: "USA_finpos"}
+
+        def get_country_code(country: Country) -> str:
+            country_mapping = {Country.KR: "KOR", Country.US: "USA", Country.JPN: "JPN", Country.HKG: "HKG"}
+            return country_mapping.get(country, country.value.upper())
+
+        def create_table_mapping(table_type: str) -> Dict[Country, str]:
+            return {country: f"{get_country_code(country)}_{table_type}" for country in Country}
+
+        self.income_tables = create_table_mapping("income")
+        self.cashflow_tables = create_table_mapping("cashflow")
+        self.finpos_tables = create_table_mapping("finpos")
 
     def _get_date_conditions(self, start_date: Optional[str], end_date: Optional[str]) -> Dict:
         """
