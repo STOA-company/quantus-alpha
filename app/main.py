@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from app.core.config import get_database_config, settings
 from app.api import routers
+from app.core.exception import handler
 from app.database.conn import db
 from app.database.crud import database
 from pydantic import BaseModel
@@ -11,6 +12,8 @@ app = FastAPI(
     description="Alphafinder API Documentation",
     version="1.0.0",
 )
+handler.initialize(app)
+
 app.include_router(routers.router)
 
 db_config = get_database_config()

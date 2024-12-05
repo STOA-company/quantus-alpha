@@ -151,19 +151,24 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
 
 
 def initialize(app: FastAPI) -> None:
-    app.add_exception_handler(CustomException, custom_exception_handler)
-    app.add_exception_handler(AuthException, auth_exception_handler)
-    app.add_exception_handler(UserException, user_exception_handler)
+    # Financial Exceptions (가장 구체적인 것부터)
+    app.add_exception_handler(DataNotFoundException, data_not_found_exception_handler)
+    app.add_exception_handler(NoFinancialDataException, no_financial_data_exception_handler)
+    app.add_exception_handler(InvalidCountryException, invalid_country_exception_handler)
+    app.add_exception_handler(InvalidTickerException, invalid_ticker_exception_handler)
+    app.add_exception_handler(AnalysisException, analysis_exception_handler)
+
+    # Auth & User Exceptions
     app.add_exception_handler(TokenExpiredException, token_expired_exception_handler)
     app.add_exception_handler(InvalidTokenException, invalid_token_exception_handler)
     app.add_exception_handler(UserNotFoundException, user_not_found_exception_handler)
     app.add_exception_handler(UserAlreadyExistsException, user_already_exists_exception_handler)
-    app.add_exception_handler(NoFinancialDataException, no_financial_data_exception_handler)
-    app.add_exception_handler(InvalidCountryException, invalid_country_exception_handler)
-    app.add_exception_handler(InvalidTickerException, invalid_ticker_exception_handler)
-    app.add_exception_handler(DataNotFoundException, data_not_found_exception_handler)
-    app.add_exception_handler(AnalysisException, analysis_exception_handler)
-    app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(AuthException, auth_exception_handler)
+    app.add_exception_handler(UserException, user_exception_handler)
+
+    # Framework & General Exceptions (가장 마지막에)
     app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
+    app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(SQLAlchemyError, sqlalchemy_error_handler)
+    app.add_exception_handler(CustomException, custom_exception_handler)  # 기본 CustomException을 더 뒤로
     app.add_exception_handler(Exception, exception_handler)
