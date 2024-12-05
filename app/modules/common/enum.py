@@ -8,6 +8,13 @@ class Country(Enum):
     HKG = "hkg"
 
 
+class FinancialCountry(Enum):
+    KOR = "KOR"
+    USA = "USA"
+    JPN = "JPN"
+    HKG = "HKG"
+
+
 class Frequency(Enum):
     DAILY = "daily"
     MINUTE = "minute"
