@@ -1,7 +1,7 @@
 import logging
 from fastapi import Request, HTTPException
 from app.core.exception.handler import exception_handler
-from app.modules.common.enum import Country
+from app.modules.common.enum import FinancialCountry
 from app.modules.common.schemas import BaseResponse, PandasStatistics
 from fastapi import APIRouter, Depends, Query
 from app.modules.financial.services import FinancialService, get_financial_service
@@ -24,7 +24,7 @@ router = APIRouter()
 )
 async def get_income_performance_data(
     request: Request,
-    ctry: Annotated[Country, Query(description="국가 코드")],
+    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
@@ -51,7 +51,7 @@ async def get_income_performance_data(
 )
 async def get_income_analysis(
     request: Request,
-    ctry: Annotated[Country, Query(description="국가 코드")],
+    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
@@ -75,7 +75,7 @@ async def get_income_analysis(
 )
 async def get_cashflow_analysis(
     request: Request,
-    ctry: Annotated[Country, Query(description="국가 코드")],
+    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
@@ -99,7 +99,7 @@ async def get_cashflow_analysis(
 )
 async def get_finpos_analysis(
     request: Request,
-    ctry: Annotated[Country, Query(description="국가 코드")],
+    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
