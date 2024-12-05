@@ -4,6 +4,7 @@ __pycache__/
 *.so
 
 # Virtual Environment
+.env
 .env.*
 venv/
 # Do not ignore .env.sample
