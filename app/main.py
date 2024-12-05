@@ -4,6 +4,7 @@ from app.api import routers
 from app.database.conn import db
 from app.database.crud import database
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -19,6 +20,20 @@ db.init_app(app, **db_config.__dict__)
 @app.get("/")
 def root():
     return {"message": "Welcome to the Financial Data API !!"}
+
+
+origins = [
+    "http://43.203.148.73",
+    "http://localhost:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,  # type: ignore
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*", "Authorization", "Authorization_Swagger"],
+)
 
 
 class HealthCheckDetails(BaseModel):
