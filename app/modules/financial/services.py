@@ -7,7 +7,7 @@ from fastapi import HTTPException, Depends
 import math
 
 from app.database.crud import database
-from app.modules.common.enum import Country, FinancialCountry
+from app.modules.common.enum import FinancialCountry
 from app.modules.common.services import CommonService, get_common_service
 from app.modules.financial.schemas import (
     FinPosDetail,
@@ -33,8 +33,8 @@ class FinancialService:
         테이블 설정 - 국가 코드를 기반으로 동적으로 테이블 이름 생성
         """
 
-        def create_table_mapping(table_type: str) -> Dict[Country, str]:
-            return {country: f"{country.value}_{table_type}" for country in Country}
+        def create_table_mapping(table_type: str) -> Dict[FinancialCountry, str]:
+            return {country: f"{country.value}_{table_type}" for country in FinancialCountry}
 
         self.income_tables = create_table_mapping("income")
         self.cashflow_tables = create_table_mapping("cashflow")
@@ -123,7 +123,7 @@ class FinancialService:
     # 손익계산서
     async def get_income_analysis(
         self,
-        ctry: Country,
+        ctry: FinancialCountry,
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -212,7 +212,7 @@ class FinancialService:
     # 손익계산서
     async def get_income_data(
         self,
-        ctry: Country,
+        ctry: FinancialCountry,
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -384,8 +384,31 @@ class FinancialService:
         if not result:
             return [], []
 
-        # DB 커서에서 컬럼 정보 가져오기
-        columns = [desc[0] for desc in self.db.cursor.description]
+        # 고정된 컬럼 목록 사용
+        columns = [
+            "Code",
+            "Name",
+            "period_q",
+            "StmtDt",
+            "rev",
+            "cost_of_sales",
+            "gross_profit",
+            "sell_admin_cost",
+            "rnd_expense",
+            "operating_income",
+            "other_rev_gains",
+            "other_exp_losses",
+            "equity method gain",
+            "fin_profit",
+            "fin_cost",
+            "pbt",
+            "corp_tax_cost",
+            "profit_continuing_ops",
+            "net_income_total",
+            "net_income",
+            "net_income_not_control",
+        ]
+
         df = pd.DataFrame(result, columns=columns)
 
         # 필요한 컬럼만 선택
@@ -1013,7 +1036,7 @@ class FinancialService:
                 float(x) if pd.notnull(x) and y != 0 else None
                 for x, y in zip(df["current_asset"] - df["stock_asset"], df["current_dept"])
             ],
-            # 현금비율 = 현금성자산 / 유동부채 × 100
+            # 현금���율 = 현금성자산 / 유동부채 × 100
             "cash_ratio": [
                 float(x) if pd.notnull(x) and y != 0 else None for x, y in zip(df["cash_asset"], df["current_dept"])
             ],
