@@ -26,9 +26,10 @@ class PriceDataItem(BaseModel):
 class ResponsePriceDataItem(BaseModel):
     name: str
     ticker: str
+    market: str
     week52_highest: float
     week52_lowest: float
-    last_day_close: float
+    last_day_close: float = 0.0
     price_data: List[PriceDataItem]
 
 

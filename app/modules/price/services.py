@@ -1,7 +1,6 @@
 import asyncio
 from datetime import date, datetime, timedelta
 from functools import lru_cache
-import logging
 from typing import List, Optional, Tuple, Dict
 import numpy as np
 import pandas as pd
@@ -11,8 +10,11 @@ from app.modules.common.enum import Country, Frequency
 from app.modules.common.schemas import BaseResponse
 from app.modules.price.schemas import PriceDataItem, ResponsePriceDataItem
 from app.database.crud import database
+from app.core.logging.config import get_logger
+from app.core.exception.custom import DataNotFoundException
 
-logger = logging.getLogger(__name__)
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -40,7 +42,7 @@ class PriceServiceConfig:
     MINUTE_CHUNK_SIZE_DAYS: int = 1
     DAILY_CHUNK_SIZE_DAYS: int = 30
     MAX_CONCURRENT_REQUESTS: int = 10
-
+    MAX_MINUTE_DAYS: int = 14
     # 캐시 TTL 설정
     CACHE_TTL: Dict[str, int] = field(
         default_factory=lambda: {
@@ -52,7 +54,9 @@ class PriceServiceConfig:
     )
 
     # 컬럼 설정
-    BASE_COLUMNS: List[str] = field(default_factory=lambda: ["Date", "Ticker", "Open", "High", "Low", "Close", "Volume"])
+    BASE_COLUMNS: List[str] = field(
+        default_factory=lambda: ["Date", "Ticker", "Open", "High", "Low", "Close", "Volume", "Market"]
+    )
     NUMERIC_COLUMNS: List[str] = field(default_factory=lambda: ["Open", "High", "Low", "Close", "Volume"])
     COUNTRY_SPECIFIC_COLUMNS: Dict[Country, List[str]] = field(
         default_factory=lambda: {
@@ -76,14 +80,20 @@ class DataProcessor:
         df[self.config.NUMERIC_COLUMNS] = df[self.config.NUMERIC_COLUMNS].apply(pd.to_numeric, errors="coerce")
         return df
 
-    def get_last_day_close(self, df: pd.DataFrame, end_date: date, frequency: Frequency) -> float:
+    def get_last_day_close(self, df: pd.DataFrame, frequency: Frequency) -> float:
         """전일 종가 계산"""
         try:
+            if df.empty:
+                return 0.0
+
+            # 실제 데이터의 마지막 날짜 확인
+            last_available_date = df["Date"].max().date()
+
             if frequency == Frequency.DAILY:
-                prev_day = end_date - timedelta(days=1)
-                prev_day_data = df[df["Date"].dt.date == prev_day]
+                # 실제 데이터의 마지막 날짜 기준으로 전일 데이터 찾기
+                prev_day_data = df[df["Date"].dt.date == (last_available_date - timedelta(days=1))]
             else:
-                prev_day_data = df[df["Date"].dt.date == (end_date - timedelta(days=1))]
+                prev_day_data = df[df["Date"].dt.date == (last_available_date - timedelta(days=1))]
 
             return float(prev_day_data["Close"].iloc[-1]) if not prev_day_data.empty else 0.0
 
@@ -92,7 +102,13 @@ class DataProcessor:
             return 0.0
 
     def process_price_data(
-        self, df: pd.DataFrame, ctry: Country, frequency: Frequency, week52_data: Tuple[float, float], end_date: date
+        self,
+        df: pd.DataFrame,
+        ctry: Country,
+        frequency: Frequency,
+        week52_data: Tuple[float, float],
+        end_date: date,
+        usa_name: Optional[str] = None,
     ) -> ResponsePriceDataItem:
         """DataFrame을 PriceDataItem으로 변환"""
         if df.empty:
@@ -104,15 +120,15 @@ class DataProcessor:
             # 가격 변동률 계산
             df["daily_price_change_rate"] = np.round((df["Close"] - df["Open"]) / df["Open"] * 100, decimals=2).fillna(0)
 
-            # 종목명 처리
-            df["name"] = "" if ctry != Country.KR else df.get("Name", "").fillna("")
+            df["name"] = usa_name if ctry == Country.US else df.get("Name", "").fillna("")
 
             # 전일 종가 계산
-            df["last_day_close"] = self.get_last_day_close(df, end_date, frequency)
+            df["last_day_close"] = self.get_last_day_close(df, frequency)
 
             return ResponsePriceDataItem(
                 ticker=str(df["Ticker"].iloc[0]),
                 name=str(df["name"].iloc[0]),
+                market=str(df["Market"].iloc[0]),
                 week52_highest=week52_highest,
                 week52_lowest=week52_lowest,
                 last_day_close=float(df["last_day_close"].iloc[0]),
@@ -229,6 +245,18 @@ class DatabaseHandler:
 
         return chunks
 
+    async def get_us_ticker_name(self, ticker: str) -> Optional[str]:
+        """US 티커의 종목명 조회"""
+        try:
+            conditions = {"ticker": ticker}
+            result = await asyncio.to_thread(
+                self.database._select, table="stock_us_tickers", columns=["english_name"], **conditions
+            )
+            return result[0].english_name if result else None
+        except Exception as e:
+            logger.error(f"Error fetching US ticker name: {str(e)}")
+            return None
+
 
 class PriceService:
     """주가 데이터 서비스"""
@@ -246,14 +274,41 @@ class PriceService:
     def _get_date_range(
         self, start_date: Optional[date], end_date: Optional[date], frequency: Frequency
     ) -> Tuple[date, date]:
-        """날짜 범위 계산 및 검증"""
+        """날짜 범위 계산 및 검증
+
+        Args:
+            start_date: 시작일자
+            end_date: 종료일자
+            frequency: 데이터 주기(분/일)
+
+        Returns:
+            Tuple[date, date]: (시작일자, 종료일자)
+        """
+        # 기본 날짜 범위 설정
+        DEFAULT_DAYS = 1 if frequency == Frequency.MINUTE else 30
+
+        # end_date 기본값 설정
         if end_date is None:
             end_date = date.today()
+
+        # start_date 기본값 설정
         if start_date is None:
-            days = 1 if frequency == Frequency.MINUTE else 30
-            start_date = end_date - timedelta(days=days)
+            start_date = end_date - timedelta(days=DEFAULT_DAYS)
+
+        # 시작일이 종료일보다 늦으면 에러
         if start_date > end_date:
             raise ValueError("start_date cannot be later than end_date")
+
+        # 시작일과 종료일이 같으면 종료일 +1
+        if start_date == end_date:
+            end_date = start_date + timedelta(days=1)
+
+        # 분 단위 데이터는 최대 10일로 제한
+        if frequency == Frequency.MINUTE:
+            date_diff = (end_date - start_date).days
+            if date_diff > self.config.MAX_MINUTE_DAYS:
+                end_date = start_date + timedelta(days=self.config.MAX_MINUTE_DAYS)
+
         return start_date, end_date
 
     async def get_52week_data(self, ctry: Country, ticker: str, end_date: date) -> Tuple[float, float]:
@@ -294,32 +349,30 @@ class PriceService:
         end_date: Optional[date] = None,
     ) -> BaseResponse[ResponsePriceDataItem]:
         """가격 데이터 조회"""
-        try:
-            query_start_date, query_end_date = self._get_date_range(start_date, end_date, frequency)
 
-            cache_key = f"{ctry.value}_{frequency.value}_{ticker}"
-            df = await self._get_cached_or_fetch_data(
-                cache_key, ctry, ticker, (query_start_date, query_end_date), frequency
-            )
+        query_start_date, query_end_date = self._get_date_range(start_date, end_date, frequency)
 
-            if df is None or df.empty:
-                return BaseResponse(status_code=404, message=f"No price data found for {ticker}", data=None)
+        cache_key = f"{ctry.value}_{frequency.value}_{ticker}"
+        df = await self._get_cached_or_fetch_data(cache_key, ctry, ticker, (query_start_date, query_end_date), frequency)
 
-            # 52주 데이터 조회
-            week52_data = await self.get_52week_data(ctry, ticker, query_end_date)
+        if df is None or df.empty:
+            raise DataNotFoundException(ticker, "price")
 
-            # 데이터 처리
-            price_data = self.data_processor.process_price_data(df, ctry, frequency, week52_data, query_end_date)
+        # 52주 데이터 조회
+        week52_data = await self.get_52week_data(ctry, ticker, query_end_date)
 
-            if not price_data:
-                return BaseResponse(status_code=404, message="No valid data found after conversion", data=None)
+        # US 티커의 경우 이름 조회
+        usa_name = None
+        if ctry == Country.US:
+            usa_name = await self.db_handler.get_us_ticker_name(ticker)
 
-            return BaseResponse(status_code=200, message="Data retrieved successfully", data=price_data)
+        # 데이터 처리
+        price_data = self.data_processor.process_price_data(df, ctry, frequency, week52_data, query_end_date, usa_name)
 
-        except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
-            logger.exception("Full traceback:")
-            return BaseResponse(status_code=500, message=f"Internal server error: {str(e)}", data=None)
+        if not price_data:
+            return BaseResponse(status_code=404, message="No valid data found after conversion", data=None)
+
+        return BaseResponse(status_code=200, message="Data retrieved successfully", data=price_data)
 
     async def _get_cached_or_fetch_data(
         self, cache_key: str, ctry: Country, ticker: str, date_range: Tuple[date, date], frequency: Frequency
