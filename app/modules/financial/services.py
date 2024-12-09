@@ -7,7 +7,7 @@ from fastapi import HTTPException, Depends
 import math
 
 from app.database.crud import database
-from app.modules.common.enum import Country
+from app.modules.common.enum import FinancialCountry
 from app.modules.common.services import CommonService, get_common_service
 from app.modules.financial.schemas import (
     FinPosDetail,
@@ -33,12 +33,8 @@ class FinancialService:
         테이블 설정 - 국가 코드를 기반으로 동적으로 테이블 이름 생성
         """
 
-        def get_country_code(country: Country) -> str:
-            country_mapping = {Country.KR: "KOR", Country.US: "USA", Country.JPN: "JPN", Country.HKG: "HKG"}
-            return country_mapping.get(country, country.value.upper())
-
-        def create_table_mapping(table_type: str) -> Dict[Country, str]:
-            return {country: f"{get_country_code(country)}_{table_type}" for country in Country}
+        def create_table_mapping(table_type: str) -> Dict[FinancialCountry, str]:
+            return {country: f"{country.value}_{table_type}" for country in FinancialCountry}
 
         self.income_tables = create_table_mapping("income")
         self.cashflow_tables = create_table_mapping("cashflow")
@@ -64,9 +60,159 @@ class FinancialService:
 
         return conditions
 
+    def _to_decimal(self, value) -> Decimal:
+        """
+        값을 Decimal로 변환하고 JSON 직렬화 가능한 값으로 처리
+        """
+        try:
+            if value is None or (isinstance(value, str) and not value.strip()):
+                return Decimal("0")
+            if isinstance(value, (float, Decimal)):
+                if isinstance(value, float) and math.isnan(value):
+                    return Decimal("0")
+                if isinstance(value, Decimal) and value.is_nan():
+                    return Decimal("0")
+                if isinstance(value, float) and math.isinf(value):
+                    return Decimal("0")
+                if isinstance(value, Decimal) and value.is_infinite():
+                    return Decimal("0")
+
+            return Decimal(str(value))
+
+        except (ValueError, TypeError, InvalidOperation):
+            logger.warning(f"Failed to convert value to Decimal: {value}")
+            return Decimal("0")
+
+    ########################################## Router에서 호출하는 메서드 #########################################
+    # 실적 데이터 조회
+    async def get_income_performance_data(
+        self,
+        ctry: FinancialCountry,
+        ticker: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> BaseResponse[IncomePerformanceResponse]:
+        """
+        실적 데이터 조회
+        """
+        try:
+            table_name = self.income_tables.get(ctry)
+            if not table_name:
+                raise HTTPException(status_code=400, detail="존재하지 않는 국가입니다.")
+
+            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+
+            result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
+
+            if not result:
+                raise HTTPException(status_code=404, detail=f"{ticker} 종목에 대한 손익계산 데이터가 존재하지 않습니다.")
+
+            quarterly_data, yearly_data = self._process_income_performance_statement_result(result)
+            performance_data = IncomePerformanceResponse(quarterly=quarterly_data, yearly=yearly_data)
+
+            return BaseResponse[IncomePerformanceResponse](
+                status_code=200, message="실적 데이터를 성공적으로 조회했습니다.", data=performance_data
+            )
+
+        except HTTPException as http_error:
+            raise http_error
+        except Exception as e:
+            logger.error(f"Unexpected error in get_income_data: {str(e)}")
+            raise HTTPException(status_code=500, detail="내부 서버 오류")
+
+    # 손익계산서
+    async def get_income_analysis(
+        self,
+        ctry: FinancialCountry,
+        ticker: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> PandasStatistics[List[IncomeStatementDetail]]:
+        """손익계산서 시계열 분석"""
+        logger.info(f"Starting income analysis for {ticker}")
+
+        try:
+            result = PandasStatistics(status_code=200, message="Success", data=[], statistics={})
+            income_data = await self.get_income_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+
+            result.data = income_data.data
+            df = self._create_income_dataframe(result.data)
+
+            if df.empty:
+                logger.warning(f"Empty DataFrame for ticker: {ticker}")
+                return result
+
+            result.statistics = self._calculate_income_statistics(df)
+            logger.info(f"Successfully completed income analysis for {ticker}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error during income analysis for {ticker}: {str(e)}", exc_info=True)
+            raise AnalysisException(analysis_type="손익계산서 시계열", detail=str(e))
+
+    # 현금흐름표
+    async def get_cashflow_analysis(
+        self,
+        ctry: FinancialCountry,
+        ticker: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> PandasStatistics[List[CashFlowDetail]]:
+        """
+        현금흐름 시계열 분석
+        """
+        try:
+            result = PandasStatistics(status_code=200, message="Success", data=[], statistics={})
+
+            cashflow_data = await self.get_cashflow_data(
+                ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
+            )
+
+            result.data = cashflow_data.data
+            df = self._create_cashflow_dataframe(result.data)
+            if df.empty:
+                return result
+
+            result.statistics = self._calculate_cashflow_statistics(df)
+            return result
+
+        except Exception as e:
+            logger.error(f"Unexpected error in get_cashflow_timeseries_analysis: {str(e)}")
+            raise HTTPException(status_code=500, detail="내부 서버 오류")
+
+    # 재무상태표
+    async def get_finpos_analysis(
+        self,
+        ctry: FinancialCountry,
+        ticker: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> PandasStatistics[List[FinPosDetail]]:
+        """
+        재무상태표 시계열 분석
+        """
+        try:
+            result = PandasStatistics(status_code=200, message="Success", data=[], statistics={})
+
+            finpos_data = await self.get_finpos_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+
+            result.data = finpos_data.data
+            df = self._create_finpos_dataframe(result.data)
+            if df.empty:
+                return result
+
+            result.statistics = self._calculate_finpos_statistics(df)
+            return result
+
+        except Exception as e:
+            logger.error(f"Unexpected error in get_finpos_timeseries_analysis: {str(e)}")
+            raise HTTPException(status_code=500, detail="내부 서버 오류")
+
+    ########################################## 데이터 조회 메서드 #########################################
+    # 손익계산서
     async def get_income_data(
         self,
-        ctry: Country,
+        ctry: FinancialCountry,
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -100,18 +246,19 @@ class FinancialService:
             logger.error(f"Unexpected error in get_income_data: {str(e)}", exc_info=True)
             raise AnalysisException(analysis_type="손익계산서 조회", detail=str(e))
 
-    async def get_income_performance_data(
+    # 현금흐름표
+    async def get_cashflow_data(
         self,
-        ctry: Country,
+        ctry: FinancialCountry,
         ticker: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-    ) -> BaseResponse[IncomePerformanceResponse]:
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> BaseResponse[List[CashFlowDetail]]:
         """
-        실적 데이터 조회
+        국가별 현금흐름 데이터 조회
         """
         try:
-            table_name = self.income_tables.get(ctry)
+            table_name = self.cashflow_tables.get(ctry)
             if not table_name:
                 raise HTTPException(status_code=400, detail="존재하지 않는 국가입니다.")
 
@@ -120,29 +267,129 @@ class FinancialService:
             result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
 
             if not result:
-                raise HTTPException(status_code=404, detail=f"{ticker} 종목에 대한 손익계산 데이터가 존재하지 않습니다.")
+                raise HTTPException(status_code=404, detail=f"{ticker} 종목에 대한 현금흐름 데이터가 존재하지 않습니다.")
 
-            quarterly_data, yearly_data = self._process_income_performance_statement_result(result)
-            performance_data = IncomePerformanceResponse(quarterly=quarterly_data, yearly=yearly_data)
+            statements = self._process_cashflow_result(result)
 
-            return BaseResponse[IncomePerformanceResponse](
-                status_code=200, message="실적 데이터를 성공적으로 조회했습니다.", data=performance_data
+            return BaseResponse[List[CashFlowDetail]](
+                status_code=200, message="현금흐름표 데이터를 성공적으로 조회했습니다.", data=statements
             )
 
-        except HTTPException as http_error:
-            raise http_error
+        except HTTPException:
+            raise
         except Exception as e:
-            logger.error(f"Unexpected error in get_income_data: {str(e)}")
+            logger.error(f"Unexpected error in get_cashflow_data: {str(e)}")
             raise HTTPException(status_code=500, detail="내부 서버 오류")
 
+    # 재무상태표
+    async def get_finpos_data(
+        self, ctry: FinancialCountry, ticker: str, start_date: Optional[date] = None, end_date: Optional[date] = None
+    ) -> BaseResponse[List[FinPosDetail]]:
+        """
+        재무상태표 데이터 조회
+        """
+        try:
+            table_name = self.finpos_tables.get(ctry)
+            if not table_name:
+                raise HTTPException(status_code=400, detail="존재하지 않는 국가입니다.")
+
+            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+
+            result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
+
+            if not result:
+                raise HTTPException(
+                    status_code=404, detail=f"{ticker} 종목에 대한 재무상태표 데이터가 존재하지 않습니다."
+                )
+
+            statements = self._process_finpos_result(result)
+
+            return BaseResponse[List[FinPosDetail]](
+                status_code=200, message="재무상태표 데이터를 성공적으로 조회했습니다.", data=statements
+            )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in get_finpos_data: {str(e)}")
+            raise HTTPException(status_code=500, detail="내부 서버 오류")
+
+    async def _get_latest_quarter(self, ctry: FinancialCountry, ticker: str) -> str:
+        """
+        가장 최근 분기 데이터 조회
+        """
+        try:
+            table_name = self.income_tables.get(ctry)
+            if not table_name:
+                raise HTTPException(status_code=400, detail="Invalid country code")
+
+            result = self.db._select(
+                table=table_name, columns=["period_q"], order="period_q", ascending=False, limit=1, Code=ticker
+            )
+
+            if not result:
+                raise HTTPException(status_code=404, detail=f"No data found for {ticker}")
+
+            return result[0][0]
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting latest quarter: {e}")
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+    ########################################## DataFrame 처리 메서드 #########################################
+    # 손익계산서
+    def _create_income_dataframe(self, data: List[IncomeStatementDetail]) -> pd.DataFrame:
+        """
+        손익계산서 데이터를 DataFrame으로 변환
+        """
+        df = pd.DataFrame([item.dict() for item in data])
+        if df.empty:
+            return df
+
+        df["period_q"] = pd.to_datetime(df["period_q"], format="%Y%m")
+        return df.sort_values("period_q")
+
+    # 현금흐름표
+    def _create_cashflow_dataframe(self, data: List[CashFlowDetail]) -> pd.DataFrame:
+        """
+        현금흐름 데이터를 DataFrame으로 변환
+        """
+        df = pd.DataFrame([item.dict() for item in data])
+        if df.empty:
+            return df
+
+        df["period_q"] = pd.to_datetime(df["period_q"], format="%Y%m")
+        return df.sort_values("period_q")
+
+    # 재무상태표
+    def _create_finpos_dataframe(self, data: List[FinPosDetail]) -> pd.DataFrame:
+        """
+        재무상태표 데이터를 DataFrame으로 변환
+        """
+        df = pd.DataFrame([item.dict() for item in data])
+        if df.empty:
+            return df
+
+        df["period_q"] = pd.to_datetime(df["period_q"], format="%Y%m")
+        return df.sort_values("period_q")
+
+    ########################################## 결과 처리 메서드 #########################################
+    # 실적
     def _process_income_performance_statement_result(self, result) -> Tuple[List[IncomeStatement], List[IncomeStatement]]:
         """
         실적 결과 처리 - 분기별 및 연도별 데이터를 분리하여 처리
         """
-        all_columns = [
+        if not result:
+            return [], []
+
+        # 고정된 컬럼 목록 사용
+        columns = [
             "Code",
             "Name",
             "period_q",
+            "StmtDt",
             "rev",
             "cost_of_sales",
             "gross_profit",
@@ -162,8 +409,9 @@ class FinancialService:
             "net_income_not_control",
         ]
 
-        df = pd.DataFrame(result, columns=all_columns)
+        df = pd.DataFrame(result, columns=columns)
 
+        # 필요한 컬럼만 선택
         required_columns = [
             "Code",
             "Name",
@@ -177,39 +425,27 @@ class FinancialService:
         ]
         df = df[required_columns]
 
+        # 연도별 데이터 처리
         df["year"] = df["period_q"].astype(str).str[:4]
+        agg_columns = [col for col in required_columns if col not in ["Code", "Name", "period_q"]]
 
-        yearly_sum = (
-            df.groupby(["Code", "Name", "year"])
-            .agg(
-                {
-                    "rev": "sum",
-                    "gross_profit": "sum",
-                    "operating_income": "sum",
-                    "net_income": "sum",
-                    "net_income_not_control": "sum",
-                    "net_income_total": "sum",
-                }
-            )
-            .reset_index()
-        )
+        yearly_sum = df.groupby(["Code", "Name", "year"]).agg({col: "sum" for col in agg_columns}).reset_index()
 
         yearly_sum["period_q"] = yearly_sum["year"] + "00"
         yearly_sum = yearly_sum.drop("year", axis=1)
 
-        quarterly_statements = []
-        for _, row in df.iterrows():
-            quarterly_statements.append(self._create_comprehensive_income_statement(row))
+        # 분기별/연도별 statement 생성
+        quarterly_statements = [self._create_comprehensive_income_statement(row) for _, row in df.iterrows()]
 
-        yearly_statements = []
-        for _, row in yearly_sum.iterrows():
-            yearly_statements.append(self._create_comprehensive_income_statement(row))
+        yearly_statements = [self._create_comprehensive_income_statement(row) for _, row in yearly_sum.iterrows()]
 
+        # 정렬
         quarterly_statements.sort(key=lambda x: x.period_q, reverse=True)
         yearly_statements.sort(key=lambda x: x.period_q, reverse=True)
 
         return quarterly_statements, yearly_statements
 
+    # 손익계산서
     def _process_income_statement_result(self, result) -> List[IncomeStatementDetail]:
         """
         손익계산 결과 처리
@@ -245,92 +481,7 @@ class FinancialService:
 
         return statements
 
-    def _create_income_statement_detail(self, row_dict: Dict) -> IncomeStatementDetail:
-        """
-        손익계산서 상세 정보 생성
-        """
-        return IncomeStatementDetail(
-            code=row_dict["Code"],
-            name=row_dict["Name"],
-            period_q=row_dict["period_q"],
-            rev=self._to_decimal(row_dict["rev"]),
-            cost_of_sales=self._to_decimal(row_dict["cost_of_sales"]),
-            gross_profit=self._to_decimal(row_dict["gross_profit"]),
-            sell_admin_cost=self._to_decimal(row_dict["sell_admin_cost"]),
-            rnd_expense=self._to_decimal(row_dict["rnd_expense"]),
-            operating_income=self._to_decimal(row_dict["operating_income"]),
-            other_rev_gains=self._to_decimal(row_dict["other_rev_gains"]),
-            other_exp_losses=self._to_decimal(row_dict["other_exp_losses"]),
-            equity_method_gain=self._to_decimal(row_dict["equity method gain"]),
-            fin_profit=self._to_decimal(row_dict["fin_profit"]),
-            fin_cost=self._to_decimal(row_dict["fin_cost"]),
-            pbt=self._to_decimal(row_dict["pbt"]),
-            corp_tax_cost=self._to_decimal(row_dict["corp_tax_cost"]),
-            profit_continuing_ops=self._to_decimal(row_dict["profit_continuing_ops"]),
-            net_income_total=self._to_decimal(row_dict["net_income_total"]),
-            net_income=self._to_decimal(row_dict["net_income"]),
-            net_income_not_control=self._to_decimal(row_dict["net_income_not_control"]),
-        )
-
-    def _create_comprehensive_income_statement(self, row_dict: Dict) -> IncomeStatement:
-        """
-        모든 실적 정보를 포함하는 통합 Statement 생성
-        """
-
-        def safe_get_value(key: str) -> Decimal:
-            try:
-                return self._to_decimal(row_dict[key])
-            except Exception as e:
-                logger.warning(f"Error converting {key}: {str(e)}")
-                return Decimal("0")
-
-        return IncomeStatement(
-            code=row_dict["Code"],
-            name=row_dict["Name"],
-            period_q=row_dict["period_q"],
-            rev=safe_get_value("rev"),
-            gross_profit=safe_get_value("gross_profit"),
-            operating_income=safe_get_value("operating_income"),
-            net_income=safe_get_value("net_income"),
-            net_income_not_control=safe_get_value("net_income_not_control"),
-            net_income_total=safe_get_value("net_income_total"),
-            is_yearly=False,
-        )
-
-    async def get_cashflow_data(
-        self,
-        ctry: Country,
-        ticker: str,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-    ) -> BaseResponse[List[CashFlowDetail]]:
-        """
-        국가별 현금흐름 데이터 조회
-        """
-        try:
-            table_name = self.cashflow_tables.get(ctry)
-            if not table_name:
-                raise HTTPException(status_code=400, detail="존재하지 않는 국가입니다.")
-
-            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
-
-            result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
-
-            if not result:
-                raise HTTPException(status_code=404, detail=f"{ticker} 종목에 대한 현금흐름 데이터가 존재하지 않습니다.")
-
-            statements = self._process_cashflow_result(result)
-
-            return BaseResponse[List[CashFlowDetail]](
-                status_code=200, message="현금흐름표 데이터를 성공적으로 조회했습니다.", data=statements
-            )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error in get_cashflow_data: {str(e)}")
-            raise HTTPException(status_code=500, detail="내부 서버 오류")
-
+    # 현금흐름표
     def _process_cashflow_result(self, result) -> List[CashFlowDetail]:
         """
         현금흐름 결과 처리
@@ -361,85 +512,7 @@ class FinancialService:
 
         return statements
 
-    def _create_cashflow_detail(self, row_dict: Dict) -> CashFlowDetail:
-        """
-        현금흐름 상세 정보 생성
-        """
-        return CashFlowDetail(
-            code=row_dict["Code"],
-            name=row_dict["Name"],
-            period_q=row_dict["period_q"],
-            operating_cashflow=self._to_decimal(row_dict["operating_cashflow"]),
-            non_controlling_changes=self._to_decimal(row_dict["non_controlling_changes"]),
-            working_capital_changes=self._to_decimal(row_dict["working_capital_changes"]),
-            finance_cashflow=self._to_decimal(row_dict["finance_cashflow"]),
-            dividends=self._to_decimal(row_dict["dividends"]),
-            investing_cashflow=self._to_decimal(row_dict["investing_cashflow"]),
-            depreciation=self._to_decimal(row_dict["depreciation"]),
-            free_cash_flow1=self._to_decimal(row_dict["free_cash_flow1"]),
-            free_cash_flow2=self._to_decimal(row_dict["free_cash_flow2"]),
-            cash_earnings=self._to_decimal(row_dict["cash_earnings"]),
-            capex=self._to_decimal(row_dict["capex"]),
-            other_cash_flows=self._to_decimal(row_dict["other_cash_flows"]),
-            cash_increment=self._to_decimal(row_dict["cash_increment"]),
-        )
-
-    async def _get_latest_quarter(self, ctry: Country, ticker: str) -> str:
-        """
-        가장 최근 분기 데이터 조회
-        """
-        try:
-            table_name = self.income_tables.get(ctry)
-            if not table_name:
-                raise HTTPException(status_code=400, detail="Invalid country code")
-
-            result = self.db._select(
-                table=table_name, columns=["period_q"], order="period_q", ascending=False, limit=1, Code=ticker
-            )
-
-            if not result:
-                raise HTTPException(status_code=404, detail=f"No data found for {ticker}")
-
-            return result[0][0]
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error getting latest quarter: {e}")
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-    async def get_finpos_data(
-        self, ctry: Country, ticker: str, start_date: Optional[date] = None, end_date: Optional[date] = None
-    ) -> BaseResponse[List[FinPosDetail]]:
-        """
-        재무상태표 데이터 조회
-        """
-        try:
-            table_name = self.finpos_tables.get(ctry)
-            if not table_name:
-                raise HTTPException(status_code=400, detail="존재하지 않는 국가입니다.")
-
-            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
-
-            result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
-
-            if not result:
-                raise HTTPException(
-                    status_code=404, detail=f"{ticker} 종목에 대한 재무상태표 데이터가 존재하지 않습니다."
-                )
-
-            statements = self._process_finpos_result(result)
-
-            return BaseResponse[List[FinPosDetail]](
-                status_code=200, message="재무상태표 데이터를 성공적으로 조회했습니다.", data=statements
-            )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error in get_finpos_data: {str(e)}")
-            raise HTTPException(status_code=500, detail="내부 서버 오류")
-
+    # 재무상태표
     def _process_finpos_result(self, result) -> List[FinPosDetail]:
         """
         재무상태표 결과 처리
@@ -490,6 +563,86 @@ class FinancialService:
 
         return statements
 
+    ########################################## 데이터 생성 메서드 #########################################
+    # 실적
+    def _create_comprehensive_income_statement(self, row_dict: Dict) -> IncomeStatement:
+        """
+        모든 실적 정보를 포함하는 통합 Statement 생성
+        """
+
+        def safe_get_value(key: str) -> Decimal:
+            try:
+                return self._to_decimal(row_dict[key])
+            except Exception as e:
+                logger.warning(f"Error converting {key}: {str(e)}")
+                return Decimal("0")
+
+        return IncomeStatement(
+            code=row_dict["Code"],
+            name=row_dict["Name"],
+            period_q=row_dict["period_q"],
+            rev=safe_get_value("rev"),
+            gross_profit=safe_get_value("gross_profit"),
+            operating_income=safe_get_value("operating_income"),
+            net_income=safe_get_value("net_income"),
+            net_income_not_control=safe_get_value("net_income_not_control"),
+            net_income_total=safe_get_value("net_income_total"),
+            is_yearly=False,
+        )
+
+    # 손익계산서
+    def _create_income_statement_detail(self, row_dict: Dict) -> IncomeStatementDetail:
+        """
+        손익계산서 상세 정보 생성
+        """
+        return IncomeStatementDetail(
+            code=row_dict["Code"],
+            name=row_dict["Name"],
+            period_q=row_dict["period_q"],
+            rev=self._to_decimal(row_dict["rev"]),
+            cost_of_sales=self._to_decimal(row_dict["cost_of_sales"]),
+            gross_profit=self._to_decimal(row_dict["gross_profit"]),
+            sell_admin_cost=self._to_decimal(row_dict["sell_admin_cost"]),
+            rnd_expense=self._to_decimal(row_dict["rnd_expense"]),
+            operating_income=self._to_decimal(row_dict["operating_income"]),
+            other_rev_gains=self._to_decimal(row_dict["other_rev_gains"]),
+            other_exp_losses=self._to_decimal(row_dict["other_exp_losses"]),
+            equity_method_gain=self._to_decimal(row_dict["equity method gain"]),
+            fin_profit=self._to_decimal(row_dict["fin_profit"]),
+            fin_cost=self._to_decimal(row_dict["fin_cost"]),
+            pbt=self._to_decimal(row_dict["pbt"]),
+            corp_tax_cost=self._to_decimal(row_dict["corp_tax_cost"]),
+            profit_continuing_ops=self._to_decimal(row_dict["profit_continuing_ops"]),
+            net_income_total=self._to_decimal(row_dict["net_income_total"]),
+            net_income=self._to_decimal(row_dict["net_income"]),
+            net_income_not_control=self._to_decimal(row_dict["net_income_not_control"]),
+        )
+
+    # 현금흐름표
+    def _create_cashflow_detail(self, row_dict: Dict) -> CashFlowDetail:
+        """
+        현금흐름 상세 정보 생성
+        """
+        return CashFlowDetail(
+            code=row_dict["Code"],
+            name=row_dict["Name"],
+            period_q=row_dict["period_q"],
+            operating_cashflow=self._to_decimal(row_dict["operating_cashflow"]),
+            non_controlling_changes=self._to_decimal(row_dict["non_controlling_changes"]),
+            working_capital_changes=self._to_decimal(row_dict["working_capital_changes"]),
+            finance_cashflow=self._to_decimal(row_dict["finance_cashflow"]),
+            dividends=self._to_decimal(row_dict["dividends"]),
+            investing_cashflow=self._to_decimal(row_dict["investing_cashflow"]),
+            depreciation=self._to_decimal(row_dict["depreciation"]),
+            free_cash_flow1=self._to_decimal(row_dict["free_cash_flow1"]),
+            free_cash_flow2=self._to_decimal(row_dict["free_cash_flow2"]),
+            cash_earnings=self._to_decimal(row_dict["cash_earnings"]),
+            capex=self._to_decimal(row_dict["capex"]),
+            other_cash_flows=self._to_decimal(row_dict["other_cash_flows"]),
+            cash_increment=self._to_decimal(row_dict["cash_increment"]),
+        )
+
+    # 재무상태표
     def _create_finpos_detail(self, row_dict: Dict) -> FinPosDetail:
         """
         재무상태표 상세 정보 생성
@@ -533,70 +686,7 @@ class FinancialService:
             non_ctrl_shrhld_eq=self._to_decimal(row_dict["non_ctrl_shrhld_eq"]),
         )
 
-    def _to_decimal(self, value) -> Decimal:
-        """
-        값을 Decimal로 변환하고 JSON 직렬화 가능한 값으로 처리
-        """
-        try:
-            if value is None or (isinstance(value, str) and not value.strip()):
-                return Decimal("0")
-            if isinstance(value, (float, Decimal)):
-                if isinstance(value, float) and math.isnan(value):
-                    return Decimal("0")
-                if isinstance(value, Decimal) and value.is_nan():
-                    return Decimal("0")
-                if isinstance(value, float) and math.isinf(value):
-                    return Decimal("0")
-                if isinstance(value, Decimal) and value.is_infinite():
-                    return Decimal("0")
-
-            return Decimal(str(value))
-
-        except (ValueError, TypeError, InvalidOperation):
-            logger.warning(f"Failed to convert value to Decimal: {value}")
-            return Decimal("0")
-
-    ############################손익계산서 시계열 분석 pandas##############################
-    async def get_income_analysis(
-        self,
-        ctry: Country,
-        ticker: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-    ) -> PandasStatistics[List[IncomeStatementDetail]]:
-        """손익계산서 시계열 분석"""
-        logger.info(f"Starting income analysis for {ticker}")
-
-        try:
-            result = PandasStatistics(status_code=200, message="Success", data=[], statistics={})
-            income_data = await self.get_income_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
-
-            result.data = income_data.data
-            df = self._create_income_dataframe(result.data)
-
-            if df.empty:
-                logger.warning(f"Empty DataFrame for ticker: {ticker}")
-                return result
-
-            result.statistics = self._calculate_income_statistics(df)
-            logger.info(f"Successfully completed income analysis for {ticker}")
-            return result
-
-        except Exception as e:
-            logger.error(f"Error during income analysis for {ticker}: {str(e)}", exc_info=True)
-            raise AnalysisException(analysis_type="손익계산서 시계열", detail=str(e))
-
-    def _create_income_dataframe(self, data: List[IncomeStatementDetail]) -> pd.DataFrame:
-        """
-        손익계산서 데이터를 DataFrame으로 변환
-        """
-        df = pd.DataFrame([item.dict() for item in data])
-        if df.empty:
-            return df
-
-        df["period_q"] = pd.to_datetime(df["period_q"], format="%Y%m")
-        return df.sort_values("period_q")
-
+    ########################################## 통계 계산 메서드 - 손익계산서 #########################################
     def _calculate_income_statistics(self, df: pd.DataFrame) -> Dict:
         """
         손익계산서 통계 계산
@@ -695,47 +785,7 @@ class FinancialService:
             for col, series in basic_stats.items()
         }
 
-    ############################현금흐름 시계열 분석 pandas##############################
-    async def get_cashflow_analysis(
-        self,
-        ctry: Country,
-        ticker: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-    ) -> PandasStatistics[List[CashFlowDetail]]:
-        """
-        현금흐름 시계열 분석
-        """
-        try:
-            result = PandasStatistics(status_code=200, message="Success", data=[], statistics={})
-
-            cashflow_data = await self.get_cashflow_data(
-                ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
-            )
-
-            result.data = cashflow_data.data
-            df = self._create_cashflow_dataframe(result.data)
-            if df.empty:
-                return result
-
-            result.statistics = self._calculate_cashflow_statistics(df)
-            return result
-
-        except Exception as e:
-            logger.error(f"Unexpected error in get_cashflow_timeseries_analysis: {str(e)}")
-            raise HTTPException(status_code=500, detail="내부 서버 오류")
-
-    def _create_cashflow_dataframe(self, data: List[CashFlowDetail]) -> pd.DataFrame:
-        """
-        현금흐름 데이터를 DataFrame으로 변환
-        """
-        df = pd.DataFrame([item.dict() for item in data])
-        if df.empty:
-            return df
-
-        df["period_q"] = pd.to_datetime(df["period_q"], format="%Y%m")
-        return df.sort_values("period_q")
-
+    ########################################## 통계 계산 메서드 - 현금흐름표 #########################################
     def _calculate_cashflow_statistics(self, df: pd.DataFrame) -> Dict:
         """
         현금흐름 통계 계산
@@ -854,45 +904,7 @@ class FinancialService:
             ],
         }
 
-    ############################재무상태표 시계열 분석 pandas##############################
-    async def get_finpos_analysis(
-        self,
-        ctry: Country,
-        ticker: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-    ) -> PandasStatistics[List[FinPosDetail]]:
-        """
-        재무상태표 시계열 분석
-        """
-        try:
-            result = PandasStatistics(status_code=200, message="Success", data=[], statistics={})
-
-            finpos_data = await self.get_finpos_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
-
-            result.data = finpos_data.data
-            df = self._create_finpos_dataframe(result.data)
-            if df.empty:
-                return result
-
-            result.statistics = self._calculate_finpos_statistics(df)
-            return result
-
-        except Exception as e:
-            logger.error(f"Unexpected error in get_finpos_timeseries_analysis: {str(e)}")
-            raise HTTPException(status_code=500, detail="내부 서버 오류")
-
-    def _create_finpos_dataframe(self, data: List[FinPosDetail]) -> pd.DataFrame:
-        """
-        재무상태표 데이터를 DataFrame으로 변환
-        """
-        df = pd.DataFrame([item.dict() for item in data])
-        if df.empty:
-            return df
-
-        df["period_q"] = pd.to_datetime(df["period_q"], format="%Y%m")
-        return df.sort_values("period_q")
-
+    ########################################## 통계 계산 메서드 - 재무상태표 #########################################
     def _calculate_finpos_statistics(self, df: pd.DataFrame) -> Dict:
         """
         재무상태표 통계 계산
@@ -1024,7 +1036,7 @@ class FinancialService:
                 float(x) if pd.notnull(x) and y != 0 else None
                 for x, y in zip(df["current_asset"] - df["stock_asset"], df["current_dept"])
             ],
-            # 현금비율 = 현금성자산 / 유동부채 × 100
+            # 현금���율 = 현금성자산 / 유동부채 × 100
             "cash_ratio": [
                 float(x) if pd.notnull(x) and y != 0 else None for x, y in zip(df["cash_asset"], df["current_dept"])
             ],
