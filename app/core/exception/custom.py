@@ -64,12 +64,6 @@ class InvalidTickerException(FinancialException):
         super().__init__(message="유효하지 않은 종목 코드입니다", status_code=400, error_code="INVALID_TICKER")
 
 
-class FinancialException(CustomException):
-    """재무 관련 기본 예외"""
-
-    pass
-
-
 class DataNotFoundException(FinancialException):
     """데이터를 찾을 수 없는 경우의 예외"""
 
