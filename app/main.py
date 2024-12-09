@@ -24,12 +24,10 @@ def root():
 
 origins = [
     "*",
-    "http://43.203.148.73",
-    "http://localhost:3000",
 ]
 
 app.add_middleware(
-    CORSMiddleware,  # type: ignore
+    CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
