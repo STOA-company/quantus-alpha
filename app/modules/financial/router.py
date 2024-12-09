@@ -2,16 +2,16 @@ import logging
 from fastapi import Request, HTTPException
 from app.core.exception.handler import exception_handler
 from app.modules.common.enum import FinancialCountry
-from app.modules.common.schemas import BaseResponse, PandasStatistics
+from app.modules.common.schemas import BaseResponse
 from fastapi import APIRouter, Depends, Query
 from app.modules.financial.services import FinancialService, get_financial_service
 from .schemas import (
-    CashFlowDetail,
-    FinPosDetail,
+    CashFlowResponse,
+    FinPosResponse,
     IncomePerformanceResponse,
-    IncomeStatementDetail,
+    IncomeStatementResponse,
 )
-from typing import List, Optional, Annotated
+from typing import Optional, Annotated
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -46,8 +46,8 @@ async def get_income_performance_data(
 
 @router.get(
     "/income-pandas",
-    response_model=PandasStatistics[List[IncomeStatementDetail]],
-    summary="손익계산서 pandas 사용한 분석",
+    response_model=BaseResponse[IncomeStatementResponse],
+    summary="손익계산서",
 )
 async def get_income_analysis(
     request: Request,
@@ -56,7 +56,7 @@ async def get_income_analysis(
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-) -> PandasStatistics[List[IncomeStatementDetail]]:
+) -> BaseResponse[IncomeStatementResponse]:
     try:
         result = await financial_service.get_income_analysis(
             ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
@@ -70,8 +70,8 @@ async def get_income_analysis(
 
 @router.get(
     "/cashflow-pandas",
-    response_model=PandasStatistics[List[CashFlowDetail]],
-    summary="현금흐름 pandas 사용한 분석",
+    response_model=BaseResponse[CashFlowResponse],
+    summary="현금흐름",
 )
 async def get_cashflow_analysis(
     request: Request,
@@ -80,7 +80,7 @@ async def get_cashflow_analysis(
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-) -> PandasStatistics[List[CashFlowDetail]]:
+) -> BaseResponse[CashFlowResponse]:
     try:
         result = await financial_service.get_cashflow_analysis(
             ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
@@ -94,8 +94,8 @@ async def get_cashflow_analysis(
 
 @router.get(
     "/finpos-pandas",
-    response_model=PandasStatistics[List[FinPosDetail]],
-    summary="재무상태표 pandas 사용한 분석",
+    response_model=BaseResponse[FinPosResponse],
+    summary="재무상태표",
 )
 async def get_finpos_analysis(
     request: Request,
@@ -104,7 +104,7 @@ async def get_finpos_analysis(
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
-) -> PandasStatistics[List[FinPosDetail]]:
+) -> BaseResponse[FinPosResponse]:
     try:
         result = await financial_service.get_finpos_analysis(
             ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
