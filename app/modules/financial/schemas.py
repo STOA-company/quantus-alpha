@@ -1,6 +1,6 @@
 from decimal import Decimal
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # class FinancialDataResponse(BaseModel):
 #     data: List[Dict[str, Any]] = Field(
@@ -37,9 +37,7 @@ class FinancialDataResponse(BaseModel):
 
 
 class IncomeStatementDetail(BaseModel):
-    code: str = Field(max_length=20)
-    name: str = Field(max_length=100)
-    period_q: str = Field(max_length=20)
+    period_q: Optional[str] = Field(max_length=20)
     rev: float
     cost_of_sales: float
     gross_profit: float
@@ -60,13 +58,14 @@ class IncomeStatementDetail(BaseModel):
 
 
 class IncomeStatementResponse(BaseModel):
-    statements: List[IncomeStatementDetail]
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
+    ttm: IncomeStatementDetail
+    details: List[IncomeStatementDetail]
 
 
 class CashFlowDetail(BaseModel):
-    code: str = Field(max_length=20)
-    name: str = Field(max_length=100)
-    period_q: str = Field(max_length=20)
+    period_q: Optional[str] = Field(max_length=20)
     operating_cashflow: float
     non_controlling_changes: float
     working_capital_changes: float
@@ -83,13 +82,14 @@ class CashFlowDetail(BaseModel):
 
 
 class CashFlowResponse(BaseModel):
-    statements: List[CashFlowDetail]
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
+    ttm: CashFlowDetail
+    details: List[CashFlowDetail]
 
 
 class FinPosDetail(BaseModel):
-    code: str = Field(max_length=20)
-    name: str = Field(max_length=100)
-    period_q: str = Field(max_length=20)
+    period_q: Optional[str] = Field(max_length=20)
     total_asset: float
     current_asset: float
     stock_asset: float
@@ -126,16 +126,16 @@ class FinPosDetail(BaseModel):
 
 
 class FinPosResponse(BaseModel):
-    statements: List[FinPosDetail]
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
+    ttm: FinPosDetail
+    details: List[FinPosDetail]
 
 
 class IncomeStatement(BaseModel):
     """통합 실적 Statement 스키마"""
 
-    # 기본 정보
-    code: str
-    name: str
-    period_q: str
+    period_q: Optional[str] = Field(max_length=20)
 
     # 매출 관련
     rev: Decimal
@@ -150,11 +150,11 @@ class IncomeStatement(BaseModel):
     net_income_total: Decimal
 
     class Config:
-        json_encoders = {
-            Decimal: lambda v: str(v)  # Decimal을 문자열로 변환하여 정밀도 유지
-        }
+        json_encoders = {Decimal: lambda v: str(v)}
 
 
 class IncomePerformanceResponse(BaseModel):
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
     quarterly: List[IncomeStatement]  # 분기별 데이터
     yearly: List[IncomeStatement]  # 연간 데이터
