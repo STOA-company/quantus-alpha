@@ -23,6 +23,7 @@ def root():
 
 
 origins = [
+    "*",
     "http://43.203.148.73",
     "http://localhost:3000",
 ]
