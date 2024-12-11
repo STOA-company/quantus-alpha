@@ -18,12 +18,6 @@ class Settings(BaseSettings):
     API_V2_STR: str = "/api/v2"
     DATA_DIR: str = os.getenv("DATA_DIR", "./data")
 
-    # S3 settings
-    USE_S3: bool = os.getenv("USE_S3", "False").lower() == "true"
-    AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
-    AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
-    AWS_REGION: str = os.getenv("AWS_REGION", "")
-
     # RDS settings
     RDS_HOST: str = os.getenv("RDS_HOST", "")
     RDS_USER: str = os.getenv("RDS_USER", "")
