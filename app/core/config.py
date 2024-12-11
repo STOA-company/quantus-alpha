@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
     PROJECT_NAME: str = "Alphafinder API 1.0"
     API_V1_STR: str = "/api/v1"
+    API_V2_STR: str = "/api/v2"
     DATA_DIR: str = os.getenv("DATA_DIR", "./data")
 
     # S3 settings
