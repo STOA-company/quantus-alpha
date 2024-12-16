@@ -36,11 +36,17 @@ class NewsService:
         if ticker:
             df = df[df['Code'] == ticker]
         
-        # emotion의 존재 여부를 기준으로 먼저 정렬하고, 그 다음 날짜로 정렬
+        # emotion이 있는지 여부를 새로운 컬럼으로 추가
+        df['has_emotion'] = df['emotion'].notna()
+        
+        # has_emotion과 date로 정렬
         df = df.sort_values(
-            by=[df['emotion'].notna(), 'date'],
+            by=['has_emotion', 'date'],
             ascending=[False, False]
         )
+        
+        # 임시 컬럼 제거
+        df = df.drop('has_emotion', axis=1)
         
         return df
 
