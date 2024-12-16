@@ -3,12 +3,15 @@
 set -e
 # 프로젝트 디렉토리로 이동
 echo "Changing to project directory..."
-cd ~/quantus-backend || exit 1
+cd ~/quantus-alpha || exit 1
 # Git 작업
 echo "Fetching latest changes..."
 git fetch origin || exit 1
 git checkout main || exit 1
 git pull origin main || exit 1
+# Poetry install
+echo "Installing dependencies with Poetry..."
+poetry install || { echo "Poetry installation failed!"; exit 1; }
 # Docker 컨테이너 정리
 echo "Cleaning up Docker containers..."
 docker stop nginx web || true
@@ -47,5 +50,5 @@ while [ $attempt -le $max_attempts ]; do
     attempt=$((attempt + 1))
 done
 echo "Deployment failed: API did not respond with 200 status code after $max_attempts attempts"
-echo "Last status code: $status_code"
+echo "성공 >< : $status_code"
 exit 1
