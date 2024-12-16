@@ -47,6 +47,7 @@ class NewsService:
     @staticmethod
     def _count_emotions(df: pd.DataFrame) -> Dict[str, int]:
         """감정 분석 결과 카운트"""
+
         emotion_counts = df['emotion'].value_counts(dropna=False)
         return {
             'positive_count': int(emotion_counts.get('긍정', 0)),

@@ -8,7 +8,7 @@ class NewsResponse(PaginationBaseResponse):
     negative_count: int
     neutral_count: int
     not_emotion_count: int
-    
+
 class NewsItem(BaseModel):
     date: datetime
     title: str
