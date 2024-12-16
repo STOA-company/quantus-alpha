@@ -47,7 +47,7 @@ class NewsService:
         
         # 임시 컬럼 제거
         df = df.drop('has_emotion', axis=1)
-        
+
         return df
 
     @staticmethod
