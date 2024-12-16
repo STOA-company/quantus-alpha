@@ -35,16 +35,25 @@ class NewsService:
         """DataFrame 전처리 및 필터링"""
         if ticker:
             df = df[df['Code'] == ticker]
+        
+        # emotion의 존재 여부를 기준으로 먼저 정렬하고, 그 다음 날짜로 정렬
+        df = df.sort_values(
+            by=[df['emotion'].notna(), 'date'],
+            ascending=[False, False]
+        )
+        
         return df
 
     @staticmethod
     def _count_emotions(df: pd.DataFrame) -> Dict[str, int]:
         """감정 분석 결과 카운트"""
-        emotion_counts = df['emotion'].fillna('중립').value_counts()
+
+        emotion_counts = df['emotion'].value_counts(dropna=False)
         return {
             'positive_count': int(emotion_counts.get('긍정', 0)),
             'negative_count': int(emotion_counts.get('부정', 0)),
-            'neutral_count': int(emotion_counts.get('중립', 0))
+            'neutral_count': int(emotion_counts.get('중립', 0)),
+            'not_emotion_count': int(emotion_counts.get(None, 0))
         }
 
     @staticmethod
@@ -85,14 +94,10 @@ class NewsService:
         # S3 데이터 가져오기
         s3_data = await self._fetch_s3_data(date_str, country_path)
         if s3_data is None:
-            # 이전 날짜 시도
-            previous_date = (datetime.strptime(date_str, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
-            s3_data = await self._fetch_s3_data(previous_date, country_path)
-            if s3_data is None:
-                raise DataNotFoundException(
-                    ticker=ticker or "all",
-                    data_type="news"
-                )
+            raise DataNotFoundException(
+                ticker=ticker or "all",
+                data_type="news"
+            )
 
         # DataFrame 처리
         df = pd.read_parquet(pd.io.common.BytesIO(s3_data))
