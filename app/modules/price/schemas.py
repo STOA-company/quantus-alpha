@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
 
@@ -48,3 +48,34 @@ class StockKrFactorItem(BaseModel):
     rate_of_change_10d: float
     rate_of_change_30d: float
     rate_of_change_60d: float
+
+
+# v2
+class PriceSummaryItem(BaseModel):
+    name: str
+    ticker: str
+    market: str
+    sector: str
+    last_day_close: float
+    week_52_low: float
+    week_52_high: float
+
+
+class PriceDailyItem(BaseModel):
+    date: date
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+    price_change_rate: float
+
+
+class PriceMinuteItem(BaseModel):
+    date: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+    price_change_rate: float
