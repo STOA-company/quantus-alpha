@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from app.core.exception.custom import AnalysisException, DataNotFoundException
 from app.modules.news.schemas import NewsItem
 from app.modules.common.enum import Country
-from quantus_alpha.common.configs import s3_client
+from quantus_aws.common.configs import s3_client
 
 KST_TIMEZONE = pytz.timezone("Asia/Seoul")
 
