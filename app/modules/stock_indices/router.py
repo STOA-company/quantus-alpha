@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends
-from .service import StockIndicesService
+from .services import StockIndicesService
 
 router = APIRouter()
 
 
+# TODO: yfinance  -> 한투 api or Refinitiv 로 변경
 @router.get("/five", summary="코스피/코스닥 지수 조회 5분 간격")
 async def get_stock_indices_five(
     service: StockIndicesService = Depends(StockIndicesService),
