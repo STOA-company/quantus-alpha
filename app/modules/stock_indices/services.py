@@ -4,17 +4,45 @@ from datetime import datetime
 import pytz
 import yfinance as yf
 from pykrx import stock
+import json
+from pathlib import Path
 
 
 class StockIndicesService:
     def __init__(self):
-        self.indices = {"KOSPI": {"index": "^KS11", "components": []}, "KOSDAQ": {"index": "^KQ11", "components": []}}
         self.korea_tz = pytz.timezone("Asia/Seoul")
         self._cache = {}
-        self._cache_duration = 300  # 컴포넌트 리스트만 5분 캐시
-        self._update_components()
+        self._cache_duration = 300
         self._data_cache = {}
-        self._data_cache_duration = 30  # 30초 캐시
+        self._data_cache_duration = 30
+        self._market_status_cache = {}  # 시장 상태 캐시 추가
+        self._market_status_cache_duration = 60  # 1분
+        self._yf_tickers = {}
+        self.indices = self._load_indices()
+        self._update_components()
+
+    def _load_indices(self):
+        try:
+            config_path = Path(__file__).parent.parent.parent / "config" / "indices.json"
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+
+            indices = {}
+            for name, info in config["indices"].items():
+                indices[name] = {
+                    "index": info["index"],
+                    "components": [],
+                    "market_code": info["market_code"],
+                    "suffix": info["suffix"],
+                }
+            return indices
+        except Exception as e:
+            print(f"Error loading indices config: {str(e)}")
+            # 기본값 반환
+            return {
+                "KOSPI": {"index": "^KS11", "components": [], "market_code": "KOSPI", "suffix": ".KS"},
+                "KOSDAQ": {"index": "^KQ11", "components": [], "market_code": "KOSDAQ", "suffix": ".KQ"},
+            }
 
     def _get_components_cache(self, key):
         if key in self._cache:
@@ -35,53 +63,85 @@ class StockIndicesService:
 
         today = datetime.now().strftime("%Y%m%d")
         try:
-            kospi_tickers = stock.get_market_ticker_list(today, market="KOSPI")
-            kosdaq_tickers = stock.get_market_ticker_list(today, market="KOSDAQ")
-
-            self.indices["KOSPI"]["components"] = [f"{ticker}.KS" for ticker in kospi_tickers]
-            self.indices["KOSDAQ"]["components"] = [f"{ticker}.KQ" for ticker in kosdaq_tickers]
+            for market_name, market_info in self.indices.items():
+                tickers = stock.get_market_ticker_list(today, market=market_info["market_code"])
+                market_info["components"] = [f"{ticker}{market_info['suffix']}" for ticker in tickers]
 
             self._set_components_cache(cache_key, self.indices)
         except Exception as e:
             print(f"Error updating components: {str(e)}")
 
+    def _get_yf_ticker(self, ticker):
+        if ticker not in self._yf_tickers:
+            self._yf_tickers[ticker] = yf.Ticker(ticker)
+        return self._yf_tickers[ticker]
+
     async def get_indices_data(self):
+        now = datetime.now(self.korea_tz)
+        cache_key = f"all_indices_{now.strftime('%Y%m%d_%H%M')}"
+
+        # 전체 데이터 캐시 확인
+        if cache_key in self._data_cache:
+            data, timestamp = self._data_cache[cache_key]
+            if now.timestamp() - timestamp < self._data_cache_duration:
+                return data
+
+        # 모든 지수 데이터를 동시에 가져오기
+        time_series_tasks = []
+        market_status_tasks = []
+
+        for market_name, market_info in self.indices.items():
+            time_series_tasks.append(self._get_index_data(market_info["index"]))
+            market_status_tasks.append(self._get_market_status(market_info["components"]))
+
+        # 병렬로 실행
+        time_series_results, market_status_results = await asyncio.gather(
+            asyncio.gather(*time_series_tasks), asyncio.gather(*market_status_tasks)
+        )
+
+        # 결과 조합
         result = {}
+        for i, (market_name, _) in enumerate(self.indices.items()):
+            if time_series_results[i] and market_status_results[i]:
+                result[market_name] = {"time_series": time_series_results[i], "market_status": market_status_results[i]}
 
-        async def fetch_market_data(market_name, market_info):
-            try:
-                time_series = await self._get_index_data(market_info["index"])
-                if time_series:
-                    market_status = await self._get_market_status(market_info["components"])
-                    return market_name, {"time_series": time_series, "market_status": market_status}
-            except Exception as e:
-                print(f"Error fetching {market_name}: {str(e)}")
-            return None
-
-        tasks = [fetch_market_data(market_name, market_info) for market_name, market_info in self.indices.items()]
-
-        results = await asyncio.gather(*tasks)
-        result = {name: data for item in results if item and (name := item[0]) and (data := item[1])}
-
+        # 결과 캐싱
+        self._data_cache[cache_key] = (result, now.timestamp())
         return result
 
     async def _get_market_status(self, tickers):
-        today = datetime.now(self.korea_tz).strftime("%Y%m%d")
+        now = datetime.now(self.korea_tz)
+        market = "KOSPI" if tickers[0].endswith(".KS") else "KOSDAQ"
+        cache_key = f"market_status_{market}_{now.strftime('%Y%m%d_%H%M')}"
+
+        # 시장 상태 캐시 확인
+        if cache_key in self._market_status_cache:
+            data, timestamp = self._market_status_cache[cache_key]
+            if now.timestamp() - timestamp < self._market_status_cache_duration:
+                return data
 
         try:
-            df = stock.get_market_ohlcv_by_ticker(today)
+            today = now.strftime("%Y%m%d")
+            df = stock.get_market_ohlcv_by_ticker(today, market=market)
+
+            if len(df) == 0:
+                raise Exception("No data available")
 
             up = (df["등락률"] > 0).sum()
             down = (df["등락률"] < 0).sum()
             unchanged = (df["등락률"] == 0).sum()
             total = len(df)
 
-            return {
+            result = {
                 "상승": f"{round((up / total * 100), 1)}%",
                 "하락": f"{round((down / total * 100), 1)}%",
                 "보합": f"{round((unchanged / total * 100), 1)}%",
-                "총합": f"{round((total / total * 100), 1)}%",
+                "총합": "100.0%",
             }
+
+            # 결과 캐싱
+            self._market_status_cache[cache_key] = (result, now.timestamp())
+            return result
 
         except Exception as e:
             print(f"Error getting market status: {str(e)}")
@@ -107,7 +167,7 @@ class StockIndicesService:
         today_end = now
 
         try:
-            index = yf.Ticker(ticker)
+            index = self._get_yf_ticker(ticker)
             df = index.history(start=today_start, end=today_end, interval="5m")
 
             if len(df) == 0:
