@@ -12,11 +12,14 @@ from app.modules.financial.schemas import (
     CashFlowResponse,
     FinPosDetail,
     FinPosResponse,
+    FinancialRatioResponse,
     IncomePerformanceResponse,
     IncomeStatement,
     IncomeStatementDetail,
     CashFlowDetail,
     IncomeStatementResponse,
+    InterestCoverageRatioResponse,
+    LiquidityRatioResponse,
 )
 from app.modules.common.schemas import BaseResponse
 from app.core.exception.custom import DataNotFoundException, InvalidCountryException, AnalysisException
@@ -235,6 +238,47 @@ class FinancialService:
             logger.error(f"Unexpected error in get_finpos_timeseries_analysis: {str(e)}")
             raise HTTPException(status_code=500, detail="내부 서버 오류")
 
+    # 재무비율
+    async def get_financial_ratio(self, ctry: FinancialCountry, ticker: str) -> BaseResponse[FinancialRatioResponse]:
+        """
+        재무비율 조회
+        """
+        try:
+            # finpos 테이블에서 조회
+            financial_ratio_data = await self.get_financial_ratio_data(ctry, ticker)
+            return financial_ratio_data
+        except Exception as e:
+            logger.error(f"Unexpected error in get_financial_ratio: {str(e)}")
+            raise AnalysisException(analysis_type="재무비율 조회", detail=str(e))
+
+    # 유동비율
+    async def get_liquidity_ratio(self, ctry: FinancialCountry, ticker: str) -> BaseResponse[LiquidityRatioResponse]:
+        """
+        유동비율 조회
+        """
+        try:
+            # finpos 테이블에서 조회
+            liquidity_ratio_data = await self.get_liquidity_ratio_data(ctry, ticker)
+            return liquidity_ratio_data
+        except Exception as e:
+            logger.error(f"Unexpected error in get_liquidity_ratio: {str(e)}")
+            raise AnalysisException(analysis_type="유동비율 조회", detail=str(e))
+
+    # 이자보상배율
+    async def get_interest_coverage_ratio(
+        self, ctry: FinancialCountry, ticker: str
+    ) -> BaseResponse[InterestCoverageRatioResponse]:
+        """
+        이자보상배율 조회
+        """
+        try:
+            # finpos 테이블에서 조회
+            interest_coverage_ratio_data = await self.get_interest_coverage_ratio_data(ctry, ticker)
+            return interest_coverage_ratio_data
+        except Exception as e:
+            logger.error(f"Unexpected error in get_interest_coverage_ratio: {str(e)}")
+            raise AnalysisException(analysis_type="이자보상배율 조회", detail=str(e))
+
     ########################################## 데이터 조회 메서드 #########################################
     # 손익계산서
     async def get_income_data(
@@ -397,6 +441,148 @@ class FinancialService:
             logger.error(f"Error getting latest quarter: {e}")
             raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+    ########################################## 계산 메서드 #########################################
+    # 부채비율 계산
+    async def get_financial_ratio_data(
+        self, ctry: FinancialCountry, ticker: str
+    ) -> Tuple[str, BaseResponse[FinancialRatioResponse]]:
+        """
+        재무비율 데이터 조회 - 부채비율 (최근 4분기 평균)
+        부채비율 = (총부채 / 자기자본) * 100
+        회사명도 함께 반환
+        """
+        table_name = self.finpos_tables.get(ctry)
+        if not table_name:
+            logger.warning(f"잘못된 국가 코드: {ctry}")
+            raise InvalidCountryException()
+
+        conditions = {"Code": ticker}
+        result = self.db._select(table=table_name, order="period_q", ascending=False, limit=4, **conditions)
+
+        if not result:
+            logger.warning(f"재무비율 데이터를 찾을 수 없습니다: {ticker}")
+            raise DataNotFoundException(ticker=ticker, data_type="재무비율")
+
+        # 회사명 추출
+        company_name = result[0].Name
+
+        # 4분기 각각의 부채비율 계산
+        debt_ratios = []
+        for quarter in result:
+            total_debt = self._to_decimal(quarter.total_dept)
+            equity = self._to_decimal(quarter.equity)
+
+            if equity != 0:
+                quarter_ratio = float((total_debt / equity) * 100)
+                debt_ratios.append(quarter_ratio)
+            else:
+                debt_ratios.append(0.0)
+
+        # 4분기 평균 계산 및 소수점 2자리로 반올림
+        average_debt_ratio = round(sum(debt_ratios) / len(debt_ratios), 2)
+
+        financial_ratio_response = FinancialRatioResponse(code=ticker, name=company_name, ratio=average_debt_ratio)
+
+        return company_name, BaseResponse[FinancialRatioResponse](
+            status_code=200,
+            message="부채비율(4분기 평균) 데이터를 성공적으로 조회했습니다.",
+            data=financial_ratio_response,
+        )
+
+    # 유동비율 계산
+    async def get_liquidity_ratio_data(self, ctry: FinancialCountry, ticker: str) -> BaseResponse[LiquidityRatioResponse]:
+        """
+        유동비율 데이터 조회 (최근 4분기 평균)
+        유동비율 = (유동자산 / 유동부채) * 100
+        """
+        table_name = self.finpos_tables.get(ctry)
+        if not table_name:
+            logger.warning(f"잘못된 국가 코드: {ctry}")
+            raise InvalidCountryException()
+
+        conditions = {"Code": ticker}
+        result = self.db._select(table=table_name, order="period_q", ascending=False, limit=4, **conditions)
+
+        if not result:
+            logger.warning(f"유동비율 데이터를 찾을 수 없습니다: {ticker}")
+            raise DataNotFoundException(ticker=ticker, data_type="유동비율")
+
+        if len(result) < 4:
+            logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
+            raise DataNotFoundException(ticker=ticker, data_type="유동비율(4분���)")
+
+        # 4분기 각각의 유동비율 계산
+        liquidity_ratios = []
+        for quarter in result:
+            current_asset = self._to_decimal(quarter.current_asset)
+            current_debt = self._to_decimal(quarter.current_dept)
+
+            if current_debt != 0:
+                quarter_ratio = float((current_asset / current_debt) * 100)
+                liquidity_ratios.append(quarter_ratio)
+            else:
+                liquidity_ratios.append(0.0)
+
+        # 4분기 평균 계산 및 소수점 2자리로 반올림
+        average_liquidity_ratio = round(sum(liquidity_ratios) / len(liquidity_ratios), 2)
+
+        liquidity_ratio_response = LiquidityRatioResponse(code=ticker, name=result[0].Name, ratio=average_liquidity_ratio)
+
+        return BaseResponse[LiquidityRatioResponse](
+            status_code=200,
+            message="유동비율(4분기 평균) 데이터를 성공적으로 조회했습니다.",
+            data=liquidity_ratio_response,
+        )
+
+    # 이자보상배율 계산
+    async def get_interest_coverage_ratio_data(
+        self, ctry: FinancialCountry, ticker: str
+    ) -> BaseResponse[InterestCoverageRatioResponse]:
+        """
+        이자보상배율 데이터 조회 (최근 4분기 평균)
+        이자보상배율 = 영업이익 / 금융비용
+        """
+        table_name = self.income_tables.get(ctry)
+        if not table_name:
+            logger.warning(f"잘못된 국가 코드: {ctry}")
+            raise InvalidCountryException()
+
+        conditions = {"Code": ticker}
+        result = self.db._select(table=table_name, order="period_q", ascending=False, limit=4, **conditions)
+
+        if not result:
+            logger.warning(f"이자보상배율 데이터를 찾을 수 없습니다: {ticker}")
+            raise DataNotFoundException(ticker=ticker, data_type="이자보상배율")
+
+        if len(result) < 4:
+            logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
+            raise DataNotFoundException(ticker=ticker, data_type="이자보상배율(4분기)")
+
+        # 4분기 각각의 이자보상배율 계산
+        interest_coverage_ratios = []
+        for quarter in result:
+            operating_income = self._to_decimal(quarter.operating_income)
+            fin_cost = self._to_decimal(quarter.fin_cost)
+
+            if fin_cost != 0:
+                quarter_ratio = float(operating_income / fin_cost)
+                interest_coverage_ratios.append(quarter_ratio)
+            else:
+                interest_coverage_ratios.append(0.0)
+
+        # 4분기 평균 계산 및 소수점 2자리로 반올림
+        average_interest_coverage_ratio = round(sum(interest_coverage_ratios) / len(interest_coverage_ratios), 2)
+
+        interest_coverage_ratio_response = InterestCoverageRatioResponse(
+            code=ticker, name=result[0].Name, ratio=average_interest_coverage_ratio
+        )
+
+        return BaseResponse[InterestCoverageRatioResponse](
+            status_code=200,
+            message="이자보상배율(4분기 평균) 데이터를 성공적으로 조회했습니다.",
+            data=interest_coverage_ratio_response,
+        )
+
     ########################################## ttm 메서드 #########################################
     # 손익계산서 ttm
     def _process_income_ttm_result(self, result) -> IncomeStatementDetail:
@@ -469,8 +655,13 @@ class FinancialService:
 
         # TTM 계산을 위한 딕셔너리 초기화
         ttm_dict = {
-            col: sum(self._to_decimal(getattr(row, col, 0)) for row in recent_12_months)
-            for col, val in zip(first_row._fields, first_row)
+            col: sum(
+                self._to_decimal(getattr(row, col, 0))
+                for row in recent_12_months
+                for col, val in zip(row._fields, row)
+                if col not in exclude_columns and col != "period_q"
+            )
+            for col in first_row._fields
             if col not in exclude_columns and col != "period_q"
         }
         ttm_dict["period_q"] = "TTM"
