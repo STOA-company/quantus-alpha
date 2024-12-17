@@ -679,6 +679,9 @@ class FinancialService:
         # SQLAlchemy 결과를 DataFrame으로 변환
         df = pd.DataFrame([{col: val for col, val in zip(row._fields, row)} for row in result])
 
+        # eps Mock 데이터
+        df["eps"] = 100000000
+
         # 필요한 컬럼만 선택
         required_columns = [
             "Code",
@@ -690,6 +693,7 @@ class FinancialService:
             "net_income",
             "net_income_not_control",
             "net_income_total",
+            "eps",
         ]
         df = df[required_columns]
 
