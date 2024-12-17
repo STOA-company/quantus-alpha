@@ -125,10 +125,12 @@ class DataProcessor:
             # 전일 종가 계산
             df["last_day_close"] = self.get_last_day_close(df, frequency)
 
+            # TODO: 시가총액 Mock 데이터
             return ResponsePriceDataItem(
                 ticker=str(df["Ticker"].iloc[0]),
                 name=str(df["name"].iloc[0]),
                 market=str(df["Market"].iloc[0]),
+                market_cap=569.87,
                 week52_highest=week52_highest,
                 week52_lowest=week52_lowest,
                 last_day_close=float(df["last_day_close"].iloc[0]),

@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -9,6 +10,13 @@ class StockInfo(BaseModel):
 
 
 class Indicators(BaseModel):
-    per: float | None = Field(description="PER")
-    pbr: float | None = Field(description="PBR")
-    roe: float | None = Field(description="ROE")
+    per: Optional[float] = Field(default=None, description="PER")
+    industry_per: Optional[float] = Field(default=None, description="산업 평균 PER")
+    pbr: Optional[float] = Field(default=None, description="PBR")
+    industry_pbr: Optional[float] = Field(default=None, description="산업 평균 PBR")
+    roe: Optional[float] = Field(default=None, description="ROE")
+    industry_roe: Optional[float] = Field(default=None, description="산업 평균 ROE")
+    financial_data: Optional[str] = Field(default=None, description="재무 현황")
+    price_trend: Optional[str] = Field(default=None, description="주가 추세")
+    market_situation: Optional[str] = Field(default=None, description="시장 상황")
+    industry_situation: Optional[str] = Field(default=None, description="업종 상황")
