@@ -7,7 +7,7 @@ from app.modules.news.services import NewsService, get_news_service
 
 router = APIRouter()
 
-@router.get("/", response_model=NewsResponse[List[NewsItem]])
+@router.get("", response_model=NewsResponse[List[NewsItem]])
 async def get_news(
     ctry: Annotated[Country, Query(description="국가 코드 (KR / US)")],
     ticker: Annotated[Optional[str], Query(description="종목 코드, 예시: 005930")] = None,
