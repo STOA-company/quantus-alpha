@@ -28,7 +28,7 @@ async def get_income_performance_data(
     ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
-    end_date: Annotated[Optional[str], Query(description="종���일자 (YYYYMM)")] = None,
+    end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[IncomePerformanceResponse]:
     try:
