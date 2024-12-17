@@ -27,6 +27,8 @@ class PandasStatistics(BaseModel, Generic[T]):
 
 
 class PaginationBaseResponse(BaseResponse):
-    total: int
-    page: int
+    total_count: int
+    total_pages: int
+    current_page: int
+    offset: int
     size: int

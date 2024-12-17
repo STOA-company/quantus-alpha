@@ -4,8 +4,8 @@ from enum import Enum
 class Country(Enum):
     KR = "kr"
     US = "us"
-    JPN = "jpn"
-    HKG = "hkg"
+    JP = "jp"
+    HK = "hk"
 
 
 class FinancialCountry(Enum):
