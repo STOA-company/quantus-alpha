@@ -6,7 +6,7 @@ router = APIRouter()
 
 
 @router.get("/", summary="코스피/코스닥/나스닥/S&P500 지수 조회 일봉 간격", response_model=IndicesData)
-async def get_stock_indices_five(
+async def get_stock_indices(
     service: StockIndicesService = Depends(StockIndicesService),
 ) -> IndicesData:
     try:
