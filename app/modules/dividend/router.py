@@ -1,3 +1,4 @@
+from fastapi import APIRouter
 from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from app.modules.common.enum import FinancialCountry
@@ -7,7 +8,6 @@ from app.modules.dividend.services import DividendService, get_dividend_service
 
 
 router = APIRouter()
-
 
 @router.get("", response_model=BaseResponse[DividendItem], summary="배당 정보 조회(Mock 데이터)")
 async def get_dividend(
