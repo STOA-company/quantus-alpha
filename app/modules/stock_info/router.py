@@ -8,7 +8,7 @@ from .services import StockInfoService, get_stock_info_service
 router = APIRouter()
 
 
-@router.get("/", response_model=BaseResponse[StockInfo], summary="주식 정보 조회")
+@router.get("", response_model=BaseResponse[StockInfo], summary="주식 정보 조회")
 async def get_stock_info(
     ticker: str,
     ctry: Country,
