@@ -509,7 +509,7 @@ class FinancialService:
 
         if len(result) < 4:
             logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
-            raise DataNotFoundException(ticker=ticker, data_type="유동비율(4분���)")
+            raise DataNotFoundException(ticker=ticker, data_type="유동비율(4분기)")
 
         # 4분기 각각의 유동비율 계산
         liquidity_ratios = []
@@ -641,7 +641,7 @@ class FinancialService:
     # 재무상태표 ttm
     def _process_finpos_ttm_result(self, result) -> FinPosDetail:
         """
-        재무상태표 ttm 결과 처리 - 모든 재무 항목에 대해 최근 12개월 합산
+        재무상태표 ttm 결과 처리 - 각 컬럼별로 최근 12개월 합산
         """
         if not result:
             return FinPosDetail()
@@ -655,15 +655,12 @@ class FinancialService:
 
         # TTM 계산을 위한 딕셔너리 초기화
         ttm_dict = {
-            col: sum(
-                self._to_decimal(getattr(row, col, 0))
-                for row in recent_12_months
-                for col, val in zip(row._fields, row)
-                if col not in exclude_columns and col != "period_q"
-            )
-            for col in first_row._fields
+            col: sum(self._to_decimal(getattr(row, col, 0)) for row in recent_12_months)
+            for col, val in zip(first_row._fields, first_row)
             if col not in exclude_columns and col != "period_q"
         }
+
+        # TTM 값에는 'TTM'이라고 표시
         ttm_dict["period_q"] = "TTM"
 
         return self._create_finpos_detail(ttm_dict)
