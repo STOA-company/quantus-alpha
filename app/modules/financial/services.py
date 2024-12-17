@@ -1,6 +1,6 @@
 import pandas as pd
 from app.core.logging.config import get_logger
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional, Dict, List, Tuple
 from fastapi import HTTPException, Depends
 import math
@@ -15,12 +15,13 @@ from app.modules.financial.schemas import (
     FinPosResponse,
     FinancialRatioResponse,
     IncomePerformanceResponse,
-    IncomeStatement,
     IncomeStatementDetail,
     CashFlowDetail,
     IncomeStatementResponse,
     InterestCoverageRatioResponse,
     LiquidityRatioResponse,
+    QuarterlyIncome,
+    IncomeMetric,
 )
 from app.modules.common.schemas import BaseResponse
 from app.core.exception.custom import DataNotFoundException, InvalidCountryException, AnalysisException
@@ -51,7 +52,7 @@ class FinancialService:
         날짜 조건 생성
         start_date (Optional[str]): YYYYMM 형식의 시작일
         end_date (Optional[str]): YYYYMM 형식의 종료일
-        기본값은 5년치 데이터를 조회
+        기본값은 10분기/10년치 데이터를 조회
         """
         from datetime import datetime
 
@@ -68,7 +69,8 @@ class FinancialService:
         latest_quarter_month = str(latest_quarter_month).zfill(2)  # 한 자리 월을 두 자리로 변환
 
         if not start_date:
-            conditions["period_q__gte"] = f"{current_year - 5}01"  # 5년 전부터
+            # 분기별 데이터는 2.5년(10분기)치, 연간 데이터는 10년치 조회를 위해 10년 전부터 데이터 조회
+            conditions["period_q__gte"] = f"{current_year - 10}01"  # 10년 전부터
             conditions["period_q__lte"] = f"{current_year}{latest_quarter_month}"  # 현재 연도의 마지막 분기
         else:
             conditions["period_q__gte"] = f"{start_date[:4]}01"  # 시작년도의 1월
@@ -82,25 +84,27 @@ class FinancialService:
     def _to_decimal(self, value) -> Decimal:
         """
         값을 Decimal로 변환하고 JSON 직렬화 가능한 값으로 처리
+        소수점 2자리까지 반올림
         """
         try:
             if value is None or (isinstance(value, str) and not value.strip()):
-                return Decimal("0")
+                return Decimal("0.00")
             if isinstance(value, (float, Decimal)):
                 if isinstance(value, float) and math.isnan(value):
-                    return Decimal("0")
+                    return Decimal("0.00")
                 if isinstance(value, Decimal) and value.is_nan():
-                    return Decimal("0")
+                    return Decimal("0.00")
                 if isinstance(value, float) and math.isinf(value):
-                    return Decimal("0")
+                    return Decimal("0.00")
                 if isinstance(value, Decimal) and value.is_infinite():
-                    return Decimal("0")
+                    return Decimal("0.00")
 
-            return Decimal(str(value))
+            # 값을 Decimal로 변환하고 소수점 2자리로 반올림
+            return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         except (ValueError, TypeError, InvalidOperation):
             logger.warning(f"Failed to convert value to Decimal: {value}")
-            return Decimal("0")
+            return Decimal("0.00")
 
     ########################################## Router에서 호출하는 메서드 #########################################
     # 실적 데이터 조회
@@ -677,9 +681,10 @@ class FinancialService:
     # 실적
     def _process_income_performance_statement_result(
         self, result, exclude_columns=["StmtDt"]
-    ) -> Tuple[List[IncomeStatement], List[IncomeStatement]]:
+    ) -> Tuple[List[QuarterlyIncome], List[QuarterlyIncome]]:
         """
         실적 결과 처리 - 분기별 및 연도별 데이터를 분리하여 처리
+        최근 10개의 분기/연간 데이터만 반환
         """
         if not result:
             return [], []
@@ -687,7 +692,7 @@ class FinancialService:
         # SQLAlchemy 결과를 DataFrame으로 변환
         df = pd.DataFrame([{col: val for col, val in zip(row._fields, row)} for row in result])
 
-        # eps Mock 데이터 생성 - 시계열 패턴 반영
+        # TODO: eps Mock 데이터 생성 - 시계열 패턴 반영
         base_eps = 1000  # 기준 EPS 값
         num_rows = len(df)
 
@@ -710,39 +715,43 @@ class FinancialService:
         df["eps"] = eps_values[::-1]  # 최신 데이터가 앞쪽에 오도록 역순 정렬
 
         # 필요한 컬럼만 선택
-        required_columns = [
-            "Code",
-            "Name",
-            "period_q",
-            "rev",
-            "gross_profit",
-            "operating_income",
-            "net_income",
-            "net_income_not_control",
-            "net_income_total",
-            "eps",
-        ]
+        required_columns = ["Code", "Name", "period_q", "rev", "operating_income", "net_income", "eps"]
         df = df[required_columns]
+
+        def create_income_metric(value: float) -> IncomeMetric:
+            """기업/업종 평균 값을 포함한 IncomeMetric 생성"""
+            # 업종 평균은 회사 값의 ±20% 범위 내에서 랜덤하게 생성
+            industry_avg = value * (1 + random.uniform(-0.2, 0.2))
+            return IncomeMetric(company=Decimal(str(value)), industry_avg=Decimal(str(industry_avg)))
+
+        def create_quarterly_income(row) -> QuarterlyIncome:
+            """QuarterlyIncome 객체 생성"""
+            return QuarterlyIncome(
+                period_q=str(row["period_q"]),
+                rev=create_income_metric(row["rev"]),
+                operating_income=create_income_metric(row["operating_income"]),
+                net_income=create_income_metric(row["net_income"]),
+                eps=create_income_metric(row["eps"]),
+            )
 
         # 연도별 데이터 처리
         df["year"] = df["period_q"].astype(str).str[:4]
-        agg_columns = [col for col in required_columns if col not in ["Code", "Name", "period_q"]]
+        agg_columns = ["rev", "operating_income", "net_income", "eps"]
 
         yearly_sum = df.groupby(["Code", "Name", "year"]).agg({col: "sum" for col in agg_columns}).reset_index()
         yearly_sum["period_q"] = yearly_sum["year"]
         yearly_sum = yearly_sum.drop("year", axis=1)
 
-        # 분기별/연도별 statement 생성
-        quarterly_statements = [self._create_comprehensive_income_statement(row.to_dict()) for _, row in df.iterrows()]
-        yearly_statements = [
-            self._create_comprehensive_income_statement(row.to_dict()) for _, row in yearly_sum.iterrows()
-        ]
+        # 분기별/연도별 데이터 생성
+        quarterly_statements = [create_quarterly_income(row) for _, row in df.iterrows()]
+        yearly_statements = [create_quarterly_income(row) for _, row in yearly_sum.iterrows()]
 
         # 정렬
         quarterly_statements.sort(key=lambda x: x.period_q, reverse=True)
         yearly_statements.sort(key=lambda x: x.period_q, reverse=True)
 
-        return quarterly_statements, yearly_statements
+        # 최근 10개의 데이터만 반환
+        return quarterly_statements[:10], yearly_statements[:10]
 
     # 손익계산서
     def _process_income_statement_result(
@@ -796,7 +805,7 @@ class FinancialService:
 
     ########################################## 데이터 생성 메서드 #########################################
     # 실적
-    def _create_comprehensive_income_statement(self, row_dict: Dict) -> IncomeStatement:
+    def _create_comprehensive_income_statement(self, row_dict: Dict) -> QuarterlyIncome:
         """
         모든 실적 정보를 포함하는 통합 Statement 생성
         """
@@ -811,7 +820,7 @@ class FinancialService:
                     logger.warning(f"Error converting {field_name}: {str(e)}")
                     values[field_name] = Decimal("0")
 
-        return IncomeStatement(**values)
+        return QuarterlyIncome(**values)
 
     # 손익계산서
     def _create_income_statement_detail(self, row_dict: Dict) -> IncomeStatementDetail:
