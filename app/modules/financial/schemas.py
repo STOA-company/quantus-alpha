@@ -158,3 +158,26 @@ class IncomePerformanceResponse(BaseModel):
     name: str = Field(max_length=100)
     quarterly: List[IncomeStatement]  # 분기별 데이터
     yearly: List[IncomeStatement]  # 연간 데이터
+
+
+class FinancialRatioResponse(BaseModel):
+    ratio: float
+    industry_avg: Optional[float] = None  # 업종 평균
+
+
+class LiquidityRatioResponse(BaseModel):
+    ratio: float
+    industry_avg: Optional[float] = None
+
+
+class InterestCoverageRatioResponse(BaseModel):
+    ratio: float
+    industry_avg: Optional[float] = None
+
+
+class RatioResponse(BaseModel):
+    code: str = Field(max_length=20)
+    name: str = Field(max_length=100)
+    financial_ratios: FinancialRatioResponse
+    liquidity_ratios: LiquidityRatioResponse
+    interest_coverage_ratios: InterestCoverageRatioResponse
