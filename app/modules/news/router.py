@@ -7,12 +7,13 @@ from app.modules.news.services import NewsService, get_news_service
 
 router = APIRouter()
 
-@router.get("/", response_model=NewsResponse[List[NewsItem]])
+@router.get("", response_model=NewsResponse[List[NewsItem]])
 async def get_news(
     ctry: Annotated[Country, Query(description="국가 코드 (KR / US)")],
-    ticker: Annotated[str, Query(description="종목 코드, 예시: 005930")],
+    ticker: Annotated[Optional[str], Query(description="종목 코드, 예시: 005930")] = None,
     date: Annotated[Optional[str], Query(description="날짜, 예시: 20241210, 기본값: 오늘 날짜")] = None,
-    page: Annotated[Optional[int], Query(description="페이지 번호, 기보값: 1")] = 1,
+    page: Annotated[Optional[int], Query(description="페이지 번호, 기본값: 1")] = 1,
+
     size: Annotated[Optional[int], Query(description="페이지 크기, 기본값: 6")] = 6,
     news_service: NewsService = Depends(get_news_service),
 ):

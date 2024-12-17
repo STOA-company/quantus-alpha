@@ -6,6 +6,7 @@ import pandas as pd
 from app.core.exception.custom import DataNotFoundException
 from app.modules.news.schemas import NewsItem
 from app.modules.common.enum import Country
+from quantus_aws.common.configs import s3_client
 
 KST_TIMEZONE = pytz.timezone("Asia/Seoul")
 
@@ -27,17 +28,31 @@ class NewsService:
     def _process_dataframe(df: pd.DataFrame, ticker: Optional[str] = None) -> pd.DataFrame:
         """DataFrame 전처리 및 필터링"""
         if ticker:
-            df = df[df["Code"] == ticker]
+            df = df[df['Code'] == ticker]
+        
+        # emotion이 있는지 여부를 새로운 컬럼으로 추가
+        df['has_emotion'] = df['emotion'].notna()
+        
+        # has_emotion과 date로 정렬
+        df = df.sort_values(
+            by=['has_emotion', 'date'],
+            ascending=[False, False]
+        )
+        
+        # 임시 컬럼 제거
+        df = df.drop('has_emotion', axis=1)
+
         return df
 
     @staticmethod
     def _count_emotions(df: pd.DataFrame) -> Dict[str, int]:
         """감정 분석 결과 카운트"""
-        emotion_counts = df["emotion"].fillna("중립").value_counts()
+        emotion_counts = df['emotion'].value_counts(dropna=False)
         return {
-            "positive_count": int(emotion_counts.get("긍정", 0)),
-            "negative_count": int(emotion_counts.get("부정", 0)),
-            "neutral_count": int(emotion_counts.get("중립", 0)),
+            'positive_count': int(emotion_counts.get('긍정', 0)),
+            'negative_count': int(emotion_counts.get('부정', 0)),
+            'neutral_count': int(emotion_counts.get('중립', 0)),
+            'not_emotion_count': int(emotion_counts.get(None, 0))
         }
 
     @staticmethod
@@ -73,11 +88,10 @@ class NewsService:
         # S3 데이터 가져오기
         s3_data = await self._fetch_s3_data(date_str, country_path)
         if s3_data is None:
-            # 이전 날짜 시도
-            previous_date = (datetime.strptime(date_str, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
-            s3_data = await self._fetch_s3_data(previous_date, country_path)
-            if s3_data is None:
-                raise DataNotFoundException(ticker=ticker or "all", data_type="news")
+            raise DataNotFoundException(
+                ticker=ticker or "all",
+                data_type="news"
+            )
 
         # DataFrame 처리
         df = pd.read_parquet(pd.io.common.BytesIO(s3_data))
