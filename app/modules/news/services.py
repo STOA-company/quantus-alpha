@@ -19,7 +19,7 @@ class NewsService:
         """S3에서 데이터를 가져오는 내부 메서드"""
         try:
             file_path = f"{country_path}/{date_str}.parquet"
-            response = self._s3_client.get_object(Bucket=self._bucket_name, Key=file_path)
+            response = s3_client.get_object(Bucket=self._bucket_name, Key=file_path)
             return response["Body"].read()
         except Exception:
             return None
