@@ -132,32 +132,38 @@ class FinPosResponse(BaseModel):
     details: List[FinPosDetail]
 
 
-class IncomeStatement(BaseModel):
-    """통합 실적 Statement 스키마"""
+class IncomeMetric(BaseModel):
+    """개별 지표의 기업/업종 평균 값"""
 
-    period_q: Optional[str] = Field(max_length=20)
-
-    # 매출 관련
-    rev: Decimal
-    gross_profit: Decimal
-
-    # 영업이익 관련
-    operating_income: Decimal
-
-    # 순이익 관련
-    net_income: Decimal
-    net_income_not_control: Decimal
-    net_income_total: Decimal
+    company: Decimal
+    industry_avg: Decimal
 
     class Config:
-        json_encoders = {Decimal: lambda v: str(v)}
+        json_encoders = {
+            Decimal: lambda v: f"{float(v):.2f}"  # 소수점 2자리까지 출력
+        }
+
+
+class QuarterlyIncome(BaseModel):
+    """분기별 실적 데이터"""
+
+    period_q: str = Field(max_length=20)
+    rev: IncomeMetric
+    operating_income: IncomeMetric
+    net_income: IncomeMetric
+    eps: IncomeMetric
 
 
 class IncomePerformanceResponse(BaseModel):
+    """실적 응답 스키마"""
+
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
-    quarterly: List[IncomeStatement]  # 분기별 데이터
-    yearly: List[IncomeStatement]  # 연간 데이터
+    quarterly: List[QuarterlyIncome]  # 분기별 데이터
+    yearly: List[QuarterlyIncome]  # 연간 데이터
+
+    class Config:
+        json_encoders = {Decimal: lambda v: str(v)}
 
 
 class FinancialRatioResponse(BaseModel):
