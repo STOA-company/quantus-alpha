@@ -10,6 +10,7 @@ from .schemas import (
     FinPosResponse,
     IncomePerformanceResponse,
     IncomeStatementResponse,
+    RatioResponse,
 )
 from typing import Optional, Annotated
 
@@ -27,7 +28,7 @@ async def get_income_performance_data(
     ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
-    end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
+    end_date: Annotated[Optional[str], Query(description="종���일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[IncomePerformanceResponse]:
     try:
@@ -45,7 +46,7 @@ async def get_income_performance_data(
 
 
 @router.get(
-    "/income-pandas",
+    "/income",
     response_model=BaseResponse[IncomeStatementResponse],
     summary="손익계산서",
 )
@@ -69,7 +70,7 @@ async def get_income_analysis(
 
 
 @router.get(
-    "/cashflow-pandas",
+    "/cashflow",
     response_model=BaseResponse[CashFlowResponse],
     summary="현금흐름",
 )
@@ -93,7 +94,7 @@ async def get_cashflow_analysis(
 
 
 @router.get(
-    "/finpos-pandas",
+    "/finpos",
     response_model=BaseResponse[FinPosResponse],
     summary="재무상태표",
 )
@@ -113,4 +114,37 @@ async def get_finpos_analysis(
 
     except Exception as error:
         logger.error(f"Financial position analysis 조회 실패: {str(error)}, ticker: {ticker}, country: {ctry}")
+        return await exception_handler(request, error)
+
+
+@router.get(
+    "/financial-ratio",
+    response_model=BaseResponse[RatioResponse],
+    summary="재무 api",
+)
+async def get_financial_ratio(
+    request: Request,
+    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
+    ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+    financial_service: FinancialService = Depends(get_financial_service),
+) -> BaseResponse[RatioResponse]:
+    try:
+        company_name, result1 = await financial_service.get_financial_ratio(ctry=ctry, ticker=ticker)
+        result2 = await financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker)
+        result3 = await financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker)
+
+        return BaseResponse[RatioResponse](
+            status_code=200,
+            message="재무 데이터를 성공적으로 조회했습니다.",
+            data=RatioResponse(
+                code=ticker,
+                name=company_name,
+                financial_ratios=result1.data,
+                liquidity_ratios=result2.data,
+                interest_coverage_ratios=result3.data,
+            ),
+        )
+
+    except Exception as error:
+        logger.error(f"Financial ratio 조회 실패: {str(error)}, ticker: {ticker}, country: {ctry}")
         return await exception_handler(request, error)
