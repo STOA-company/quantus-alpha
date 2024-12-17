@@ -1,11 +1,9 @@
 from functools import lru_cache
-from typing import Dict, Optional, Tuple, List
+from typing import Dict, Optional, List
 import pytz
-from datetime import date, datetime, timedelta
-from io import BytesIO
+from datetime import datetime, timedelta
 import pandas as pd
-from fastapi import HTTPException
-from app.core.exception.custom import AnalysisException, DataNotFoundException
+from app.core.exception.custom import DataNotFoundException
 from app.modules.news.schemas import NewsItem
 from app.modules.common.enum import Country
 from quantus_aws.common.configs import s3_client
@@ -15,18 +13,14 @@ KST_TIMEZONE = pytz.timezone("Asia/Seoul")
 
 class NewsService:
     def __init__(self):
-        self._s3_client = s3_client
         self._bucket_name = "quantus-news"
 
     async def _fetch_s3_data(self, date_str: str, country_path: str) -> Optional[bytes]:
         """S3에서 데이터를 가져오는 내부 메서드"""
         try:
             file_path = f"{country_path}/{date_str}.parquet"
-            response = self._s3_client.get_object(
-                Bucket=self._bucket_name,
-                Key=file_path
-            )
-            return response['Body'].read()
+            response = self._s3_client.get_object(Bucket=self._bucket_name, Key=file_path)
+            return response["Body"].read()
         except Exception:
             return None
 
@@ -53,7 +47,6 @@ class NewsService:
     @staticmethod
     def _count_emotions(df: pd.DataFrame) -> Dict[str, int]:
         """감정 분석 결과 카운트"""
-
         emotion_counts = df['emotion'].value_counts(dropna=False)
         return {
             'positive_count': int(emotion_counts.get('긍정', 0)),
@@ -67,12 +60,12 @@ class NewsService:
         """DataFrame을 NewsItem 리스트로 변환"""
         return [
             NewsItem(
-                date=pd.to_datetime(row['date']) if not isinstance(row['date'], datetime) else row['date'],
-                title=row['titles'],
-                content=row['content'],
-                summary=row['summary'] if pd.notna(row['summary']) else None,
-                emotion=row['emotion'] if pd.notna(row['emotion']) else None,
-                image_url=row['image'] if pd.notna(row['image']) else None
+                date=pd.to_datetime(row["date"]) if not isinstance(row["date"], datetime) else row["date"],
+                title=row["titles"],
+                content=row["content"],
+                summary=row["summary"] if pd.notna(row["summary"]) else None,
+                emotion=row["emotion"] if pd.notna(row["emotion"]) else None,
+                image_url=row["image"] if pd.notna(row["image"]) else None,
             )
             for _, row in df.iterrows()
         ]
@@ -84,12 +77,7 @@ class NewsService:
         return datetime.now(KST_TIMEZONE).strftime("%Y%m%d")
 
     async def get_news(
-        self, 
-        page: int, 
-        size: int, 
-        ctry: Country, 
-        ticker: Optional[str] = None, 
-        date: Optional[str] = None
+        self, page: int, size: int, ctry: Country, ticker: Optional[str] = None, date: Optional[str] = None
     ) -> Dict[str, any]:
         """뉴스 데이터 조회"""
 
@@ -113,17 +101,11 @@ class NewsService:
         emotion_counts = self._count_emotions(df)
         total_records = len(df)
         start_idx = (page - 1) * size
-        df_paged = df.iloc[start_idx:start_idx + size]
+        df_paged = df.iloc[start_idx : start_idx + size]
         news_items = self._create_news_items(df_paged)
 
         # 결과 반환
-        return {
-            "total": total_records,
-            "page": page,
-            "size": size,
-            "data": news_items,
-            **emotion_counts
-        }
+        return {"total": total_records, "page": page, "size": size, "data": news_items, **emotion_counts}
 
 
 def get_news_service() -> NewsService:
