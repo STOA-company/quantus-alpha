@@ -149,6 +149,9 @@ class IncomeStatement(BaseModel):
     net_income_not_control: Decimal
     net_income_total: Decimal
 
+    # 주당순이익 Mock 데이터
+    eps: Decimal = 100000000
+
     class Config:
         json_encoders = {Decimal: lambda v: str(v)}
 
