@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Optional, Dict, List, Tuple
 from fastapi import HTTPException, Depends
 import math
+import random
 
 from app.database.crud import database
 from app.modules.common.enum import FinancialCountry
@@ -686,8 +687,27 @@ class FinancialService:
         # SQLAlchemy 결과를 DataFrame으로 변환
         df = pd.DataFrame([{col: val for col, val in zip(row._fields, row)} for row in result])
 
-        # eps Mock 데이터
-        df["eps"] = 100000000
+        # eps Mock 데이터 생성 - 시계열 패턴 반영
+        base_eps = 1000  # 기준 EPS 값
+        num_rows = len(df)
+
+        # 시계열 패턴을 만들기 위한 계산
+        eps_values = []
+        for i in range(num_rows):
+            # 기본 증가 트렌드
+            trend = base_eps * (1 + (i * 0.05))
+
+            # 계절성 추가 (4분기 패턴)
+            seasonal_factor = 1 + (0.2 * (i % 4) / 4)
+
+            # 약간의 랜덤성 추가 (-5% ~ +5%)
+            random_factor = 1 + (random.uniform(-0.05, 0.05))
+
+            eps = round(trend * seasonal_factor * random_factor, 2)
+            eps_values.append(eps)
+
+        # 시간 순서대로 정렬된 데이터에 맞춰 eps 값 할당
+        df["eps"] = eps_values[::-1]  # 최신 데이터가 앞쪽에 오도록 역순 정렬
 
         # 필요한 컬럼만 선택
         required_columns = [
