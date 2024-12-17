@@ -481,7 +481,10 @@ class FinancialService:
         # 4분기 평균 계산 및 소수점 2자리로 반올림
         average_debt_ratio = round(sum(debt_ratios) / len(debt_ratios), 2)
 
-        financial_ratio_response = FinancialRatioResponse(code=ticker, name=company_name, ratio=average_debt_ratio)
+        # TODO: 업종 평균 Mock 데이터
+        financial_ratio_response = FinancialRatioResponse(
+            code=ticker, name=company_name, ratio=average_debt_ratio, industry_avg="23.5"
+        )
 
         return company_name, BaseResponse[FinancialRatioResponse](
             status_code=200,
@@ -526,7 +529,10 @@ class FinancialService:
         # 4분기 평균 계산 및 소수점 2자리로 반올림
         average_liquidity_ratio = round(sum(liquidity_ratios) / len(liquidity_ratios), 2)
 
-        liquidity_ratio_response = LiquidityRatioResponse(code=ticker, name=result[0].Name, ratio=average_liquidity_ratio)
+        # TODO: 업종 평균 Mock 데이터
+        liquidity_ratio_response = LiquidityRatioResponse(
+            code=ticker, name=result[0].Name, ratio=average_liquidity_ratio, industry_avg="17.4"
+        )
 
         return BaseResponse[LiquidityRatioResponse](
             status_code=200,
@@ -573,8 +579,9 @@ class FinancialService:
         # 4분기 평균 계산 및 소수점 2자리로 반올림
         average_interest_coverage_ratio = round(sum(interest_coverage_ratios) / len(interest_coverage_ratios), 2)
 
+        # TODO: 업종 평균 Mock 데이터
         interest_coverage_ratio_response = InterestCoverageRatioResponse(
-            code=ticker, name=result[0].Name, ratio=average_interest_coverage_ratio
+            code=ticker, name=result[0].Name, ratio=average_interest_coverage_ratio, industry_avg="-12.7"
         )
 
         return BaseResponse[InterestCoverageRatioResponse](
