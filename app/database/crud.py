@@ -5,6 +5,7 @@ from sqlalchemy import select, insert, update, delete, desc, asc, or_, and_
 from sqlalchemy.exc import IntegrityError
 from contextlib import contextmanager
 import logging
+from sqlalchemy import func
 from app.core.config import get_database_config
 from app.database.conn import db
 
@@ -202,6 +203,7 @@ class Database:
         ascending: bool = False,
         join_info: JoinInfo | None = None,
         limit: int = 0,
+        offset: int = 0,
         **kwargs,
     ):
         """SELECT 쿼리 실행"""
@@ -235,6 +237,9 @@ class Database:
             if limit:
                 stmt = stmt.limit(limit)
 
+            if offset:
+                stmt = stmt.offset(offset)
+
             with self.get_connection() as connection:
                 result = connection.execute(stmt)
                 return result.fetchall()
@@ -264,6 +269,38 @@ class Database:
             return join_obj
         except Exception as e:
             logging.error(f"Error in join operation: {str(e)}")
+            raise
+
+    def _count(self, table: str, join_info: JoinInfo | None = None, **kwargs) -> int:
+        """COUNT 쿼리 실행
+
+        Args:
+            table (str): 테이블 이름
+            join_info (JoinInfo, optional): 조인 정보. Defaults to None.
+            **kwargs: 검색 조건
+
+        Returns:
+            int: 조건에 맞는 레코드 수
+
+        Raises:
+            Exception: 쿼리 실행 중 오류 발생시
+        """
+        try:
+            obj = self.meta_data.tables[table]
+            cond = self.get_condition(obj, **kwargs)
+
+            stmt = select(func.count()).select_from(obj).where(*cond)
+
+            if join_info:
+                join_condition = self._join(join_info)
+                stmt = stmt.select_from(join_condition)
+
+            with self.get_connection() as connection:
+                result = connection.execute(stmt)
+                return result.scalar() or 0
+
+        except Exception as e:
+            logging.error(f"Error in count operation: {str(e)}")
             raise
 
 
