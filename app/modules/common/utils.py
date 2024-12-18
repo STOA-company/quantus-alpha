@@ -10,7 +10,7 @@ import re
 #     return df
 
 
-def check_ticker_contry_len_2(ticker: str):
+def check_ticker_country_len_2(ticker: str):
     # 한국 주식 패턴 체크 (A + 6자리 숫자)
     if re.match(r"^A\d{6}$", ticker):
         return "kr"
@@ -27,7 +27,7 @@ def check_ticker_contry_len_2(ticker: str):
     return "us"
 
 
-def check_ticker_contry_len_3(ticker: str):
+def check_ticker_country_len_3(ticker: str):
     # 한국 주식 패턴 체크 (A + 6자리 숫자)
     if re.match(r"^A\d{6}$", ticker):
         return "kor"

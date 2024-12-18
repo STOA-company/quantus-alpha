@@ -119,6 +119,10 @@ class FinancialService:
         """
         실적 데이터 조회
         """
+        if ticker:
+            if ctry == "KOR":
+                ticker = ticker
+
         try:
             if ctry == "USA":
                 ticker = f"{ticker}-US"

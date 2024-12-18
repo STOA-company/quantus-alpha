@@ -3,7 +3,7 @@ from datetime import datetime
 from app.core.exception.custom import DataNotFoundException
 from app.database.crud import database
 from app.core.logging.config import get_logger
-from app.modules.common.utils import check_ticker_contry_len_3
+from app.modules.common.utils import check_ticker_country_len_3
 from .mapping import document_type_mapping
 
 
@@ -17,7 +17,7 @@ class DisclosureService:
     async def get_disclosure(self, ticker: str, year: str = None, page: int = 1, size: int = 6):
         if not year:
             year = datetime.now().strftime("%Y")
-        ctry = check_ticker_contry_len_3(ticker)
+        ctry = check_ticker_country_len_3(ticker)
 
         if ctry != "usa":
             raise DataNotFoundException(ticker=ctry, data_type="공시")
