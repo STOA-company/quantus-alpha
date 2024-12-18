@@ -10,19 +10,19 @@ class StockInformation(Base):
 
     # Required Columns
     ticker = Column(String(20), primary_key=True, nullable=False, comment="종목 티커")
-    logo_image = Column(String(255), nullable=False, comment="로고 이미지 URL")
-    name = Column(String(100), nullable=False, comment="종목명")
-    ctry = Column(String(20), nullable=False, comment="국가")
-    market = Column(String(100), nullable=False, comment="거래소")
+    logo_image = Column(String(255), nullable=True, comment="로고 이미지 URL")
+    name = Column(String(100), nullable=True, comment="종목명")
+    ctry = Column(String(20), nullable=True, comment="국가")
+    market = Column(String(100), nullable=True, comment="거래소")
 
     # Index membership flags
-    is_kospi_100 = Column(Boolean, default=False, comment="코스피 100 편입 여부")
-    is_kospi_150 = Column(Boolean, default=False, comment="코스피 150 편입 여부")
-    is_kospi_200 = Column(Boolean, default=False, comment="코스피 200 편입 여부")
-    is_kosdaq_150 = Column(Boolean, default=False, comment="코스닥 150 편입 여부")
-    is_krx_300 = Column(Boolean, default=False, comment="KRX 300 편입 여부")
-    is_snp_500 = Column(Boolean, default=False, comment="S&P 500 편입 여부")
-    is_nasdaq_100 = Column(Boolean, default=False, comment="나스닥 100 편입 여부")
+    is_kospi_100 = Column(Boolean, default=True, comment="코스피 100 편입 여부")
+    is_kospi_150 = Column(Boolean, default=True, comment="코스피 150 편입 여부")
+    is_kospi_200 = Column(Boolean, default=True, comment="코스피 200 편입 여부")
+    is_kosdaq_150 = Column(Boolean, default=True, comment="코스닥 150 편입 여부")
+    is_krx_300 = Column(Boolean, default=True, comment="KRX 300 편입 여부")
+    is_snp_500 = Column(Boolean, default=True, comment="S&P 500 편입 여부")
+    is_nasdaq_100 = Column(Boolean, default=True, comment="나스닥 100 편입 여부")
 
     # GICS Sector information (nullable)
     sector_1 = Column(String(100), nullable=True, comment="GICS Level 1 (11개 섹터)")
@@ -70,11 +70,11 @@ class StockFactor(Base):
     ticker = Column(String(20), primary_key=True, nullable=False, comment="종목 코드")
 
     # Market Data
-    market_cap = Column(Float, nullable=False, comment="시가총액")
-    shared_outstanding = Column(Integer, nullable=False, comment="상장주식수")
-    last_close = Column(Float, nullable=False, comment="전일 종가")
-    week_52_high = Column(Float, nullable=False, comment="52주 최고가")
-    week_52_low = Column(Float, nullable=False, comment="52주 최저가")
+    market_cap = Column(Float, nullable=True, comment="시가총액")
+    shared_outstanding = Column(Integer, nullable=True, comment="상장주식수")
+    last_close = Column(Float, nullable=True, comment="전일 종가")
+    week_52_high = Column(Float, nullable=True, comment="52주 최고가")
+    week_52_low = Column(Float, nullable=True, comment="52주 최저가")
 
     # Financial Ratios
     per = Column(Float, nullable=True, comment="주가수익비율(PER)")
@@ -82,10 +82,10 @@ class StockFactor(Base):
     roe = Column(Float, nullable=True, comment="자기자본이익률(ROE)")
 
     # Status Indicators
-    finance_status = Column(Integer, nullable=False, comment="재무현황 (1: 좋음, 2: 보통, 3: 나쁨)")
-    stock_trend = Column(Integer, nullable=False, comment="주식 추세")
-    market_condition = Column(Integer, nullable=False, comment="시장 상황")
-    industry_condition = Column(Integer, nullable=False, comment="업종 상황")
+    finance_status = Column(Integer, nullable=True, comment="재무현황 (1: 좋음, 2: 보통, 3: 나쁨)")
+    stock_trend = Column(Integer, nullable=True, comment="주식 추세")
+    market_condition = Column(Integer, nullable=True, comment="시장 상황")
+    industry_condition = Column(Integer, nullable=True, comment="업종 상황")
 
     # Validations
     @model_validator(mode="after")
