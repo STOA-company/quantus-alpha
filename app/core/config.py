@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     RDS_DB: str = os.getenv("RDS_DB", "")
     RDS_PORT: int = os.getenv("RDS_PORT", 3306)
 
+    @property
+    def DATABASE_URL(self) -> str:
+        return f"mysql://{self.RDS_USER}:{self.RDS_PASSWORD}@{self.RDS_HOST}:{self.RDS_PORT}/{self.RDS_DB}"
+
     class Config:
         env_file = f".env.{ENV}"
         env_file_encoding = "utf-8"
