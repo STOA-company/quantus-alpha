@@ -1,253 +1,253 @@
-from functools import lru_cache
-import asyncio
-from datetime import datetime
-import pytz
+import logging
 import yfinance as yf
-from pykrx import stock
-import json
-from pathlib import Path
+from typing import Tuple
+import asyncio
+from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
+import pandas as pd
+from app.database.crud import database
+from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
 
 
 class StockIndicesService:
     def __init__(self):
-        self.korea_tz = pytz.timezone("Asia/Seoul")
+        self.db = database
+        self.symbols = {"kospi": "^KS11", "kosdaq": "^KQ11", "nasdaq": "^IXIC", "sp500": "^GSPC"}
         self._cache = {}
-        self._cache_duration = 300
-        self._data_cache = {}
-        self._data_cache_duration = 30
-        self._market_status_cache = {}  # 시장 상태 캐시 추가
-        self._market_status_cache_duration = 60  # 1분
-        self._yf_tickers = {}
-        self.indices = self._load_indices()
-        self._update_components()
+        self._cache_timeout = 300
+        self._executor = ThreadPoolExecutor(max_workers=8)
+        self._lock = asyncio.Lock()
+        self._background_task_running = False
 
-    def _load_indices(self):
-        try:
-            config_path = Path(__file__).parent.parent.parent / "config" / "indices.json"
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-
-            indices = {}
-            for name, info in config["indices"].items():
-                indices[name] = {
-                    "index": info["index"],
-                    "components": [],
-                    "market_code": info["market_code"],
-                    "suffix": info["suffix"],
-                }
-            return indices
-        except Exception as e:
-            print(f"Error loading indices config: {str(e)}")
-            # 기본값 반환
-            return {
-                "KOSPI": {"index": "^KS11", "components": [], "market_code": "KOSPI", "suffix": ".KS"},
-                "KOSDAQ": {"index": "^KQ11", "components": [], "market_code": "KOSDAQ", "suffix": ".KQ"},
-            }
-
-    def _get_components_cache(self, key):
-        if key in self._cache:
-            data, timestamp = self._cache[key]
-            if datetime.now().timestamp() - timestamp < self._cache_duration:
-                return data
-        return None
-
-    def _set_components_cache(self, key, data):
-        self._cache[key] = (data, datetime.now().timestamp())
-
-    def _update_components(self):
-        cache_key = "components"
-        cached_data = self._get_components_cache(cache_key)
-        if cached_data:
-            self.indices = cached_data
+    async def _update_cache_background(self):
+        """백그라운드에서 캐시 업데이트"""
+        if self._background_task_running:
             return
 
-        today = datetime.now().strftime("%Y%m%d")
         try:
-            for market_name, market_info in self.indices.items():
-                tickers = stock.get_market_ticker_list(today, market=market_info["market_code"])
-                market_info["components"] = [f"{ticker}{market_info['suffix']}" for ticker in tickers]
+            self._background_task_running = True
+            while True:
+                tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in self.symbols.items()]
+                await asyncio.gather(*tasks)
 
-            self._set_components_cache(cache_key, self.indices)
+                ratio_tasks = [self.get_market_ratios(name) for name in self.symbols.keys()]
+                await asyncio.gather(*ratio_tasks)
+
+                await asyncio.sleep(240)
+        finally:
+            self._background_task_running = False
+
+    async def _fetch_yf_data_concurrent(self, symbol: str, name: str):
+        """비동기로 yfinance 데이터 조회"""
+        try:
+            cache_key_daily = f"{name}_daily"
+            cache_key_min5 = f"{name}_min5"
+            now = datetime.now()
+
+            if cache_key_daily in self._cache and cache_key_min5 in self._cache:
+                cached_daily, timestamp_daily = self._cache[cache_key_daily]
+                cached_min5, timestamp_min5 = self._cache[cache_key_min5]
+                if now - timestamp_daily < timedelta(seconds=self._cache_timeout) and now - timestamp_min5 < timedelta(
+                    seconds=self._cache_timeout
+                ):
+                    return
+
+            async def fetch_history(period, interval=None):
+                try:
+                    loop = asyncio.get_event_loop()
+                    ticker = yf.Ticker(symbol)
+
+                    def fetch():
+                        if interval:
+                            return ticker.history(period=period, interval=interval)
+                        return ticker.history(period=period)
+
+                    df = await loop.run_in_executor(self._executor, fetch)
+                    return df
+                except Exception:
+                    return pd.DataFrame()
+
+            daily_df, min5_df = await asyncio.gather(fetch_history("1d"), fetch_history("1d", "5m"))
+
+            if not daily_df.empty:
+                daily_data = {
+                    "open": round(float(daily_df["Open"].iloc[0]), 2),
+                    "close": round(float(daily_df["Close"].iloc[0]), 2),
+                }
+                self._cache[cache_key_daily] = (daily_data, now)
+
+            if not min5_df.empty:
+                min5_data = {
+                    index.strftime("%Y-%m-%d %H:%M:%S"): TimeData(
+                        open=round(row["Open"], 2),
+                        high=round(row["High"], 2),
+                        low=round(row["Low"], 2),
+                        close=round(row["Close"], 2),
+                        volume=round(row["Volume"], 2),
+                    )
+                    for index, row in min5_df.iterrows()
+                }
+                self._cache[cache_key_min5] = (min5_data, now)
+
         except Exception as e:
-            print(f"Error updating components: {str(e)}")
+            print(f"Error fetching data for {name}: {e}")
 
-    def _get_yf_ticker(self, ticker):
-        if ticker not in self._yf_tickers:
-            self._yf_tickers[ticker] = yf.Ticker(ticker)
-        return self._yf_tickers[ticker]
+    # async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
+    #     """최적화된 시장 등락비율 조회"""
+    #     try:
+    #         cache_key = f"{market}_ratio"
+    #         now = datetime.now()
 
-    async def get_indices_data(self):
-        now = datetime.now(self.korea_tz)
-        cache_key = f"all_indices_{now.strftime('%Y%m%d_%H%M')}"
+    #         # 캐시 확인
+    #         if cache_key in self._cache:
+    #             data, timestamp = self._cache[cache_key]
+    #             if now - timestamp < timedelta(seconds=self._cache_timeout):
+    #                 return data
 
-        # 전체 데이터 캐시 확인
-        if cache_key in self._data_cache:
-            data, timestamp = self._data_cache[cache_key]
-            if now.timestamp() - timestamp < self._data_cache_duration:
-                return data
+    #         async with self._lock:
+    #             market_mapping = {"kospi": "KOSPI", "kosdaq": "KOSDAQ", "nasdaq": "NASDAQ", "sp500": "S&P500"}
+    #             market_filter = market_mapping.get(market.lower(), market)
+    #             table = "stock_kr_1d" if market_filter in ["KOSPI", "KOSDAQ"] else "stock_us_1d"
 
-        # 모든 지수 데이터를 동시에 가져오기
-        time_series_tasks = []
-        market_status_tasks = []
+    #             query = text("""
+    #                 SELECT
+    #                     SUM(CASE WHEN (Close - Open) / Open * 100 > 1 THEN 1 ELSE 0 END) AS advance,
+    #                     SUM(CASE WHEN (Close - Open) / Open * 100 < -1 THEN 1 ELSE 0 END) AS decline,
+    #                     SUM(CASE WHEN ABS((Close - Open) / Open * 100) <= 1 THEN 1 ELSE 0 END) AS unchanged,
+    #                     COUNT(*) AS total
+    #                 FROM """ + table + """
+    #                 WHERE Market = :market AND Date = (
+    #                     SELECT MAX(Date) FROM """ + table + """ WHERE Market = :market
+    #                 ) AND Open != 0
+    #             """)
 
-        for market_name, market_info in self.indices.items():
-            time_series_tasks.append(self._get_index_data(market_info["index"]))
-            market_status_tasks.append(self._get_market_status(market_info["components"]))
+    #             result = self.db._execute(query, {"market": market_filter})
+    #             rows = result.fetchall()
 
-        # 병렬로 실행
-        time_series_results, market_status_results = await asyncio.gather(
-            asyncio.gather(*time_series_tasks), asyncio.gather(*market_status_tasks)
-        )
+    #             if not rows:
+    #                 logging.error(f"No data found for market: {market_filter}")
+    #                 return 0.0, 0.0, 0.0
 
-        # 결과 조합
-        result = {}
-        for i, (market_name, _) in enumerate(self.indices.items()):
-            if time_series_results[i] and market_status_results[i]:
-                result[market_name] = {"time_series": time_series_results[i], "market_status": market_status_results[i]}
+    #             advance, decline, unchanged, total = rows[0]
 
-        # 결과 캐싱
-        self._data_cache[cache_key] = (result, now.timestamp())
-        return result
+    #             # Total이 0인 경우 처리
+    #             if total == 0:
+    #                 print(f"No valid stocks found for market: {market}")
+    #                 return 0.0, 0.0, 0.0
 
-    async def _get_market_status(self, tickers):
-        now = datetime.now(self.korea_tz)
-        market = "KOSPI" if tickers[0].endswith(".KS") else "KOSDAQ"
-        cache_key = f"market_status_{market}_{now.strftime('%Y%m%d_%H%M')}"
+    #             # TODO 일단 목데이터. 데이터 정리되면 넣을 예정
+    #             ratios = (
+    #                 round(advance / total * 100, 2),
+    #                 round(decline / total * 100, 2),
+    #                 round(unchanged / total * 100, 2),
+    #             )
 
-        # 시장 상태 캐시 확인
-        if cache_key in self._market_status_cache:
-            data, timestamp = self._market_status_cache[cache_key]
-            if now.timestamp() - timestamp < self._market_status_cache_duration:
-                return data
+    #             # 캐시에 저장
+    #             self._cache[cache_key] = (ratios, now)
+    #             return ratios
 
+    #     except Exception as e:
+    #         logging.error(f"Error in get_market_ratios for {market}: {str(e)}")
+    #         return 0.0, 0.0, 0.0
+
+    async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
+        """최적화된 시장 등락비율 조회"""
         try:
-            today = now.strftime("%Y%m%d")
-            df = stock.get_market_ohlcv_by_ticker(today, market=market)
+            cache_key = f"{market}_ratio"
+            now = datetime.now()
 
-            if len(df) == 0:
-                raise Exception("No data available")
+            # 캐시 확인
+            if cache_key in self._cache:
+                data, timestamp = self._cache[cache_key]
+                if now - timestamp < timedelta(seconds=self._cache_timeout):
+                    return data
 
-            up = (df["등락률"] > 0).sum()
-            down = (df["등락률"] < 0).sum()
-            unchanged = (df["등락률"] == 0).sum()
-            total = len(df)
-
-            result = {
-                "상승": f"{round((up / total * 100), 1)}%",
-                "하락": f"{round((down / total * 100), 1)}%",
-                "보합": f"{round((unchanged / total * 100), 1)}%",
-                "총합": "100.0%",
+            # 고정된 테스트 데이터 반환
+            ratios = {
+                "kospi": (45.32, 35.45, 19.23),
+                "kosdaq": (42.15, 38.65, 19.20),
+                "nasdaq": (48.25, 32.55, 19.20),
+                "sp500": (46.78, 34.02, 19.20),
             }
 
-            # 결과 캐싱
-            self._market_status_cache[cache_key] = (result, now.timestamp())
-            return result
+            test_ratios = ratios.get(market.lower(), (33.33, 33.33, 33.34))
+
+            # 캐시에 저장
+            self._cache[cache_key] = (test_ratios, now)
+            return test_ratios
 
         except Exception as e:
-            print(f"Error getting market status: {str(e)}")
-            return {
-                "상승": "0.0%",
-                "하락": "0.0%",
-                "보합": "0.0%",
-                "총합": "0.0%",
-            }
+            logging.error(f"Error in get_market_ratios for {market}: {str(e)}")
+            return 0.0, 0.0, 0.0
 
-    @lru_cache(maxsize=32)
-    async def _get_index_data(self, ticker):
-        cache_key = f"index_data_{ticker}"
-        now = datetime.now(self.korea_tz)
-
-        # 캐시된 데이터 확인
-        if cache_key in self._data_cache:
-            data, timestamp = self._data_cache[cache_key]
-            if now.timestamp() - timestamp < self._data_cache_duration:
-                return data
-
-        today_start = now.replace(hour=9, minute=0, second=0, microsecond=0)
-        today_end = now
-
+    async def get_indices_data(self) -> IndicesData:
+        """지수 데이터 조회"""
         try:
-            index = self._get_yf_ticker(ticker)
-            df = index.history(start=today_start, end=today_end, interval="5m")
+            tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in self.symbols.items()]
+            await asyncio.gather(*tasks)
 
-            if len(df) == 0:
-                return None
+            ratio_tasks = [self.get_market_ratios(name) for name in self.symbols.keys()]
+            ratio_results = await asyncio.gather(*ratio_tasks)
 
-            time_series = []
-            first_price = None
+            indices_summary = {}
+            indices_data = {}
 
-            for i in range(len(df)):
-                kr_time = df.index[i].tz_convert("Asia/Seoul")
-                if not (9 <= kr_time.hour <= 15) or (kr_time.hour == 15 and kr_time.minute > 30):
-                    continue
+            for name, ratios in zip(self.symbols.keys(), ratio_results):
+                cache_key_daily = f"{name}_daily"
+                cache_key_min5 = f"{name}_min5"
 
-                current_value = round(float(df["Close"].iloc[i]), 2)
-                if first_price is None:
-                    first_price = current_value
+                if cache_key_daily in self._cache:
+                    daily_data, _ = self._cache[cache_key_daily]
+                    change = daily_data["close"] - daily_data["open"]
+                    change_percent = round((change / daily_data["open"]) * 100, 2) if daily_data["open"] != 0 else 0.00
 
-                current_change = round(((current_value - first_price) / first_price * 100), 2)
-                change_str = f"+{current_change}%" if current_change > 0 else f"{current_change}%"
+                    rise_ratio, fall_ratio, unchanged_ratio = ratios
 
-                time_series.append({"time": kr_time.strftime("%H:%M"), "value": current_value, "change": change_str})
+                    indices_summary[name] = IndexSummary(
+                        prev_close=daily_data["close"],
+                        change=round(change, 2),
+                        change_percent=change_percent,
+                        rise_ratio=rise_ratio,
+                        fall_ratio=fall_ratio,
+                        unchanged_ratio=unchanged_ratio,
+                    )
+                else:
+                    indices_summary[name] = IndexSummary(
+                        prev_close=0.00,
+                        change=0.00,
+                        change_percent=0.00,
+                        rise_ratio=0.00,
+                        fall_ratio=0.00,
+                        unchanged_ratio=0.00,
+                    )
 
-            # 결과 캐싱
-            self._data_cache[cache_key] = (time_series, now.timestamp())
-            return time_series
+                indices_data[name] = self._cache.get(cache_key_min5, ({}, None))[0]
 
-        except Exception as e:
-            print(f"Error getting index data for {ticker}: {str(e)}")
-            return None
-
-    async def get_indices_data_fifteen(self):
-        result = {}
-
-        async def fetch_market_data(market_name, market_info):
-            try:
-                time_series = await self._get_index_data_fifteen(market_info["index"])
-                if time_series:
-                    return market_name, time_series
-            except Exception as e:
-                print(f"Error fetching {market_name}: {str(e)}")
-            return None
-
-        tasks = [fetch_market_data(market_name, market_info) for market_name, market_info in self.indices.items()]
-
-        results = await asyncio.gather(*tasks)
-        result = {name: data for item in results if item and (name := item[0]) and (data := item[1])}
-
-        return result
-
-    async def _get_index_data_fifteen(self, ticker):
-        now = datetime.now(self.korea_tz)
-        today_start = now.replace(hour=9, minute=0, second=0, microsecond=0)
-        today_end = now.replace(hour=15, minute=30, second=0, microsecond=0)
-
-        try:
-            index = yf.Ticker(ticker)
-            df = index.history(start=today_start, end=today_end, interval="15m")
-
-            if len(df) == 0:
-                return None
-
-            time_series = []
-            first_price = None
-
-            for i in range(len(df)):
-                kr_time = df.index[i].tz_convert("Asia/Seoul")
-
-                if not (9 <= kr_time.hour <= 15) or (kr_time.hour == 15 and kr_time.minute > 30):
-                    continue
-
-                current_value = round(float(df["Close"].iloc[i]), 2)
-
-                if first_price is None:
-                    first_price = current_value
-
-                current_change = round(((current_value - first_price) / first_price * 100), 2)
-                time_series.append({"time": kr_time.strftime("%H:%M"), "value": current_value, "change": current_change})
-
-            return time_series
+            return IndicesData(
+                status_code=200,
+                message="데이터를 성공적으로 조회했습니다.",
+                kospi=indices_summary["kospi"],
+                kosdaq=indices_summary["kosdaq"],
+                nasdaq=indices_summary["nasdaq"],
+                sp500=indices_summary["sp500"],
+                data=IndicesResponse(
+                    kospi=indices_data["kospi"],
+                    kosdaq=indices_data["kosdaq"],
+                    nasdaq=indices_data["nasdaq"],
+                    sp500=indices_data["sp500"],
+                ),
+            )
 
         except Exception as e:
-            print(f"Error getting index data for {ticker}: {str(e)}")
-            return None
+            empty_summary = IndexSummary(
+                prev_close=0.00, change=0.00, change_percent=0.00, rise_ratio=0.00, fall_ratio=0.00, unchanged_ratio=0.00
+            )
+            return IndicesData(
+                status_code=404,
+                message=f"데이터 조회 중 오류가 발생했습니다: {e}",
+                kospi=empty_summary,
+                kosdaq=empty_summary,
+                nasdaq=empty_summary,
+                sp500=empty_summary,
+                data=None,
+            )

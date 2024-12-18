@@ -1,11 +1,11 @@
-from enum import Enum
+from enum import Enum, IntEnum
 
 
 class Country(Enum):
     KR = "kr"
     US = "us"
-    JPN = "jpn"
-    HKG = "hkg"
+    JP = "jp"
+    HK = "hk"
 
 
 class FinancialCountry(Enum):
@@ -45,3 +45,9 @@ class CacheType(Enum):
     PERMANENT = "permanent"  # 과거 데이터
     TEMPORARY = "temporary"  # 최근 데이터
     NO_CACHE = "no_cache"  # 실시간 데이터
+
+
+class FinanceStatus(IntEnum):
+    GOOD = 1
+    NEUTRAL = 2
+    BAD = 3
