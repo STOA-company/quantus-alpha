@@ -87,6 +87,21 @@ class NewsService:
         elif ctry == "hk":
             return ticker[2:]
 
+    @staticmethod
+    def get_current_market_country() -> str:
+        """
+        현재 시간 기준으로 활성화된 시장 국가 반환
+        한국 시간 07:00-19:00 -> 한국 시장
+        한국 시간 19:00-07:00 -> 미국 시장
+        """
+        current_time = datetime.now(KST_TIMEZONE)
+        current_hour = current_time.hour
+
+        if 7 <= current_hour < 19:
+            return "kr"
+        else:
+            return "us"
+
     async def get_news(
         self, page: int, size: int, ticker: Optional[str] = None, date: Optional[str] = None
     ) -> Dict[str, any]:
@@ -95,8 +110,9 @@ class NewsService:
             raise ValueError("Page number must be greater than 0")
         if size < 1:
             raise ValueError("Page size must be greater than 0")
-
-        ctry = check_ticker_country_len_2(ticker)
+        ctry = self.get_current_market_country()
+        if ticker:
+            ctry = check_ticker_country_len_2(ticker)
 
         # 티커 전처리
         if ticker:
