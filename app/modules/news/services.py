@@ -5,11 +5,17 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 from app.core.exception.custom import DataNotFoundException
+from app.modules.common.utils import check_ticker_contry_len_2
 from app.modules.news.schemas import NewsItem
-from app.modules.common.enum import Country
 from quantus_aws.common.configs import s3_client
 
 KST_TIMEZONE = pytz.timezone("Asia/Seoul")
+NEWS_CONTRY_MAP = {
+    "kr": "KR",
+    "us": "US",
+    "jp": "JP",
+    "hk": "HK",
+}
 
 
 class NewsService:
@@ -70,20 +76,35 @@ class NewsService:
         """현재 KST 날짜를 가져오는 캐시된 메서드"""
         return datetime.now(KST_TIMEZONE).strftime("%Y%m%d")
 
+    @staticmethod
+    def _ticker_preprocess(ticker: str, ctry: str) -> str:
+        if ctry == "us":
+            return ticker
+        elif ctry == "kr":
+            return ticker[1:]
+        elif ctry == "jp":
+            return ticker[1:]
+        elif ctry == "hk":
+            return ticker[2:]
+
     async def get_news(
-        self, page: int, size: int, ctry: Country, ticker: Optional[str] = None, date: Optional[str] = None
+        self, page: int, size: int, ticker: Optional[str] = None, date: Optional[str] = None
     ) -> Dict[str, any]:
         """뉴스 데이터 조회"""
         if page < 1:
             raise ValueError("Page number must be greater than 0")
         if size < 1:
             raise ValueError("Page size must be greater than 0")
-        if ctry not in [Country.KR, Country.US]:
-            raise DataNotFoundException(ticker=ctry.name, data_type="news")
+
+        ctry = check_ticker_contry_len_2(ticker)
+
+        # 티커 전처리
+        if ticker:
+            ticker = self._ticker_preprocess(ticker, ctry)
 
         # 날짜 및 경로 설정
         date_str = date or self._get_current_date()
-        country_path = f"merged_data/{ctry.name}"
+        country_path = f"merged_data/{NEWS_CONTRY_MAP[ctry]}"
 
         # S3 데이터 가져오기
         s3_data = await self._fetch_s3_data(date_str, country_path)
