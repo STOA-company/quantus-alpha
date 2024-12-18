@@ -35,7 +35,7 @@ class StockInfoService:
         result = StockInfo(
             introduction=intro_result.get("translated_overview", ""),
             homepage_url=result["URL"],
-            ceo_name=result["LastName"] + result["FirstName"],
+            ceo_name=result["LastName"] + " " + result["FirstName"],
             establishment_date=result["IncInDt"],
             listing_date=result["oldest_date"],
         )
