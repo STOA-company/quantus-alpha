@@ -8,6 +8,7 @@ class NewsResponse(PaginationBaseResponse):
     positive_count: int
     negative_count: int
     neutral_count: int
+    ctry: str
 
 
 class NewsItem(BaseModel):
