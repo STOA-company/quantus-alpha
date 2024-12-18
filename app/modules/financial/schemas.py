@@ -133,15 +133,19 @@ class FinPosResponse(BaseModel):
 
 
 class IncomeMetric(BaseModel):
-    """개별 지표의 기업/업종 평균 값"""
-
-    company: Decimal
-    industry_avg: Decimal
+    company: Decimal = Field(
+        description="해당 기업의 지표 값",
+        example=1234.56,
+        json_schema_extra={"type": "number", "format": "float", "multipleOf": 0.01},
+    )
+    industry_avg: Decimal = Field(
+        description="해당 업종의 평균 값",
+        example=789.12,
+        json_schema_extra={"type": "number", "format": "float", "multipleOf": 0.01},
+    )
 
     class Config:
-        json_encoders = {
-            Decimal: lambda v: f"{float(v):.2f}"  # 소수점 2자리까지 출력
-        }
+        json_encoders = {Decimal: lambda v: round(float(v), 2)}
 
 
 class QuarterlyIncome(BaseModel):
