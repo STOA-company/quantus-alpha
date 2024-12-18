@@ -5,6 +5,7 @@ from app.modules.common.enum import Country
 from app.modules.stock_info.schemas import Indicators, StockInfo
 from app.core.logging.config import get_logger
 
+
 logger = get_logger(__name__)
 
 
@@ -22,13 +23,18 @@ class StockInfoService:
             raise DataNotFoundException(ticker=ctry.name, data_type="stock_info")
 
         file_name = self.file_name.format(ctry.name)
-        FILE_PATH = f"{self.file_path}/{file_name}"
-        df = pd.read_csv(FILE_PATH)
+        info_file_path = f"{self.file_path}/{file_name}"
+        df = pd.read_csv(info_file_path)
         result = df.loc[df["ticker"] == ticker].to_dict(orient="records")[0]
         if result is None:
             raise DataNotFoundException(ticker=ticker, data_type="stock_info")
 
+        intro_file_path = f"{self.file_path}/summary_{ctry.name}.parquet"
+        intro_df = pd.read_parquet(intro_file_path)
+        intro_result = intro_df.loc[intro_df["Code"] == ticker].to_dict(orient="records")[0]
+
         result = StockInfo(
+            introduction=intro_result.get("translated_overview", ""),
             homepage_url=result["URL"],
             ceo_name=result["LastName"] + result["FirstName"],
             establishment_date=result["IncInDt"],
@@ -39,52 +45,80 @@ class StockInfoService:
 
     async def get_indicators(self, ctry: Country, ticker: str) -> Indicators:
         """
-        기업 정보 조회 - 최신 데이터
+        지표 조회
         """
-        try:
-            # 실제 쿼리
-            stock_data = self.db._select(table="stock_kr_1d", order="Date", ascending=False, limit=1, Ticker=ticker)
+        if ctry == "USA":
+            ticker = f"{ticker}-US"
 
-            financial_data = self.db._select(table="KOR_finpos", order="period_q", ascending=False, limit=1, Code=ticker)
+        return Indicators(
+            per=15.7,
+            industry_per=22.4,
+            pbr=2.8,
+            industry_pbr=3.2,
+            roe=12.5,
+            industry_roe=9.8,
+            financial_data="좋음",
+            price_trend="보통",
+            market_situation="나쁨",
+            industry_situation="좋음",
+        )
 
-            # 기본값 설정
-            result = Indicators(per=None, pbr=None, roe=None)
+        # TODO: 임시 Mock 데이터
+        # try:
+        #     # 실제 쿼리
+        #     stock_data = self.db._select(table="stock_kr_1d", order="Date", ascending=False, limit=1, Ticker=ticker)
 
-            if stock_data and financial_data:
-                # Row 객체의 _mapping 속성 사용
-                stock_row = stock_data[0]._mapping
-                fin_row = financial_data[0]._mapping
+        #     financial_data = self.db._select(table="KOR_finpos", order="period_q", ascending=False, limit=1, Code=ticker)
 
-                stock_price = stock_row["Close"]
-                retained_earnings = fin_row["retained_earnings"]
-                total_equity = fin_row["total_equity"]
+        #     # 기본값 설정
+        #     result = Indicators(
+        #         per=None,
+        #         industry_per=None,
+        #         pbr=None,
+        #         industry_pbr=None,
+        #         roe=None,
+        #         industry_roe=None,
+        #         financial_data=None,
+        #         price_trend=None,
+        #         market_situation=None,
+        #         industry_situation=None,
+        #     )
 
-                print("=== DEBUG VALUES ===")
-                print(f"Stock price: {format(stock_price, ',.2f')}")
-                print(f"Retained earnings: {format(retained_earnings, ',.8f')}")
-                print(f"Total equity: {format(total_equity, ',.2f')}")
+        #     if stock_data and financial_data:
+        #         # Row 객체의 _mapping 속성 사용
+        #         stock_row = stock_data[0]._mapping
+        #         fin_row = financial_data[0]._mapping
 
-                # 지표 계산
-                per = round(stock_price / retained_earnings, 2) if retained_earnings and retained_earnings != 0 else None
-                pbr = round(stock_price / total_equity, 2) if total_equity and total_equity != 0 else None
+        #         stock_price = stock_row["Close"]
+        #         retained_earnings = fin_row["retained_earnings"]
+        #         total_equity = fin_row["total_equity"]
 
-                # ROE 계산 과정 출력
-                if total_equity and total_equity != 0:
-                    roe_calc = (retained_earnings / total_equity) * 100
-                    print(
-                        f"ROE calculation: ({format(retained_earnings, ',.8f')} / {format(total_equity, ',.2f')}) * 100 = {format(roe_calc, ',.2f')}"
-                    )
-                    roe = round(roe_calc, 2)
-                else:
-                    roe = None
+        #         print("=== DEBUG VALUES ===")
+        #         print(f"Stock price: {format(stock_price, ',.2f')}")
+        #         print(f"Retained earnings: {format(retained_earnings, ',.8f')}")
+        #         print(f"Total equity: {format(total_equity, ',.2f')}")
 
-                result = Indicators(per=per, pbr=pbr, roe=roe)
+        #         # 지표 계산
+        #         per = round(stock_price / retained_earnings, 2) if retained_earnings and retained_earnings != 0 else None
+        #         pbr = round(stock_price / total_equity, 2) if total_equity and total_equity != 0 else None
 
-            return result
+        #         # ROE 계산 과정 출력
+        #         if total_equity and total_equity != 0:
+        #             roe_calc = (retained_earnings / total_equity) * 100
+        #             print(
+        #                 f"ROE calculation: ({format(retained_earnings, ',.8f')} / {format(total_equity, ',.2f')}) * 100 = {format(roe_calc, ',.2f')}"
+        #             )
+        #             roe = round(roe_calc, 2)
+        #         else:
+        #             roe = None
 
-        except Exception as e:
-            print(f"Error: {str(e)}")
-            raise e
+        #         result = Indicators(per=per, pbr=pbr, roe=roe)
+
+        #     return result
+
+        # except Exception as e:
+        #     print(f"Error: {str(e)}")
+        #     raise e
 
 
 def get_stock_info_service() -> StockInfoService:
