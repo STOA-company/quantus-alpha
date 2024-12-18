@@ -110,7 +110,7 @@ class FinancialService:
     # 실적 데이터 조회
     async def get_income_performance_data(
         self,
-        ctry: FinancialCountry,
+        ctry: str,
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -118,8 +118,15 @@ class FinancialService:
         """
         실적 데이터 조회
         """
+        if ticker:
+            if ctry == "KOR":
+                ticker = ticker
+
         try:
-            table_name = self.income_tables.get(ctry)
+            if ctry == "USA":
+                ticker = f"{ticker}-US"
+            country = FinancialCountry(ctry)
+            table_name = self.income_tables.get(country)
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
                 raise InvalidCountryException()
