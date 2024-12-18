@@ -26,6 +26,7 @@ greenlet = "^3.1.1"
 seaborn = "^0.13.2"
 yfinance = "^0.2.36"
 pykrx = "^1.0.48"
+alembic = "^1.14.0"
 
 
 
