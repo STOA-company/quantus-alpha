@@ -130,6 +130,7 @@ class NewsService:
             "offset": start_idx,
             "size": size,
             "data": news_items,
+            "ctry": ctry,
             **emotion_counts,
         }
 

@@ -25,6 +25,7 @@ from app.modules.financial.schemas import (
 )
 from app.modules.common.schemas import BaseResponse
 from app.core.exception.custom import DataNotFoundException, InvalidCountryException, AnalysisException
+from app.modules.common.utils import contry_mapping
 
 logger = get_logger(__name__)
 
@@ -145,8 +146,10 @@ class FinancialService:
             # DB 결과에서 직접 이름 추출
             name = result[0][1] if result else ""
 
+            ctry = contry_mapping.get(ctry)
+
             performance_response = IncomePerformanceResponse(
-                code=ticker, name=name, quarterly=quarterly_statements, yearly=yearly_statements
+                code=ticker, name=name, ctry=ctry, quarterly=quarterly_statements, yearly=yearly_statements
             )
 
             logger.info(f"Successfully retrieved income performance data for {ticker}")
@@ -256,8 +259,11 @@ class FinancialService:
         재무비율 조회
         """
         try:
+            if ctry == "USA":
+                ticker = f"{ticker}-US"
+            country = FinancialCountry(ctry)
             # finpos 테이블에서 조회
-            financial_ratio_data = await self.get_financial_ratio_data(ctry, ticker)
+            financial_ratio_data = await self.get_financial_ratio_data(country, ticker)
             return financial_ratio_data
         except Exception as e:
             logger.error(f"Unexpected error in get_financial_ratio: {str(e)}")
@@ -269,8 +275,11 @@ class FinancialService:
         유동비율 조회
         """
         try:
+            if ctry == "USA":
+                ticker = f"{ticker}-US"
+            country = FinancialCountry(ctry)
             # finpos 테이블에서 조회
-            liquidity_ratio_data = await self.get_liquidity_ratio_data(ctry, ticker)
+            liquidity_ratio_data = await self.get_liquidity_ratio_data(country, ticker)
             return liquidity_ratio_data
         except Exception as e:
             logger.error(f"Unexpected error in get_liquidity_ratio: {str(e)}")
@@ -284,8 +293,11 @@ class FinancialService:
         이자보상배율 조회
         """
         try:
+            if ctry == "USA":
+                ticker = f"{ticker}-US"
+            country = FinancialCountry(ctry)
             # finpos 테이블에서 조회
-            interest_coverage_ratio_data = await self.get_interest_coverage_ratio_data(ctry, ticker)
+            interest_coverage_ratio_data = await self.get_interest_coverage_ratio_data(country, ticker)
             return interest_coverage_ratio_data
         except Exception as e:
             logger.error(f"Unexpected error in get_interest_coverage_ratio: {str(e)}")
@@ -456,16 +468,16 @@ class FinancialService:
     ########################################## 계산 메서드 #########################################
     # 부채비율 계산
     async def get_financial_ratio_data(
-        self, ctry: FinancialCountry, ticker: str
+        self, country: FinancialCountry, ticker: str
     ) -> Tuple[str, BaseResponse[FinancialRatioResponse]]:
         """
         재무비율 데이터 조회 - 부채비율 (최근 4분기 평균)
         부채비율 = (총부채 / 자기자본) * 100
         회사명도 함께 반환
         """
-        table_name = self.finpos_tables.get(ctry)
+        table_name = self.finpos_tables.get(country)
         if not table_name:
-            logger.warning(f"잘못된 국가 코드: {ctry}")
+            logger.warning(f"잘못된 국가 코드: {country}")
             raise InvalidCountryException()
 
         conditions = {"Code": ticker}
@@ -505,14 +517,16 @@ class FinancialService:
         )
 
     # 유동비율 계산
-    async def get_liquidity_ratio_data(self, ctry: FinancialCountry, ticker: str) -> BaseResponse[LiquidityRatioResponse]:
+    async def get_liquidity_ratio_data(
+        self, country: FinancialCountry, ticker: str
+    ) -> BaseResponse[LiquidityRatioResponse]:
         """
         유동비율 데이터 조회 (최근 4분기 평균)
         유동비율 = (유동자산 / 유동부채) * 100
         """
-        table_name = self.finpos_tables.get(ctry)
+        table_name = self.finpos_tables.get(country)
         if not table_name:
-            logger.warning(f"잘못된 국가 코드: {ctry}")
+            logger.warning(f"잘못된 국가 코드: {country}")
             raise InvalidCountryException()
 
         conditions = {"Code": ticker}
@@ -554,15 +568,15 @@ class FinancialService:
 
     # 이자보상배율 계산
     async def get_interest_coverage_ratio_data(
-        self, ctry: FinancialCountry, ticker: str
+        self, country: FinancialCountry, ticker: str
     ) -> BaseResponse[InterestCoverageRatioResponse]:
         """
         이자보상배율 데이터 조회 (최근 4분기 평균)
         이자보상배율 = 영업이익 / 금융비용
         """
-        table_name = self.income_tables.get(ctry)
+        table_name = self.income_tables.get(country)
         if not table_name:
-            logger.warning(f"잘못된 국가 코드: {ctry}")
+            logger.warning(f"잘못된 국가 코드: {country}")
             raise InvalidCountryException()
 
         conditions = {"Code": ticker}

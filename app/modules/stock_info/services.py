@@ -5,6 +5,7 @@ from app.modules.common.enum import Country
 from app.modules.stock_info.schemas import Indicators, StockInfo
 from app.core.logging.config import get_logger
 
+
 logger = get_logger(__name__)
 
 
@@ -46,6 +47,9 @@ class StockInfoService:
         """
         지표 조회
         """
+        if ctry == "USA":
+            ticker = f"{ticker}-US"
+
         return Indicators(
             per=15.7,
             industry_per=22.4,
