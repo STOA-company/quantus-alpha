@@ -4,6 +4,7 @@ from app.core.exception.handler import exception_handler
 from app.modules.common.enum import FinancialCountry
 from app.modules.common.schemas import BaseResponse
 from fastapi import APIRouter, Depends, Query
+from app.modules.common.utils import check_ticker_contry_len_3
 from app.modules.financial.services import FinancialService, get_financial_service
 from .schemas import (
     CashFlowResponse,
@@ -25,13 +26,13 @@ router = APIRouter()
 )
 async def get_income_performance_data(
     request: Request,
-    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[IncomePerformanceResponse]:
     try:
+        ctry = check_ticker_contry_len_3(ticker).upper()
         return await financial_service.get_income_performance_data(
             ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
         )
