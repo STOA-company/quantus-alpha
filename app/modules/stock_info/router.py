@@ -18,11 +18,11 @@ async def get_stock_info(
     return BaseResponse(status_code=200, message="주식 정보를 성공적으로 조회했습니다.", data=data)
 
 
-@router.get("/indicators", response_model=BaseResponse[Indicators], summary="기업 정보 조회")
+@router.get("/indicators", response_model=BaseResponse[Indicators], summary="지표 조회")
 async def get_indicators(
     ctry: Country,
     ticker: str,
     service: StockInfoService = Depends(get_stock_info_service),
 ):
     data = await service.get_indicators(ctry, ticker)
-    return BaseResponse(status_code=200, message="기업 정보를 성공적으로 조회했습니다.", data=data)
+    return BaseResponse(status_code=200, message="지표 정보를 성공적으로 조회했습니다.", data=data)
