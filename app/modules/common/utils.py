@@ -42,3 +42,11 @@ def check_ticker_contry_len_3(ticker: str):
 
     # 미국 주식은 위의 패턴에 해당하지 않는 모든 경우
     return "usa"
+
+
+contry_mapping = {
+    "KOR": "kr",
+    "USA": "us",
+    "JPN": "jp",
+    "HKG": "hk",
+}

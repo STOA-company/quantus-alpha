@@ -14,6 +14,7 @@ from .schemas import (
     RatioResponse,
 )
 from typing import Optional, Annotated
+from app.modules.common.utils import contry_mapping
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -125,14 +126,15 @@ async def get_finpos_analysis(
 )
 async def get_financial_ratio(
     request: Request,
-    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[RatioResponse]:
     try:
+        ctry = check_ticker_contry_len_3(ticker).upper()
         company_name, result1 = await financial_service.get_financial_ratio(ctry=ctry, ticker=ticker)
         result2 = await financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker)
         result3 = await financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker)
+        ctry_two = contry_mapping.get(ctry)
 
         return BaseResponse[RatioResponse](
             status_code=200,
@@ -140,6 +142,7 @@ async def get_financial_ratio(
             data=RatioResponse(
                 code=ticker,
                 name=company_name,
+                ctry=ctry_two,
                 financial_ratios=result1.data,
                 liquidity_ratios=result2.data,
                 interest_coverage_ratios=result3.data,
