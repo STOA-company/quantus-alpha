@@ -1,10 +1,9 @@
 import pandas as pd
 from app.database.crud import database
 from app.core.exception.custom import DataNotFoundException
-from app.modules.common.enum import Country
 from app.modules.stock_info.schemas import Indicators, StockInfo
 from app.core.logging.config import get_logger
-
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 
@@ -15,21 +14,21 @@ class StockInfoService:
         self.file_path = "static"
         self.file_name = "stock_{}_info.csv"
 
-    async def get_stock_info(self, ctry: Country, ticker: str) -> StockInfo:
+    async def get_stock_info(self, ctry: str, ticker: str, db: AsyncSession) -> StockInfo:
         """
         주식 정보 조회
         """
-        if ctry != Country.US:
-            raise DataNotFoundException(ticker=ctry.value, data_type="stock_info")
+        if ctry != "us":
+            raise DataNotFoundException(ticker=ctry, data_type="stock_info")
 
-        file_name = self.file_name.format(ctry.value)
+        file_name = self.file_name.format(ctry)
         info_file_path = f"{self.file_path}/{file_name}"
         df = pd.read_csv(info_file_path)
         result = df.loc[df["ticker"] == ticker].to_dict(orient="records")[0]
         if result is None:
             raise DataNotFoundException(ticker=ticker, data_type="stock_info")
 
-        intro_file_path = f"{self.file_path}/summary_{ctry.value}.parquet"
+        intro_file_path = f"{self.file_path}/summary_{ctry}.parquet"
         intro_df = pd.read_parquet(intro_file_path)
         intro_result = intro_df.loc[intro_df["Code"] == ticker].to_dict(orient="records")[0]
 
@@ -43,11 +42,11 @@ class StockInfoService:
 
         return result
 
-    async def get_indicators(self, ctry: Country, ticker: str) -> Indicators:
+    async def get_indicators(self, ctry: str, ticker: str, db: AsyncSession) -> Indicators:
         """
         지표 조회
         """
-        if ctry == "USA":
+        if ctry == "us":
             ticker = f"{ticker}-US"
 
         return Indicators(
