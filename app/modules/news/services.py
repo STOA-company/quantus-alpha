@@ -5,7 +5,7 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 from app.core.exception.custom import DataNotFoundException
-from app.modules.common.utils import check_ticker_contry_len_2
+from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.news.schemas import NewsItem
 from quantus_aws.common.configs import s3_client
 
@@ -96,7 +96,7 @@ class NewsService:
         if size < 1:
             raise ValueError("Page size must be greater than 0")
 
-        ctry = check_ticker_contry_len_2(ticker)
+        ctry = check_ticker_country_len_2(ticker)
 
         # 티커 전처리
         if ticker:
