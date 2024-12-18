@@ -13,7 +13,7 @@ from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.price.schemas import PriceDailyItem, PriceSummaryItem
 from app.database.conn import db
 from app.database.crud import database
-
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 
@@ -42,14 +42,14 @@ class PriceService:
         self.country_specific_columns = {Country.KR: self.base_columns + ["Name"], Country.US: self.base_columns}
         self.price_columns = ["Date", "Open", "High", "Low", "Close", "Volume"]
 
-    def _fetch_52week_data(self, ctry: Country, ticker: str) -> pd.DataFrame:
+    def _fetch_52week_data(self, ctry: str, ticker: str) -> pd.DataFrame:
         """
         52주 데이터 조회
         """
         end_date = date.today()
         start_date = end_date - timedelta(days=365)
 
-        table_name = f"stock_{ctry.value.lower()}_1d"
+        table_name = f"stock_{ctry}_1d"
         columns = self.country_specific_columns.get(ctry, self.base_columns)
 
         result = self._db._select(
@@ -298,11 +298,11 @@ class PriceService:
 
         return data
 
-    async def get_price_data_summary(self, ctry: Country, ticker: str) -> PriceSummaryItem:
+    async def get_price_data_summary(self, ctry: str, ticker: str, db: AsyncSession) -> PriceSummaryItem:
         """
         종목 요약 데이터 조회
         """
-        cache_key = f"summary_{ctry.value}_{ticker}"
+        cache_key = f"summary_{ctry}_{ticker}"
 
         cached_data = self._cache.get(cache_key)
         if cached_data:
@@ -315,7 +315,7 @@ class PriceService:
 
         week_52_high, week_52_low, last_day_close = self._process_price_data(df)
 
-        name = self._get_us_ticker_name(ticker) if ctry == Country.US else df["Name"].iloc[0]
+        name = self._get_us_ticker_name(ticker) if ctry == "us" else df["Name"].iloc[0]
 
         response_data = {
             "name": name,
