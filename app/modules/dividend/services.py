@@ -1,6 +1,7 @@
 from app.modules.common.enum import FinancialCountry
 from app.modules.dividend.schemas import DividendItem, DividendDetail, DividendYearResponse
 from app.database.crud import database
+from app.modules.common.utils import contry_mapping
 
 
 class DividendService:
@@ -9,6 +10,8 @@ class DividendService:
 
     async def get_dividend(self, ctry: FinancialCountry, ticker: str) -> DividendItem:
         """배당 정보 조회"""
+        if ctry == "USA":
+            ticker = f"{ticker}-US"
         # Mock 데이터 생성
         yearly_details = [
             DividendYearResponse(
@@ -129,7 +132,12 @@ class DividendService:
             ),
         ]
 
+        ctry_two = contry_mapping.get(ctry)
+
         return DividendItem(
+            ticker=ticker,
+            name="Mock Company",
+            ctry=ctry_two,
             last_year_dividend_count=4,  # 2023년 배당 건수
             last_dividend_per_share=2800.0,  # 2023년 마지막 배당금
             last_dividend_ratio=0.45,  # 배당성향

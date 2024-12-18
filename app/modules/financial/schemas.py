@@ -163,6 +163,7 @@ class IncomePerformanceResponse(BaseModel):
 
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
+    ctry: str = Field(max_length=20)
     quarterly: List[QuarterlyIncome]  # 분기별 데이터
     yearly: List[QuarterlyIncome]  # 연간 데이터
 
@@ -188,6 +189,7 @@ class InterestCoverageRatioResponse(BaseModel):
 class RatioResponse(BaseModel):
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
+    ctry: str = Field(max_length=20)
     financial_ratios: FinancialRatioResponse
     liquidity_ratios: LiquidityRatioResponse
     interest_coverage_ratios: InterestCoverageRatioResponse
