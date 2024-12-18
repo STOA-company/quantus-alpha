@@ -20,23 +20,23 @@ class StockInfoService:
         주식 정보 조회
         """
         if ctry != Country.US:
-            raise DataNotFoundException(ticker=ctry.name, data_type="stock_info")
+            raise DataNotFoundException(ticker=ctry.value, data_type="stock_info")
 
-        file_name = self.file_name.format(ctry.name)
+        file_name = self.file_name.format(ctry.value)
         info_file_path = f"{self.file_path}/{file_name}"
         df = pd.read_csv(info_file_path)
         result = df.loc[df["ticker"] == ticker].to_dict(orient="records")[0]
         if result is None:
             raise DataNotFoundException(ticker=ticker, data_type="stock_info")
 
-        intro_file_path = f"{self.file_path}/summary_{ctry.name}.parquet"
+        intro_file_path = f"{self.file_path}/summary_{ctry.value}.parquet"
         intro_df = pd.read_parquet(intro_file_path)
         intro_result = intro_df.loc[intro_df["Code"] == ticker].to_dict(orient="records")[0]
 
         result = StockInfo(
             introduction=intro_result.get("translated_overview", ""),
             homepage_url=result["URL"],
-            ceo_name=result["LastName"] + result["FirstName"],
+            ceo_name=result["LastName"] + " " + result["FirstName"],
             establishment_date=result["IncInDt"],
             listing_date=result["oldest_date"],
         )
