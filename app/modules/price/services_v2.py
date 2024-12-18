@@ -9,6 +9,7 @@ from app.core.exception.custom import DataNotFoundException
 from app.core.logging.config import get_logger
 from app.modules.common.enum import Country
 from app.modules.common.cache import MemoryCache
+from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.price.schemas import PriceDailyItem, PriceSummaryItem
 from app.database.conn import db
 from app.database.crud import database
@@ -273,7 +274,7 @@ class PriceService:
     ) -> List[PriceDailyItem]:
         """일봉 데이터 조회"""
         start_date, end_date = self._validate_date_range(start_date, end_date)
-
+        ctry = check_ticker_country_len_2(ticker)
         cache_key = f"daily_{ctry.value}_{ticker}_{start_date}_{end_date}"
         cached_data = self._cache.get(cache_key)
         if cached_data:
