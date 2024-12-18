@@ -11,7 +11,8 @@ class StockInformation(Base):
     # Required Columns
     ticker = Column(String(20), primary_key=True, nullable=False, comment="종목 티커")
     logo_image = Column(String(255), nullable=True, comment="로고 이미지 URL")
-    name = Column(String(100), nullable=True, comment="종목명")
+    kr_name = Column(String(100), nullable=True, comment="한글 종목명")
+    en_name = Column(String(100), nullable=True, comment="영문 종목명")
     ctry = Column(String(20), nullable=True, comment="국가")
     market = Column(String(100), nullable=True, comment="거래소")
 
@@ -34,7 +35,7 @@ class StockInformation(Base):
     homepage_url = Column(String(255), nullable=True, comment="회사 홈페이지 URL")
     ceo = Column(String(100), nullable=True, comment="대표이사")
     establishment_date = Column(Date, nullable=True, comment="설립일")
-    listing_date = Column(Date, nullable=False, comment="상장일")
+    listing_date = Column(Date, nullable=True, comment="상장일")
 
     class Config:
         json_schema_extra = {
