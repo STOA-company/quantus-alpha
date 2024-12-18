@@ -1,5 +1,6 @@
 from dataclasses import asdict, dataclass, field
 from sqlalchemy import MetaData
+from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import select, insert, update, delete, desc, asc, or_, and_
 from sqlalchemy.exc import IntegrityError
 from contextlib import contextmanager
@@ -17,6 +18,10 @@ class JoinInfo:
     columns: list = field(default_factory=list)
     is_outer: bool = False
     secondary_condition: dict = field(default_factory=dict)
+
+
+class Base(DeclarativeBase):
+    pass
 
 
 class Database:
