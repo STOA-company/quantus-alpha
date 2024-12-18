@@ -320,11 +320,14 @@ class PriceService:
         response_data = {
             "name": name,
             "ticker": ticker,
+            "logo_url": "https://kr.pinterest.com/eunju011014/%EA%B7%80%EC%97%AC%EC%9A%B4-%EC%A7%A4/",
             "market": df["Market"].iloc[0],
             "sector": "추후 업뎃 예정",
+            "market_cap": 123.45,
             "last_day_close": last_day_close,
             "week_52_low": week_52_low,
             "week_52_high": week_52_high,
+            "is_market_close": True,
         }
 
         try:
