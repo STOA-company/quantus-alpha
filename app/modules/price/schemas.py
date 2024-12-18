@@ -57,6 +57,7 @@ class PriceSummaryItem(BaseModel):
     ticker: str
     market: str
     sector: str
+    market_cap: float
     last_day_close: float
     week_52_low: float
     week_52_high: float

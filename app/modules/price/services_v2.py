@@ -322,6 +322,7 @@ class PriceService:
             "ticker": ticker,
             "market": df["Market"].iloc[0],
             "sector": "추후 업뎃 예정",
+            "market_cap": 123.45,
             "last_day_close": last_day_close,
             "week_52_low": week_52_low,
             "week_52_high": week_52_high,
