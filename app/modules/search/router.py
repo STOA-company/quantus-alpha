@@ -18,9 +18,10 @@ async def search(
     service: SearchService = Depends(get_search_service),
     db: AsyncSession = Depends(db.get_async_db),
 ) -> SearchResponse:
-    search_result = await service.search(query, ctry, offset, limit, db)
+    # limit + 1개를 요청하여 더 있는지 확인
+    search_result = await service.search(query, ctry, offset, limit + 1, db)
     has_more = len(search_result) > limit
     if has_more:
-        search_result = search_result[:-1]
+        search_result = search_result[:-1]  # 마지막 항목 제거
 
     return SearchResponse(status_code=200, message="검색이 완료되었습니다.", data=search_result, has_more=has_more)
