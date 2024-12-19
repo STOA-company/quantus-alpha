@@ -4,9 +4,10 @@ from datetime import date, datetime, timedelta
 import pandas as pd
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from app.core.exception.custom import DataNotFoundException
 from app.core.logging.config import get_logger
+from app.models.models_stock import StockInformation
 from app.modules.common.enum import Country
 from app.modules.common.cache import MemoryCache
 from app.modules.common.utils import check_ticker_country_len_2
@@ -314,6 +315,7 @@ class PriceService:
             raise DataNotFoundException(ticker, "52week")
 
         week_52_high, week_52_low, last_day_close = self._process_price_data(df)
+        sector = await self._get_sector_by_ticker(ticker)
 
         name = self._get_us_ticker_name(ticker) if ctry == "us" else df["Name"].iloc[0]
 
@@ -323,7 +325,7 @@ class PriceService:
             "ctry": ctry,
             "logo_url": "https://kr.pinterest.com/eunju011014/%EA%B7%80%EC%97%AC%EC%9A%B4-%EC%A7%A4/",
             "market": df["Market"].iloc[0],
-            "sector": "추후 업뎃 예정",
+            "sector": sector,
             "market_cap": 123.45,
             "last_day_close": last_day_close,
             "week_52_low": week_52_low,
@@ -337,6 +339,15 @@ class PriceService:
             logger.error(f"Failed to set cache for {cache_key}: {e}")
 
         return PriceSummaryItem(**response_data)
+
+    async def _get_sector_by_ticker(self, ticker: str) -> str:
+        """
+        종목 섹터 조회
+        """
+        db = self._async_db
+        query = select(StockInformation.sector_3).where(StockInformation.ticker == ticker)
+        result = await db.execute_async_query(query)
+        return result.scalar() or None
 
 
 def get_price_service() -> PriceService:
