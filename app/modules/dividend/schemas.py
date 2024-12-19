@@ -19,6 +19,7 @@ class DividendItem(BaseModel):
     name: str = Field(description="종목 이름")
     ctry: str = Field(description="국가 코드")
     last_year_dividend_count: int = Field(description="전년도 배당 건수")
+    last_year_dividend_date: List[str] = Field(description="전년도 배당 일자")
     last_dividend_per_share: float = Field(description="직전 1주당 배당금")
     last_dividend_ratio: float = Field(description="직전 1주당 배당비율")
     last_dividend_growth_rate: float = Field(description="직전 배당 성장률")

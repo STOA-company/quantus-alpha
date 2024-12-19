@@ -139,6 +139,7 @@ class DividendService:
             name="Mock Company",
             ctry=ctry_two,
             last_year_dividend_count=4,  # 2023년 배당 건수
+            last_year_dividend_date=["03", "06", "09", "12"],  # 배당 일자
             last_dividend_per_share=2800.0,  # 2023년 마지막 배당금
             last_dividend_ratio=0.45,  # 배당성향
             last_dividend_growth_rate=0.12,  # 전년 대비 성장률
