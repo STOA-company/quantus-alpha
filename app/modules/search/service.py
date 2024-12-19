@@ -1,12 +1,16 @@
-from typing import List
+from typing import List, Optional, Tuple
 from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.database.crud import database
 from app.models.models_stock import StockInformation
 from app.modules.common.enum import TranslateCountry
 from app.modules.search.schemas import SearchItem
 
 
 class SearchService:
+    def __init__(self):
+        self.db = database
+
     async def search(
         self, query: str, ctry: TranslateCountry, offset: int, limit: int, db: AsyncSession
     ) -> List[SearchItem]:
@@ -34,6 +38,7 @@ class SearchService:
                 or_(
                     func.lower(StockInformation.kr_name).like(func.lower(search_term)),
                     func.lower(StockInformation.en_name).like(func.lower(search_term)),
+                    func.lower(StockInformation.ticker).like(func.lower(search_term)),
                 )
             )
         )
@@ -47,6 +52,7 @@ class SearchService:
                 or_(
                     func.lower(StockInformation.kr_name).like(func.lower(search_term)),
                     func.lower(StockInformation.en_name).like(func.lower(search_term)),
+                    func.lower(StockInformation.ticker).like(func.lower(search_term)),
                 )
             )
             .offset(offset)
@@ -60,17 +66,71 @@ class SearchService:
         search_items = []
         for item in search_result:
             name = item.kr_name if ctry == TranslateCountry.KO else item.en_name
+
+            # db 세션 전달
+            current_price, price_rate = await self._get_current_price(item.ticker, db)
+            print(f"Current price: {current_price}, Price rate: {price_rate}")
+
             search_items.append(
                 SearchItem(
                     ticker=item.ticker,
                     name=name,
                     language=ctry,
-                    current_price=None,
-                    current_price_rate=None,
+                    current_price=current_price,
+                    current_price_rate=price_rate,
                 )
             )
 
         return search_items
+
+    async def _get_current_price(self, ticker: str, db: AsyncSession) -> Tuple[Optional[float], Optional[float]]:
+        """
+        현재 주가 조회, 등락률 계산
+        등락률 계산 방법: (Close - Open) / Open * 100
+        """
+        try:
+            country_code = await self.get_country_code(ticker, db)
+            country_code = country_code.lower()
+            table_name = f"stock_{country_code}_1d"
+
+            result = self.db._select(
+                table=table_name, columns=["Close", "Open"], order="Date", ascending=False, limit=1, Ticker=ticker
+            )
+
+            if not result or len(result) == 0:
+                print(f"No data found for {ticker} in {table_name}")
+                return None, None
+
+            row = result[0]
+            print(f"Raw data for {ticker}: {row}")
+
+            try:
+                close = float(row._mapping["Close"])
+                open_price = float(row._mapping["Open"])
+
+                if open_price == 0:
+                    rate = 0
+                else:
+                    rate = round(((close - open_price) / open_price) * 100, 2)
+
+                print(f"{ticker} ({country_code}): close={close}, open={open_price}, rate={rate:.2f}%")
+                return close, rate
+
+            except (KeyError, ValueError, AttributeError) as e:
+                print(f"Error processing data for {ticker}: {e}")
+                print(f"Row structure: {dir(row)}")
+                return None, None
+
+        except Exception as e:
+            print(f"Database error for {ticker}: {e}")
+            return None, None
+
+    async def get_country_code(self, ticker: str, db: AsyncSession) -> str:
+        """
+        ticker로 국가 코드 조회
+        """
+        result = await db.execute(select(StockInformation.ctry).where(StockInformation.ticker == ticker))
+        return result.scalar_one()
 
 
 def get_search_service() -> SearchService:
