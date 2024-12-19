@@ -135,6 +135,7 @@ class DisclosureService:
                 price_change = (
                     round((ticker_data.Close - ticker_data.Open) / ticker_data.Open * 100, 2) if ticker_data else None
                 )
+                name = ticker_data.korean_name if language == "ko" else ticker_data.english_name
 
             items.append(
                 {
@@ -151,7 +152,7 @@ class DisclosureService:
                     "key_points_5": key_points_list[4],
                     "summary": translated_data.ai_summary if analysis_data.translated else analysis_data.ai_summary,
                     "document_url": row.sec_url,
-                    "name": ticker_data.korean_name if language == "ko" else ticker_data.english_name,
+                    "name": name if not ticker else None,
                     "price_change": price_change if not ticker else None,
                 }
             )
