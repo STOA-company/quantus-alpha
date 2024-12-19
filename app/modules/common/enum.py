@@ -15,6 +15,11 @@ class FinancialCountry(Enum):
     HKG = "HKG"
 
 
+class TranslateCountry(Enum):
+    KO = "ko"
+    EN = "en"
+
+
 class Frequency(Enum):
     DAILY = "daily"
     MINUTE = "minute"

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.conn import db
-from app.modules.common.enum import Country
+from app.modules.common.enum import TranslateCountry
 from app.modules.search.schemas import SearchResponse
 from app.modules.search.service import SearchService, get_search_service
 
@@ -12,7 +12,7 @@ router = APIRouter()
 @router.get("", summary="검색 기능")
 async def search(
     query: str,
-    ctry: Country = Query(Country, description="검색 시 나올 기업명 언어(kr, us)"),
+    ctry: TranslateCountry = Query(TranslateCountry, description="검색 시 나올 기업명 언어(ko, en)"),
     offset: int = Query(0, description="검색 시작 위치"),
     limit: int = Query(20, description="검색 결과 수"),
     service: SearchService = Depends(get_search_service),

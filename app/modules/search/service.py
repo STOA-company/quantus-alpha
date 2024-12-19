@@ -2,7 +2,7 @@ from typing import List
 from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.models_stock import StockInformation
-from app.modules.common.enum import Country
+from app.modules.common.enum import TranslateCountry
 from app.modules.search.schemas import SearchItem
 
 
@@ -44,16 +44,16 @@ class SearchService:
 
         search_items = []
         for item in search_result:
-            if ctry == Country.KR:
+            if ctry == TranslateCountry.KO:
                 name = item.kr_name
-            elif ctry == Country.US:
+            elif ctry == TranslateCountry.EN:
                 name = item.en_name
 
             search_items.append(
                 SearchItem(
                     ticker=item.ticker,
                     name=name,
-                    ctry=item.ctry,
+                    language=ctry,
                     current_price=None,
                     current_price_rate=None,
                 )
