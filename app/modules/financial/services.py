@@ -119,6 +119,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        db: AsyncSession = Depends(db.get_async_db),
     ) -> BaseResponse[IncomePerformanceResponse]:
         """
         실적 데이터 조회
@@ -148,12 +149,19 @@ class FinancialService:
             quarterly_statements, yearly_statements = self._process_income_performance_statement_result(result)
 
             # DB 결과에서 직접 이름 추출
-            name = result[0][1] if result else ""
+            company_name = await self.get_kr_name_by_ticker(db=db, ticker=ticker)
+            print(f"----------------------------------: {company_name}")
 
             ctry = contry_mapping.get(ctry)
+            sector = await self.get_sector_by_ticker(ticker)
 
             performance_response = IncomePerformanceResponse(
-                code=ticker, name=name, ctry=ctry, quarterly=quarterly_statements, yearly=yearly_statements
+                code=ticker,
+                name=company_name,
+                ctry=ctry,
+                sector=sector,
+                quarterly=quarterly_statements,
+                yearly=yearly_statements,
             )
 
             logger.info(f"Successfully retrieved income performance data for {ticker}")
@@ -485,11 +493,27 @@ class FinancialService:
         Returns:
             Optional[str]: 한글 기업명. 종목이 없는 경우 None 반환
         """
+        if ticker.endswith("-US"):
+            ticker = ticker[:-3]
+
         query = select(StockInformation.kr_name).where(StockInformation.ticker == ticker)
         result = await db.execute(query)
         kr_name = result.scalar_one_or_none()
 
         return kr_name
+
+    # 섹터 조회
+    async def get_sector_by_ticker(self, ticker: str) -> Optional[str]:
+        """
+        종목 섹터 조회
+        """
+        if ticker.endswith("-US"):
+            ticker = ticker[:-3]
+
+        query = select(StockInformation.sector_3).where(StockInformation.ticker == ticker)
+        result = self.db._execute(query)
+        sector = result.scalar_one_or_none()
+        return sector
 
     ########################################## 계산 메서드 #########################################
     # 부채비율 계산
