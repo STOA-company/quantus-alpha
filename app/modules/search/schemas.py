@@ -6,7 +6,7 @@ from pydantic import BaseModel
 class SearchItem(BaseModel):
     ticker: str
     name: Optional[str] = None
-    ctry: Optional[str] = None
+    language: Optional[str] = None
     current_price: Optional[float] = None
     current_price_rate: Optional[float] = None
 
