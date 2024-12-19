@@ -26,9 +26,10 @@ async def get_stock_info(
 async def get_indicators(
     ticker: str,
     service: StockInfoService = Depends(get_stock_info_service),
+    db: AsyncSession = Depends(db.get_async_db),
 ):
     ctry = check_ticker_country_len_2(ticker)
-    data = await service.get_indicators(ctry, ticker)
+    data = await service.get_indicators(ctry, ticker, db)
     return BaseResponse(status_code=200, message="지표 정보를 성공적으로 조회했습니다.", data=data)
 
 
