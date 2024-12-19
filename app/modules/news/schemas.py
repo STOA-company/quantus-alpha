@@ -16,3 +16,5 @@ class NewsItem(BaseModel):
     title: str
     summary: str | None
     emotion: str | None
+    name: str | None
+    change_rate: float | None
