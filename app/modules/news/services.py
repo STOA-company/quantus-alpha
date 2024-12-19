@@ -1,13 +1,16 @@
 from functools import lru_cache
 from typing import Dict, Optional, List
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.news.schemas import NewsItem
 from quantus_aws.common.configs import s3_client
+from app.database.crud import database
+from app.core.logging.config import get_logger
+
 
 KST_TIMEZONE = pytz.timezone("Asia/Seoul")
 NEWS_CONTRY_MAP = {
@@ -17,10 +20,13 @@ NEWS_CONTRY_MAP = {
     "hk": "HK",
 }
 
+logger = get_logger(__name__)
+
 
 class NewsService:
     def __init__(self):
         self._bucket_name = "quantus-news"
+        self.db = database
 
     async def _fetch_s3_data(self, date_str: str, country_path: str) -> Optional[bytes]:
         """S3에서 데이터를 가져오는 내부 메서드"""
@@ -57,18 +63,32 @@ class NewsService:
             "neutral_count": int(emotion_counts.get("neutral", 0)),
         }
 
-    @staticmethod
-    def _create_news_items(df: pd.DataFrame) -> List[NewsItem]:
+    def _create_news_items(self, df: pd.DataFrame, include_stock_info: bool = False) -> List[NewsItem]:
         """DataFrame을 NewsItem 리스트로 변환"""
-        return [
-            NewsItem(
-                date=pd.to_datetime(row["date"]) if not isinstance(row["date"], datetime) else row["date"],
-                title=row["titles"],
-                summary=row["summary"] if pd.notna(row["summary"]) else None,
-                emotion=row["emotion"] if pd.notna(row["emotion"]) else None,
-            )
-            for _, row in df.iterrows()
-        ]
+        print(f"df columns#####: {df.columns}")
+        result = []
+        for _, row in df.iterrows():
+            news_item = {
+                "date": pd.to_datetime(row["date"]) if not isinstance(row["date"], datetime) else row["date"],
+                "title": row["titles"],
+                "summary": row["summary"] if pd.notna(row["summary"]) else None,
+                "emotion": row["emotion"].lower() if pd.notna(row["emotion"]) else None,
+                "name": None,
+                "change_rate": None,
+            }
+
+            if include_stock_info:
+                news_item.update(
+                    {
+                        "name": row["Name"] if pd.notna(row["Name"]) else "None",
+                        "change_rate": float(row["change_rate"]) if pd.notna(row["change_rate"]) else 0.00,
+                    }
+                )
+
+            # NewsItem 객체로 변환
+            result.append(NewsItem(**news_item))
+
+        return result
 
     @staticmethod
     @lru_cache(maxsize=1)
@@ -102,6 +122,63 @@ class NewsService:
         else:
             return "us"
 
+    @staticmethod
+    def _format_date(date_str):  # TODO: 홈 - 뉴스데이터 로직 수정 필요
+        date_obj = datetime.strptime(date_str, "%Y%m%d")
+        # 하루 전 날짜로 변경
+        prev_day = date_obj - timedelta(days=1)
+        return prev_day.strftime("%Y-%m-%d")
+
+    def _get_stock_info(self, df: pd.DataFrame, ctry: str, date_str: str) -> pd.DataFrame:
+        """주식 정보(종목명, 가격변화율) 조회"""
+        table_name = f"stock_{ctry}_1d"
+
+        tickers = df["Code"].unique().tolist()
+        logger.debug(f"Querying tickers: {tickers}")
+
+        if ctry == "kr":
+            tickers = [f"A{ticker}" for ticker in tickers]
+
+        stock_data = self.db._select(
+            table=table_name, columns=["Date", "Ticker", "Open", "Close", "Name"], Date=date_str, Ticker__in=tickers
+        )
+
+        logger.debug(f"stock_data: {stock_data}")
+
+        if not stock_data:
+            logger.warning(f"No stock data found for tickers: {tickers} on date: {date_str}")
+            # DataFrame에 새 컬럼 추가
+            df_copy = df.copy()
+            df_copy["Name"] = "None"
+            df_copy["change_rate"] = 0.00
+            return df_copy
+
+        # 결과를 리스트 형태로 변환
+        stock_data_list = [
+            {"Date": row[0], "Ticker": row[1], "Open": float(row[2]), "Close": float(row[3]), "Name": str(row[4])}
+            for row in stock_data
+        ]
+
+        # 리스트를 DataFrame으로 변환
+        stock_df = pd.DataFrame(stock_data_list)
+
+        stock_df["change_rate"] = round((stock_df["Close"] - stock_df["Open"]) / stock_df["Open"] * 100, 2)
+
+        if ctry == "kr":
+            stock_df["Ticker"] = stock_df["Ticker"].str[1:]
+
+        # 원본 DataFrame 복사 후 병합
+        df_copy = df.copy()
+        merged_df = pd.merge(
+            df_copy, stock_df[["Ticker", "change_rate"]], left_on=["Code"], right_on=["Ticker"], how="left"
+        ).drop(columns=["Ticker"])
+
+        # 누락된 데이터 처리
+        merged_df["Name"] = merged_df["Name"].fillna("None")
+        merged_df["change_rate"] = merged_df["change_rate"].fillna(0.00)
+
+        return merged_df
+
     async def get_news(
         self, page: int, size: int, ticker: Optional[str] = None, date: Optional[str] = None
     ) -> Dict[str, any]:
@@ -110,12 +187,11 @@ class NewsService:
             raise ValueError("Page number must be greater than 0")
         if size < 1:
             raise ValueError("Page size must be greater than 0")
+        # 시간대에 맞춘 ctry 기본값 설정
         ctry = self.get_current_market_country()
+
         if ticker:
             ctry = check_ticker_country_len_2(ticker)
-
-        # 티커 전처리
-        if ticker:
             ticker = self._ticker_preprocess(ticker, ctry)
 
         # 날짜 및 경로 설정
@@ -136,8 +212,13 @@ class NewsService:
         total_records = len(df)
         start_idx = (page - 1) * size
         df_paged = df.iloc[start_idx : start_idx + size]
-        news_items = self._create_news_items(df_paged)
 
+        if not ticker:
+            formatted_date = self._format_date(date_str)
+            df_paged = self._get_stock_info(df_paged, ctry, formatted_date)
+            news_items = self._create_news_items(df_paged, include_stock_info=True)
+        else:
+            news_items = self._create_news_items(df_paged, include_stock_info=False)
         # 결과 반환
         return {
             "total_count": total_records,

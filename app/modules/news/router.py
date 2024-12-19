@@ -14,6 +14,7 @@ async def get_news(
     size: Annotated[Optional[int], Query(description="페이지 크기, 기본값: 6")] = 6,
     news_service: NewsService = Depends(get_news_service),
 ):
+    # TODO: 홈 - 뉴스데이터 로직 수정 필요
     """
     뉴스 데이터를 조회합니다.
 
