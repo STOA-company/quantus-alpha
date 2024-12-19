@@ -55,6 +55,7 @@ class StockKrFactorItem(BaseModel):
 class PriceSummaryItem(BaseModel):
     name: str
     ticker: str
+    ctry: str
     logo_url: str
     market: str
     sector: str

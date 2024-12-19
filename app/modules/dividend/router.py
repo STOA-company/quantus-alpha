@@ -12,7 +12,7 @@ router = APIRouter()
 
 @router.get("", response_model=BaseResponse[DividendItem], summary="배당 정보 조회(Mock 데이터)")
 async def get_dividend(
-    ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+    ticker: Annotated[str, Query(description="종목 코드 (일단 us만 가능)", min_length=1)],
     service: DividendService = Depends(get_dividend_service),
 ) -> BaseResponse[DividendItem]:
     ctry = check_ticker_country_len_3(ticker).upper()
