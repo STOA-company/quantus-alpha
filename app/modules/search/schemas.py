@@ -1,0 +1,18 @@
+from typing import List, Optional
+
+from pydantic import BaseModel
+
+
+class SearchItem(BaseModel):
+    ticker: str
+    name: Optional[str] = None
+    ctry: Optional[str] = None
+    current_price: Optional[float] = None
+    current_price_rate: Optional[float] = None
+
+
+class SearchResponse(BaseModel):
+    status_code: int
+    message: str
+    has_more: bool
+    data: List[SearchItem]
