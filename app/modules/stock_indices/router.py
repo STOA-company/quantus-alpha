@@ -1,28 +1,28 @@
 from fastapi import APIRouter, Depends
-from .service import StockIndicesService
+from app.modules.stock_indices.schemas import IndicesData, IndexSummary
+from .services import StockIndicesService
 
 router = APIRouter()
 
 
-@router.get("/five", summary="코스피/코스닥 지수 조회 5분 간격")
-async def get_stock_indices_five(
+@router.get("", summary="코스피/코스닥/나스닥/S&P500 지수 조회 일봉 간격", response_model=IndicesData)
+async def get_stock_indices(
     service: StockIndicesService = Depends(StockIndicesService),
-):
-    result = await service.get_indices_data()
+) -> IndicesData:
+    try:
+        result = await service.get_indices_data()
+        return result
+    except Exception:
+        empty_summary = IndexSummary(
+            prev_close=0.0, change=0.0, change_percent=0.0, rise_ratio=0, fall_ratio=0, unchanged_ratio=0
+        )
 
-    if not result:
-        return {"status_code": 404, "message": "오늘의 거래 데이터가 아직 없습니다.", "data": None}
-
-    return {"status_code": 200, "message": "코스피/코스닥 지수를 성공적으로 조회했습니다.", "data": result}
-
-
-@router.get("/fifteen", summary="코스피/코스닥 지수 조회 15분 간격")
-async def get_stock_indices_fifteen(
-    service: StockIndicesService = Depends(StockIndicesService),
-):
-    result = await service.get_indices_data_fifteen()
-
-    if not result:
-        return {"status_code": 404, "message": "오늘의 거래 데이터가 아직 없습니다.", "data": None}
-
-    return {"status_code": 200, "message": "코스피/코스닥 지수를 성공적으로 조회했습니다.", "data": result}
+        return IndicesData(
+            status_code=404,
+            message="오늘의 거래 데이터가 아직 없습니다.",
+            kospi=empty_summary,
+            kosdaq=empty_summary,
+            nasdaq=empty_summary,
+            sp500=empty_summary,
+            data=None,
+        )

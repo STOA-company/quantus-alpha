@@ -9,7 +9,7 @@ from app.modules.common.enum import Country, Frequency
 router = APIRouter()
 
 
-@router.get("/", response_model=BaseResponse[ResponsePriceDataItem])
+@router.get("", response_model=BaseResponse[ResponsePriceDataItem])
 async def get_price_data(
     ctry: Annotated[Country, Query(description="Country code (kr/us)")],
     ticker: Annotated[str, Query(description="Stock ticker symbol")],

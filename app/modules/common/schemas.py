@@ -9,12 +9,6 @@ class ResponseSchema(BaseModel):
     message: str
 
 
-class PaginationSchema(BaseModel):
-    total: int
-    page: int
-    size: int
-
-
 class ListResponseSchema(ResponseSchema, Generic[T]):
     data: List[T]
 
@@ -30,3 +24,11 @@ class PandasStatistics(BaseModel, Generic[T]):
     message: str
     data: Optional[T] = None
     statistics: Optional[dict] = None
+
+
+class PaginationBaseResponse(BaseResponse):
+    total_count: int
+    total_pages: int
+    current_page: int
+    offset: int
+    size: int

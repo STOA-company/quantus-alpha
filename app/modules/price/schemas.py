@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 class PriceDataResponse(BaseModel):
@@ -27,6 +27,7 @@ class ResponsePriceDataItem(BaseModel):
     name: str
     ticker: str
     market: str
+    market_cap: Optional[float] = None
     week52_highest: float
     week52_lowest: float
     last_day_close: float = 0.0
@@ -54,11 +55,15 @@ class StockKrFactorItem(BaseModel):
 class PriceSummaryItem(BaseModel):
     name: str
     ticker: str
+    ctry: str
+    logo_url: str
     market: str
     sector: str
+    market_cap: float
     last_day_close: float
     week_52_low: float
     week_52_high: float
+    is_market_close: bool
 
 
 class PriceDailyItem(BaseModel):

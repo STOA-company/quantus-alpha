@@ -18,18 +18,16 @@ class Settings(BaseSettings):
     API_V2_STR: str = "/api/v2"
     DATA_DIR: str = os.getenv("DATA_DIR", "./data")
 
-    # S3 settings
-    USE_S3: bool = os.getenv("USE_S3", "False").lower() == "true"
-    AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
-    AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
-    AWS_REGION: str = os.getenv("AWS_REGION", "")
-
     # RDS settings
     RDS_HOST: str = os.getenv("RDS_HOST", "")
     RDS_USER: str = os.getenv("RDS_USER", "")
     RDS_PASSWORD: str = os.getenv("RDS_PASSWORD", "")
     RDS_DB: str = os.getenv("RDS_DB", "")
     RDS_PORT: int = os.getenv("RDS_PORT", 3306)
+
+    @property
+    def DATABASE_URL(self) -> str:
+        return f"mysql://{self.RDS_USER}:{self.RDS_PASSWORD}@{self.RDS_HOST}:{self.RDS_PORT}/{self.RDS_DB}"
 
     class Config:
         env_file = f".env.{ENV}"

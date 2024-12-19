@@ -1,0 +1,20 @@
+from datetime import datetime
+from pydantic import BaseModel
+
+from app.modules.common.schemas import PaginationBaseResponse
+
+
+class NewsResponse(PaginationBaseResponse):
+    positive_count: int
+    negative_count: int
+    neutral_count: int
+    ctry: str
+
+
+class NewsItem(BaseModel):
+    date: datetime
+    title: str
+    summary: str | None
+    emotion: str | None
+    name: str | None
+    change_rate: float | None
