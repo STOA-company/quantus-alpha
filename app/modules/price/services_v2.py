@@ -320,6 +320,7 @@ class PriceService:
         response_data = {
             "name": name,
             "ticker": ticker,
+            "ctry": ctry,
             "logo_url": "https://kr.pinterest.com/eunju011014/%EA%B7%80%EC%97%AC%EC%9A%B4-%EC%A7%A4/",
             "market": df["Market"].iloc[0],
             "sector": "추후 업뎃 예정",
