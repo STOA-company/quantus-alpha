@@ -18,3 +18,9 @@ class NewsItem(BaseModel):
     emotion: str | None
     name: str | None
     change_rate: float | None
+
+
+class LatestNewsResponse(BaseModel):
+    date: datetime
+    content: str
+    type: str

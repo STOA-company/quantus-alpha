@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 from app.core.exception.custom import DataNotFoundException
-from app.modules.common.utils import check_ticker_country_len_2
-from app.modules.news.schemas import NewsItem
+from app.modules.common.utils import check_ticker_country_len_2, check_ticker_country_len_3
+from app.modules.news.schemas import LatestNewsResponse, NewsItem
 from quantus_aws.common.configs import s3_client
 from app.database.crud import database
 from app.core.logging.config import get_logger
@@ -230,6 +230,153 @@ class NewsService:
             "ctry": ctry,
             **emotion_counts,
         }
+
+    async def get_latest_news(self, ticker: str) -> LatestNewsResponse:
+        """최신 뉴스와 공시 데이터 중 최신 데이터 조회"""
+        try:
+            # 1. 공시 데이터 조회
+            disclosure_info = await self._get_disclosure_data(ticker)
+
+            # 2. 뉴스 데이터 조회
+            news_info = await self._get_news_data(ticker)
+
+            # 3. 둘 다 없으면 에러
+            if not disclosure_info and not news_info:
+                raise DataNotFoundException(ticker=ticker, data_type="news and disclosure")
+
+            # 4. 날짜 비교하여 최신 데이터 선택
+            result = self._select_latest_data(disclosure_info, news_info)
+
+            return LatestNewsResponse(**result)
+
+        except Exception as e:
+            logger.error(f"Error in get_latest_news for ticker {ticker}: {str(e)}")
+            raise
+
+    def _parse_key_points(self, key_points: list) -> str:
+        """key_points 리스트를 파싱하여 작은따옴표만 큰따옴표로 변경"""
+        try:
+            # 리스트의 각 항목을 큰따옴표로 감싸기
+            quoted_items = [f"{item}" for item in key_points]
+            # 대괄호로 감싸서 반환
+            return "[" + " ".join(quoted_items) + "]"
+        except Exception as e:
+            logger.error(f"Error parsing key points: {str(e)}")
+            return str(key_points)
+
+    async def _get_disclosure_data(self, ticker: str) -> Optional[Dict]:
+        """공시 데이터 조회 및 분석 데이터 함께 반환"""
+        try:
+            # 공시 기본 데이터 조회
+            year = datetime.now().strftime("%Y")
+            ctry = check_ticker_country_len_3(ticker)
+
+            disclosure_data = self.db._select(
+                table=f"{ctry}_disclosure",
+                columns=["filing_id", "filing_date"],
+                order="filing_date",
+                ascending=False,
+                limit=1,
+                ticker=ticker,
+                filing_date__like=f"{year}%",
+                ai_processed=1,
+            )
+
+            if not disclosure_data:
+                return None
+
+            # 분석 데이터 조회
+            analysis_data = self.db._select(
+                table=f"{ctry}_disclosure_analysis",
+                columns=["ai_summary", "market_impact", "impact_reason", "key_points", "translated"],
+                filing_id=disclosure_data[0][0],
+            )
+
+            if not analysis_data:
+                return None
+
+            analysis_data = list(analysis_data[0])
+            if analysis_data[-1]:
+                translated_data = self.db._select(
+                    table=f"{ctry}_disclosure_analysis_translation",
+                    columns=["ai_summary", "key_points"],
+                    filing_id=disclosure_data[0][0],
+                )
+                analysis_data[0] = translated_data[0][0]
+                analysis_data[3] = translated_data[0][1]
+            print(f"analysis_data::::: {analysis_data[3]}")
+            key_points_parsed = self._parse_key_points(analysis_data[3])
+            content = f"{analysis_data[0]} {key_points_parsed}"
+            print(f"content::::: {content}")
+            return {"date": disclosure_data[0][1], "content": content, "type": "disclosure"}
+
+        except Exception as e:
+            logger.error(f"Error fetching disclosure data: {str(e)}")
+            return None
+
+    async def _get_news_data(self, ticker: str) -> Optional[Dict]:
+        """뉴스 데이터 조회"""
+        try:
+            ctry = check_ticker_country_len_2(ticker)
+            processed_ticker = self._ticker_preprocess(ticker, ctry)
+
+            # S3 데이터 조회
+            s3_data = await self._fetch_s3_data(self._get_current_date(), f"merged_data/{NEWS_CONTRY_MAP[ctry]}")
+
+            if not s3_data:
+                return None
+
+            # DataFrame 처리
+            df = pd.read_parquet(pd.io.common.BytesIO(s3_data))
+            df = self._process_dataframe(df, processed_ticker)
+
+            if df.empty:
+                return None
+
+            latest_news = df.iloc[0]
+            return {"date": latest_news["date"], "content": latest_news["summary"], "type": "news"}
+
+        except Exception as e:
+            logger.error(f"Error fetching news data: {str(e)}")
+            return None
+
+    def _select_latest_data(self, disclosure_info: Optional[Dict], news_info: Optional[Dict]) -> Dict:
+        """두 데이터 중 최신 데이터 선택"""
+        if not disclosure_info:
+            if news_info:
+                # 뉴스 데이터의 content 처리
+                news_info["content"] = self._parse_news_content(news_info["content"])
+            return news_info
+        if not news_info:
+            return disclosure_info
+
+        disclosure_date = pd.to_datetime(disclosure_info["date"])
+        news_date = pd.to_datetime(news_info["date"])
+
+        result = disclosure_info if disclosure_date > news_date else news_info
+
+        # 뉴스인 경우 content 처리
+        if result["type"] == "news":
+            result["content"] = self._parse_news_content(result["content"])
+
+        return result
+
+    def _parse_news_content(self, content: str) -> str:
+        """뉴스 content에서 기사 요약 부분만 추출하고 정리"""
+        try:
+            # "기사 요약" 섹션 추출
+            if "**기사 요약**" in content:
+                summary_section = content.split("**기사 요약**")[1].split("**주가에")[0]
+
+                # 불필요한 문자 제거
+                cleaned_content = summary_section.replace("\n", "")
+                # 연속된 공백을 하나로
+                cleaned_content = " ".join(cleaned_content.split())
+                return cleaned_content.strip(" :")
+            return content
+        except Exception as e:
+            logger.error(f"Error parsing news content: {str(e)}")
+            return content
 
 
 def get_news_service() -> NewsService:
