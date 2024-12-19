@@ -1,5 +1,4 @@
 from typing import List
-import random  # 파일 상단에 추가
 
 from app.modules.news.services import get_news_service
 from app.database.crud import JoinInfo, database
@@ -38,9 +37,7 @@ class TrendingService:
 
         trending_stocks = []
         for idx, row in enumerate(result, start=1):
-            # 무작위 가격과 변동률 생성
-            current_price = random.randint(10000, 100000)  # 1만원 ~ 10만원
-            current_price_rate = round(random.uniform(-5.0, 5.0), 2)  # -5.0% ~ +5.0%
+            current_price, current_price_rate = await self.get_current_price(ticker=row.Ticker, table_name=table_name)
 
             stock_dict = {
                 "num": idx,
@@ -85,9 +82,8 @@ class TrendingService:
 
         trending_stocks = []
         for idx, row in enumerate(result, start=1):
-            # 무작위 가격과 변동률 생성
-            current_price = round(random.uniform(10.0, 500.0), 2)  # $10 ~ $500
-            current_price_rate = round(random.uniform(-5.0, 5.0), 2)  # -5.0% ~ +5.0%
+            # 각 종목별 현재가와 변동률 조회
+            current_price, current_price_rate = await self.get_current_price(ticker=row.Ticker, table_name=table_name)
 
             stock_dict = {
                 "num": idx,
@@ -100,6 +96,37 @@ class TrendingService:
             trending_stocks.append(TrendingStockEn(**stock_dict))
 
         return trending_stocks
+
+    # 가져온 테이블에서의 각 티커별 가격 및 변동률
+    async def get_current_price(self, ticker: str, table_name: str) -> tuple[float, float]:
+        """
+        현재가와 변동률 조회 (당일 종가와 시가 기준)
+        Args:
+            ticker: 종목코드
+            table_name: 테이블명
+        Returns:
+            tuple[float, float]: (현재가, 변동률)
+        """
+        # 당일 시가와 종가 조회
+        result = self.database._select(
+            table=table_name,
+            columns=["Date", "Open", "Close"],
+            order="Date",
+            ascending=False,
+            limit=1,
+            **{"Ticker": ticker},
+        )
+
+        if not result:
+            return 0.0, 0.0
+
+        current_price = float(result[0].Close)
+        open_price = float(result[0].Open)
+
+        # 변동률 계산: ((종가 - 시가) / 시가) * 100
+        price_rate = round(((current_price - open_price) / open_price * 100), 2) if open_price != 0 else 0.0
+
+        return current_price, price_rate
 
 
 def get_trending_service():
