@@ -1,10 +1,14 @@
+from typing import List
 import pandas as pd
+from sqlalchemy import select
 from app.database.crud import database
 from app.core.exception.custom import DataNotFoundException
-from app.modules.common.enum import Country
-from app.modules.stock_info.schemas import Indicators, StockInfo
+from app.models.models_stock import StockInformation
+from app.modules.stock_info.schemas import Indicators, SimilarStock, StockInfo
 from app.core.logging.config import get_logger
-
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, func
+from fastapi import HTTPException
 
 logger = get_logger(__name__)
 
@@ -15,39 +19,39 @@ class StockInfoService:
         self.file_path = "static"
         self.file_name = "stock_{}_info.csv"
 
-    async def get_stock_info(self, ctry: Country, ticker: str) -> StockInfo:
+    async def get_stock_info(self, ctry: str, ticker: str, db: AsyncSession) -> StockInfo:
         """
         주식 정보 조회
         """
-        if ctry != Country.US:
-            raise DataNotFoundException(ticker=ctry.name, data_type="stock_info")
+        if ctry != "us":
+            raise DataNotFoundException(ticker=ctry, data_type="stock_info")
 
-        file_name = self.file_name.format(ctry.name)
+        file_name = self.file_name.format(ctry)
         info_file_path = f"{self.file_path}/{file_name}"
         df = pd.read_csv(info_file_path)
         result = df.loc[df["ticker"] == ticker].to_dict(orient="records")[0]
         if result is None:
             raise DataNotFoundException(ticker=ticker, data_type="stock_info")
 
-        intro_file_path = f"{self.file_path}/summary_{ctry.name}.parquet"
+        intro_file_path = f"{self.file_path}/summary_{ctry}.parquet"
         intro_df = pd.read_parquet(intro_file_path)
         intro_result = intro_df.loc[intro_df["Code"] == ticker].to_dict(orient="records")[0]
 
         result = StockInfo(
             introduction=intro_result.get("translated_overview", ""),
             homepage_url=result["URL"],
-            ceo_name=result["LastName"] + result["FirstName"],
+            ceo_name=result["LastName"] + " " + result["FirstName"],
             establishment_date=result["IncInDt"],
             listing_date=result["oldest_date"],
         )
 
         return result
 
-    async def get_indicators(self, ctry: Country, ticker: str) -> Indicators:
+    async def get_indicators(self, ctry: str, ticker: str, db: AsyncSession) -> Indicators:
         """
         지표 조회
         """
-        if ctry == "USA":
+        if ctry == "us":
             ticker = f"{ticker}-US"
 
         return Indicators(
@@ -119,6 +123,52 @@ class StockInfoService:
         # except Exception as e:
         #     print(f"Error: {str(e)}")
         #     raise e
+
+    async def get_similar_stocks(self, ctry: str, ticker: str, db: AsyncSession) -> List[SimilarStock]:
+        """
+        연관 종목 조회
+
+        Args:
+            ctry (str): 국가 코드
+            ticker (str): 종목 코드
+
+        Returns:
+            List[SimilarStock]: 연관 종목 리스트
+        """
+        # ticker의 섹터 조회
+        query = select(StockInformation).where(StockInformation.ticker == ticker)
+        result = await db.execute(query)
+        stock_info = result.scalars().first()
+
+        if not stock_info:
+            raise HTTPException(status_code=404, detail=f"Stock not found: {ticker}")
+
+        sector = stock_info.sector_3
+
+        # 같은 섹터의 다른 종목들을 랜덤하게 6개 조회
+        query = (
+            select(StockInformation)
+            .where(and_(StockInformation.sector_3 == sector, StockInformation.ticker != ticker))
+            .order_by(func.rand())
+            .limit(6)
+        )
+
+        result = await db.execute(query)
+        stocks = result.scalars().all()
+
+        # 종목 SimilarStock 리스트 생성
+        similar_stocks = [
+            SimilarStock(
+                ticker=stock.ticker,
+                name=stock.kr_name,
+                ctry=stock.ctry,
+                current_price=None,
+                current_price_rate=None,
+            )
+            for stock in stocks
+        ]
+
+        return similar_stocks
 
 
 def get_stock_info_service() -> StockInfoService:

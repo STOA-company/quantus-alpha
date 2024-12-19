@@ -4,7 +4,9 @@ from app.core.exception.handler import exception_handler
 from app.modules.common.enum import FinancialCountry
 from app.modules.common.schemas import BaseResponse
 from fastapi import APIRouter, Depends, Query
-from app.modules.common.utils import check_ticker_contry_len_3
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.database.conn import db
+from app.modules.common.utils import check_ticker_country_len_3
 from app.modules.financial.services import FinancialService, get_financial_service
 from .schemas import (
     CashFlowResponse,
@@ -33,7 +35,7 @@ async def get_income_performance_data(
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[IncomePerformanceResponse]:
     try:
-        ctry = check_ticker_contry_len_3(ticker).upper()
+        ctry = check_ticker_country_len_3(ticker).upper()
         return await financial_service.get_income_performance_data(
             ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
         )
@@ -128,10 +130,13 @@ async def get_financial_ratio(
     request: Request,
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     financial_service: FinancialService = Depends(get_financial_service),
+    db: AsyncSession = Depends(db.get_async_db),
 ) -> BaseResponse[RatioResponse]:
     try:
-        ctry = check_ticker_contry_len_3(ticker).upper()
-        company_name, result1 = await financial_service.get_financial_ratio(ctry=ctry, ticker=ticker)
+        ctry = check_ticker_country_len_3(ticker).upper()
+        company_name = await financial_service.get_kr_name_by_ticker(db=db, ticker=ticker)
+        print(f"ㅁㄴㅇㄹㅁㄴㅇㄹㅁㄴㅇㄹ: {company_name}")
+        result1 = await financial_service.get_financial_ratio(ctry=ctry, ticker=ticker)
         result2 = await financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker)
         result3 = await financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker)
         ctry_two = contry_mapping.get(ctry)
