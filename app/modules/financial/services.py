@@ -1,12 +1,14 @@
 import pandas as pd
+from sqlalchemy import select
 from app.core.logging.config import get_logger
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional, Dict, List, Tuple
 from fastapi import HTTPException, Depends
 import math
 import random
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.crud import database
+from app.models.models_stock import StockInformation
 from app.modules.common.enum import FinancialCountry
 from app.modules.common.services import CommonService, get_common_service
 from app.modules.financial.schemas import (
@@ -184,7 +186,7 @@ class FinancialService:
                 logger.warning(f"No data found for ticker: {ticker}")
                 return BaseResponse[IncomeStatementResponse](
                     status_code=404,
-                    message="데이터를 찾을 수 없습니다.",
+                    message="데이터를 찾을 �� 없습니다.",
                     data=IncomeStatementResponse(code=ticker, name="", details=[]),
                 )
 
@@ -465,6 +467,24 @@ class FinancialService:
             logger.error(f"Error getting latest quarter: {e}")
             raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+    @staticmethod
+    async def get_kr_name_by_ticker(db: AsyncSession, ticker: str) -> Optional[str]:
+        """
+        ticker로 StockInformation 테이블에서 한글로 된 기업이름 조회
+
+        Args:
+            db (AsyncSession): 데이터베이스 세션
+            ticker (str): 종목 코드
+
+        Returns:
+            Optional[str]: 한글 기업명. 종목이 없는 경우 None 반환
+        """
+        query = select(StockInformation.kr_name).where(StockInformation.ticker == ticker)
+        result = await db.execute(query)
+        kr_name = result.scalar_one_or_none()
+
+        return kr_name
+
     ########################################## 계산 메서드 #########################################
     # 부채비율 계산
     async def get_financial_ratio_data(
@@ -487,9 +507,6 @@ class FinancialService:
             logger.warning(f"재무비율 데이터를 찾을 수 없습니다: {ticker}")
             raise DataNotFoundException(ticker=ticker, data_type="재무비율")
 
-        # 회사명 추출
-        company_name = result[0].Name
-
         # 4분기 각각의 부채비율 계산
         debt_ratios = []
         for quarter in result:
@@ -506,11 +523,9 @@ class FinancialService:
         average_debt_ratio = round(sum(debt_ratios) / len(debt_ratios), 2)
 
         # TODO: 업종 평균 Mock 데이터
-        financial_ratio_response = FinancialRatioResponse(
-            code=ticker, name=company_name, ratio=average_debt_ratio, industry_avg="23.5"
-        )
+        financial_ratio_response = FinancialRatioResponse(code=ticker, ratio=average_debt_ratio, industry_avg="23.5")
 
-        return company_name, BaseResponse[FinancialRatioResponse](
+        return BaseResponse[FinancialRatioResponse](
             status_code=200,
             message="부채비율(4분기 평균) 데이터를 성공적으로 조회했습니다.",
             data=financial_ratio_response,
@@ -590,7 +605,7 @@ class FinancialService:
             logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
             raise DataNotFoundException(ticker=ticker, data_type="이자보상배율(4분기)")
 
-        # 4분기 각각의 이자보상배율 계산
+        # 4분기 각��의 이자보상배율 계산
         interest_coverage_ratios = []
         for quarter in result:
             operating_income = self._to_decimal(quarter.operating_income)
@@ -655,7 +670,7 @@ class FinancialService:
         # 최근 12개월 데이터 선택
         recent_12_months = result[-12:]
 
-        # 첫 번재 row에서 컬럼 추출
+        # 첫 번재 row에서 컬�� 추출
         exclude_columns = ["Code", "Name", "StmtDt"]
         first_row = recent_12_months[0]
 
@@ -802,7 +817,7 @@ class FinancialService:
 
         statements = []
         for row in result:
-            # 제외할 컬럼들의 인덱스를 제외한 데이터만 사용
+            # 제외할 컬럼들의 인덱스를 제외한 ��이터만 사용
             row_dict = {col: val for col, val in zip(row._fields, row) if col not in exclude_columns}
             statements.append(self._create_cashflow_detail(row_dict))
 
