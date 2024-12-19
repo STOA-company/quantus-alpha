@@ -1,4 +1,7 @@
+from datetime import datetime
 import re
+import pytz
+
 # from app.core.dependencies import s3_client
 # from io import BytesIO
 # import pandas as pd
@@ -50,3 +53,19 @@ contry_mapping = {
     "JPN": "jp",
     "HKG": "hk",
 }
+KST_TIMEZONE = pytz.timezone("Asia/Seoul")
+
+
+def get_current_market_country() -> str:
+    """
+    현재 시간 기준으로 활성화된 시장 국가 반환
+    한국 시간 07:00-19:00 -> 한국 시장
+    한국 시간 19:00-07:00 -> 미국 시장
+    """
+    current_time = datetime.now(KST_TIMEZONE)
+    current_hour = current_time.hour
+
+    if 7 <= current_hour < 19:
+        return "kr"
+    else:
+        return "us"
