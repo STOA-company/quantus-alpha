@@ -84,3 +84,10 @@ class PriceMinuteItem(BaseModel):
     close: float
     volume: int
     price_change_rate: float
+
+
+class RealTimePriceDataItem(BaseModel):
+    ctry: str
+    price: float
+    price_change: float
+    price_change_rate: float
