@@ -164,6 +164,7 @@ class IncomePerformanceResponse(BaseModel):
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
     ctry: str = Field(max_length=20)
+    sector: Optional[str]
     quarterly: List[QuarterlyIncome]  # 분기별 데이터
     yearly: List[QuarterlyIncome]  # 연간 데이터
 
