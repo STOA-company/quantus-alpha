@@ -1,5 +1,8 @@
 import logging
+from urllib3 import Retry
 import yfinance as yf
+import requests
+from requests.adapters import HTTPAdapter
 from typing import Tuple
 import asyncio
 from datetime import datetime, timedelta
@@ -15,9 +18,18 @@ class StockIndicesService:
         self.symbols = {"kospi": "^KS11", "kosdaq": "^KQ11", "nasdaq": "^IXIC", "sp500": "^GSPC"}
         self._cache = {}
         self._cache_timeout = 300
-        self._executor = ThreadPoolExecutor(max_workers=8)
+        self._executor = ThreadPoolExecutor(max_workers=4)
         self._lock = asyncio.Lock()
         self._background_task_running = False
+        self.session = requests.Session()
+        retries = Retry(
+            total=3,  # 총 재시도 횟수
+            backoff_factor=0.3,  # 재시도 간격
+            status_forcelist=[500, 502, 503, 504],  # 재시도할 HTTP 상태 코드
+            allowed_methods=["HEAD", "GET", "OPTIONS"],  # 재시도할 HTTP 메소드
+        )
+        adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50, max_retries=retries)
+        self.session.mount("https://", adapter)
 
     async def _update_cache_background(self):
         """백그라운드에서 캐시 업데이트"""
@@ -55,7 +67,7 @@ class StockIndicesService:
             async def fetch_history(period, interval=None):
                 try:
                     loop = asyncio.get_event_loop()
-                    ticker = yf.Ticker(symbol)
+                    ticker = yf.Ticker(symbol, session=self.session)
 
                     def fetch():
                         if interval:
