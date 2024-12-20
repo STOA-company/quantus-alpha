@@ -1,9 +1,11 @@
+import random
 from fastapi import APIRouter, Depends
 
+from app.modules.common.enum import FearAndGreedIndex
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.price.services_v2 import PriceService, get_price_service
-from app.modules.stock_info.schemas import Indicators
+from app.modules.stock_info.schemas import FearGreedIndexItem, FearGreedIndexResponse, Indicators
 from .services import StockInfoService, get_stock_info_service
 from app.database.conn import db
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,3 +66,30 @@ async def get_similar_stocks(
     ctry = check_ticker_country_len_2(ticker)
     data = await service.get_similar_stocks(ctry, ticker, db)
     return BaseResponse(status_code=200, message="연관 종목을 성공적으로 조회했습니다.", data=data)
+
+
+# 공포와 탐욕 지수
+@router.get(
+    "/fear_greed_index", summary="공포와 탐욕 지수 조회 // (mock)", response_model=BaseResponse[FearGreedIndexResponse]
+)
+async def get_fear_greed_index(
+    service: StockInfoService = Depends(get_stock_info_service),
+):
+    data = FearGreedIndexResponse(
+        kor_stock=FearGreedIndexItem(
+            fear_greed_index=random.randint(0, 100),
+            last_close=random.choice(list(FearAndGreedIndex)).name,
+            last_week=random.choice(list(FearAndGreedIndex)).name,
+            last_month=random.choice(list(FearAndGreedIndex)).name,
+            last_year=random.choice(list(FearAndGreedIndex)).name,
+        ),
+        us_stock=FearGreedIndexItem(
+            fear_greed_index=random.randint(0, 100),
+            last_close=random.choice(list(FearAndGreedIndex)).name,
+            last_week=random.choice(list(FearAndGreedIndex)).name,
+            last_month=random.choice(list(FearAndGreedIndex)).name,
+            last_year=random.choice(list(FearAndGreedIndex)).name,
+        ),
+    )
+
+    return BaseResponse(status_code=200, message="공포와 탐욕 지수를 성공적으로 조회했습니다.", data=data)

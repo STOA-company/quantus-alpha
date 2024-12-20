@@ -56,3 +56,11 @@ class FinanceStatus(IntEnum):
     GOOD = 1
     NEUTRAL = 2
     BAD = 3
+
+
+class FearAndGreedIndex(Enum):
+    EXTREME_FEAR = 0  # 0-20 // 매우 공포
+    FEAR = 25  # 21-40 // 공포
+    NEUTRAL = 50  # 41-60 // 중립
+    GREED = 75  # 61-80 // 탐욕
+    EXTREME_GREED = 100  # 81-100 // 매우 탐욕
