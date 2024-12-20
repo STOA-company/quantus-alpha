@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from app.database.crud import database
-from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
+from app.modules.stock_indices.schemas import IndexSummary, IndicesData, TimeData
 
 
 class StockIndicesService:
@@ -182,72 +182,89 @@ class StockIndicesService:
 
     async def get_indices_data(self) -> IndicesData:
         """지수 데이터 조회"""
-        try:
-            tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in self.symbols.items()]
-            await asyncio.gather(*tasks)
+        return IndicesData(
+            status_code=200,
+            message="데이터를 성공적으로 조회했습니다.",
+            kospi=IndexSummary(
+                prev_close=0.0, change=0.0, change_percent=0.0, rise_ratio=0, fall_ratio=0, unchanged_ratio=0
+            ),
+            kosdaq=IndexSummary(
+                prev_close=0.0, change=0.0, change_percent=0.0, rise_ratio=0, fall_ratio=0, unchanged_ratio=0
+            ),
+            nasdaq=IndexSummary(
+                prev_close=0.0, change=0.0, change_percent=0.0, rise_ratio=0, fall_ratio=0, unchanged_ratio=0
+            ),
+            sp500=IndexSummary(
+                prev_close=0.0, change=0.0, change_percent=0.0, rise_ratio=0, fall_ratio=0, unchanged_ratio=0
+            ),
+            data=None,
+        )
+        # try:
+        #     tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in self.symbols.items()]
+        #     await asyncio.gather(*tasks)
 
-            ratio_tasks = [self.get_market_ratios(name) for name in self.symbols.keys()]
-            ratio_results = await asyncio.gather(*ratio_tasks)
+        #     ratio_tasks = [self.get_market_ratios(name) for name in self.symbols.keys()]
+        #     ratio_results = await asyncio.gather(*ratio_tasks)
 
-            indices_summary = {}
-            indices_data = {}
+        #     indices_summary = {}
+        #     indices_data = {}
 
-            for name, ratios in zip(self.symbols.keys(), ratio_results):
-                cache_key_daily = f"{name}_daily"
-                cache_key_min5 = f"{name}_min5"
+        #     for name, ratios in zip(self.symbols.keys(), ratio_results):
+        #         cache_key_daily = f"{name}_daily"
+        #         cache_key_min5 = f"{name}_min5"
 
-                if cache_key_daily in self._cache:
-                    daily_data, _ = self._cache[cache_key_daily]
-                    change = daily_data["close"] - daily_data["open"]
-                    change_percent = round((change / daily_data["open"]) * 100, 2) if daily_data["open"] != 0 else 0.00
+        #         if cache_key_daily in self._cache:
+        #             daily_data, _ = self._cache[cache_key_daily]
+        #             change = daily_data["close"] - daily_data["open"]
+        #             change_percent = round((change / daily_data["open"]) * 100, 2) if daily_data["open"] != 0 else 0.00
 
-                    rise_ratio, fall_ratio, unchanged_ratio = ratios
+        #             rise_ratio, fall_ratio, unchanged_ratio = ratios
 
-                    indices_summary[name] = IndexSummary(
-                        prev_close=daily_data["close"],
-                        change=round(change, 2),
-                        change_percent=change_percent,
-                        rise_ratio=rise_ratio,
-                        fall_ratio=fall_ratio,
-                        unchanged_ratio=unchanged_ratio,
-                    )
-                else:
-                    indices_summary[name] = IndexSummary(
-                        prev_close=0.00,
-                        change=0.00,
-                        change_percent=0.00,
-                        rise_ratio=0.00,
-                        fall_ratio=0.00,
-                        unchanged_ratio=0.00,
-                    )
+        #             indices_summary[name] = IndexSummary(
+        #                 prev_close=daily_data["close"],
+        #                 change=round(change, 2),
+        #                 change_percent=change_percent,
+        #                 rise_ratio=rise_ratio,
+        #                 fall_ratio=fall_ratio,
+        #                 unchanged_ratio=unchanged_ratio,
+        #             )
+        #         else:
+        #             indices_summary[name] = IndexSummary(
+        #                 prev_close=0.00,
+        #                 change=0.00,
+        #                 change_percent=0.00,
+        #                 rise_ratio=0.00,
+        #                 fall_ratio=0.00,
+        #                 unchanged_ratio=0.00,
+        #             )
 
-                indices_data[name] = self._cache.get(cache_key_min5, ({}, None))[0]
+        #         indices_data[name] = self._cache.get(cache_key_min5, ({}, None))[0]
 
-            return IndicesData(
-                status_code=200,
-                message="데이터를 성공적으로 조회했습니다.",
-                kospi=indices_summary["kospi"],
-                kosdaq=indices_summary["kosdaq"],
-                nasdaq=indices_summary["nasdaq"],
-                sp500=indices_summary["sp500"],
-                data=IndicesResponse(
-                    kospi=indices_data["kospi"],
-                    kosdaq=indices_data["kosdaq"],
-                    nasdaq=indices_data["nasdaq"],
-                    sp500=indices_data["sp500"],
-                ),
-            )
+        #     return IndicesData(
+        #         status_code=200,
+        #         message="데이터를 성공적으로 조회했습니다.",
+        #         kospi=indices_summary["kospi"],
+        #         kosdaq=indices_summary["kosdaq"],
+        #         nasdaq=indices_summary["nasdaq"],
+        #         sp500=indices_summary["sp500"],
+        #         data=IndicesResponse(
+        #             kospi=indices_data["kospi"],
+        #             kosdaq=indices_data["kosdaq"],
+        #             nasdaq=indices_data["nasdaq"],
+        #             sp500=indices_data["sp500"],
+        #         ),
+        #     )
 
-        except Exception as e:
-            empty_summary = IndexSummary(
-                prev_close=0.00, change=0.00, change_percent=0.00, rise_ratio=0.00, fall_ratio=0.00, unchanged_ratio=0.00
-            )
-            return IndicesData(
-                status_code=404,
-                message=f"데이터 조회 중 오류가 발생했습니다: {e}",
-                kospi=empty_summary,
-                kosdaq=empty_summary,
-                nasdaq=empty_summary,
-                sp500=empty_summary,
-                data=None,
-            )
+        # except Exception as e:
+        #     empty_summary = IndexSummary(
+        #         prev_close=0.00, change=0.00, change_percent=0.00, rise_ratio=0.00, fall_ratio=0.00, unchanged_ratio=0.00
+        #     )
+        #     return IndicesData(
+        #         status_code=404,
+        #         message=f"데이터 조회 중 오류가 발생했습니다: {e}",
+        #         kospi=empty_summary,
+        #         kosdaq=empty_summary,
+        #         nasdaq=empty_summary,
+        #         sp500=empty_summary,
+        #         data=None,
+        #     )
