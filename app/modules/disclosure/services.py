@@ -78,23 +78,23 @@ class DisclosureService:
 
             table_name = f"stock_{ctry}_1d"
             columns = ["Date", "Ticker", "Open", "Close"]
+            join_columns = ["korean_name", "english_name"]
             # join_info 설정
             join_info = JoinInfo(
                 primary_table=table_name,  # 메인 테이블 (stock_us_1d)
                 secondary_table="stock_us_tickers",  # 조인할 테이블
                 primary_column="Ticker",  # 메인 테이블의 조인 컬럼
                 secondary_column="ticker",  # stock_us_tickers의 조인 컬럼
-                columns=[
-                    "korean_name" if language == TranslateCountry.KO else "english_name"
-                ],  # 조인 테이블에서 가져올 컬럼
+                columns=join_columns,  # 조인 테이블에서 가져올 컬럼
             )
 
             conditions = {"Ticker__in": results_ticker, "Date": (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")}
 
-            stock_results = self.db._select(table=table_name, columns=columns, join_info=join_info, **conditions)
+            stock_results = self.db._select(
+                table=table_name, columns=columns + join_columns, join_info=join_info, **conditions
+            )
             if stock_results:
                 ticker_dict = {result.Ticker: result for result in stock_results}
-
         analysis_dict = {result.filing_id: result for result in analysis_results}
         translated_dict = {result.filing_id: result for result in translated_results}
 
@@ -134,10 +134,11 @@ class DisclosureService:
                     logger.error(f"Failed to parse key_points for filing_id: {row.filing_id}, error: {str(e)}")
 
             if not ticker:
+                print(f"###########3{ticker_data}")
                 price_change = (
                     round((ticker_data.Close - ticker_data.Open) / ticker_data.Open * 100, 2) if ticker_data else None
                 )
-                name = ticker_data.korean_name if TranslateCountry.KO else ticker_data.english_name
+                name = ticker_data.korean_name if language == TranslateCountry.KO else ticker_data.english_name
 
             items.append(
                 {
