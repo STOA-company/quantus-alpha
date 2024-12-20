@@ -15,9 +15,9 @@ class DividendService:
         """배당 정보 조회"""
         table_name = f"stock_{ctry}_1d"
 
-        # 배당 데이터 가져오기
-        file_path = os.path.join("static", "dividend.csv")
-        df1 = pd.read_csv(file_path)
+        # 배당 데이터 가져오기 (parquet 파일 사용)
+        file_path = os.path.join("static", "dividend.parquet")
+        df1 = pd.read_parquet(file_path)
         df1 = df1[(df1["Ticker"] == ticker) & (df1["ISOCurrCode"] == "USD")]
 
         # ticker가 없는 경우 체크
