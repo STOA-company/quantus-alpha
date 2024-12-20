@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 import pandas as pd
 from sqlalchemy import select
 from app.database.crud import database
@@ -157,18 +157,55 @@ class StockInfoService:
         stocks = result.scalars().all()
 
         # 종목 SimilarStock 리스트 생성
-        similar_stocks = [
-            SimilarStock(
-                ticker=stock.ticker,
-                name=stock.kr_name,
-                ctry=stock.ctry,
-                current_price=None,
-                current_price_rate=None,
+        similar_stocks = []
+        for stock in stocks:
+            # 각 종목별로 현재가와 변동률 조회
+            current_price, current_price_rate = await self.get_current_price(
+                ticker=stock.ticker,  # 각 종목의 ticker 사용
+                table_name=f"stock_{stock.ctry}_1d",  # 각 종목의 국가에 맞는 테이블 사용
             )
-            for stock in stocks
-        ]
+
+            similar_stocks.append(
+                SimilarStock(
+                    ticker=stock.ticker,
+                    name=stock.kr_name,
+                    ctry=stock.ctry,
+                    current_price=current_price,
+                    current_price_rate=current_price_rate,
+                )
+            )
 
         return similar_stocks
+
+    async def get_current_price(self, ticker: str, table_name: str) -> Tuple[float, float]:
+        """
+        현재가와 변동률 조회
+        Args:
+            ticker: 종목코드
+            table_name: 테이블명
+        Returns:
+            Tuple[float, float]: (현재가, 변동률)
+        """
+        result = self.db._select(
+            table=table_name,
+            columns=["Close", "Open"],
+            order="Date",
+            ascending=False,
+            limit=1,
+            **{"Ticker": ticker},  # kwargs로 전달
+        )
+
+        if not result:
+            return 0.0, 0.0
+
+        row = result[0]  # fetchall()의 결과이므로 인덱싱으로 접근
+        current_price = float(row.Close)
+        open_price = float(row.Open)
+
+        # 변동률 계산: ((종가 - 시가) / 시가) * 100
+        price_rate = round(((current_price - open_price) / open_price * 100), 2) if open_price != 0 else 0.0
+
+        return current_price, price_rate
 
 
 def get_stock_info_service() -> StockInfoService:

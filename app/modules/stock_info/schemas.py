@@ -29,3 +29,16 @@ class SimilarStock(BaseModel):
     ctry: str
     current_price: Optional[float]
     current_price_rate: Optional[float]
+
+
+class FearGreedIndexItem(BaseModel):
+    fear_greed_index: int
+    last_close: str
+    last_week: str
+    last_month: str
+    last_year: str
+
+
+class FearGreedIndexResponse(BaseModel):
+    kor_stock: FearGreedIndexItem
+    us_stock: FearGreedIndexItem

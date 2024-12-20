@@ -33,11 +33,12 @@ async def get_income_performance_data(
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
+    db: AsyncSession = Depends(db.get_async_db),
 ) -> BaseResponse[IncomePerformanceResponse]:
     try:
         ctry = check_ticker_country_len_3(ticker).upper()
         return await financial_service.get_income_performance_data(
-            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
+            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, db=db
         )
     except HTTPException as http_error:
         logger.error(
@@ -135,10 +136,9 @@ async def get_financial_ratio(
     try:
         ctry = check_ticker_country_len_3(ticker).upper()
         company_name = await financial_service.get_kr_name_by_ticker(db=db, ticker=ticker)
-        print(f"ㅁㄴㅇㄹㅁㄴㅇㄹㅁㄴㅇㄹ: {company_name}")
-        result1 = await financial_service.get_financial_ratio(ctry=ctry, ticker=ticker)
-        result2 = await financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker)
-        result3 = await financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker)
+        result1 = await financial_service.get_financial_ratio(ctry=ctry, ticker=ticker, db=db)
+        result2 = await financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker, db=db)
+        result3 = await financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker, db=db)
         ctry_two = contry_mapping.get(ctry)
 
         return BaseResponse[RatioResponse](

@@ -21,3 +21,5 @@ class DisclosureItem(BaseModel):
     key_points_5: str | None
     summary: str | None = None
     document_url: str
+    name: str | None
+    price_change: str | None
