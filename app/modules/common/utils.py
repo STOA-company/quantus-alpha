@@ -52,6 +52,10 @@ contry_mapping = {
     "USA": "us",
     "JPN": "jp",
     "HKG": "hk",
+    "us": "USA",
+    "kr": "KOR",
+    "jp": "JPN",
+    "hk": "HKG",
 }
 KST_TIMEZONE = pytz.timezone("Asia/Seoul")
 
