@@ -402,7 +402,6 @@ class NewsService:
 
             # 1. S3에서 최신 뉴스 데이터 조회
             country_path = f"merged_data/{NEWS_CONTRY_MAP[ctry]}"
-            print(f"country_path: {country_path}")
             s3_data = self._fetch_s3_data(date_str, country_path)
             if s3_data is None:
                 raise DataNotFoundException(ticker="all", data_type="news")
