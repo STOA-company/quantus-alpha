@@ -92,7 +92,7 @@ class StockIndicesService:
                 self._cache[cache_key_min5] = (min5_data, now)
 
         except Exception as e:
-            print(f"Error fetching data for {name}: {e}")
+            logging.error(f"Error fetching data for {name}: {e}")
 
     # async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
     #     """최적화된 시장 등락비율 조회"""

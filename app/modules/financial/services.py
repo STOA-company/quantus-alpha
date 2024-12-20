@@ -152,7 +152,6 @@ class FinancialService:
 
             # DB 결과에서 직접 이름 추출
             company_name = await self.get_kr_name_by_ticker(db=db, ticker=ticker)
-            print(f"----------------------------------: {company_name}")
 
             ctry = contry_mapping.get(ctry)
             sector = await self.get_sector_by_ticker(ticker)

@@ -134,7 +134,6 @@ class DisclosureService:
                     logger.error(f"Failed to parse key_points for filing_id: {row.filing_id}, error: {str(e)}")
 
             if not ticker:
-                print(f"###########3{ticker_data}")
                 price_change = (
                     round((ticker_data.Close - ticker_data.Open) / ticker_data.Open * 100, 2) if ticker_data else None
                 )
