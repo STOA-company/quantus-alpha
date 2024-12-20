@@ -1,5 +1,5 @@
 from typing import List, Optional, Tuple
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.crud import database
 from app.models.models_stock import StockInformation
@@ -29,15 +29,20 @@ class SearchService:
         """
         # 검색어 전처리
         search_term = f"%{query}%"
-        # 검색 쿼리
+        # 검색 쿼리 최적화
         search_query = (
             select(StockInformation)
             .where(
                 or_(
-                    func.lower(StockInformation.kr_name).like(func.lower(search_term)),
-                    func.lower(StockInformation.en_name).like(func.lower(search_term)),
-                    func.lower(StockInformation.ticker).like(func.lower(search_term)),
+                    StockInformation.ticker == query,
+                    StockInformation.ticker.ilike(search_term),
+                    StockInformation.kr_name.ilike(search_term),
+                    StockInformation.en_name.ilike(search_term),
                 )
+            )
+            .order_by(
+                # case 문법 수정 - 리스트가 아닌 개별 인자로 전달
+                case((StockInformation.ticker == query, 1), else_=2).label("sort_order")
             )
             .offset(offset)
             .limit(limit)
