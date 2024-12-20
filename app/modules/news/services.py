@@ -191,7 +191,7 @@ class NewsService:
             raise ValueError("Page number must be greater than 0")
         if size < 1:
             raise ValueError("Page size must be greater than 0")
-        MAX_NEWS = 50
+
         # 시간대에 맞춘 ctry 기본값 설정
         ctry = self.get_current_market_country()
 
@@ -209,10 +209,8 @@ class NewsService:
             raise DataNotFoundException(ticker=ticker or "all", data_type="news")
 
         # DataFrame 처리
-        # 최대 50개 뉴스 데이터만 조회
         df = pd.read_parquet(pd.io.common.BytesIO(s3_data))
         df = self._process_dataframe(df, ticker)
-        df = df.head(MAX_NEWS)
 
         # 감정 카운트 및 페이지네이션 처리
         emotion_counts = self._count_emotions(df)
