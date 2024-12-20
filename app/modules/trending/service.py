@@ -3,7 +3,7 @@ from typing import List
 from app.modules.news.services import get_news_service
 from app.database.crud import JoinInfo, database
 from app.database.conn import db
-from app.modules.trending.schemas import TrendingStock, TrendingStockEn, TrendingStockKr
+from app.modules.trending.schemas import TrendingStock, TrendingStockKr, TrendingStockUs
 
 
 class TrendingService:
@@ -14,8 +14,8 @@ class TrendingService:
 
     async def get_trending_stocks(self) -> TrendingStock:
         kr = await self._get_trending_stocks_kr()
-        en = await self._get_trending_stocks_en()
-        return TrendingStock(kr=kr, en=en)
+        us = await self._get_trending_stocks_us()
+        return TrendingStock(kr=kr, us=us)
 
     async def _get_trending_stocks_kr(self) -> List[TrendingStockKr]:
         table_name = "stock_kr_1d"
@@ -51,7 +51,7 @@ class TrendingService:
 
         return trending_stocks
 
-    async def _get_trending_stocks_en(self) -> List[TrendingStockEn]:
+    async def _get_trending_stocks_us(self) -> List[TrendingStockUs]:
         table_name = "stock_us_1d"
 
         # 최신 날짜 조회
@@ -93,7 +93,7 @@ class TrendingService:
                 "current_price": current_price,
                 "current_price_rate": current_price_rate,
             }
-            trending_stocks.append(TrendingStockEn(**stock_dict))
+            trending_stocks.append(TrendingStockUs(**stock_dict))
 
         return trending_stocks
 

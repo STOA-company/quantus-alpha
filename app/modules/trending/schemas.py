@@ -11,7 +11,7 @@ class TrendingStockKr(BaseModel):
     current_price_rate: Optional[float]
 
 
-class TrendingStockEn(BaseModel):
+class TrendingStockUs(BaseModel):
     num: int
     ticker: str
     name: str
@@ -22,4 +22,4 @@ class TrendingStockEn(BaseModel):
 
 class TrendingStock(BaseModel):
     kr: List[TrendingStockKr]
-    en: List[TrendingStockEn]
+    us: List[TrendingStockUs]
