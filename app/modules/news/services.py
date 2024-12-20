@@ -65,7 +65,6 @@ class NewsService:
 
     def _create_news_items(self, df: pd.DataFrame, include_stock_info: bool = False) -> List[NewsItem]:
         """DataFrame을 NewsItem 리스트로 변환"""
-        print(f"df columns#####: {df.columns}")
         result = []
         for _, row in df.iterrows():
             news_item = {
