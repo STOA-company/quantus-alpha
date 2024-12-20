@@ -137,10 +137,17 @@ class NewsService:
 
         if ctry == "kr":
             tickers = [f"A{ticker}" for ticker in tickers]
+
+        kr_columns = ["Date", "Ticker", "Open", "Close", "Name"]
+        us_columns = ["Date", "Ticker", "Open", "Close"]
+
+        if ctry == "kr":
+            db_columns = kr_columns
+        else:
+            db_columns = us_columns
+
         while True:
-            stock_data = self.db._select(
-                table=table_name, columns=["Date", "Ticker", "Open", "Close", "Name"], Date=date_str, Ticker__in=tickers
-            )
+            stock_data = self.db._select(table=table_name, columns=db_columns, Date=date_str, Ticker__in=tickers)
             if stock_data:
                 break
             else:
@@ -161,7 +168,13 @@ class NewsService:
 
         # 결과를 리스트 형태로 변환
         stock_data_list = [
-            {"Date": row[0], "Ticker": row[1], "Open": float(row[2]), "Close": float(row[3]), "Name": str(row[4])}
+            {
+                "Date": row[0],
+                "Ticker": row[1],
+                "Open": float(row[2]),
+                "Close": float(row[3]),
+                "Name": str(row[4] if ctry == "kr" else None),
+            }
             for row in stock_data
         ]
 
