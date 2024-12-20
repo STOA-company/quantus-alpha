@@ -1,14 +1,14 @@
 from typing import List, Tuple
+from fastapi import HTTPException
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from app.database.crud import database
 from app.core.exception.custom import DataNotFoundException
 from app.models.models_stock import StockInformation
 from app.modules.stock_info.schemas import Indicators, SimilarStock, StockInfo
 from app.core.logging.config import get_logger
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, func
-from fastapi import HTTPException
+from app.modules.common.utils import contry_mapping
 
 logger = get_logger(__name__)
 
@@ -47,82 +47,77 @@ class StockInfoService:
 
         return result
 
-    async def get_indicators(self, ctry: str, ticker: str, db: AsyncSession) -> Indicators:
-        """
-        지표 조회
-        """
+    async def get_indicators(self, ctry: str, ticker: str) -> Indicators:
+        """지표 조회"""
         if ctry == "us":
             ticker = f"{ticker}-US"
 
-        return Indicators(
-            per=15.7,
-            industry_per=22.4,
-            pbr=2.8,
-            industry_pbr=3.2,
-            roe=12.5,
-            industry_roe=9.8,
-            financial_data="좋음",
-            price_trend="보통",
-            market_situation="나쁨",
-            industry_situation="좋음",
+        # ctry 3자리 코드로 변환
+        ctry_3 = contry_mapping[ctry]
+
+        # 현재 종목의 지표 조회
+        table_name = f"{ctry_3}_stock_factors"
+        columns = ["per", "pbr", "roe"]
+
+        current_stock = self.db._select(
+            table=table_name,
+            columns=columns,
+            **{"ticker": ticker},
         )
 
-        # TODO: 임시 Mock 데이터
-        # try:
-        #     # 실제 쿼리
-        #     stock_data = self.db._select(table="stock_kr_1d", order="Date", ascending=False, limit=1, Ticker=ticker)
+        if not current_stock:
+            return Indicators(
+                per=0,
+                industry_per=0,
+                pbr=0,
+                industry_pbr=0,
+                roe=0,
+                industry_roe=0,
+            )
 
-        #     financial_data = self.db._select(table="KOR_finpos", order="period_q", ascending=False, limit=1, Code=ticker)
+        # 관련 섹터의 ticker 조회
+        sector_tickers = await self.get_related_sectors(ticker)
 
-        #     # 기본값 설정
-        #     result = Indicators(
-        #         per=None,
-        #         industry_per=None,
-        #         pbr=None,
-        #         industry_pbr=None,
-        #         roe=None,
-        #         industry_roe=None,
-        #         financial_data=None,
-        #         price_trend=None,
-        #         market_situation=None,
-        #         industry_situation=None,
-        #     )
+        # US 시장인 경우 -US 접미사 추가
+        if ctry == "us":
+            sector_tickers = [f"{t}-US" for t in sector_tickers]
 
-        #     if stock_data and financial_data:
-        #         # Row 객체의 _mapping 속성 사용
-        #         stock_row = stock_data[0]._mapping
-        #         fin_row = financial_data[0]._mapping
+        # 섹터 종목이 있는 경우에만 쿼리 실행
+        if sector_tickers:
+            sector_results = self.db._select(table=table_name, columns=columns, **{"ticker__in": sector_tickers})
 
-        #         stock_price = stock_row["Close"]
-        #         retained_earnings = fin_row["retained_earnings"]
-        #         total_equity = fin_row["total_equity"]
+            # 섹터 평균 계산 (소수점 2자리로 반올림)
+            if sector_results:
+                sector_per = round(sum(stock.per for stock in sector_results if stock.per) / len(sector_results), 2)
+                sector_pbr = round(sum(stock.pbr for stock in sector_results if stock.pbr) / len(sector_results), 2)
+                sector_roe = round(sum(stock.roe for stock in sector_results if stock.roe) / len(sector_results), 2)
+            else:
+                sector_per = sector_pbr = sector_roe = 0
+        else:
+            sector_per = sector_pbr = sector_roe = 0
 
-        #         print("=== DEBUG VALUES ===")
-        #         print(f"Stock price: {format(stock_price, ',.2f')}")
-        #         print(f"Retained earnings: {format(retained_earnings, ',.8f')}")
-        #         print(f"Total equity: {format(total_equity, ',.2f')}")
+        return Indicators(
+            per=round(current_stock[0].per, 2),
+            industry_per=sector_per,
+            pbr=round(current_stock[0].pbr, 2),
+            industry_pbr=sector_pbr,
+            roe=round(current_stock[0].roe, 2),
+            industry_roe=sector_roe,
+        )
 
-        #         # 지표 계산
-        #         per = round(stock_price / retained_earnings, 2) if retained_earnings and retained_earnings != 0 else None
-        #         pbr = round(stock_price / total_equity, 2) if total_equity and total_equity != 0 else None
+    # 관련 섹터 조회
+    async def get_related_sectors(self, ticker: str) -> List[str]:
+        # 섹터 조회
+        query = select(StockInformation.sector_3).where(StockInformation.ticker == ticker)
+        result = self.db._execute(query)
+        sector = result.scalars().first()
 
-        #         # ROE 계산 과정 출력
-        #         if total_equity and total_equity != 0:
-        #             roe_calc = (retained_earnings / total_equity) * 100
-        #             print(
-        #                 f"ROE calculation: ({format(retained_earnings, ',.8f')} / {format(total_equity, ',.2f')}) * 100 = {format(roe_calc, ',.2f')}"
-        #             )
-        #             roe = round(roe_calc, 2)
-        #         else:
-        #             roe = None
+        # 관련 섹터의 ticker 조회
+        query = select(StockInformation).where(StockInformation.sector_3 == sector)
+        result = self.db._execute(query)
+        related_sectors = result.scalars().all()
 
-        #         result = Indicators(per=per, pbr=pbr, roe=roe)
-
-        #     return result
-
-        # except Exception as e:
-        #     print(f"Error: {str(e)}")
-        #     raise e
+        return related_sectors
 
     async def get_similar_stocks(self, ctry: str, ticker: str, db: AsyncSession) -> List[SimilarStock]:
         """
