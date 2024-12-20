@@ -1,3 +1,4 @@
+import random
 from typing import List, Tuple
 from fastapi import HTTPException
 import pandas as pd
@@ -96,6 +97,8 @@ class StockInfoService:
         else:
             sector_per = sector_pbr = sector_roe = 0
 
+        status_options = ["좋음", "보통", "나쁨"]
+
         return Indicators(
             per=round(current_stock[0].per, 2),
             industry_per=sector_per,
@@ -103,6 +106,10 @@ class StockInfoService:
             industry_pbr=sector_pbr,
             roe=round(current_stock[0].roe, 2),
             industry_roe=sector_roe,
+            financial_data=random.choice(status_options),
+            price_trend=random.choice(status_options),
+            market_situation=random.choice(status_options),
+            industry_situation=random.choice(status_options),
         )
 
     # 관련 섹터 조회
