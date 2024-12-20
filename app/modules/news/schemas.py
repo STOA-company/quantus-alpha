@@ -8,6 +8,7 @@ class NewsResponse(PaginationBaseResponse):
     positive_count: int
     negative_count: int
     neutral_count: int
+    ctry: str
 
 
 class NewsItem(BaseModel):
@@ -15,3 +16,11 @@ class NewsItem(BaseModel):
     title: str
     summary: str | None
     emotion: str | None
+    name: str | None
+    change_rate: float | None
+
+
+class LatestNewsResponse(BaseModel):
+    date: datetime
+    content: str
+    type: str

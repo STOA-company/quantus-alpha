@@ -1,12 +1,15 @@
 import pandas as pd
+from sqlalchemy import and_, select
 from app.core.logging.config import get_logger
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional, Dict, List, Tuple
 from fastapi import HTTPException, Depends
 import math
 import random
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.crud import database
+from app.database.conn import db
+from app.models.models_stock import StockInformation
 from app.modules.common.enum import FinancialCountry
 from app.modules.common.services import CommonService, get_common_service
 from app.modules.financial.schemas import (
@@ -15,15 +18,17 @@ from app.modules.financial.schemas import (
     FinPosResponse,
     FinancialRatioResponse,
     IncomePerformanceResponse,
-    IncomeStatement,
     IncomeStatementDetail,
     CashFlowDetail,
     IncomeStatementResponse,
     InterestCoverageRatioResponse,
     LiquidityRatioResponse,
+    QuarterlyIncome,
+    IncomeMetric,
 )
 from app.modules.common.schemas import BaseResponse
 from app.core.exception.custom import DataNotFoundException, InvalidCountryException, AnalysisException
+from app.modules.common.utils import contry_mapping
 
 logger = get_logger(__name__)
 
@@ -31,6 +36,7 @@ logger = get_logger(__name__)
 class FinancialService:
     def __init__(self, common_service: CommonService):
         self.db = database
+        self.database = db
         self.common_service = common_service
         self._setup_tables()
 
@@ -51,7 +57,7 @@ class FinancialService:
         날짜 조건 생성
         start_date (Optional[str]): YYYYMM 형식의 시작일
         end_date (Optional[str]): YYYYMM 형식의 종료일
-        기본값은 5년치 데이터를 조회
+        기본값은 10분기/10년치 데이터를 조회
         """
         from datetime import datetime
 
@@ -68,7 +74,8 @@ class FinancialService:
         latest_quarter_month = str(latest_quarter_month).zfill(2)  # 한 자리 월을 두 자리로 변환
 
         if not start_date:
-            conditions["period_q__gte"] = f"{current_year - 5}01"  # 5년 전부터
+            # 분기별 데이터는 2.5년(10분기)치, 연간 데이터는 10년치 조회를 위해 10년 전부터 데이터 조회
+            conditions["period_q__gte"] = f"{current_year - 10}01"  # 10년 전부터
             conditions["period_q__lte"] = f"{current_year}{latest_quarter_month}"  # 현재 연도의 마지막 분기
         else:
             conditions["period_q__gte"] = f"{start_date[:4]}01"  # 시작년도의 1월
@@ -82,40 +89,50 @@ class FinancialService:
     def _to_decimal(self, value) -> Decimal:
         """
         값을 Decimal로 변환하고 JSON 직렬화 가능한 값으로 처리
+        소수점 2자리까지 반올림
         """
         try:
             if value is None or (isinstance(value, str) and not value.strip()):
-                return Decimal("0")
+                return Decimal("0.00")
             if isinstance(value, (float, Decimal)):
                 if isinstance(value, float) and math.isnan(value):
-                    return Decimal("0")
+                    return Decimal("0.00")
                 if isinstance(value, Decimal) and value.is_nan():
-                    return Decimal("0")
+                    return Decimal("0.00")
                 if isinstance(value, float) and math.isinf(value):
-                    return Decimal("0")
+                    return Decimal("0.00")
                 if isinstance(value, Decimal) and value.is_infinite():
-                    return Decimal("0")
+                    return Decimal("0.00")
 
-            return Decimal(str(value))
+            # 값을 Decimal로 변환하고 소수점 2자리로 반올림
+            return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         except (ValueError, TypeError, InvalidOperation):
             logger.warning(f"Failed to convert value to Decimal: {value}")
-            return Decimal("0")
+            return Decimal("0.00")
 
     ########################################## Router에서 호출하는 메서드 #########################################
     # 실적 데이터 조회
     async def get_income_performance_data(
         self,
-        ctry: FinancialCountry,
+        ctry: str,
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        db: AsyncSession = Depends(db.get_async_db),
     ) -> BaseResponse[IncomePerformanceResponse]:
         """
         실적 데이터 조회
         """
+        if ticker:
+            if ctry == "KOR":
+                ticker = ticker
+
         try:
-            table_name = self.income_tables.get(ctry)
+            if ctry == "USA":
+                ticker = f"{ticker}-US"
+            country = FinancialCountry(ctry)
+            table_name = self.income_tables.get(country)
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
                 raise InvalidCountryException()
@@ -132,10 +149,19 @@ class FinancialService:
             quarterly_statements, yearly_statements = self._process_income_performance_statement_result(result)
 
             # DB 결과에서 직접 이름 추출
-            name = result[0][1] if result else ""
+            company_name = await self.get_kr_name_by_ticker(db=db, ticker=ticker)
+            print(f"----------------------------------: {company_name}")
+
+            ctry = contry_mapping.get(ctry)
+            sector = await self.get_sector_by_ticker(ticker)
 
             performance_response = IncomePerformanceResponse(
-                code=ticker, name=name, quarterly=quarterly_statements, yearly=yearly_statements
+                code=ticker,
+                name=company_name,
+                ctry=ctry,
+                sector=sector,
+                quarterly=quarterly_statements,
+                yearly=yearly_statements,
             )
 
             logger.info(f"Successfully retrieved income performance data for {ticker}")
@@ -240,26 +266,36 @@ class FinancialService:
             raise HTTPException(status_code=500, detail="내부 서버 오류")
 
     # 재무비율
-    async def get_financial_ratio(self, ctry: FinancialCountry, ticker: str) -> BaseResponse[FinancialRatioResponse]:
+    async def get_financial_ratio(
+        self, ctry: FinancialCountry, ticker: str, db: AsyncSession
+    ) -> BaseResponse[FinancialRatioResponse]:
         """
         재무비율 조회
         """
         try:
+            if ctry == "USA":
+                ticker = f"{ticker}-US"
+            country = FinancialCountry(ctry)
             # finpos 테이블에서 조회
-            financial_ratio_data = await self.get_financial_ratio_data(ctry, ticker)
+            financial_ratio_data = await self.get_financial_ratio_data(country, ticker, db)
             return financial_ratio_data
         except Exception as e:
             logger.error(f"Unexpected error in get_financial_ratio: {str(e)}")
             raise AnalysisException(analysis_type="재무비율 조회", detail=str(e))
 
     # 유동비율
-    async def get_liquidity_ratio(self, ctry: FinancialCountry, ticker: str) -> BaseResponse[LiquidityRatioResponse]:
+    async def get_liquidity_ratio(
+        self, ctry: FinancialCountry, ticker: str, db: AsyncSession
+    ) -> BaseResponse[LiquidityRatioResponse]:
         """
         유동비율 조회
         """
         try:
+            if ctry == "USA":
+                ticker = f"{ticker}-US"
+            country = FinancialCountry(ctry)
             # finpos 테이블에서 조회
-            liquidity_ratio_data = await self.get_liquidity_ratio_data(ctry, ticker)
+            liquidity_ratio_data = await self.get_liquidity_ratio_data(country, ticker, db)
             return liquidity_ratio_data
         except Exception as e:
             logger.error(f"Unexpected error in get_liquidity_ratio: {str(e)}")
@@ -267,14 +303,17 @@ class FinancialService:
 
     # 이자보상배율
     async def get_interest_coverage_ratio(
-        self, ctry: FinancialCountry, ticker: str
+        self, ctry: FinancialCountry, ticker: str, db: AsyncSession
     ) -> BaseResponse[InterestCoverageRatioResponse]:
         """
         이자보상배율 조회
         """
         try:
+            if ctry == "USA":
+                ticker = f"{ticker}-US"
+            country = FinancialCountry(ctry)
             # finpos 테이블에서 조회
-            interest_coverage_ratio_data = await self.get_interest_coverage_ratio_data(ctry, ticker)
+            interest_coverage_ratio_data = await self.get_interest_coverage_ratio_data(country, ticker, db)
             return interest_coverage_ratio_data
         except Exception as e:
             logger.error(f"Unexpected error in get_interest_coverage_ratio: {str(e)}")
@@ -442,19 +481,53 @@ class FinancialService:
             logger.error(f"Error getting latest quarter: {e}")
             raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+    @staticmethod
+    async def get_kr_name_by_ticker(db: AsyncSession, ticker: str) -> Optional[str]:
+        """
+        ticker로 StockInformation 테이블에서 한글로 된 기업이름 조회
+
+        Args:
+            db (AsyncSession): 데이터베이스 세션
+            ticker (str): 종목 코드
+
+        Returns:
+            Optional[str]: 한글 기업명. 종목이 없는 경우 None 반환
+        """
+        if ticker.endswith("-US"):
+            ticker = ticker[:-3]
+
+        query = select(StockInformation.kr_name).where(StockInformation.ticker == ticker)
+        result = await db.execute(query)
+        kr_name = result.scalar_one_or_none()
+
+        return kr_name
+
+    # 섹터 조회
+    async def get_sector_by_ticker(self, ticker: str) -> Optional[str]:
+        """
+        종목 섹터 조회
+        """
+        if ticker.endswith("-US"):
+            ticker = ticker[:-3]
+
+        query = select(StockInformation.sector_3).where(StockInformation.ticker == ticker)
+        result = self.db._execute(query)
+        sector = result.scalar_one_or_none()
+        return sector
+
     ########################################## 계산 메서드 #########################################
     # 부채비율 계산
     async def get_financial_ratio_data(
-        self, ctry: FinancialCountry, ticker: str
+        self, country: FinancialCountry, ticker: str, db: AsyncSession
     ) -> Tuple[str, BaseResponse[FinancialRatioResponse]]:
         """
         재무비율 데이터 조회 - 부채비율 (최근 4분기 평균)
         부채비율 = (총부채 / 자기자본) * 100
         회사명도 함께 반환
         """
-        table_name = self.finpos_tables.get(ctry)
+        table_name = self.finpos_tables.get(country)
         if not table_name:
-            logger.warning(f"잘못된 국가 코드: {ctry}")
+            logger.warning(f"잘못된 국가 코드: {country}")
             raise InvalidCountryException()
 
         conditions = {"Code": ticker}
@@ -463,9 +536,6 @@ class FinancialService:
         if not result:
             logger.warning(f"재무비율 데이터를 찾을 수 없습니다: {ticker}")
             raise DataNotFoundException(ticker=ticker, data_type="재무비율")
-
-        # 회사명 추출
-        company_name = result[0].Name
 
         # 4분기 각각의 부채비율 계산
         debt_ratios = []
@@ -482,26 +552,30 @@ class FinancialService:
         # 4분기 평균 계산 및 소수점 2자리로 반올림
         average_debt_ratio = round(sum(debt_ratios) / len(debt_ratios), 2)
 
+        industry_avg = await self.get_financial_industry_avg(country=country, ticker=ticker, db=db)
+
         # TODO: 업종 평균 Mock 데이터
         financial_ratio_response = FinancialRatioResponse(
-            code=ticker, name=company_name, ratio=average_debt_ratio, industry_avg="23.5"
+            code=ticker, ratio=average_debt_ratio, industry_avg=industry_avg
         )
 
-        return company_name, BaseResponse[FinancialRatioResponse](
+        return BaseResponse[FinancialRatioResponse](
             status_code=200,
             message="부채비율(4분기 평균) 데이터를 성공적으로 조회했습니다.",
             data=financial_ratio_response,
         )
 
     # 유동비율 계산
-    async def get_liquidity_ratio_data(self, ctry: FinancialCountry, ticker: str) -> BaseResponse[LiquidityRatioResponse]:
+    async def get_liquidity_ratio_data(
+        self, country: FinancialCountry, ticker: str, db: AsyncSession
+    ) -> BaseResponse[LiquidityRatioResponse]:
         """
         유동비율 데이터 조회 (최근 4분기 평균)
         유동비율 = (유동자산 / 유동부채) * 100
         """
-        table_name = self.finpos_tables.get(ctry)
+        table_name = self.finpos_tables.get(country)
         if not table_name:
-            logger.warning(f"잘못된 국가 코드: {ctry}")
+            logger.warning(f"잘못된 국가 코드: {country}")
             raise InvalidCountryException()
 
         conditions = {"Code": ticker}
@@ -529,10 +603,10 @@ class FinancialService:
 
         # 4분기 평균 계산 및 소수점 2자리로 반올림
         average_liquidity_ratio = round(sum(liquidity_ratios) / len(liquidity_ratios), 2)
+        industry_avg = await self.get_liquidity_industry_avg(country=country, ticker=ticker, db=db)
 
-        # TODO: 업종 평균 Mock 데이터
         liquidity_ratio_response = LiquidityRatioResponse(
-            code=ticker, name=result[0].Name, ratio=average_liquidity_ratio, industry_avg="17.4"
+            code=ticker, name=result[0].Name, ratio=average_liquidity_ratio, industry_avg=industry_avg
         )
 
         return BaseResponse[LiquidityRatioResponse](
@@ -543,15 +617,15 @@ class FinancialService:
 
     # 이자보상배율 계산
     async def get_interest_coverage_ratio_data(
-        self, ctry: FinancialCountry, ticker: str
+        self, country: FinancialCountry, ticker: str, db: AsyncSession
     ) -> BaseResponse[InterestCoverageRatioResponse]:
         """
         이자보상배율 데이터 조회 (최근 4분기 평균)
         이자보상배율 = 영업이익 / 금융비용
         """
-        table_name = self.income_tables.get(ctry)
+        table_name = self.income_tables.get(country)
         if not table_name:
-            logger.warning(f"잘못된 국가 코드: {ctry}")
+            logger.warning(f"잘못된 국가 코드: {country}")
             raise InvalidCountryException()
 
         conditions = {"Code": ticker}
@@ -579,10 +653,10 @@ class FinancialService:
 
         # 4분기 평균 계산 및 소수점 2자리로 반올림
         average_interest_coverage_ratio = round(sum(interest_coverage_ratios) / len(interest_coverage_ratios), 2)
+        industry_avg = await self.get_interest_coverage_industry_avg(country=country, ticker=ticker, db=db)
 
-        # TODO: 업종 평균 Mock 데이터
         interest_coverage_ratio_response = InterestCoverageRatioResponse(
-            code=ticker, name=result[0].Name, ratio=average_interest_coverage_ratio, industry_avg="-12.7"
+            code=ticker, name=result[0].Name, ratio=average_interest_coverage_ratio, industry_avg=industry_avg
         )
 
         return BaseResponse[InterestCoverageRatioResponse](
@@ -590,6 +664,170 @@ class FinancialService:
             message="이자보상배율(4분기 평균) 데이터를 성공적으로 조회했습니다.",
             data=interest_coverage_ratio_response,
         )
+
+    # 부채비율 업종 평균 조회
+    async def get_financial_industry_avg(self, country: FinancialCountry, ticker: str, db: AsyncSession) -> float:
+        """
+        업종 평균 부채비율 조회
+        Returns:
+            float: 업종 평균 부채비율 (총부채 / 자기자본 * 100)
+        """
+        base_ticker = ticker.replace("-US", "") if country == FinancialCountry.USA else ticker
+
+        # 현재 종목의 sector_3 조회
+        query = select(StockInformation.sector_3).where(StockInformation.ticker == base_ticker)
+        result = await db.execute(query)
+        sector_3 = result.scalar_one_or_none()
+
+        if not sector_3:
+            logger.warning(f"업종 정보를 찾을 수 없습니다: {ticker}")
+            return 0.0
+
+        # 같은 sector_3를 가진 다른 종목들의 ticker 조회
+        same_sector_query = await db.execute(
+            select(StockInformation.ticker).where(
+                and_(
+                    StockInformation.sector_3 == sector_3,
+                    StockInformation.ticker != base_ticker,  # 현재 종목 제외
+                )
+            )
+        )
+        sector_tickers = same_sector_query.scalars().all()
+
+        # 업종 평균 부채비율 계산
+        sector_ratios = []
+        table_name = self.finpos_tables.get(country)
+
+        for sector_ticker in sector_tickers:
+            # finpos 테이블 조회를 위해 ticker 형식 변환
+            finpos_ticker = f"{sector_ticker}-US" if country == FinancialCountry.USA else sector_ticker
+            conditions = {"Code": finpos_ticker}
+            sector_result = self.db._select(table=table_name, order="period_q", ascending=False, limit=4, **conditions)
+
+            if sector_result:
+                ticker_ratios = []
+                for quarter in sector_result:
+                    total_debt = self._to_decimal(quarter.total_dept)
+                    equity = self._to_decimal(quarter.equity)
+
+                    if equity != 0:
+                        ratio = float((total_debt / equity) * 100)
+                        ticker_ratios.append(ratio)
+                    else:
+                        ticker_ratios.append(0.0)
+
+                if ticker_ratios:
+                    # 각 종목의 4분기 평균 계산
+                    sector_ratios.append(round(sum(ticker_ratios) / len(ticker_ratios), 2))
+
+        # 업종 평균 계산
+        industry_avg = round(sum(sector_ratios) / len(sector_ratios), 2) if sector_ratios else 0.0
+
+        return industry_avg
+
+    async def get_liquidity_industry_avg(self, country: FinancialCountry, ticker: str, db: AsyncSession) -> float:
+        """
+        업종 평균 유동비율 조회
+        Returns:
+            float: 업종 평균 유동비율 (유동자산 / 유동부채 * 100)
+        """
+        base_ticker = ticker.replace("-US", "") if country == FinancialCountry.USA else ticker
+
+        # 현재 종목의 sector_3 조회
+        query = select(StockInformation.sector_3).where(StockInformation.ticker == base_ticker)
+        result = await db.execute(query)
+        sector_3 = result.scalar_one_or_none()
+
+        if not sector_3:
+            logger.warning(f"업종 정보를 찾을 수 없습니다: {ticker}")
+            return 0.0
+
+        # 같은 sector_3를 가진 다른 종목들의 ticker 조회
+        same_sector_query = await db.execute(
+            select(StockInformation.ticker).where(
+                and_(StockInformation.sector_3 == sector_3, StockInformation.ticker != base_ticker)
+            )
+        )
+        sector_tickers = same_sector_query.scalars().all()
+
+        # 업종 평균 유동비율 계산
+        sector_ratios = []
+        table_name = self.finpos_tables.get(country)
+
+        for sector_ticker in sector_tickers:
+            finpos_ticker = f"{sector_ticker}-US" if country == FinancialCountry.USA else sector_ticker
+            conditions = {"Code": finpos_ticker}
+            sector_result = self.db._select(table=table_name, order="period_q", ascending=False, limit=4, **conditions)
+
+            if sector_result:
+                ticker_ratios = []
+                for quarter in sector_result:
+                    current_asset = self._to_decimal(quarter.current_asset)
+                    current_debt = self._to_decimal(quarter.current_dept)
+
+                    if current_debt != 0:
+                        ratio = float((current_asset / current_debt) * 100)
+                        ticker_ratios.append(ratio)
+                    else:
+                        ticker_ratios.append(0.0)
+
+                if ticker_ratios:
+                    sector_ratios.append(round(sum(ticker_ratios) / len(ticker_ratios), 2))
+
+        industry_avg = round(sum(sector_ratios) / len(sector_ratios), 2) if sector_ratios else 0.0
+        return industry_avg
+
+    async def get_interest_coverage_industry_avg(self, country: FinancialCountry, ticker: str, db: AsyncSession) -> float:
+        """
+        업종 평균 이자보상배율 조회
+        Returns:
+            float: 업종 평균 이자보상배율 (영업이익 / 금융비용)
+        """
+        base_ticker = ticker.replace("-US", "") if country == FinancialCountry.USA else ticker
+
+        # 현재 종목의 sector_3 조회
+        query = select(StockInformation.sector_3).where(StockInformation.ticker == base_ticker)
+        result = await db.execute(query)
+        sector_3 = result.scalar_one_or_none()
+
+        if not sector_3:
+            logger.warning(f"업종 정보를 찾을 수 없습니다: {ticker}")
+            return 0.0
+
+        # 같은 sector_3를 가진 다른 종목들의 ticker 조회
+        same_sector_query = await db.execute(
+            select(StockInformation.ticker).where(
+                and_(StockInformation.sector_3 == sector_3, StockInformation.ticker != base_ticker)
+            )
+        )
+        sector_tickers = same_sector_query.scalars().all()
+
+        # 업종 평균 이자보상배율 계산
+        sector_ratios = []
+        table_name = self.income_tables.get(country)
+
+        for sector_ticker in sector_tickers:
+            income_ticker = f"{sector_ticker}-US" if country == FinancialCountry.USA else sector_ticker
+            conditions = {"Code": income_ticker}
+            sector_result = self.db._select(table=table_name, order="period_q", ascending=False, limit=4, **conditions)
+
+            if sector_result:
+                ticker_ratios = []
+                for quarter in sector_result:
+                    operating_income = self._to_decimal(quarter.operating_income)
+                    fin_cost = self._to_decimal(quarter.fin_cost)
+
+                    if fin_cost != 0:
+                        ratio = float(operating_income / fin_cost)
+                        ticker_ratios.append(ratio)
+                    else:
+                        ticker_ratios.append(0.0)
+
+                if ticker_ratios:
+                    sector_ratios.append(round(sum(ticker_ratios) / len(ticker_ratios), 2))
+
+        industry_avg = round(sum(sector_ratios) / len(sector_ratios), 2) if sector_ratios else 0.0
+        return industry_avg
 
     ########################################## ttm 메서드 #########################################
     # 손익계산서 ttm
@@ -630,7 +868,7 @@ class FinancialService:
         # 최근 12개월 데이터 선택
         recent_12_months = result[-12:]
 
-        # 첫 번재 row에서 컬럼 추출
+        # 첫 번재 row에서 컬 추출
         exclude_columns = ["Code", "Name", "StmtDt"]
         first_row = recent_12_months[0]
 
@@ -677,9 +915,10 @@ class FinancialService:
     # 실적
     def _process_income_performance_statement_result(
         self, result, exclude_columns=["StmtDt"]
-    ) -> Tuple[List[IncomeStatement], List[IncomeStatement]]:
+    ) -> Tuple[List[QuarterlyIncome], List[QuarterlyIncome]]:
         """
         실적 결과 처리 - 분기별 및 연도별 데이터를 분리하여 처리
+        최근 10개의 분기/연간 데이터만 반환
         """
         if not result:
             return [], []
@@ -687,7 +926,7 @@ class FinancialService:
         # SQLAlchemy 결과를 DataFrame으로 변환
         df = pd.DataFrame([{col: val for col, val in zip(row._fields, row)} for row in result])
 
-        # eps Mock 데이터 생성 - 시계열 패턴 반영
+        # TODO: eps Mock 데이터 생성 - 시계열 패턴 반영
         base_eps = 1000  # 기준 EPS 값
         num_rows = len(df)
 
@@ -710,39 +949,43 @@ class FinancialService:
         df["eps"] = eps_values[::-1]  # 최신 데이터가 앞쪽에 오도록 역순 정렬
 
         # 필요한 컬럼만 선택
-        required_columns = [
-            "Code",
-            "Name",
-            "period_q",
-            "rev",
-            "gross_profit",
-            "operating_income",
-            "net_income",
-            "net_income_not_control",
-            "net_income_total",
-            "eps",
-        ]
+        required_columns = ["Code", "Name", "period_q", "rev", "operating_income", "net_income", "eps"]
         df = df[required_columns]
+
+        def create_income_metric(value: float) -> IncomeMetric:
+            """기업/업종 평균 값을 포함한 IncomeMetric 생성"""
+            # 업종 평균은 회사 값의 ±20% 범위 내에서 랜덤하게 생성
+            industry_avg = value * (1 + random.uniform(-0.2, 0.2))
+            return IncomeMetric(company=Decimal(str(value)), industry_avg=Decimal(str(industry_avg)))
+
+        def create_quarterly_income(row) -> QuarterlyIncome:
+            """QuarterlyIncome 객체 생성"""
+            return QuarterlyIncome(
+                period_q=str(row["period_q"]),
+                rev=create_income_metric(row["rev"]),
+                operating_income=create_income_metric(row["operating_income"]),
+                net_income=create_income_metric(row["net_income"]),
+                eps=create_income_metric(row["eps"]),
+            )
 
         # 연도별 데이터 처리
         df["year"] = df["period_q"].astype(str).str[:4]
-        agg_columns = [col for col in required_columns if col not in ["Code", "Name", "period_q"]]
+        agg_columns = ["rev", "operating_income", "net_income", "eps"]
 
         yearly_sum = df.groupby(["Code", "Name", "year"]).agg({col: "sum" for col in agg_columns}).reset_index()
         yearly_sum["period_q"] = yearly_sum["year"]
         yearly_sum = yearly_sum.drop("year", axis=1)
 
-        # 분기별/연도별 statement 생성
-        quarterly_statements = [self._create_comprehensive_income_statement(row.to_dict()) for _, row in df.iterrows()]
-        yearly_statements = [
-            self._create_comprehensive_income_statement(row.to_dict()) for _, row in yearly_sum.iterrows()
-        ]
+        # 분기별/연도별 데이터 생성
+        quarterly_statements = [create_quarterly_income(row) for _, row in df.iterrows()]
+        yearly_statements = [create_quarterly_income(row) for _, row in yearly_sum.iterrows()]
 
         # 정렬
         quarterly_statements.sort(key=lambda x: x.period_q, reverse=True)
         yearly_statements.sort(key=lambda x: x.period_q, reverse=True)
 
-        return quarterly_statements, yearly_statements
+        # 최근 10개의 데이터만 반환
+        return quarterly_statements[:10], yearly_statements[:10]
 
     # 손익계산서
     def _process_income_statement_result(
@@ -796,7 +1039,7 @@ class FinancialService:
 
     ########################################## 데이터 생성 메서드 #########################################
     # 실적
-    def _create_comprehensive_income_statement(self, row_dict: Dict) -> IncomeStatement:
+    def _create_comprehensive_income_statement(self, row_dict: Dict) -> QuarterlyIncome:
         """
         모든 실적 정보를 포함하는 통합 Statement 생성
         """
@@ -811,7 +1054,7 @@ class FinancialService:
                     logger.warning(f"Error converting {field_name}: {str(e)}")
                     values[field_name] = Decimal("0")
 
-        return IncomeStatement(**values)
+        return QuarterlyIncome(**values)
 
     # 손익계산서
     def _create_income_statement_detail(self, row_dict: Dict) -> IncomeStatementDetail:

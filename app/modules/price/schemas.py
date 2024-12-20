@@ -55,11 +55,15 @@ class StockKrFactorItem(BaseModel):
 class PriceSummaryItem(BaseModel):
     name: str
     ticker: str
+    ctry: str
+    logo_url: str
     market: str
     sector: str
+    market_cap: float
     last_day_close: float
     week_52_low: float
     week_52_high: float
+    is_market_close: bool
 
 
 class PriceDailyItem(BaseModel):
@@ -79,4 +83,11 @@ class PriceMinuteItem(BaseModel):
     low: float
     close: float
     volume: int
+    price_change_rate: float
+
+
+class RealTimePriceDataItem(BaseModel):
+    ctry: str
+    price: float
+    price_change: float
     price_change_rate: float
