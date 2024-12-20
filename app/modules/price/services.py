@@ -1,14 +1,19 @@
 import asyncio
 from datetime import date, datetime, timedelta
 from functools import lru_cache
+import json
 from typing import List, Optional, Tuple, Dict
+from fastapi import Request
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
+
+from sse_starlette import EventSourceResponse
 from app.modules.common.cache import MemoryCache
 from app.modules.common.enum import Country, Frequency
 from app.modules.common.schemas import BaseResponse
-from app.modules.price.schemas import PriceDataItem, ResponsePriceDataItem
+from app.modules.common.utils import check_ticker_country_len_2
+from app.modules.price.schemas import PriceDataItem, RealTimePriceDataItem, ResponsePriceDataItem
 from app.database.crud import database
 from app.core.logging.config import get_logger
 from app.core.exception.custom import DataNotFoundException
@@ -268,6 +273,7 @@ class PriceService:
         self._cache = MemoryCache()
         self.db_handler = DatabaseHandler(self.config, database)
         self.data_processor = DataProcessor(self.config)
+        self.database = database
 
     def _get_chunk_size(self, frequency: Frequency) -> int:
         """주기에 따른 청크 크기 반환"""
@@ -434,6 +440,96 @@ class PriceService:
         logger.info(f"Fetched {len(df)} records from database")
 
         return df
+
+    async def get_real_time_price_data(self, ticker: str, request: Request) -> BaseResponse[RealTimePriceDataItem]:
+        """일회성 실시간 가격 데이터 조회"""
+        try:
+            ctry = check_ticker_country_len_2(ticker)
+            table_name = f"stock_{ctry}_1d"
+            columns = ["Date", "Open", "Close"]
+            conditions = {
+                "Ticker": ticker,
+                "Date": (date.today() - timedelta(days=1)).strftime("%Y-%m-%d"),
+            }
+
+            data = pd.DataFrame(self.database._select(table=table_name, columns=columns, **conditions))
+
+            if data.empty:
+                return BaseResponse(status_code=404, message="No data found", data=None)
+
+            price_change = round(data["Close"] - data["Open"], 2)
+            price_change_rate = round(price_change / data["Open"], 2)
+
+            result = RealTimePriceDataItem(
+                ctry=ctry,
+                price=float(data["Close"]),
+                price_change=float(price_change),
+                price_change_rate=float(price_change_rate),
+            )
+
+            return BaseResponse(status_code=200, message="Data retrieved successfully", data=result)
+
+        except Exception as e:
+            logger.error(f"Error in get_real_time_price_data: {str(e)}")
+            return BaseResponse(status_code=500, message=f"Error: {str(e)}", data=None)
+
+    async def stream_real_time_price_data(self, ticker: str, request: Request) -> EventSourceResponse:
+        """실시간 가격 데이터 스트림"""
+
+        async def event_generator():
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    ctry = check_ticker_country_len_2(ticker)
+                    table_name = f"stock_{ctry}_1d"
+                    columns = ["Date", "Open", "Close"]
+                    conditions = {
+                        "Ticker": ticker,
+                        "Date": (date.today() - timedelta(days=1)).strftime("%Y-%m-%d"),
+                    }
+
+                    data = pd.DataFrame(self.database._select(table=table_name, columns=columns, **conditions))
+
+                    if data.empty:
+                        yield {
+                            "event": "error",
+                            "data": json.dumps({"status_code": 404, "message": "No data found", "data": None}),
+                        }
+                        break
+
+                    price_change = round(data["Close"] - data["Open"], 2)
+                    price_change_rate = round(price_change / data["Open"], 2)
+
+                    result = RealTimePriceDataItem(
+                        ctry=ctry,
+                        price=float(data["Close"]),
+                        price_change=float(price_change),
+                        price_change_rate=float(price_change_rate),
+                    )
+
+                    response_data = BaseResponse(status_code=200, message="Data retrieved successfully", data=result)
+
+                    yield {"event": "update", "data": response_data.model_dump_json()}
+
+                except Exception as e:
+                    logger.error(f"Error in stream_real_time_price_data: {str(e)}")
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({"status_code": 500, "message": f"Error: {str(e)}", "data": None}),
+                    }
+                    break
+
+                await asyncio.sleep(5)
+
+        return EventSourceResponse(
+            event_generator(),
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
+        )
 
 
 def get_price_service() -> PriceService:

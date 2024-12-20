@@ -21,3 +21,24 @@ class Indicators(BaseModel):
     price_trend: Optional[str] = Field(default=None, description="주가 추세")
     market_situation: Optional[str] = Field(default=None, description="시장 상황")
     industry_situation: Optional[str] = Field(default=None, description="업종 상황")
+
+
+class SimilarStock(BaseModel):
+    ticker: str
+    name: str
+    ctry: str
+    current_price: Optional[float]
+    current_price_rate: Optional[float]
+
+
+class FearGreedIndexItem(BaseModel):
+    fear_greed_index: int
+    last_close: str
+    last_week: str
+    last_month: str
+    last_year: str
+
+
+class FearGreedIndexResponse(BaseModel):
+    kor_stock: FearGreedIndexItem
+    us_stock: FearGreedIndexItem

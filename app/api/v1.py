@@ -6,6 +6,9 @@ from app.modules.news.router import router as news_router
 from app.modules.stock_info.router import router as stock_info_router
 from app.modules.disclosure.router import router as disclosure_router
 from app.modules.dividend.router import router as dividend_router
+from app.modules.sector.router import router as sector_router
+from app.modules.search.router import router as search_router
+from app.modules.trending.router import router as trending_router
 
 api_router = APIRouter()
 
@@ -16,3 +19,6 @@ api_router.include_router(news_router, prefix="/news", tags=["news"])
 api_router.include_router(stock_info_router, prefix="/info", tags=["stock-info"])
 api_router.include_router(disclosure_router, prefix="/disclosure", tags=["disclosure"])
 api_router.include_router(dividend_router, prefix="/dividend", tags=["dividend"])
+api_router.include_router(sector_router, prefix="/sector", tags=["sector"])
+api_router.include_router(search_router, prefix="/search", tags=["search"])
+api_router.include_router(trending_router, prefix="/trending", tags=["trending"])

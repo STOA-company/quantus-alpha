@@ -1,6 +1,7 @@
 from typing import Annotated, List, Optional
 from fastapi import APIRouter, Query, Depends
-from app.modules.news.schemas import NewsItem, NewsResponse
+from app.modules.common.schemas import BaseResponse
+from app.modules.news.schemas import LatestNewsResponse, NewsItem, NewsResponse
 from app.modules.news.services import NewsService, get_news_service
 
 router = APIRouter()
@@ -14,6 +15,7 @@ async def get_news(
     size: Annotated[Optional[int], Query(description="페이지 크기, 기본값: 6")] = 6,
     news_service: NewsService = Depends(get_news_service),
 ):
+    # TODO: 홈 - 뉴스데이터 로직 수정 필요
     """
     뉴스 데이터를 조회합니다.
 
@@ -29,3 +31,12 @@ async def get_news(
     """
     result = await news_service.get_news(page=page, size=size, ticker=ticker, date=date)
     return NewsResponse(status_code=200, message="Successfully retrieved news data", **result)
+
+
+@router.get("/latest", response_model=BaseResponse[LatestNewsResponse])
+async def get_latest_news(
+    ticker: Annotated[str, Query(description="종목 코드, 예시: A005930, AAPL")],
+    news_service: NewsService = Depends(get_news_service),
+):
+    result = await news_service.get_latest_news(ticker=ticker)
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=result)
