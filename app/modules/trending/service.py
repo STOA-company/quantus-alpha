@@ -1,5 +1,5 @@
+from datetime import date, timedelta
 from typing import List
-
 from app.modules.news.services import get_news_service
 from app.database.crud import JoinInfo, database
 from app.database.conn import db
@@ -12,52 +12,51 @@ class TrendingService:
         self.database = database
         self.db = db
 
-    async def get_trending_stocks(self) -> TrendingStock:
-        kr = await self._get_trending_stocks_kr()
-        us = await self._get_trending_stocks_us()
+    def get_trending_stocks(self) -> TrendingStock:
+        kr = self._get_trending_stocks_kr()
+        us = self._get_trending_stocks_us()
         return TrendingStock(kr=kr, us=us)
 
-    async def _get_trending_stocks_kr(self) -> List[TrendingStockKr]:
+    def _get_trending_stocks_kr(self) -> List[TrendingStockKr]:
         table_name = "stock_kr_1d"
 
-        # 최신 날짜 조회
-        latest_date = self.database._select(table=table_name, columns=["Date"], order="Date", ascending=False, limit=1)[
-            0
-        ].Date
+        check_date = date.today() - timedelta(days=1)
+        while True:
+            date_str = check_date.strftime("%Y-%m-%d")
+            query_result = self.database._select(
+                table=table_name,
+                columns=["Ticker", "Name", "Volume", "Open", "Close", "Date"],
+                order="Volume",
+                ascending=False,
+                limit=10,
+                Date=date_str,
+            )
+            if query_result:
+                break
+            else:
+                check_date = check_date - timedelta(days=1)
 
-        # 최신 날짜의 데이터 중 volume 상위 10개 조회
-        result = self.database._select(
-            table=table_name,
-            columns=["Ticker", "Name", "Volume"],
-            order="Volume",
-            ascending=False,
-            limit=10,
-            **{"Date": latest_date},
-        )
+        result = []
+        for idx, row in enumerate(query_result, start=1):
+            current_price = float(row.Close) if row.Close is not None else 0.0
+            open_price = float(row.Open) if row.Open is not None else 0.0
 
-        trending_stocks = []
-        for idx, row in enumerate(result, start=1):
-            current_price, current_price_rate = await self.get_current_price(ticker=row.Ticker, table_name=table_name)
+            price_rate = round(((current_price - open_price) / open_price * 100), 2) if open_price != 0 else 0.0
 
-            stock_dict = {
-                "num": idx,
-                "ticker": str(row.Ticker),
-                "name": str(row.Name),
-                "volume": float(row.Volume) if row.Volume is not None else 0.0,
-                "current_price": current_price,
-                "current_price_rate": current_price_rate,
-            }
-            trending_stocks.append(TrendingStockKr(**stock_dict))
+            stock = TrendingStockKr(
+                num=idx,
+                ticker=str(row.Ticker),
+                name=str(row.Name),
+                volume=float(row.Volume) if row.Volume is not None else 0.0,
+                current_price=current_price,
+                current_price_rate=price_rate,
+            )
+            result.append(stock)
 
-        return trending_stocks
+        return result
 
-    async def _get_trending_stocks_us(self) -> List[TrendingStockUs]:
+    def _get_trending_stocks_us(self) -> List[TrendingStockUs]:
         table_name = "stock_us_1d"
-
-        # 최신 날짜 조회
-        latest_date = self.database._select(table=table_name, columns=["Date"], order="Date", ascending=False, limit=1)[
-            0
-        ].Date
 
         # 조인 정보 설정
         join_info = JoinInfo(
@@ -69,64 +68,34 @@ class TrendingService:
             is_outer=False,
         )
 
-        # 최신 날짜의 데이터 중 volume 상위 10개 조회 (조인 포함)
-        result = self.database._select(
+        query_result = self.database._select(
             table=table_name,
-            columns=["Ticker", "Volume"],
+            columns=["Ticker", "Volume", "Open", "Close", "korean_name"],
             order="Volume",
             ascending=False,
             limit=10,
             join_info=join_info,
-            **{"Date": latest_date},
+            Date=(date.today() - timedelta(days=1)).strftime("%Y-%m-%d"),
         )
 
-        trending_stocks = []
-        for idx, row in enumerate(result, start=1):
-            # 각 종목별 현재가와 변동률 조회
-            current_price, current_price_rate = await self.get_current_price(ticker=row.Ticker, table_name=table_name)
+        result = []
+        for idx, row in enumerate(query_result, start=1):
+            current_price = float(row.Close) if row.Close is not None else 0.0
+            open_price = float(row.Open) if row.Open is not None else 0.0
 
-            stock_dict = {
-                "num": idx,
-                "ticker": str(row.Ticker),
-                "name": str(row.korean_name),
-                "volume": float(row.Volume) if row.Volume is not None else 0.0,
-                "current_price": current_price,
-                "current_price_rate": current_price_rate,
-            }
-            trending_stocks.append(TrendingStockUs(**stock_dict))
+            price_rate = round(((current_price - open_price) / open_price * 100), 2) if open_price != 0 else 0.0
 
-        return trending_stocks
+            stock = TrendingStockUs(
+                num=idx,
+                ticker=str(row.Ticker),
+                name=str(row.korean_name),
+                volume=float(row.Volume) if row.Volume is not None else 0.0,
+                current_price=current_price,
+                current_price_rate=price_rate,
+            )
+            result.append(stock)
 
-    # 가져온 테이블에서의 각 티커별 가격 및 변동률
-    async def get_current_price(self, ticker: str, table_name: str) -> tuple[float, float]:
-        """
-        현재가와 변동률 조회 (당일 종가와 시가 기준)
-        Args:
-            ticker: 종목코드
-            table_name: 테이블명
-        Returns:
-            tuple[float, float]: (현재가, 변동률)
-        """
-        # 당일 시가와 종가 조회
-        result = self.database._select(
-            table=table_name,
-            columns=["Date", "Open", "Close"],
-            order="Date",
-            ascending=False,
-            limit=1,
-            **{"Ticker": ticker},
-        )
-
-        if not result:
-            return 0.0, 0.0
-
-        current_price = float(result[0].Close)
-        open_price = float(result[0].Open)
-
-        # 변동률 계산: ((종가 - 시가) / 시가) * 100
-        price_rate = round(((current_price - open_price) / open_price * 100), 2) if open_price != 0 else 0.0
-
-        return current_price, price_rate
+        return result
 
 
 def get_trending_service():

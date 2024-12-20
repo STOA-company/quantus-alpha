@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import check_ticker_country_len_2, check_ticker_country_len_3
-from app.modules.news.schemas import LatestNewsResponse, NewsItem
+from app.modules.news.schemas import LatestNewsResponse, NewsItem, TopStoriesResponse
 from quantus_aws.common.configs import s3_client
 from app.database.crud import database
 from app.core.logging.config import get_logger
@@ -28,7 +28,7 @@ class NewsService:
         self._bucket_name = "quantus-news"
         self.db = database
 
-    async def _fetch_s3_data(self, date_str: str, country_path: str) -> Optional[bytes]:
+    def _fetch_s3_data(self, date_str: str, country_path: str) -> Optional[bytes]:
         """S3에서 데이터를 가져오는 내부 메서드"""
         try:
             file_path = f"{country_path}/{date_str}.parquet"
@@ -137,10 +137,17 @@ class NewsService:
 
         if ctry == "kr":
             tickers = [f"A{ticker}" for ticker in tickers]
-
-        stock_data = self.db._select(
-            table=table_name, columns=["Date", "Ticker", "Open", "Close", "Name"], Date=date_str, Ticker__in=tickers
-        )
+        while True:
+            stock_data = self.db._select(
+                table=table_name, columns=["Date", "Ticker", "Open", "Close", "Name"], Date=date_str, Ticker__in=tickers
+            )
+            if stock_data:
+                break
+            else:
+                # 문자열 날짜를 datetime으로 변환하여 계산
+                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                date_obj = date_obj - timedelta(days=1)
+                date_str = date_obj.strftime("%Y-%m-%d")
 
         logger.debug(f"stock_data: {stock_data}")
 
@@ -178,9 +185,7 @@ class NewsService:
 
         return merged_df
 
-    async def get_news(
-        self, page: int, size: int, ticker: Optional[str] = None, date: Optional[str] = None
-    ) -> Dict[str, any]:
+    def get_news(self, page: int, size: int, ticker: Optional[str] = None, date: Optional[str] = None) -> Dict[str, any]:
         """뉴스 데이터 조회"""
         if page < 1:
             raise ValueError("Page number must be greater than 0")
@@ -198,7 +203,7 @@ class NewsService:
         country_path = f"merged_data/{NEWS_CONTRY_MAP[ctry]}"
 
         # S3 데이터 가져오기
-        s3_data = await self._fetch_s3_data(date_str, country_path)
+        s3_data = self._fetch_s3_data(date_str, country_path)
         if s3_data is None:
             raise DataNotFoundException(ticker=ticker or "all", data_type="news")
 
@@ -230,14 +235,14 @@ class NewsService:
             **emotion_counts,
         }
 
-    async def get_latest_news(self, ticker: str) -> LatestNewsResponse:
+    def get_latest_news(self, ticker: str) -> LatestNewsResponse:
         """최신 뉴스와 공시 데이터 중 최신 데이터 조회"""
         try:
             # 1. 공시 데이터 조회
-            disclosure_info = await self._get_disclosure_data(ticker)
+            disclosure_info = self._get_disclosure_data(ticker)
 
             # 2. 뉴스 데이터 조회
-            news_info = await self._get_news_data(ticker)
+            news_info = self._get_news_data(ticker)
 
             # 3. 둘 다 없으면 에러
             if not disclosure_info and not news_info:
@@ -263,7 +268,7 @@ class NewsService:
             logger.error(f"Error parsing key points: {str(e)}")
             return str(key_points)
 
-    async def _get_disclosure_data(self, ticker: str) -> Optional[Dict]:
+    def _get_disclosure_data(self, ticker: str) -> Optional[Dict]:
         """공시 데이터 조회 및 분석 데이터 함께 반환"""
         try:
             # 공시 기본 데이터 조회
@@ -303,24 +308,22 @@ class NewsService:
                 )
                 analysis_data[0] = translated_data[0][0]
                 analysis_data[3] = translated_data[0][1]
-            print(f"analysis_data::::: {analysis_data[3]}")
             key_points_parsed = self._parse_key_points(analysis_data[3])
             content = f"{analysis_data[0]} {key_points_parsed}"
-            print(f"content::::: {content}")
             return {"date": disclosure_data[0][1], "content": content, "type": "disclosure"}
 
         except Exception as e:
             logger.error(f"Error fetching disclosure data: {str(e)}")
             return None
 
-    async def _get_news_data(self, ticker: str) -> Optional[Dict]:
+    def _get_news_data(self, ticker: str) -> Optional[Dict]:
         """뉴스 데이터 조회"""
         try:
             ctry = check_ticker_country_len_2(ticker)
             processed_ticker = self._ticker_preprocess(ticker, ctry)
 
             # S3 데이터 조회
-            s3_data = await self._fetch_s3_data(self._get_current_date(), f"merged_data/{NEWS_CONTRY_MAP[ctry]}")
+            s3_data = self._fetch_s3_data(self._get_current_date(), f"merged_data/{NEWS_CONTRY_MAP[ctry]}")
 
             if not s3_data:
                 return None
@@ -376,6 +379,167 @@ class NewsService:
         except Exception as e:
             logger.error(f"Error parsing news content: {str(e)}")
             return content
+
+        # 1. 최신 뉴스 1주치 데이터 조회
+        # 2. 최신 공시 1주치 데이터 조회
+        # 3. 뉴스는 date, 공시는 filing_date로 outer 병합
+        # 4. response에 보내질 ticker를 넣을 빈리스트 생성
+        # 5. 빈리스트에 최신부터 유니크한 티커 11개 추가
+        # 6. 최신부터 11개의 종목 조회 11개가 안되면 11개 될때까지 ticker 조회
+        # 7. 해당 종목의 2주치 뉴스, 공시 데이터 ticker별로 분류
+        # 8. 해당 종목의 주가 데이터 조회
+        # 9. 각 종목별 뉴스, 공시 데이터와 가격 데이터 병합
+
+    def get_top_stories(self) -> TopStoriesResponse:
+        try:
+            # 시장 및 날짜 설정
+            ctry = self.get_current_market_country()
+            db_country = "usa" if ctry == "us" else "kr"
+            current_date = datetime.now(KST_TIMEZONE)
+            date_str = current_date.strftime("%Y%m%d")
+            end_date = current_date.strftime("%Y-%m-%d")
+            start_date = (current_date - timedelta(days=7)).strftime("%Y-%m-%d")
+
+            # 1. S3에서 최신 뉴스 데이터 조회
+            country_path = f"merged_data/{NEWS_CONTRY_MAP[ctry]}"
+            print(f"country_path: {country_path}")
+            s3_data = self._fetch_s3_data(date_str, country_path)
+            if s3_data is None:
+                raise DataNotFoundException(ticker="all", data_type="news")
+
+            news_df = pd.read_parquet(pd.io.common.BytesIO(s3_data))
+            news_df = self._process_dataframe(news_df)
+            news_df = news_df.rename(columns={"titles": "title"})
+
+            # 2. DB에서 최신 공시 데이터 조회
+            disclosure_data = self.db._select(
+                table="usa_disclosure",
+                columns=["filing_id", "filing_date", "ticker"],
+                order="filing_date",
+                ascending=False,
+                filing_date__gte=start_date,
+                filing_date__lte=end_date,
+                ai_processed=1,
+            )
+
+            if disclosure_data:
+                disclosure_df = pd.DataFrame(disclosure_data, columns=["filing_id", "date", "ticker"])
+                disclosure_df["date"] = pd.to_datetime(disclosure_df["date"])
+            else:
+                disclosure_df = pd.DataFrame(columns=["filing_id", "date", "ticker"])
+
+            # 3. 뉴스와 공시 데이터 티커 기준으로 분석
+            news_tickers = pd.DataFrame(news_df["Code"].value_counts()).reset_index()
+            news_tickers.columns = ["ticker", "count"]
+
+            disclosure_tickers = pd.DataFrame(disclosure_df["ticker"].value_counts()).reset_index()
+            disclosure_tickers.columns = ["ticker", "count"]
+
+            # 4 & 5. 티커 리스트 생성 및 상위 11개 선정
+            all_tickers = (
+                pd.concat([news_tickers.set_index("ticker"), disclosure_tickers.set_index("ticker")])
+                .groupby(level=0)
+                .sum()
+                .sort_values("count", ascending=False)
+            )
+
+            top_tickers = all_tickers.head(11).index.tolist()
+
+            # 6 & 7. 선택된 티커의 데이터 처리
+            result_data = []
+            for ticker in top_tickers:
+                # 8. 주가 데이터 조회
+                stock_data = self.db._select(
+                    table=f"stock_{ctry}_1d",
+                    columns=["Date", "Close", "Open", "Name"],
+                    Date=end_date,
+                    Ticker=f"A{ticker}" if ctry == "kr" else ticker,
+                )
+
+                if not stock_data:
+                    continue
+
+                # 9. 종목 정보 구성
+                stock_info = {
+                    "name": stock_data[0][3],
+                    "ticker": ticker,
+                    "logo_image": f"https://storage.quantus.kr/logo/{ctry}/{ticker}.png",
+                    "ctry": ctry,
+                    "current_price": float(stock_data[0][1]),
+                    "change_rate": round(
+                        ((float(stock_data[0][1]) - float(stock_data[0][2])) / float(stock_data[0][2])) * 100, 2
+                    ),
+                }
+
+                # 해당 종목의 뉴스 데이터 처리
+                ticker_news = news_df[news_df["Code"] == ticker].copy()
+                news_items = [
+                    NewsItem(
+                        date=row["date"],
+                        title=row["title"],
+                        summary=row["summary"] if pd.notna(row["summary"]) else None,
+                        emotion=row["emotion"].lower() if pd.notna(row["emotion"]) else None,
+                        name=stock_info["name"],
+                        change_rate=stock_info["change_rate"],
+                    )
+                    for _, row in ticker_news.iterrows()
+                ]
+
+                # 해당 종목의 공시 데이터 처리
+                ticker_disclosure = disclosure_df[disclosure_df["ticker"] == ticker]
+                for _, disc in ticker_disclosure.iterrows():
+                    analysis_data = self.db._select(
+                        table=f"{db_country}_disclosure_analysis",
+                        columns=["ai_summary", "market_impact", "impact_reason", "key_points", "translated"],
+                        filing_id=disc["filing_id"],
+                    )
+
+                    if analysis_data:
+                        analysis = analysis_data[0]
+                        summary = analysis[0]
+                        key_points = analysis[3]
+
+                        if analysis[4]:  # translated 확인
+                            translated_data = self.db._select(
+                                table=f"{db_country}_disclosure_analysis_translation",
+                                columns=["ai_summary", "key_points"],
+                                filing_id=disc["filing_id"],
+                            )
+                            if translated_data:
+                                summary = translated_data[0][0]
+                                key_points = translated_data[0][1]
+
+                        content = f"{summary} {self._parse_key_points(key_points)}"
+
+                        news_items.append(
+                            NewsItem(
+                                date=disc["date"],
+                                title=disc["title"],
+                                summary=content,
+                                emotion=None,
+                                name=stock_info["name"],
+                                change_rate=stock_info["change_rate"],
+                            )
+                        )
+
+                # 날짜순 정렬
+                news_items.sort(key=lambda x: x.date, reverse=True)
+                stock_info["news"] = news_items
+
+                result_data.append(stock_info)
+
+            # 결과가 없으면 예외 발생
+            if not result_data:
+                raise DataNotFoundException(ticker="all", data_type="top_stories")
+
+            # 가장 관련성 높은(뉴스+공시가 많은) 종목 선택
+            top_story = max(result_data, key=lambda x: len(x["news"]))
+
+            return TopStoriesResponse(**top_story)
+
+        except Exception as e:
+            logger.error(f"Error in get_top_stories: {str(e)}")
+            raise
 
 
 def get_news_service() -> NewsService:
