@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.modules.common.enum import Country
 from app.modules.common.schemas import BaseResponse
-from app.modules.price.schemas import PriceDailyItem, PriceSummaryItem
+from app.modules.price.schemas import PriceDailyItem
 from app.modules.price.services_v2 import get_price_service, PriceService
 
 
@@ -35,7 +35,7 @@ async def get_price_data_daily(
     return BaseResponse(status_code=200, message="Success", data=data)
 
 
-@router.get("/summary", response_model=BaseResponse[PriceSummaryItem])
+# @router.get("/summary", response_model=BaseResponse[PriceSummaryItem])
 async def get_price_data_summary(
     ctry: Annotated[Country, Query(description="국가 코드 (kr/us)")],
     ticker: Annotated[str, Query(description="종목 티커")],
