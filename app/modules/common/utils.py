@@ -15,16 +15,31 @@ import pytz
 
 def check_ticker_country_len_2(ticker: str):
     # 한국 주식 패턴 체크 (A + 6자리 숫자)
-    if re.match(r"^A\d{6}$", ticker):
-        return "kr"
+    try:
+        if re.match(r"^A\d{6}$", ticker):
+            return "kr"
+        raise ValueError("한국 주식 티커 형식이 아닙니다")
+    except ValueError:
+        # 다음 패턴 확인으로 진행
+        pass
 
     # 홍콩 주식 패턴 체크 (HK + 숫자)
-    if re.match(r"^HK\d+$", ticker):
-        return "hk"
+    try:
+        if re.match(r"^HK\d+$", ticker):
+            return "hk"
+        raise ValueError("홍콩 주식 티커 형식이 아닙니다")
+    except ValueError:
+        # 다음 패턴 확인으로 진행
+        pass
 
     # 일본 주식 패턴 체크 (J + 숫자)
-    if re.match(r"^J\d+$", ticker):
-        return "jp"
+    try:
+        if re.match(r"^J\d+$", ticker):
+            return "jp"
+        raise ValueError("일본 주식 티커 형식이 아닙니다")
+    except ValueError:
+        # 다음 패턴 확인으로 진행
+        pass
 
     # 미국 주식은 위의 패턴에 해당하지 않는 모든 경우
     return "us"
@@ -32,16 +47,31 @@ def check_ticker_country_len_2(ticker: str):
 
 def check_ticker_country_len_3(ticker: str):
     # 한국 주식 패턴 체크 (A + 6자리 숫자)
-    if re.match(r"^A\d{6}$", ticker):
-        return "kor"
+    try:
+        if re.match(r"^A\d{6}$", ticker):
+            return "kor"
+        raise ValueError("한국 주식 티커 형식이 아닙니다")
+    except ValueError:
+        # 다음 패턴 확인으로 진행
+        pass
 
     # 홍콩 주식 패턴 체크 (HK + 숫자)
-    if re.match(r"^HK\d+$", ticker):
-        return "hkg"
+    try:
+        if re.match(r"^HK\d+$", ticker):
+            return "hkg"
+        raise ValueError("홍콩 주식 티커 형식이 아닙니다")
+    except ValueError:
+        # 다음 패턴 확인으로 진행
+        pass
 
     # 일본 주식 패턴 체크 (J + 숫자)
-    if re.match(r"^J\d+$", ticker):
-        return "jpn"
+    try:
+        if re.match(r"^J\d+$", ticker):
+            return "jpn"
+        raise ValueError("일본 주식 티커 형식이 아닙니다")
+    except ValueError:
+        # 다음 패턴 확인으로 진행
+        pass
 
     # 미국 주식은 위의 패턴에 해당하지 않는 모든 경우
     return "usa"
@@ -52,6 +82,10 @@ contry_mapping = {
     "USA": "us",
     "JPN": "jp",
     "HKG": "hk",
+    "us": "USA",
+    "kr": "KOR",
+    "jp": "JPN",
+    "hk": "HKG",
 }
 KST_TIMEZONE = pytz.timezone("Asia/Seoul")
 

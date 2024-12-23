@@ -1,5 +1,6 @@
 import logging
 import yfinance as yf
+import requests
 from typing import Tuple
 import asyncio
 from datetime import datetime, timedelta
@@ -15,9 +16,10 @@ class StockIndicesService:
         self.symbols = {"kospi": "^KS11", "kosdaq": "^KQ11", "nasdaq": "^IXIC", "sp500": "^GSPC"}
         self._cache = {}
         self._cache_timeout = 300
-        self._executor = ThreadPoolExecutor(max_workers=8)
+        self._executor = ThreadPoolExecutor(max_workers=4)
         self._lock = asyncio.Lock()
         self._background_task_running = False
+        self.session = requests.Session()
 
     async def _update_cache_background(self):
         """백그라운드에서 캐시 업데이트"""
@@ -55,7 +57,7 @@ class StockIndicesService:
             async def fetch_history(period, interval=None):
                 try:
                     loop = asyncio.get_event_loop()
-                    ticker = yf.Ticker(symbol)
+                    ticker = yf.Ticker(symbol, session=self.session)
 
                     def fetch():
                         if interval:
@@ -90,7 +92,7 @@ class StockIndicesService:
                 self._cache[cache_key_min5] = (min5_data, now)
 
         except Exception as e:
-            print(f"Error fetching data for {name}: {e}")
+            logging.error(f"Error fetching data for {name}: {e}")
 
     # async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
     #     """최적화된 시장 등락비율 조회"""

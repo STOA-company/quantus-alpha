@@ -213,11 +213,24 @@ class Database:
             if columns is None:
                 cols = [obj]
             else:
-                cols = list(map(lambda x: getattr(obj.columns, x), columns))
+                primary_cols = []
+                if join_info:
+                    for col in columns:
+                        if col not in join_info.columns:
+                            try:
+                                primary_cols.append(getattr(obj.columns, col))
+                            except AttributeError:
+                                continue
+                else:
+                    primary_cols = [getattr(obj.columns, col) for col in columns]
+                cols = primary_cols
 
             if join_info:
                 join_table_obj = self.meta_data.tables[join_info.secondary_table]
-                join_cols = list(map(lambda x: getattr(join_table_obj.columns, x), join_info.columns))
+                join_cols = []
+                for col in join_info.columns:
+                    if col in columns:
+                        join_cols.append(getattr(join_table_obj.columns, col))
                 cols.extend(join_cols)
 
             cond = self.get_condition(obj, **kwargs)

@@ -31,7 +31,7 @@ async def get_indicators(
     db: AsyncSession = Depends(db.get_async_db),
 ):
     ctry = check_ticker_country_len_2(ticker)
-    data = await service.get_indicators(ctry, ticker, db)
+    data = await service.get_indicators(ctry, ticker)
     return BaseResponse(status_code=200, message="지표 정보를 성공적으로 조회했습니다.", data=data)
 
 
@@ -45,7 +45,7 @@ async def get_combined(
     ctry = check_ticker_country_len_2(ticker)
 
     stock_info = await stock_service.get_stock_info(ctry, ticker, db)
-    indicators = await stock_service.get_indicators(ctry, ticker, db)
+    indicators = await stock_service.get_indicators(ctry, ticker)
     summary = await summary_service.get_price_data_summary(ctry, ticker, db)
 
     data = {
