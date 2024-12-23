@@ -89,7 +89,6 @@ class DisclosureService:
                 columns=join_columns,  # 조인 테이블에서 가져올 컬럼
             )
             max_date = self.db._select(table=table_name, columns=["Date"], order="Date", ascending=False, limit=1)
-            print(f"max_date###############: {max_date}")
             conditions = {"Ticker__in": results_ticker, "Date": max_date[0][0].strftime("%Y-%m-%d")}
 
             stock_results = self.db._select(
