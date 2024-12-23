@@ -24,3 +24,13 @@ class LatestNewsResponse(BaseModel):
     date: datetime
     content: str
     type: str
+
+
+class TopStoriesResponse(BaseModel):
+    name: str
+    ticker: str
+    logo_image: str
+    ctry: str
+    current_price: float
+    change_rate: float
+    news: list[NewsItem]

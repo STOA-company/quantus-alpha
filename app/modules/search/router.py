@@ -12,7 +12,7 @@ router = APIRouter()
 @router.get("", summary="검색 기능")
 async def search(
     query: str,
-    ctry: TranslateCountry = Query(TranslateCountry, description="검색 시 나올 기업명 언어(ko, en)"),
+    ctry: TranslateCountry = Query(default=TranslateCountry.KO, description="검색 시 나올 기업명 언어(ko, en)"),
     offset: int = Query(0, description="검색 시작 위치"),
     limit: int = Query(20, description="검색 결과 수"),
     service: SearchService = Depends(get_search_service),

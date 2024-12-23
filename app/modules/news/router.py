@@ -8,7 +8,7 @@ router = APIRouter()
 
 
 @router.get("", response_model=NewsResponse[List[NewsItem]])
-async def get_news(
+def get_news(
     ticker: Annotated[Optional[str], Query(description="종목 코드, 예시: A005930, None은 전체 종목")] = None,
     date: Annotated[Optional[str], Query(description="날짜, 예시: 20241210, 기본값: 오늘 날짜")] = None,
     page: Annotated[Optional[int], Query(description="페이지 번호, 기본값: 1")] = 1,
@@ -29,14 +29,22 @@ async def get_news(
     Returns:
         NewsResponse: 뉴스 데이터 및 메타 정보
     """
-    result = await news_service.get_news(page=page, size=size, ticker=ticker, date=date)
+    result = news_service.get_news(page=page, size=size, ticker=ticker, date=date)
     return NewsResponse(status_code=200, message="Successfully retrieved news data", **result)
 
 
 @router.get("/latest", response_model=BaseResponse[LatestNewsResponse])
-async def get_latest_news(
+def get_latest_news(
     ticker: Annotated[str, Query(description="종목 코드, 예시: A005930, AAPL")],
     news_service: NewsService = Depends(get_news_service),
 ):
-    result = await news_service.get_latest_news(ticker=ticker)
+    result = news_service.get_latest_news(ticker=ticker)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=result)
+
+
+# @router.get("/top_stories", response_model=BaseResponse[TopStoriesResponse])
+def get_top_stories(
+    news_service: NewsService = Depends(get_news_service),
+):
+    data = news_service.get_top_stories()
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)

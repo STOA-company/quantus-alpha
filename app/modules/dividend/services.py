@@ -1,7 +1,10 @@
-from app.modules.common.enum import FinancialCountry
+from app.modules.common.enum import Country, FinancialCountry
 from app.modules.dividend.schemas import DividendItem, DividendDetail, DividendYearResponse
 from app.database.crud import database
 from app.modules.common.utils import contry_mapping
+import pandas as pd
+import os
+import numpy as np
 
 
 class DividendService:
@@ -10,141 +13,156 @@ class DividendService:
 
     async def get_dividend(self, ctry: FinancialCountry, ticker: str) -> DividendItem:
         """배당 정보 조회"""
-        if ctry == "USA":
-            ticker = f"{ticker}-US"
-        # Mock 데이터 생성
-        yearly_details = [
-            DividendYearResponse(
-                year=2024,
-                dividend_detail=[
-                    DividendDetail(
-                        ex_dividend_date="2024-03-28",
-                        dividend_payment_date="2024-04-15",
-                        dividend_per_share=1500.0,
-                        dividend_yield=1.8,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2024-06-28",
-                        dividend_payment_date="2024-07-15",
-                        dividend_per_share=2000.0,
-                        dividend_yield=2.1,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2024-09-27",
-                        dividend_payment_date="2024-10-15",
-                        dividend_per_share=2500.0,
-                        dividend_yield=2.5,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2024-12-27",
-                        dividend_payment_date="2025-01-15",
-                        dividend_per_share=3000.0,
-                        dividend_yield=2.8,
-                    ),
-                ],
-            ),
-            DividendYearResponse(
-                year=2023,
-                dividend_detail=[
-                    DividendDetail(
-                        ex_dividend_date="2023-03-29",
-                        dividend_payment_date="2023-04-14",
-                        dividend_per_share=1300.0,
-                        dividend_yield=1.6,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2023-06-29",
-                        dividend_payment_date="2023-07-14",
-                        dividend_per_share=1800.0,
-                        dividend_yield=2.0,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2023-09-28",
-                        dividend_payment_date="2023-10-16",
-                        dividend_per_share=2300.0,
-                        dividend_yield=2.3,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2023-12-28",
-                        dividend_payment_date="2024-01-15",
-                        dividend_per_share=2800.0,
-                        dividend_yield=2.6,
-                    ),
-                ],
-            ),
-            DividendYearResponse(
-                year=2022,
-                dividend_detail=[
-                    DividendDetail(
-                        ex_dividend_date="2022-03-29",
-                        dividend_payment_date="2022-04-15",
-                        dividend_per_share=1000.0,
-                        dividend_yield=1.4,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2022-06-29",
-                        dividend_payment_date="2022-07-15",
-                        dividend_per_share=1500.0,
-                        dividend_yield=1.8,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2022-09-29",
-                        dividend_payment_date="2022-10-17",
-                        dividend_per_share=2000.0,
-                        dividend_yield=2.1,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2022-12-29",
-                        dividend_payment_date="2023-01-16",
-                        dividend_per_share=2500.0,
-                        dividend_yield=2.4,
-                    ),
-                ],
-            ),
-            DividendYearResponse(
-                year=2021,
-                dividend_detail=[
-                    DividendDetail(
-                        ex_dividend_date="2021-03-29",
-                        dividend_payment_date="2021-04-15",
-                        dividend_per_share=800.0,
-                        dividend_yield=1.2,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2021-06-29",
-                        dividend_payment_date="2021-07-15",
-                        dividend_per_share=1200.0,
-                        dividend_yield=1.5,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2021-09-29",
-                        dividend_payment_date="2021-10-15",
-                        dividend_per_share=1700.0,
-                        dividend_yield=1.9,
-                    ),
-                    DividendDetail(
-                        ex_dividend_date="2021-12-29",
-                        dividend_payment_date="2022-01-17",
-                        dividend_per_share=2200.0,
-                        dividend_yield=2.2,
-                    ),
-                ],
-            ),
-        ]
+        table_name = f"stock_{ctry}_1d"
 
-        ctry_two = contry_mapping.get(ctry)
+        # 배당 데이터 가져오기 (parquet 파일 사용)
+        file_path = os.path.join("static", "dividend.parquet")
+        df1 = pd.read_parquet(file_path)
+        df1 = df1[(df1["Ticker"] == ticker) & (df1["ISOCurrCode"] == "USD")]
+
+        # ticker가 없는 경우 체크
+        if df1.empty:
+            raise Exception(f"없는 ticker입니다: {ticker}")
+
+        # 날짜에서 시간 정보 제거 (YYYY-MM-DD 형식으로 변환)
+        df1["배당락일"] = df1["배당락일"].str[:10]  # 처음 10자리만 사용 (YYYY-MM-DD)
+        df1["배당지급일"] = df1["배당지급일"].str[:10]
+
+        # 주가 데이터 가져오기
+        date_list = df1["배당락일"].tolist()
+        columns = ["Ticker", "Date", "Close", "Market"]
+        order = "Date"
+        condition = {"Ticker": ticker, "Date__in": date_list}
+        df = pd.DataFrame(self.db._select(table=table_name, columns=columns, order=order, **condition))
+
+        # Date 컬럼도 문자열로 변환
+        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
+
+        # 데이터프레임 병합
+        df1 = df1.merge(df[["Date", "Close"]], left_on="배당락일", right_on="Date", how="left")
+        df1 = df1.drop_duplicates(subset=["배당락일", "배당지급일", "배당금"])  # 중복 제거
+
+        # 배당수익률 계산 (소수점 2자리까지)
+        df1["dividend_yield"] = (df1["배당금"] / df1["Close"]) * 100
+        df1["dividend_yield"] = df1["dividend_yield"].replace([np.inf, -np.inf, np.nan], 0).round(2)
+
+        # DividendDetail 생성 (가장 최근 데이터 사용)
+        detail = DividendDetail(
+            ex_dividend_date=df1["배당락일"].iloc[-1],
+            dividend_payment_date=df1["배당지급일"].iloc[-1],
+            dividend_per_share=float(df1["배당금"].iloc[-1]),
+            dividend_yield=float(df1["dividend_yield"].iloc[-1]),
+        )
+
+        # 배당락일 기준으로 연도 추출
+        df1["year"] = pd.to_datetime(df1["배당락일"]).dt.year
+
+        # 현재 연도 구하기
+        current_year = pd.Timestamp.now().year
+        # 3년 전 연도 계산 (현재 연도 포함 총 4년)
+        min_year = current_year - 3
+
+        # 최근 4년 데이터만 필터링 (예: 2024~2021)
+        df1 = df1[df1["year"] >= min_year]
+        yearly_groups = df1.groupby("year")
+
+        # 연도별 상세 정보 생성 (중복 없이)
+        yearly_details = []
+        for year, group in yearly_groups:
+            dividend_details = []
+            unique_group = group.sort_values(["배당락일", "배당지급일", "배당금"]).drop_duplicates(
+                subset=["배당락일", "배당지급일", "배당금"]
+            )
+            for _, row in unique_group.iterrows():
+                detail = DividendDetail(
+                    ex_dividend_date=row["배당락일"],
+                    dividend_payment_date=row["배당지급일"],
+                    dividend_per_share=round(float(row["배당금"]), 2),
+                    dividend_yield=round(float(row["dividend_yield"]), 2),
+                )
+                dividend_details.append(detail)
+
+            yearly_details.append(DividendYearResponse(year=int(year), dividend_detail=dividend_details))
+
+        # 배당지급일에서 년도와 월 추출 (YYYY-MM-DD 형식)
+        df1["payment_year"] = df1["배당지급일"].str[:4].astype(int)  # YYYY
+        df1["payment_month"] = df1["배당지급일"].str[5:7]  # MM
+
+        # 현재 연도 구하기
+        current_year = pd.Timestamp.now().year
+        last_year = current_year - 1
+
+        # 배당지급일 기준으로 작년 데이터 필터링
+        last_year_data = df1[df1["payment_year"] == last_year]
+
+        last_dividend_ratio = round(self.calculate_dividend_ratio(df1, ctry, ticker), 2)
+        last_dividend_growth_rate = self.calculate_growth_rate(df1)
+        if np.isnan(last_dividend_growth_rate) or np.isinf(last_dividend_growth_rate):
+            last_dividend_growth_rate = 0.0
+        else:
+            last_dividend_growth_rate = round(last_dividend_growth_rate, 2)
 
         return DividendItem(
             ticker=ticker,
-            name="Mock Company",
-            ctry=ctry_two,
-            last_year_dividend_count=4,  # 2023년 배당 건수
-            last_year_dividend_date=["03", "06", "09", "12"],  # 배당 일자
-            last_dividend_per_share=2800.0,  # 2023년 마지막 배당금
-            last_dividend_ratio=0.45,  # 배당성향
-            last_dividend_growth_rate=0.12,  # 전년 대비 성장률
-            detail=yearly_details,
+            name=df["Market"].iloc[0],
+            ctry=ctry,
+            last_year_dividend_count=len(last_year_data),
+            last_year_dividend_date=last_year_data["payment_month"].tolist(),
+            last_dividend_per_share=round(float(df1["배당금"].iloc[-1]), 2),
+            last_dividend_ratio=last_dividend_ratio,
+            last_dividend_growth_rate=last_dividend_growth_rate,
+            detail=sorted(yearly_details, key=lambda x: x.year, reverse=True),
         )
+
+    def calculate_dividend_ratio(self, df, ctry: Country, ticker: str):
+        """배당성향(Dividend Payout Ratio) 계산"""
+        reverse_mapping = {v: k for k, v in contry_mapping.items()}
+        ctry_three = reverse_mapping.get(ctry)
+
+        table_name = f"{ctry_three}_stock_factors"
+
+        if ctry_three == "USA":
+            ticker = f"{ticker}-US"
+
+        shares_data = self.db._select(table=table_name, columns=["shared_outstanding"], limit=1, **{"ticker": ticker})
+
+        income_data = self.db._select(
+            table=f"{ctry_three}_income",
+            columns=["net_income"],
+            limit=1,
+            order="StmtDt",
+            ascending=False,
+            **{"Code": ticker},
+        )
+
+        if not shares_data or not income_data:
+            return 0.0
+
+        latest_shares = shares_data[0][0]
+        latest_net_income = income_data[0][0] * 1_000_000  # 백만 단위를 실제 금액으로 변환
+
+        # 가장 최근 1주당 배당금
+        latest_dividend_per_share = float(df["배당금"].iloc[-1])
+
+        if latest_shares == 0:
+            return 0.0
+
+        # 주당순이익(EPS) 계산
+        eps = latest_net_income / latest_shares  # 이제 단위가 맞음
+
+        # 배당성향 = (1주당 배당금 / EPS) * 100
+        return (latest_dividend_per_share / eps) * 100 if eps != 0 else 0.0
+
+    def calculate_growth_rate(self, df):
+        """배당 성장률 계산"""
+        latest_year = df["year"].max()
+        current_year_div = df[df["year"] == latest_year]["배당금"].sum()
+        prev_year_div = df[df["year"] == (latest_year - 1)]["배당금"].sum()
+
+        if prev_year_div == 0:
+            return 0.0
+
+        return (current_year_div - prev_year_div) / prev_year_div
 
 
 def get_dividend_service():

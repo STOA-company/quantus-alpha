@@ -1,10 +1,11 @@
+from datetime import datetime, timedelta
 from typing import List
-import random  # 파일 상단에 추가
 
+import pytz
 from app.modules.news.services import get_news_service
 from app.database.crud import JoinInfo, database
 from app.database.conn import db
-from app.modules.trending.schemas import TrendingStock, TrendingStockEn, TrendingStockKr
+from app.modules.trending.schemas import TrendingStock, TrendingStockKr, TrendingStockUs
 
 
 class TrendingService:
@@ -13,54 +14,72 @@ class TrendingService:
         self.database = database
         self.db = db
 
-    async def get_trending_stocks(self) -> TrendingStock:
-        kr = await self._get_trending_stocks_kr()
-        en = await self._get_trending_stocks_en()
-        return TrendingStock(kr=kr, en=en)
+    def get_trending_stocks(self) -> TrendingStock:
+        kr = self._get_trending_stocks_kr()
+        us = self._get_trending_stocks_us()
+        return TrendingStock(kr=kr, us=us)
 
-    async def _get_trending_stocks_kr(self) -> List[TrendingStockKr]:
+    def _get_trending_stocks_kr(self) -> List[TrendingStockKr]:
         table_name = "stock_kr_1d"
 
-        # 최신 날짜 조회
-        latest_date = self.database._select(table=table_name, columns=["Date"], order="Date", ascending=False, limit=1)[
-            0
-        ].Date
+        kst = pytz.timezone("Asia/Seoul")
+        today = datetime.now(kst)
+        weekday = today.weekday()
 
-        # 최신 날짜의 데이터 중 volume 상위 10개 조회
-        result = self.database._select(
-            table=table_name,
-            columns=["Ticker", "Name", "Volume"],
-            order="Volume",
-            ascending=False,
-            limit=10,
-            **{"Date": latest_date},
-        )
+        if weekday == 0:
+            check_date = today - timedelta(days=3)
+        elif weekday == 6:
+            check_date = today - timedelta(days=2)
+        else:
+            check_date = today - timedelta(days=1)
 
-        trending_stocks = []
-        for idx, row in enumerate(result, start=1):
-            # 무작위 가격과 변동률 생성
-            current_price = random.randint(10000, 100000)  # 1만원 ~ 10만원
-            current_price_rate = round(random.uniform(-5.0, 5.0), 2)  # -5.0% ~ +5.0%
+        while True:
+            date_str = check_date.strftime("%Y-%m-%d")
+            query_result = self.database._select(
+                table=table_name,
+                columns=["Ticker", "Name", "Volume", "Open", "Close", "Date"],
+                order="Volume",
+                ascending=False,
+                limit=10,
+                Date=date_str,
+            )
+            if query_result:
+                break
+            else:
+                check_date = check_date - timedelta(days=1)
 
-            stock_dict = {
-                "num": idx,
-                "ticker": str(row.Ticker),
-                "name": str(row.Name),
-                "volume": float(row.Volume) if row.Volume is not None else 0.0,
-                "current_price": current_price,
-                "current_price_rate": current_price_rate,
-            }
-            trending_stocks.append(TrendingStockKr(**stock_dict))
+        result = []
+        for idx, row in enumerate(query_result, start=1):
+            current_price = float(row.Close) if row.Close is not None else 0.0
+            open_price = float(row.Open) if row.Open is not None else 0.0
 
-        return trending_stocks
+            price_rate = round(((current_price - open_price) / open_price * 100), 2) if open_price != 0 else 0.0
 
-    async def _get_trending_stocks_en(self) -> List[TrendingStockEn]:
+            stock = TrendingStockKr(
+                num=idx,
+                ticker=str(row.Ticker),
+                name=str(row.Name),
+                volume=float(row.Volume) if row.Volume is not None else 0.0,
+                current_price=current_price,
+                current_price_rate=price_rate,
+            )
+            result.append(stock)
+
+        return result
+
+    def _get_trending_stocks_us(self) -> List[TrendingStockUs]:
         table_name = "stock_us_1d"
 
-        # 최신 날짜 조회
-        latest_date = self.database._select(table=table_name, columns=["Date"], order="Date", ascending=False, limit=1)[
-            0
-        ].Date
+        kst = pytz.timezone("Asia/Seoul")
+        today = datetime.now(kst)
+        weekday = today.weekday()
+
+        if weekday == 0:
+            check_date = today - timedelta(days=3)
+        elif weekday == 6:
+            check_date = today - timedelta(days=2)
+        else:
+            check_date = today - timedelta(days=1)
 
         # 조인 정보 설정
         join_info = JoinInfo(
@@ -72,34 +91,42 @@ class TrendingService:
             is_outer=False,
         )
 
-        # 최신 날짜의 데이터 중 volume 상위 10개 조회 (조인 포함)
-        result = self.database._select(
-            table=table_name,
-            columns=["Ticker", "Volume"],
-            order="Volume",
-            ascending=False,
-            limit=10,
-            join_info=join_info,
-            **{"Date": latest_date},
-        )
+        while True:
+            date_str = check_date.strftime("%Y-%m-%d")
+            query_result = self.database._select(
+                table=table_name,
+                columns=["Ticker", "Volume", "Open", "Close", "korean_name"],
+                order="Volume",
+                ascending=False,
+                limit=10,
+                join_info=join_info,
+                Date=date_str,
+            )
+            if query_result:
+                break
+            else:
+                check_date = check_date - timedelta(days=1)
+                if (today - check_date).days > 4:
+                    break
 
-        trending_stocks = []
-        for idx, row in enumerate(result, start=1):
-            # 무작위 가격과 변동률 생성
-            current_price = round(random.uniform(10.0, 500.0), 2)  # $10 ~ $500
-            current_price_rate = round(random.uniform(-5.0, 5.0), 2)  # -5.0% ~ +5.0%
+        result = []
+        for idx, row in enumerate(query_result, start=1):
+            current_price = float(row.Close) if row.Close is not None else 0.0
+            open_price = float(row.Open) if row.Open is not None else 0.0
 
-            stock_dict = {
-                "num": idx,
-                "ticker": str(row.Ticker),
-                "name": str(row.korean_name),
-                "volume": float(row.Volume) if row.Volume is not None else 0.0,
-                "current_price": current_price,
-                "current_price_rate": current_price_rate,
-            }
-            trending_stocks.append(TrendingStockEn(**stock_dict))
+            price_rate = round(((current_price - open_price) / open_price * 100), 2) if open_price != 0 else 0.0
 
-        return trending_stocks
+            stock = TrendingStockUs(
+                num=idx,
+                ticker=str(row.Ticker),
+                name=str(row.korean_name),
+                volume=float(row.Volume) if row.Volume is not None else 0.0,
+                current_price=current_price,
+                current_price_rate=price_rate,
+            )
+            result.append(stock)
+
+        return result
 
 
 def get_trending_service():
