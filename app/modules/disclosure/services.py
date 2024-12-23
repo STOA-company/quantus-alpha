@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from app.core.exception.custom import DataNotFoundException
 from app.database.crud import JoinInfo, database
 from app.core.logging.config import get_logger
@@ -75,6 +75,7 @@ class DisclosureService:
         if not ticker:
             results_ticker = [result.ticker for result in results]
             ctry = "us"
+            ticker_dict = {}
 
             table_name = f"stock_{ctry}_1d"
             columns = ["Date", "Ticker", "Open", "Close"]
@@ -87,8 +88,9 @@ class DisclosureService:
                 secondary_column="ticker",  # stock_us_tickers의 조인 컬럼
                 columns=join_columns,  # 조인 테이블에서 가져올 컬럼
             )
-
-            conditions = {"Ticker__in": results_ticker, "Date": (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")}
+            max_date = self.db._select(table=table_name, columns=["Date"], order="Date", ascending=False, limit=1)
+            print(f"max_date###############: {max_date}")
+            conditions = {"Ticker__in": results_ticker, "Date": max_date[0][0].strftime("%Y-%m-%d")}
 
             stock_results = self.db._select(
                 table=table_name, columns=columns + join_columns, join_info=join_info, **conditions
