@@ -15,6 +15,7 @@ from app.modules.price.schemas import PriceDailyItem, PriceSummaryItem
 from app.database.conn import db
 from app.database.crud import database
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.modules.common.utils import contry_mapping
 
 logger = get_logger(__name__)
 
@@ -316,8 +317,9 @@ class PriceService:
 
         week_52_high, week_52_low, last_day_close = self._process_price_data(df)
         sector = await self._get_sector_by_ticker(ticker)
-
         name = self._get_us_ticker_name(ticker) if ctry == "us" else df["Name"].iloc[0]
+        market_cap = await self._get_market_cap(ctry, ticker)
+        # market_cap = market_cap / 1000000000
 
         response_data = {
             "name": name,
@@ -326,7 +328,7 @@ class PriceService:
             "logo_url": "https://kr.pinterest.com/eunju011014/%EA%B7%80%EC%97%AC%EC%9A%B4-%EC%A7%A4/",
             "market": df["Market"].iloc[0],
             "sector": sector,
-            "market_cap": 123.45,
+            "market_cap": market_cap,
             "last_day_close": last_day_close,
             "week_52_low": week_52_low,
             "week_52_high": week_52_high,
@@ -348,6 +350,21 @@ class PriceService:
         query = select(StockInformation.sector_3).where(StockInformation.ticker == ticker)
         result = await db.execute_async_query(query)
         return result.scalar() or None
+
+    async def _get_market_cap(self, ctry: str, ticker: str) -> float:
+        """
+        종목 시가총액 조회
+        """
+        if ctry == "us":
+            ticker = f"{ticker}-US"
+        ctry = contry_mapping[ctry]
+        table_name = f"{ctry}_stock_factors"
+
+        result = self._db._select(table=table_name, columns=["market_cap"], limit=1, ticker=ticker)
+
+        print(f"결과: {result}")
+        # 단일 값만 반환
+        return float(result[0].market_cap) if result else 0.0
 
 
 def get_price_service() -> PriceService:
