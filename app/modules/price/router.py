@@ -40,7 +40,7 @@ async def get_real_time_price_data(
     일회성 실시간 가격 데이터 조회 엔드포인트
     현재는 데이터가 전일 데이터를 기준으로 조회됩니다.
     """
-    return await service.get_real_time_price_data(ticker, request)
+    return await service.get_real_time_price_data(ticker)
 
 
 @router.get("/real_time/stream")
