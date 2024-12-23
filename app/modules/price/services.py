@@ -441,28 +441,77 @@ class PriceService:
 
         return df
 
+    # async def get_real_time_price_data(self, ticker: str, request: Request) -> BaseResponse[RealTimePriceDataItem]:
+    #     """일회성 실시간 가격 데이터 조회"""
+    #     try:
+    #         ctry = check_ticker_country_len_2(ticker)
+    #         table_name = f"stock_{ctry}_1d"
+
+    #         # 최근 날짜 조회
+    #         max_date_result = self.database._select(
+    #             table=table_name,
+    #             columns=["Date"],
+    #             order="Date",
+    #             ascending=False,
+    #             limit=1
+    #         )
+    #         date_str = max_date_result[0].Date if max_date_result else None
+
+    #         columns = ["Date", "Open", "Close"]
+    #         conditions = {
+    #             "Ticker": ticker,
+    #             "Date": date_str,
+    #         }
+
+    #         data = pd.DataFrame(self.database._select(table=table_name, columns=columns, **conditions))
+
+    #         if data.empty:
+    #             return BaseResponse(status_code=404, message="No data found", data=None)
+
+    #         price_change = round(data["Close"] - data["Open"], 2)
+    #         price_change_rate = round(price_change / data["Open"], 2)
+
+    #         result = RealTimePriceDataItem(
+    #             ctry=ctry,
+    #             price=float(data["Close"]),
+    #             price_change=float(price_change),
+    #             price_change_rate=float(price_change_rate),
+    #         )
+
+    #         return BaseResponse(status_code=200, message="Data retrieved successfully", data=result)
+
+    #     except Exception as e:
+    #         logger.error(f"Error in get_real_time_price_data: {str(e)}")
+    #         return BaseResponse(status_code=500, message=f"Error: {str(e)}", data=None)
+
     async def get_real_time_price_data(self, ticker: str, request: Request) -> BaseResponse[RealTimePriceDataItem]:
         """일회성 실시간 가격 데이터 조회"""
         try:
             ctry = check_ticker_country_len_2(ticker)
             table_name = f"stock_{ctry}_1d"
-            columns = ["Date", "Open", "Close"]
-            conditions = {
-                "Ticker": ticker,
-                "Date": (date.today() - timedelta(days=1)).strftime("%Y-%m-%d"),
-            }
 
-            data = pd.DataFrame(self.database._select(table=table_name, columns=columns, **conditions))
+            # where 조건을 올바르게 전달
+            conditions = {"Ticker": ticker}
 
-            if data.empty:
+            query_result = self.database._select(
+                table=table_name,
+                columns=["Date", "Open", "Close"],
+                order="Date",
+                ascending=False,
+                limit=1,
+                **conditions,  # conditions를 언패킹하여 전달
+            )
+
+            if not query_result:
                 return BaseResponse(status_code=404, message="No data found", data=None)
 
-            price_change = round(data["Close"] - data["Open"], 2)
-            price_change_rate = round(price_change / data["Open"], 2)
+            record = query_result[0]
+            price_change = round(record.Close - record.Open, 2)
+            price_change_rate = round(price_change / record.Open, 2)
 
             result = RealTimePriceDataItem(
                 ctry=ctry,
-                price=float(data["Close"]),
+                price=float(record.Close),
                 price_change=float(price_change),
                 price_change_rate=float(price_change_rate),
             )
