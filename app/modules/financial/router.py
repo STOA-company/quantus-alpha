@@ -57,13 +57,15 @@ async def get_income_performance_data(
 )
 async def get_income_analysis(
     request: Request,
-    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[IncomeStatementResponse]:
     try:
+        country_code = check_ticker_country_len_3(ticker).upper()
+        ctry = FinancialCountry(country_code)
+
         result = await financial_service.get_income_analysis(
             ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
         )
@@ -81,13 +83,15 @@ async def get_income_analysis(
 )
 async def get_cashflow_analysis(
     request: Request,
-    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[CashFlowResponse]:
     try:
+        country_code = check_ticker_country_len_3(ticker).upper()
+        ctry = FinancialCountry(country_code)
+
         result = await financial_service.get_cashflow_analysis(
             ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
         )
@@ -105,13 +109,15 @@ async def get_cashflow_analysis(
 )
 async def get_finpos_analysis(
     request: Request,
-    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[FinPosResponse]:
     try:
+        country_code = check_ticker_country_len_3(ticker).upper()
+        ctry = FinancialCountry(country_code)
+
         result = await financial_service.get_finpos_analysis(
             ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
         )

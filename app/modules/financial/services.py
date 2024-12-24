@@ -344,9 +344,11 @@ class FinancialService:
             table_name = self.income_tables.get(ctry)
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
-                raise InvalidCountryException()
+                raise InvalidCountryException(country=ctry)
 
-            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+            # USA 기업인 경우 티커에 -US 접미사 추가
+            db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
 
             logger.debug(f"Querying income data for {ticker} with conditions: {conditions}")
             result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
@@ -361,8 +363,17 @@ class FinancialService:
             statements = self._process_income_statement_result(result)
             ttm = self._process_income_ttm_result(result)
 
-            # IncomeStatementResponse 객체 생성
-            income_statement_response = IncomeStatementResponse(code=ticker, name=name, ttm=ttm, details=statements)
+            # 3자리 대문자를 2자리 소문자로 변환
+            ctry_code = contry_mapping.get(ctry.value, "").lower()  # KOR -> kr
+
+            # IncomeStatementResponse 객체 생성 시 2자리 소문자 국가 코드 사용
+            income_statement_response = IncomeStatementResponse(
+                code=ticker,
+                name=name,
+                ctry=ctry_code,  # 2자리 소문자 국가 코드
+                ttm=ttm,
+                details=statements,
+            )
 
             # BaseResponse 생성
             logger.info(f"Successfully retrieved income data for {ticker}")
@@ -391,9 +402,11 @@ class FinancialService:
             table_name = self.cashflow_tables.get(ctry)
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
-                raise InvalidCountryException()
+                raise InvalidCountryException(country=ctry)
 
-            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+            # USA 기업인 경우 티커에 -US 접미사 추가
+            db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
 
             logger.debug(f"Querying cashflow data for {ticker} with conditions: {conditions}")
             result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
@@ -408,7 +421,8 @@ class FinancialService:
             # DB 결과에서 직접 이름 추출
             name = result[0][1] if result else ""
 
-            cashflow_response = CashFlowResponse(code=ticker, name=name, ttm=ttm, details=statements)
+            ctry_code = contry_mapping.get(ctry.value, "").lower()  # KOR -> kr
+            cashflow_response = CashFlowResponse(code=ticker, name=name, ctry=ctry_code, ttm=ttm, details=statements)
 
             logger.info(f"Successfully retrieved cashflow data for {ticker}")
             return BaseResponse[CashFlowResponse](
@@ -436,9 +450,11 @@ class FinancialService:
             table_name = self.finpos_tables.get(ctry)
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
-                raise InvalidCountryException()
+                raise InvalidCountryException(country=ctry)
 
-            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+            # USA 기업인 경우 티커에 -US 접미사 추가
+            db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
 
             logger.debug(f"Querying finpos data for {ticker} with conditions: {conditions}")
             result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
@@ -453,7 +469,8 @@ class FinancialService:
             # DB 결과에서 직접 이름 추출
             name = result[0][1] if result else ""
 
-            finpos_response = FinPosResponse(code=ticker, name=name, ttm=ttm, details=statements)
+            ctry_code = contry_mapping.get(ctry.value, "").lower()  # KOR -> kr
+            finpos_response = FinPosResponse(code=ticker, name=name, ctry=ctry_code, ttm=ttm, details=statements)
 
             logger.info(f"Successfully retrieved finpos data for {ticker}")
             return BaseResponse[FinPosResponse](
