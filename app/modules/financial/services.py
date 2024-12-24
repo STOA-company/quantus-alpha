@@ -95,7 +95,7 @@ class FinancialService:
         날짜 조건 생성
         start_date (Optional[str]): YYYYMM 형식의 시작일
         end_date (Optional[str]): YYYYMM 형식의 종료일
-        기본값은 2000년도부터 현재까지
+        ���본값은 2000년도부터 현재까지
         """
         from datetime import datetime
 
@@ -459,25 +459,31 @@ class FinancialService:
                 logger.warning(f"Invalid country code: {ctry}")
                 raise InvalidCountryException(country=ctry)
 
-            # USA 기업인 경우 티커에 -US 접미사 추가
             db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
             conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
 
             logger.debug(f"Querying cashflow data for {ticker} with conditions: {conditions}")
-            result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
+            result = self.db._select(table=table_name, **conditions)
 
             if not result:
                 logger.warning(f"No cashflow data found for ticker: {ticker}")
                 raise DataNotFoundException(ticker=ticker, data_type="현금흐름")
 
-            statements = self._process_cashflow_result(result)
-            ttm = self._process_cashflow_ttm_result(result)
+            # 정렬: 연도 내림차순, 분기 오름차순
+            sorted_result = sorted(
+                result,
+                key=lambda x: (-int(x.period_q[:4]), int(x.period_q[4:])),
+            )
 
-            # DB 결과에서 직접 이름 추출
-            name = result[0][1] if result else ""
+            statements = self._process_cashflow_result(sorted_result)
+            ttm = self._process_cashflow_ttm_result(sorted_result)
+            name = sorted_result[0][1] if sorted_result else ""
+            total = self._process_cashflow_total_result(sorted_result)
 
-            ctry_code = contry_mapping.get(ctry.value, "").lower()  # KOR -> kr
-            cashflow_response = CashFlowResponse(code=ticker, name=name, ctry=ctry_code, ttm=ttm, details=statements)
+            ctry_code = contry_mapping.get(ctry.value, "").lower()
+            cashflow_response = CashFlowResponse(
+                code=ticker, name=name, ctry=ctry_code, ttm=ttm, total=total, details=statements
+            )
 
             logger.info(f"Successfully retrieved cashflow data for {ticker}")
             return BaseResponse[CashFlowResponse](
@@ -507,25 +513,31 @@ class FinancialService:
                 logger.warning(f"Invalid country code: {ctry}")
                 raise InvalidCountryException(country=ctry)
 
-            # USA 기업인 경우 티커에 -US 접미사 추가
             db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
             conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
 
             logger.debug(f"Querying finpos data for {ticker} with conditions: {conditions}")
-            result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
+            result = self.db._select(table=table_name, **conditions)
 
             if not result:
                 logger.warning(f"No finpos data found for ticker: {ticker}")
                 raise DataNotFoundException(ticker=ticker, data_type="재무상태")
 
-            statements = self._process_finpos_result(result)
-            ttm = self._process_finpos_ttm_result(result)
+            # 정렬: 연도 내림차순, 분기 오름차순
+            sorted_result = sorted(
+                result,
+                key=lambda x: (-int(x.period_q[:4]), int(x.period_q[4:])),
+            )
 
-            # DB 결과에서 직접 이름 추출
-            name = result[0][1] if result else ""
+            statements = self._process_finpos_result(sorted_result)
+            ttm = self._process_finpos_ttm_result(sorted_result)
+            name = sorted_result[0][1] if sorted_result else ""
+            total = self._process_finpos_total_result(sorted_result)
 
-            ctry_code = contry_mapping.get(ctry.value, "").lower()  # KOR -> kr
-            finpos_response = FinPosResponse(code=ticker, name=name, ctry=ctry_code, ttm=ttm, details=statements)
+            ctry_code = contry_mapping.get(ctry.value, "").lower()
+            finpos_response = FinPosResponse(
+                code=ticker, name=name, ctry=ctry_code, ttm=ttm, total=total, details=statements
+            )
 
             logger.info(f"Successfully retrieved finpos data for {ticker}")
             return BaseResponse[FinPosResponse](
@@ -961,6 +973,74 @@ class FinancialService:
 
             # IncomeStatementDetail 객체 생성
             yearly_statement = self._create_income_statement_detail(yearly_data[year])
+            yearly_statements.append(yearly_statement)
+
+        return yearly_statements
+
+    def _process_cashflow_total_result(self, result) -> List[CashFlowDetail]:
+        """
+        년도별 현금흐름표 조회 - 각 년도의 분기 데이터를 합산하여 연간 총계 계산
+        """
+        if not result:
+            return []
+
+        # 년도별 데이터 집계
+        yearly_data = defaultdict(lambda: defaultdict(Decimal))
+
+        for row in result:
+            year = str(row.period_q)[:4]  # YYYYMM 형식에서 YYYY 추출
+
+            # 제외할 컬럼
+            exclude_columns = ["Code", "Name", "StmtDt", "period_q"]
+
+            # 각 필드별로 년도별 합산
+            for field_name, value in zip(row._fields, row):
+                if field_name not in exclude_columns:
+                    yearly_data[year][field_name] += self._to_decimal(value)
+
+        # 연도별 합산 데이터를 CashFlowDetail 객체로 변환
+        yearly_statements = []
+        for year in sorted(yearly_data.keys(), reverse=True):
+            # period_q를 연도로 설정
+            yearly_data[year]["period_q"] = year
+
+            # CashFlowDetail 객체 생성
+            yearly_statement = self._create_cashflow_detail(yearly_data[year])
+            yearly_statements.append(yearly_statement)
+
+        return yearly_statements
+
+    def _process_finpos_total_result(self, result) -> List[FinPosDetail]:
+        """
+        년도별 재무상태표 조회 - 각 년도의 분기 데이터를 합산하여 연간 총계 계산
+        재무상태표는 특성상 마지막 분기의 데이터를 사용
+        """
+        if not result:
+            return []
+
+        # 년도별 마지막 분기 데이터 저장
+        yearly_data = {}
+
+        for row in result:
+            year = str(row.period_q)[:4]  # YYYYMM 형식에서 YYYY 추출
+            quarter = str(row.period_q)[4:]  # 분기 정보
+
+            # 해당 연도의 데이터가 없거나, 현재 분기가 더 큰 경우에만 업데이트
+            if year not in yearly_data or quarter > str(yearly_data[year]["period_q"])[4:]:
+                yearly_data[year] = {
+                    field_name: self._to_decimal(value)
+                    for field_name, value in zip(row._fields, row)
+                    if field_name not in ["Code", "Name", "StmtDt"]
+                }
+
+        # 연도별 데이터를 FinPosDetail 객체로 변환
+        yearly_statements = []
+        for year in sorted(yearly_data.keys(), reverse=True):
+            # period_q를 연도로 설정
+            yearly_data[year]["period_q"] = year
+
+            # FinPosDetail 객체 생성
+            yearly_statement = self._create_finpos_detail(yearly_data[year])
             yearly_statements.append(yearly_statement)
 
         return yearly_statements
