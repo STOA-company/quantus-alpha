@@ -60,6 +60,7 @@ class IncomeStatementDetail(BaseModel):
 class IncomeStatementResponse(BaseModel):
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
+    ctry: str = Field(max_length=20)
     ttm: IncomeStatementDetail
     details: List[IncomeStatementDetail]
 
@@ -84,6 +85,7 @@ class CashFlowDetail(BaseModel):
 class CashFlowResponse(BaseModel):
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
+    ctry: str = Field(max_length=20)
     ttm: CashFlowDetail
     details: List[CashFlowDetail]
 
@@ -128,6 +130,7 @@ class FinPosDetail(BaseModel):
 class FinPosResponse(BaseModel):
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
+    ctry: str = Field(max_length=20)
     ttm: FinPosDetail
     details: List[FinPosDetail]
 
