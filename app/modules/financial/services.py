@@ -395,38 +395,42 @@ class FinancialService:
                 logger.warning(f"Invalid country code: {ctry}")
                 raise InvalidCountryException(country=ctry)
 
-            # USA 기업인 경우 티커에 -US 접미사 추가
             db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
             conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
 
             logger.debug(f"Querying income data for {ticker} with conditions: {conditions}")
-            result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
+
+            # 전체 데이터를 가져온 후 파이썬에서 정렬
+            result = self.db._select(table=table_name, **conditions)
 
             if not result:
                 logger.warning(f"No income data found for ticker: {ticker}")
                 raise DataNotFoundException(ticker=ticker, data_type="손익계산")
 
-            # DB 결과에서 직접 이름 추출
-            name = result[0][1] if result else ""  # result[0][1]은 Name 컬럼의 값
+            # 정렬: 연도는 내림차순, 분기는 오름차순
+            sorted_result = sorted(
+                result,
+                key=lambda x: (-int(x.period_q[:4]), int(x.period_q[4:])),  # 연도는 음수로 변환하여 내림차순
+            )
 
-            statements = self._process_income_statement_result(result)
-            ttm = self._process_income_ttm_result(result)
-            total = self._process_income_total_result(result)
+            name = sorted_result[0][1] if sorted_result else ""
 
-            # 3자리 대문자를 2자리 소문자로 변환
-            ctry_code = contry_mapping.get(ctry.value, "").lower()  # KOR -> kr
+            # 정렬된 결과로 처리
+            statements = self._process_income_statement_result(sorted_result)
+            ttm = self._process_income_ttm_result(sorted_result)
+            total = self._process_income_total_result(sorted_result)
 
-            # IncomeStatementResponse 객체 생성 시 2자리 소문자 국가 코드 사용
+            ctry_code = contry_mapping.get(ctry.value, "").lower()
+
             income_statement_response = IncomeStatementResponse(
                 code=ticker,
                 name=name,
-                ctry=ctry_code,  # 2자리 소문자 국가 코드
+                ctry=ctry_code,
                 ttm=ttm,
                 total=total,
                 details=statements,
             )
 
-            # BaseResponse 생성
             logger.info(f"Successfully retrieved income data for {ticker}")
             return BaseResponse[IncomeStatementResponse](
                 status_code=200, message="손익계산서 데이터를 성공적으로 조회했습니다.", data=income_statement_response
