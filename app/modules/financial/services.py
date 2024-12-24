@@ -17,6 +17,7 @@ from app.modules.financial.schemas import (
     CashFlowResponse,
     FinPosDetail,
     FinPosResponse,
+    DebtRatioResponse,
     FinancialRatioResponse,
     IncomePerformanceResponse,
     IncomeStatementDetail,
@@ -283,6 +284,23 @@ class FinancialService:
         except Exception as e:
             logger.error(f"Unexpected error in get_financial_ratio: {str(e)}")
             raise AnalysisException(analysis_type="재무비율 조회", detail=str(e))
+
+    async def get_debt_ratio(
+        self, ctry: FinancialCountry, ticker: str, db: AsyncSession
+    ) -> BaseResponse[DebtRatioResponse]:
+        """
+        부채비율 조회
+        """
+        try:
+            if ctry == "USA":
+                ticker = f"{ticker}-US"
+            country = FinancialCountry(ctry)
+            # finpos 테이블에서 조회
+            debt_ratio_data = await self.get_debt_ratio_data(country, ticker, db)
+            return debt_ratio_data
+        except Exception as e:
+            logger.error(f"Unexpected error in get_debt_ratio: {str(e)}")
+            raise AnalysisException(analysis_type="부채비율 조회", detail=str(e))
 
     # 유동비율
     async def get_liquidity_ratio(
@@ -563,6 +581,47 @@ class FinancialService:
             data=financial_ratio_response,
         )
 
+    async def get_debt_ratio_data(
+        self, country: FinancialCountry, ticker: str, db: AsyncSession
+    ) -> BaseResponse[DebtRatioResponse]:
+        """
+        부채비율 데이터 조회
+        """
+        table_name = self.finpos_tables.get(country)
+        if not table_name:
+            logger.warning(f"잘못된 국가 코드: {country}")
+            raise InvalidCountryException()
+
+        quarters = await self.financial_crud.get_debt_ratio_quarters(table_name, ticker, db)
+
+        if not quarters:
+            logger.warning(f"부채비율 데이터를 찾을 수 없습니다: {ticker}")
+            raise DataNotFoundException(ticker=ticker, data_type="부채비율")
+
+        if len(quarters) < 4:
+            logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
+            raise DataNotFoundException(ticker=ticker, data_type="부채비율(4분기)")
+
+        # 벡터화된 계산
+        debt_ratios = [
+            float((self._to_decimal(q.total_dept) / self._to_decimal(q.total_asset)) * 100)
+            if self._to_decimal(q.total_asset) != 0
+            else 0.0
+            for q in quarters
+        ]
+
+        # 병렬 처리: 평균 계산과 산업 평균 조회를 동시에
+        average_debt_ratio = round(sum(debt_ratios) / len(debt_ratios), 2)
+        industry_avg = await self.get_debt_ratio_industry_avg(country=country, ticker=ticker, db=db)
+
+        debt_ratio_response = DebtRatioResponse(code=ticker, ratio=average_debt_ratio, industry_avg=industry_avg)
+
+        return BaseResponse[DebtRatioResponse](
+            status_code=200,
+            message="부채비율(4분기 평균) 데이터를 성공적으로 조회했습니다.",
+            data=debt_ratio_response,
+        )
+
     # 유동비율 계산
     async def get_liquidity_ratio_data(
         self, country: FinancialCountry, ticker: str, db: AsyncSession
@@ -647,8 +706,23 @@ class FinancialService:
             ),
         )
 
-    # 부채비율 업종 평균 조회
+    # 재무비율 업종 평균 조회
     async def get_financial_industry_avg(self, country: FinancialCountry, ticker: str, db: AsyncSession) -> float:
+        """업종 평균 재무비율 조회"""
+        table_name = self.finpos_tables.get(country)
+        if not table_name:
+            return 0.0
+
+        return await self.financial_crud.get_financial_industry_avg_data(
+            table_name=table_name,
+            base_ticker=ticker.replace("-US", "") if country == FinancialCountry.USA else ticker,
+            is_usa=country == FinancialCountry.USA,
+            ratio_type="debt",
+            db=db,
+        )
+
+    # 부채비율 업종 평균 조회
+    async def get_debt_ratio_industry_avg(self, country: FinancialCountry, ticker: str, db: AsyncSession) -> float:
         """업종 평균 부채비율 조회"""
         table_name = self.finpos_tables.get(country)
         if not table_name:

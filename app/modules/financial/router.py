@@ -136,7 +136,7 @@ async def get_financial_ratio(
     try:
         ctry = check_ticker_country_len_3(ticker).upper()
         company_name = await financial_service.get_kr_name_by_ticker(db=db, ticker=ticker)
-        result1 = await financial_service.get_financial_ratio(ctry=ctry, ticker=ticker, db=db)
+        result1 = await financial_service.get_debt_ratio(ctry=ctry, ticker=ticker, db=db)
         result2 = await financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker, db=db)
         result3 = await financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker, db=db)
         ctry_two = contry_mapping.get(ctry)
@@ -148,7 +148,7 @@ async def get_financial_ratio(
                 code=ticker,
                 name=company_name,
                 ctry=ctry_two,
-                financial_ratios=result1.data,
+                debt_ratios=result1.data,
                 liquidity_ratios=result2.data,
                 interest_coverage_ratios=result3.data,
             ),
