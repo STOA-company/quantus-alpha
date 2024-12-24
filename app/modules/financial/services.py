@@ -61,7 +61,41 @@ class FinancialService:
         날짜 조건 생성
         start_date (Optional[str]): YYYYMM 형식의 시작일
         end_date (Optional[str]): YYYYMM 형식의 종료일
-        기본값은 10분기/10년치 데이터를 조회
+        기본값은 2000년도부터 현재까지
+        """
+        from datetime import datetime
+
+        conditions = {}
+        current_date = datetime.now()
+        current_year = current_date.year
+        current_month = current_date.month
+
+        # 현재 월에 따른 가장 최근 분기 말월 계산
+        latest_quarter_month = ((current_month - 1) // 3) * 3
+        if latest_quarter_month == 0:
+            latest_quarter_month = 12
+            current_year -= 1
+        latest_quarter_month = str(latest_quarter_month).zfill(2)  # 한 자리 월을 두 자리로 변환
+
+        if not start_date:
+            # 2000년부터 현재까지의 데이터 조회
+            conditions["period_q__gte"] = "200001"  # 2000년 1월부터
+            conditions["period_q__lte"] = f"{current_year}{latest_quarter_month}"  # 현재 연도의 마지막 분기
+        else:
+            conditions["period_q__gte"] = f"{start_date[:4]}01"  # 시작년도의 1월
+            if end_date:
+                conditions["period_q__lte"] = f"{end_date[:4]}{end_date[4:6]}"
+            else:
+                conditions["period_q__lte"] = f"{current_year}{latest_quarter_month}"
+
+        return conditions
+
+    def _get_date_conditions_ten(self, start_date: Optional[str], end_date: Optional[str]) -> Dict:
+        """
+        날짜 조건 생성
+        start_date (Optional[str]): YYYYMM 형식의 시작일
+        end_date (Optional[str]): YYYYMM 형식의 종료일
+        기본값은 2000년도부터 현재까지
         """
         from datetime import datetime
 
@@ -149,7 +183,7 @@ class FinancialService:
 
             conditions = {
                 "Code__in": tickers_with_suffix,  # 수정된 티커 리스트 사용
-                **self._get_date_conditions(start_date, end_date),
+                **self._get_date_conditions_ten(start_date, end_date),
             }
 
             result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
@@ -377,6 +411,7 @@ class FinancialService:
 
             statements = self._process_income_statement_result(result)
             ttm = self._process_income_ttm_result(result)
+            total = self._process_income_total_result(result)
 
             # 3자리 대문자를 2자리 소문자로 변환
             ctry_code = contry_mapping.get(ctry.value, "").lower()  # KOR -> kr
@@ -387,6 +422,7 @@ class FinancialService:
                 name=name,
                 ctry=ctry_code,  # 2자리 소문자 국가 코드
                 ttm=ttm,
+                total=total,
                 details=statements,
             )
 
@@ -892,6 +928,39 @@ class FinancialService:
 
         return self._create_finpos_detail(ttm_dict)
 
+    def _process_income_total_result(self, result) -> List[IncomeStatementDetail]:
+        """
+        년도별 손익계산서 조회 - 각 년도의 분기 데이터를 합산하여 연간 총계 계산
+        """
+        if not result:
+            return []
+
+        # 년도별 데이터 집계
+        yearly_data = defaultdict(lambda: defaultdict(Decimal))
+
+        for row in result:
+            year = str(row.period_q)[:4]  # YYYYMM 형식에서 YYYY 추출
+
+            # 제외할 컬럼
+            exclude_columns = ["Code", "Name", "StmtDt", "period_q"]
+
+            # 각 필드별로 년도별 합산
+            for field_name, value in zip(row._fields, row):
+                if field_name not in exclude_columns:
+                    yearly_data[year][field_name] += self._to_decimal(value)
+
+        # 연도별 합산 데이터를 IncomeStatementDetail 객체로 변환
+        yearly_statements = []
+        for year in sorted(yearly_data.keys(), reverse=True):
+            # period_q를 연도로 설정
+            yearly_data[year]["period_q"] = year
+
+            # IncomeStatementDetail 객체 생성
+            yearly_statement = self._create_income_statement_detail(yearly_data[year])
+            yearly_statements.append(yearly_statement)
+
+        return yearly_statements
+
     ########################################## 결과 처리 메서드 #########################################
     # 분기 실적
     def _process_income_performance_quarterly_result(self, result, sector, ticker, ctry) -> List[QuarterlyIncome]:
@@ -1126,7 +1195,7 @@ class FinancialService:
             # period_q는 Decimal에서 str로 변환
             if field_name == "period_q":
                 values[field_name] = str(value)
-            # 필드명 매핑 ��용
+
             elif field_name in field_mapping:
                 values[field_mapping[field_name]] = self._to_decimal(value)
             else:
