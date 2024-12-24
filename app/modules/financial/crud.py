@@ -8,7 +8,7 @@ class FinancialCrud:
         self.db = db
 
     async def get_financial_ratio_quarters(self, table_name: str, ticker: str, db: AsyncSession):
-        """부채비율 계산을 위한 4분기 데이터 조회"""
+        """재무비율 계산을 위한 4분기 데이터 조회"""
         query = text(f"""
             SELECT Name, total_dept, equity
             FROM {table_name}
@@ -17,6 +17,18 @@ class FinancialCrud:
             LIMIT 4
         """)
 
+        result = await db.execute(query, {"ticker": ticker})
+        return result.fetchall()
+
+    async def get_debt_ratio_quarters(self, table_name: str, ticker: str, db: AsyncSession):
+        """부채비율 계산을 위한 4분기 데이터 조회"""
+        query = text(f"""
+            SELECT Name, total_dept, total_asset
+            FROM {table_name}
+            WHERE Code = :ticker
+            ORDER BY period_q DESC
+            LIMIT 4
+        """)
         result = await db.execute(query, {"ticker": ticker})
         return result.fetchall()
 
@@ -51,8 +63,8 @@ class FinancialCrud:
     ) -> float:
         """업종 평균 재무비율 조회"""
         ratio_calculations = {
-            "debt": """WHEN CAST(f.equity AS DECIMAL) != 0
-                      THEN (CAST(f.total_dept AS DECIMAL) / CAST(f.equity AS DECIMAL)) * 100""",
+            "debt": """WHEN CAST(f.total_asset AS DECIMAL) != 0
+                      THEN (CAST(f.total_dept AS DECIMAL) / CAST(f.total_asset AS DECIMAL)) * 100""",
             "liquidity": """WHEN CAST(f.current_dept AS DECIMAL) != 0
                            THEN (CAST(f.current_asset AS DECIMAL) / CAST(f.current_dept AS DECIMAL)) * 100""",
             "interest": """WHEN CAST(f.fin_cost AS DECIMAL) != 0
