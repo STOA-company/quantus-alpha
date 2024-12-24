@@ -156,4 +156,4 @@ async def get_financial_ratio(
 
     except Exception as error:
         logger.error(f"Financial ratio 조회 실패: {str(error)}, ticker: {ticker}, country: {ctry}")
-        return await exception_handler(request, error)
+        return exception_handler(request, error)

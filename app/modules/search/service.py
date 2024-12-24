@@ -1,5 +1,5 @@
 from typing import List, Optional, Tuple
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.crud import database
 from app.models.models_stock import StockInformation
@@ -29,31 +29,20 @@ class SearchService:
         """
         # 검색어 전처리
         search_term = f"%{query}%"
-
-        # 전체 결과 개수 먼저 조회 (디버깅용)
-        count_query = (
-            select(func.count())
-            .select_from(StockInformation)
-            .where(
-                or_(
-                    func.lower(StockInformation.kr_name).like(func.lower(search_term)),
-                    func.lower(StockInformation.en_name).like(func.lower(search_term)),
-                    func.lower(StockInformation.ticker).like(func.lower(search_term)),
-                )
-            )
-        )
-        total_count = await db.scalar(count_query)
-        print(f"Total matching records: {total_count}")
-
-        # 검색 쿼리
+        # 검색 쿼리 최적화
         search_query = (
             select(StockInformation)
             .where(
                 or_(
-                    func.lower(StockInformation.kr_name).like(func.lower(search_term)),
-                    func.lower(StockInformation.en_name).like(func.lower(search_term)),
-                    func.lower(StockInformation.ticker).like(func.lower(search_term)),
+                    StockInformation.ticker == query,
+                    StockInformation.ticker.ilike(search_term),
+                    StockInformation.kr_name.ilike(search_term),
+                    StockInformation.en_name.ilike(search_term),
                 )
+            )
+            .order_by(
+                # case 문법 수정 - 리스트가 아닌 개별 인자로 전달
+                case((StockInformation.ticker == query, 1), else_=2).label("sort_order")
             )
             .offset(offset)
             .limit(limit)
@@ -61,7 +50,6 @@ class SearchService:
 
         result = await db.execute(search_query)
         search_result = result.scalars().all()
-        print(f"Retrieved records: {len(search_result)}, Requested limit: {limit}")
 
         search_items = []
         for item in search_result:
@@ -69,8 +57,6 @@ class SearchService:
 
             # db 세션 전달
             current_price, price_rate = await self._get_current_price(item.ticker, db)
-            print(f"Current price: {current_price}, Price rate: {price_rate}")
-
             search_items.append(
                 SearchItem(
                     ticker=item.ticker,
@@ -98,11 +84,9 @@ class SearchService:
             )
 
             if not result or len(result) == 0:
-                print(f"No data found for {ticker} in {table_name}")
                 return None, None
 
             row = result[0]
-            print(f"Raw data for {ticker}: {row}")
 
             try:
                 close = float(row._mapping["Close"])
@@ -113,16 +97,12 @@ class SearchService:
                 else:
                     rate = round(((close - open_price) / open_price) * 100, 2)
 
-                print(f"{ticker} ({country_code}): close={close}, open={open_price}, rate={rate:.2f}%")
                 return close, rate
 
-            except (KeyError, ValueError, AttributeError) as e:
-                print(f"Error processing data for {ticker}: {e}")
-                print(f"Row structure: {dir(row)}")
+            except (KeyError, ValueError, AttributeError):
                 return None, None
 
-        except Exception as e:
-            print(f"Database error for {ticker}: {e}")
+        except Exception:
             return None, None
 
     async def get_country_code(self, ticker: str, db: AsyncSession) -> str:

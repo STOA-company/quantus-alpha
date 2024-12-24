@@ -137,10 +137,17 @@ class NewsService:
 
         if ctry == "kr":
             tickers = [f"A{ticker}" for ticker in tickers]
+
+        kr_columns = ["Date", "Ticker", "Open", "Close", "Name"]
+        us_columns = ["Date", "Ticker", "Open", "Close"]
+
+        if ctry == "kr":
+            db_columns = kr_columns
+        else:
+            db_columns = us_columns
+
         while True:
-            stock_data = self.db._select(
-                table=table_name, columns=["Date", "Ticker", "Open", "Close", "Name"], Date=date_str, Ticker__in=tickers
-            )
+            stock_data = self.db._select(table=table_name, columns=db_columns, Date=date_str, Ticker__in=tickers)
             if stock_data:
                 break
             else:
@@ -161,7 +168,13 @@ class NewsService:
 
         # 결과를 리스트 형태로 변환
         stock_data_list = [
-            {"Date": row[0], "Ticker": row[1], "Open": float(row[2]), "Close": float(row[3]), "Name": str(row[4])}
+            {
+                "Date": row[0],
+                "Ticker": row[1],
+                "Open": float(row[2]),
+                "Close": float(row[3]),
+                "Name": str(row[4] if ctry == "kr" else None),
+            }
             for row in stock_data
         ]
 
@@ -191,6 +204,7 @@ class NewsService:
             raise ValueError("Page number must be greater than 0")
         if size < 1:
             raise ValueError("Page size must be greater than 0")
+
         # 시간대에 맞춘 ctry 기본값 설정
         ctry = self.get_current_market_country()
 
@@ -402,7 +416,6 @@ class NewsService:
 
             # 1. S3에서 최신 뉴스 데이터 조회
             country_path = f"merged_data/{NEWS_CONTRY_MAP[ctry]}"
-            print(f"country_path: {country_path}")
             s3_data = self._fetch_s3_data(date_str, country_path)
             if s3_data is None:
                 raise DataNotFoundException(ticker="all", data_type="news")

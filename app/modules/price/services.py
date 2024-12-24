@@ -7,16 +7,21 @@ from fastapi import Request
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from sse_starlette import EventSourceResponse
+from app.models.models_stock import StockInformation
 from app.modules.common.cache import MemoryCache
 from app.modules.common.enum import Country, Frequency
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2
-from app.modules.price.schemas import PriceDataItem, RealTimePriceDataItem, ResponsePriceDataItem
+from app.modules.price.schemas import PriceDataItem, PriceSummaryItem, RealTimePriceDataItem, ResponsePriceDataItem
 from app.database.crud import database
+from app.database.conn import db
 from app.core.logging.config import get_logger
 from app.core.exception.custom import DataNotFoundException
+from app.modules.common.utils import contry_mapping
 
 
 logger = get_logger(__name__)
@@ -273,7 +278,10 @@ class PriceService:
         self._cache = MemoryCache()
         self.db_handler = DatabaseHandler(self.config, database)
         self.data_processor = DataProcessor(self.config)
+        self._async_db = db
         self.database = database
+        self.base_columns = ["Date", "Ticker", "Open", "High", "Low", "Close", "Volume", "Market"]
+        self.country_specific_columns = {Country.KR: self.base_columns + ["Name"], Country.US: self.base_columns}
 
     def _get_chunk_size(self, frequency: Frequency) -> int:
         """주기에 따른 청크 크기 반환"""
@@ -441,28 +449,77 @@ class PriceService:
 
         return df
 
-    async def get_real_time_price_data(self, ticker: str, request: Request) -> BaseResponse[RealTimePriceDataItem]:
+    # async def get_real_time_price_data(self, ticker: str, request: Request) -> BaseResponse[RealTimePriceDataItem]:
+    #     """일회성 실시간 가격 데이터 조회"""
+    #     try:
+    #         ctry = check_ticker_country_len_2(ticker)
+    #         table_name = f"stock_{ctry}_1d"
+
+    #         # 최근 날짜 조회
+    #         max_date_result = self.database._select(
+    #             table=table_name,
+    #             columns=["Date"],
+    #             order="Date",
+    #             ascending=False,
+    #             limit=1
+    #         )
+    #         date_str = max_date_result[0].Date if max_date_result else None
+
+    #         columns = ["Date", "Open", "Close"]
+    #         conditions = {
+    #             "Ticker": ticker,
+    #             "Date": date_str,
+    #         }
+
+    #         data = pd.DataFrame(self.database._select(table=table_name, columns=columns, **conditions))
+
+    #         if data.empty:
+    #             return BaseResponse(status_code=404, message="No data found", data=None)
+
+    #         price_change = round(data["Close"] - data["Open"], 2)
+    #         price_change_rate = round(price_change / data["Open"], 2)
+
+    #         result = RealTimePriceDataItem(
+    #             ctry=ctry,
+    #             price=float(data["Close"]),
+    #             price_change=float(price_change),
+    #             price_change_rate=float(price_change_rate),
+    #         )
+
+    #         return BaseResponse(status_code=200, message="Data retrieved successfully", data=result)
+
+    #     except Exception as e:
+    #         logger.error(f"Error in get_real_time_price_data: {str(e)}")
+    #         return BaseResponse(status_code=500, message=f"Error: {str(e)}", data=None)
+
+    async def get_real_time_price_data(self, ticker: str) -> BaseResponse[RealTimePriceDataItem]:
         """일회성 실시간 가격 데이터 조회"""
         try:
             ctry = check_ticker_country_len_2(ticker)
             table_name = f"stock_{ctry}_1d"
-            columns = ["Date", "Open", "Close"]
-            conditions = {
-                "Ticker": ticker,
-                "Date": (date.today() - timedelta(days=1)).strftime("%Y-%m-%d"),
-            }
 
-            data = pd.DataFrame(self.database._select(table=table_name, columns=columns, **conditions))
+            # where 조건을 올바르게 전달
+            conditions = {"Ticker": ticker}
 
-            if data.empty:
+            query_result = self.database._select(
+                table=table_name,
+                columns=["Date", "Open", "Close"],
+                order="Date",
+                ascending=False,
+                limit=1,
+                **conditions,  # conditions를 언패킹하여 전달
+            )
+
+            if not query_result:
                 return BaseResponse(status_code=404, message="No data found", data=None)
 
-            price_change = round(data["Close"] - data["Open"], 2)
-            price_change_rate = round(price_change / data["Open"], 2)
+            record = query_result[0]
+            price_change = round(record.Close - record.Open, 2)
+            price_change_rate = round(price_change / record.Open, 2)
 
             result = RealTimePriceDataItem(
                 ctry=ctry,
-                price=float(data["Close"]),
+                price=float(record.Close),
                 price_change=float(price_change),
                 price_change_rate=float(price_change_rate),
             )
@@ -530,6 +587,122 @@ class PriceService:
                 "Connection": "keep-alive",
             },
         )
+
+    async def get_price_data_summary(self, ctry: str, ticker: str, db: AsyncSession) -> PriceSummaryItem:
+        """
+        종목 요약 데이터 조회
+        """
+        cache_key = f"summary_{ctry}_{ticker}"
+
+        cached_data = self._cache.get(cache_key)
+        if cached_data:
+            logger.info(f"Cache hit for {cache_key}")
+            return PriceSummaryItem(**cached_data)
+
+        df = self._fetch_52week_data(ctry, ticker)
+        if df.empty:
+            raise DataNotFoundException(ticker, "52week")
+
+        week_52_high, week_52_low, last_day_close = self._process_price_data(df)
+        sector = await self._get_sector_by_ticker(ticker)
+        name = self._get_us_ticker_name(ticker) if ctry == "us" else df["Name"].iloc[0]
+        market_cap = await self._get_market_cap(ctry, ticker)
+        # market_cap = market_cap / 1000000000
+
+        response_data = {
+            "name": name,
+            "ticker": ticker,
+            "ctry": ctry,
+            "logo_url": "https://kr.pinterest.com/eunju011014/%EA%B7%80%EC%97%AC%EC%9A%B4-%EC%A7%A4/",
+            "market": df["Market"].iloc[0],
+            "sector": sector,
+            "market_cap": market_cap,
+            "last_day_close": last_day_close,
+            "week_52_low": week_52_low,
+            "week_52_high": week_52_high,
+            "is_market_close": True,
+        }
+
+        try:
+            self._cache.set(cache_key, response_data, self.cache_ttl_day)
+        except Exception as e:
+            logger.error(f"Failed to set cache for {cache_key}: {e}")
+
+        return PriceSummaryItem(**response_data)
+
+    def _fetch_52week_data(self, ctry: str, ticker: str) -> pd.DataFrame:
+        """
+        52주 데이터 조회
+        """
+        end_date = date.today()
+        start_date = end_date - timedelta(days=365)
+
+        table_name = f"stock_{ctry}_1d"
+        columns = self.country_specific_columns.get(ctry, self.base_columns)
+
+        result = self.database._select(
+            table=table_name,
+            columns=columns,
+            Ticker=ticker,
+            Date__gte=datetime.combine(start_date, datetime.min.time()),
+            Date__lte=datetime.combine(end_date, datetime.max.time()),
+            order="Date",
+            ascending=True,
+        )
+
+        return pd.DataFrame(result, columns=columns) if result else pd.DataFrame(columns=columns)
+
+    def _process_price_data(self, df: pd.DataFrame) -> Tuple[float, float, float]:
+        """
+        52주 최고가, 52주 최저가, 최근 종가 반환
+        """
+        week_52_high = df["High"].max()
+        week_52_low = df["Low"].min()
+        last_day_close = self._get_last_day_close(df)
+
+        return week_52_high, week_52_low, last_day_close
+
+    def _get_last_day_close(self, df: pd.DataFrame) -> float:
+        """직전 거래일의 종가 반환"""
+        if df.empty or len(df) < 2:  # 데이터가 없거나 하나밖에 없으면 0 반환
+            return 0.0
+
+        # Date로 정렬
+        sorted_df = df.sort_values("Date", ascending=False)
+
+        # 가장 최근 날짜를 제외한 첫 번째 데이터의 종가를 반환
+        return float(sorted_df.iloc[1]["Close"])
+
+    async def _get_sector_by_ticker(self, ticker: str) -> str:
+        """
+        종목 섹터 조회
+        """
+        db = self._async_db
+        query = select(StockInformation.sector_3).where(StockInformation.ticker == ticker)
+        result = await db.execute_async_query(query)
+        return result.scalar() or None
+
+    def _get_us_ticker_name(self, ticker: str) -> str:  # TODO: RDS DB에 추가하여 조회 로직 없애기
+        """
+        US 종목 이름 조회
+        """
+        result = self.database._select(table="stock_us_tickers", columns=["english_name"], ticker=ticker)
+        return result[0].english_name if result else None
+
+    async def _get_market_cap(self, ctry: str, ticker: str) -> float:
+        """
+        종목 시가총액 조회
+        """
+        if ctry == "us":
+            ticker = f"{ticker}-US"
+        ctry = contry_mapping[ctry]
+        table_name = f"{ctry}_stock_factors"
+
+        result = self.database._select(table=table_name, columns=["market_cap"], limit=1, ticker=ticker)
+
+        print(f"결과: {result}")
+        # 단일 값만 반환
+        return float(result[0].market_cap) if result else 0.0
 
 
 def get_price_service() -> PriceService:

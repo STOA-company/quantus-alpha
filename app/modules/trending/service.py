@@ -1,5 +1,7 @@
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 from typing import List
+
+import pytz
 from app.modules.news.services import get_news_service
 from app.database.crud import JoinInfo, database
 from app.database.conn import db
@@ -20,7 +22,17 @@ class TrendingService:
     def _get_trending_stocks_kr(self) -> List[TrendingStockKr]:
         table_name = "stock_kr_1d"
 
-        check_date = date.today() - timedelta(days=1)
+        kst = pytz.timezone("Asia/Seoul")
+        today = datetime.now(kst)
+        weekday = today.weekday()
+
+        if weekday == 0:
+            check_date = today - timedelta(days=3)
+        elif weekday == 6:
+            check_date = today - timedelta(days=2)
+        else:
+            check_date = today - timedelta(days=1)
+
         while True:
             date_str = check_date.strftime("%Y-%m-%d")
             query_result = self.database._select(
@@ -58,6 +70,17 @@ class TrendingService:
     def _get_trending_stocks_us(self) -> List[TrendingStockUs]:
         table_name = "stock_us_1d"
 
+        kst = pytz.timezone("Asia/Seoul")
+        today = datetime.now(kst)
+        weekday = today.weekday()
+
+        if weekday == 0:
+            check_date = today - timedelta(days=3)
+        elif weekday == 6:
+            check_date = today - timedelta(days=2)
+        else:
+            check_date = today - timedelta(days=1)
+
         # 조인 정보 설정
         join_info = JoinInfo(
             primary_table=table_name,
@@ -68,15 +91,23 @@ class TrendingService:
             is_outer=False,
         )
 
-        query_result = self.database._select(
-            table=table_name,
-            columns=["Ticker", "Volume", "Open", "Close", "korean_name"],
-            order="Volume",
-            ascending=False,
-            limit=10,
-            join_info=join_info,
-            Date=(date.today() - timedelta(days=1)).strftime("%Y-%m-%d"),
-        )
+        while True:
+            date_str = check_date.strftime("%Y-%m-%d")
+            query_result = self.database._select(
+                table=table_name,
+                columns=["Ticker", "Volume", "Open", "Close", "korean_name"],
+                order="Volume",
+                ascending=False,
+                limit=10,
+                join_info=join_info,
+                Date=date_str,
+            )
+            if query_result:
+                break
+            else:
+                check_date = check_date - timedelta(days=1)
+                if (today - check_date).days > 4:
+                    break
 
         result = []
         for idx, row in enumerate(query_result, start=1):
