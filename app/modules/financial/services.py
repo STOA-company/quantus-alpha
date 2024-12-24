@@ -1,11 +1,11 @@
-import pandas as pd
+from collections import defaultdict
+import statistics
 from sqlalchemy import select
 from app.core.logging.config import get_logger
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List
 from fastapi import HTTPException, Depends
 import math
-import random
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.crud import database
 from app.database.conn import db
@@ -139,22 +139,30 @@ class FinancialService:
                 logger.warning(f"Invalid country code: {ctry}")
                 raise InvalidCountryException()
 
-            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+            # 섹터 정보 조회
+            sector = await self.get_sector_by_ticker(ticker)
+            tickers = self.get_ticker_by_sector(sector)
 
-            logger.debug(f"Querying income performance for {ticker} with conditions: {conditions}")
+            tickers_with_suffix = [f"{t}-US" for t in tickers]  # 각 티커에 -US 접미사 추가
+
+            conditions = {
+                "Code__in": tickers_with_suffix,  # 수정된 티커 리스트 사용
+                **self._get_date_conditions(start_date, end_date),
+            }
+
             result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
 
             if not result:
                 logger.warning(f"No income performance data found for ticker: {ticker}")
                 raise DataNotFoundException(ticker=ticker, data_type="실적")
 
-            quarterly_statements, yearly_statements = self._process_income_performance_statement_result(result)
+            quarterly_statements = self._process_income_performance_quarterly_result(result, sector, ticker, ctry)
+            yearly_statements = self._process_income_performance_yearly_result(result, sector, ticker, ctry)
 
             # DB 결과에서 직접 이름 추출
             company_name = await self.get_kr_name_by_ticker(db=db, ticker=ticker)
 
             ctry = contry_mapping.get(ctry)
-            sector = await self.get_sector_by_ticker(ticker)
 
             performance_response = IncomePerformanceResponse(
                 code=ticker,
@@ -516,6 +524,34 @@ class FinancialService:
         sector = result.scalar_one_or_none()
         return sector
 
+    # 섹터 내 종목 조회
+    def get_ticker_by_sector(self, sector: str) -> List[str]:
+        """
+        섹터 내 종목 조회
+        """
+        query = select(StockInformation.ticker).where(StockInformation.sector_3 == sector)
+        result = self.db._execute(query)
+        tickers = result.scalars().all()
+        return tickers
+
+    def get_shares_by_ticker(self, ticker: str, country: str) -> float:
+        try:
+            country_enum = FinancialCountry(country)
+            table_name = f"{country_enum.value}_stock_factors"
+
+            result = self.db._select(table=table_name, ticker=ticker, limit=1)
+
+            SHARED_OUTSTANDING_INDEX = 2
+
+            if result and len(result) > 0:
+                shares_value = result[0][SHARED_OUTSTANDING_INDEX]
+                return float(shares_value) if shares_value is not None else 0.0
+
+            return 0.0
+        except Exception as e:
+            logger.error(f"Error getting shares for {ticker}: {e}")
+            return 0.0
+
     ########################################## 계산 메서드 #########################################
     # 부채비율 계산
     async def get_financial_ratio_data(
@@ -600,7 +636,7 @@ class FinancialService:
 
         return BaseResponse[LiquidityRatioResponse](
             status_code=200,
-            message="유동비율(4분기 평균) 데이터를 성공적으로 조회했습니다.",
+            message="���동비율(4분기 평균) 데이터를 성공적으로 조회했습니다.",
             data=LiquidityRatioResponse(
                 code=ticker, name=quarters[0].Name, ratio=average_liquidity_ratio, industry_avg=industry_avg
             ),
@@ -773,80 +809,167 @@ class FinancialService:
         return self._create_finpos_detail(ttm_dict)
 
     ########################################## 결과 처리 메서드 #########################################
-    # 실적
-    def _process_income_performance_statement_result(
-        self, result, exclude_columns=["StmtDt"]
-    ) -> Tuple[List[QuarterlyIncome], List[QuarterlyIncome]]:
-        """
-        실적 결과 처리 - 분기별 및 연도별 데이터를 분리하여 처리
-        최근 10개의 분기/연간 데이터만 반환
-        """
+    # 분기 실적
+    def _process_income_performance_quarterly_result(self, result, sector, ticker, ctry) -> List[QuarterlyIncome]:
         if not result:
-            return [], []
+            return []
 
-        # SQLAlchemy 결과를 DataFrame으로 변환
-        df = pd.DataFrame([{col: val for col, val in zip(row._fields, row)} for row in result])
+        tickers = self.get_ticker_by_sector(sector)
+        shares = self.get_shares_by_ticker(ticker, ctry)
 
-        # TODO: eps Mock 데이터 생성 - 시계열 패턴 반영
-        base_eps = 1000  # 기준 EPS 값
-        num_rows = len(df)
+        # 회사 데이터와 섹터 데이터 분리
+        company_data = defaultdict(dict)
+        sector_data = defaultdict(lambda: defaultdict(list))
 
-        # 시계열 패턴을 만들기 위한 계산
-        eps_values = []
-        for i in range(num_rows):
-            # 기본 증가 트렌드
-            trend = base_eps * (1 + (i * 0.05))
+        for row in result:
+            row_ticker = row[0]
+            clean_row_ticker = row_ticker.replace("-US", "")
+            period = row[2]
 
-            # 계절성 추가 (4분기 패턴)
-            seasonal_factor = 1 + (0.2 * (i % 4) / 4)
+            if row_ticker == ticker:
+                company_data[period] = {
+                    "rev": float(row[4]) if row[4] is not None else 0.0,
+                    "operating_income": float(row[9]) if row[9] is not None else 0.0,
+                    "net_income": float(row[19]) if row[19] is not None else 0.0,
+                }
 
-            # 약간의 랜덤성 추가 (-5% ~ +5%)
-            random_factor = 1 + (random.uniform(-0.05, 0.05))
+            if clean_row_ticker in tickers:
+                sector_data[period]["rev"].append(float(row[4]) if row[4] is not None else 0.0)
+                sector_data[period]["operating_income"].append(float(row[9]) if row[9] is not None else 0.0)
+                sector_data[period]["net_income"].append(float(row[19]) if row[19] is not None else 0.0)
 
-            eps = round(trend * seasonal_factor * random_factor, 2)
-            eps_values.append(eps)
+        # 섹터 평균 계산
+        sector_averages = {}
+        for period, values in sector_data.items():
+            if values["rev"] or values["operating_income"] or values["net_income"]:
+                sector_averages[period] = {
+                    "rev": statistics.mean(values["rev"]) if values["rev"] else 0.0,
+                    "operating_income": statistics.mean(values["operating_income"])
+                    if values["operating_income"]
+                    else 0.0,
+                    "net_income": statistics.mean(values["net_income"]) if values["net_income"] else 0.0,
+                }
 
-        # 시간 순서대로 정렬된 데이터에 맞춰 eps 값 할당
-        df["eps"] = eps_values[::-1]  # 최신 데이터가 앞쪽에 오도록 역순 정렬
+        quarterly_results = []
+        for period in sorted(company_data.keys(), reverse=True):
+            company_values = company_data[period]
 
-        # 필요한 컬럼만 선택
-        required_columns = ["Code", "Name", "period_q", "rev", "operating_income", "net_income", "eps"]
-        df = df[required_columns]
-
-        def create_income_metric(value: float) -> IncomeMetric:
-            """기업/업종 평균 값을 포함한 IncomeMetric 생성"""
-            # 업종 평균은 회사 값의 ±20% 범위 내에서 랜덤하게 생성
-            industry_avg = value * (1 + random.uniform(-0.2, 0.2))
-            return IncomeMetric(company=Decimal(str(value)), industry_avg=Decimal(str(industry_avg)))
-
-        def create_quarterly_income(row) -> QuarterlyIncome:
-            """QuarterlyIncome 객체 생성"""
-            return QuarterlyIncome(
-                period_q=str(row["period_q"]),
-                rev=create_income_metric(row["rev"]),
-                operating_income=create_income_metric(row["operating_income"]),
-                net_income=create_income_metric(row["net_income"]),
-                eps=create_income_metric(row["eps"]),
+            # EPS 계산 시에만 1000을 곱해서 천 단위로 변환
+            eps_company = (company_values["net_income"] * 1000) / shares if shares > 0 else 0.0
+            eps_industry = (
+                (sector_averages[period]["net_income"] * 1000) / shares
+                if period in sector_averages and shares > 0
+                else 0.0
             )
 
-        # 연도별 데이터 처리
-        df["year"] = df["period_q"].astype(str).str[:4]
-        agg_columns = ["rev", "operating_income", "net_income", "eps"]
+            print(f"net_income: {company_values['net_income']}")
+            print(f"shares: {shares}")
+            print(f"eps_company: {eps_company}")
+            print(f"eps_industry: {eps_industry}")
 
-        yearly_sum = df.groupby(["Code", "Name", "year"]).agg({col: "sum" for col in agg_columns}).reset_index()
-        yearly_sum["period_q"] = yearly_sum["year"]
-        yearly_sum = yearly_sum.drop("year", axis=1)
+            quarterly_income = QuarterlyIncome(
+                period_q=period,
+                rev=IncomeMetric(
+                    company=Decimal(str(company_values["rev"])),
+                    industry_avg=Decimal(str(sector_averages.get(period, {}).get("rev", 0.0))),
+                ),
+                operating_income=IncomeMetric(
+                    company=Decimal(str(company_values["operating_income"])),
+                    industry_avg=Decimal(str(sector_averages.get(period, {}).get("operating_income", 0.0))),
+                ),
+                net_income=IncomeMetric(
+                    company=Decimal(str(company_values["net_income"])),
+                    industry_avg=Decimal(str(sector_averages.get(period, {}).get("net_income", 0.0))),
+                ),
+                eps=IncomeMetric(company=Decimal(str(eps_company)), industry_avg=Decimal(str(eps_industry))),
+            )
+            quarterly_results.append(quarterly_income)
 
-        # 분기별/연도별 데이터 생성
-        quarterly_statements = [create_quarterly_income(row) for _, row in df.iterrows()]
-        yearly_statements = [create_quarterly_income(row) for _, row in yearly_sum.iterrows()]
+        return quarterly_results[:10]
 
-        # 정렬
-        quarterly_statements.sort(key=lambda x: x.period_q, reverse=True)
-        yearly_statements.sort(key=lambda x: x.period_q, reverse=True)
+    # 연간 실적
+    def _process_income_performance_yearly_result(self, result, sector, ticker, ctry) -> List[QuarterlyIncome]:
+        if not result:
+            return []
 
-        # 최근 10개의 데이터만 반환
-        return quarterly_statements[:10], yearly_statements[:10]
+        tickers = self.get_ticker_by_sector(sector)
+        shares = self.get_shares_by_ticker(ticker, ctry)
+
+        # 회사 데이터와 섹터 데이터 분리
+        company_data = defaultdict(dict)
+        sector_data = defaultdict(lambda: defaultdict(list))
+
+        for row in result:
+            row_ticker = row[0]
+            clean_row_ticker = row_ticker.replace("-US", "")
+            year = row[2][:4]  # 연도만 추출
+
+            if row_ticker == ticker:
+                if year not in company_data:
+                    company_data[year] = {"rev": 0.0, "operating_income": 0.0, "net_income": 0.0, "count": 0}
+                company_data[year]["rev"] += float(row[4]) if row[4] is not None else 0.0
+                company_data[year]["operating_income"] += float(row[9]) if row[9] is not None else 0.0
+                company_data[year]["net_income"] += float(row[19]) if row[19] is not None else 0.0
+                company_data[year]["count"] += 1
+                print(
+                    f"Year: {year}, Added Net Income: {float(row[19]) if row[19] is not None else 0.0}, Total: {company_data[year]['net_income']}, Count: {company_data[year]['count']}"
+                )
+
+            if clean_row_ticker in tickers:
+                sector_data[year]["rev"].append(float(row[4]) if row[4] is not None else 0.0)
+                sector_data[year]["operating_income"].append(float(row[9]) if row[9] is not None else 0.0)
+                sector_data[year]["net_income"].append(float(row[19]) if row[19] is not None else 0.0)
+
+        # 섹터 평균 계산
+        sector_averages = {}
+        for year, values in sector_data.items():
+            if values["rev"] or values["operating_income"] or values["net_income"]:
+                sector_averages[year] = {
+                    "rev": statistics.mean(values["rev"]) if values["rev"] else 0.0,
+                    "operating_income": statistics.mean(values["operating_income"])
+                    if values["operating_income"]
+                    else 0.0,
+                    "net_income": statistics.mean(values["net_income"]) if values["net_income"] else 0.0,
+                }
+
+        # 회사 데이터 연간 평균 계산
+        for year, data in company_data.items():
+            if data["count"] > 0:
+                company_data[year]["rev"] /= data["count"]
+                company_data[year]["operating_income"] /= data["count"]
+                company_data[year]["net_income"] /= data["count"]
+
+        yearly_results = []
+        for year in sorted(company_data.keys(), reverse=True):
+            company_values = company_data[year]
+
+            # EPS 계산 시에만 1000을 곱해서 천 단위로 변환
+            eps_company = (company_values["net_income"] * 1000) / shares if shares > 0 else 0.0
+            eps_industry = (
+                (sector_averages[year]["net_income"] * 1000) / shares if year in sector_averages and shares > 0 else 0.0
+            )
+
+            print(f"  EPS: {eps_company} (Company: {eps_company}, Industry Avg: {eps_industry})")
+
+            yearly_income = QuarterlyIncome(
+                period_q=year,
+                rev=IncomeMetric(
+                    company=Decimal(str(company_values["rev"])),
+                    industry_avg=Decimal(str(sector_averages.get(year, {}).get("rev", 0.0))),
+                ),
+                operating_income=IncomeMetric(
+                    company=Decimal(str(company_values["operating_income"])),
+                    industry_avg=Decimal(str(sector_averages.get(year, {}).get("operating_income", 0.0))),
+                ),
+                net_income=IncomeMetric(
+                    company=Decimal(str(company_values["net_income"])),
+                    industry_avg=Decimal(str(sector_averages.get(year, {}).get("net_income", 0.0))),
+                ),
+                eps=IncomeMetric(company=Decimal(str(eps_company)), industry_avg=Decimal(str(eps_industry))),
+            )
+            yearly_results.append(yearly_income)
+
+        return yearly_results[:10]
 
     # 손익계산서
     def _process_income_statement_result(
@@ -930,7 +1053,7 @@ class FinancialService:
             # period_q는 Decimal에서 str로 변환
             if field_name == "period_q":
                 values[field_name] = str(value)
-            # 필드명 매핑 적용
+            # 필드명 매핑 ��용
             elif field_name in field_mapping:
                 values[field_mapping[field_name]] = self._to_decimal(value)
             else:
