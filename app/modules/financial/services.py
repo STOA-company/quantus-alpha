@@ -18,6 +18,7 @@ from app.modules.financial.schemas import (
     CashFlowResponse,
     FinPosDetail,
     FinPosResponse,
+    DebtRatioResponse,
     FinancialRatioResponse,
     IncomePerformanceResponse,
     IncomeStatementDetail,
@@ -291,6 +292,21 @@ class FinancialService:
             logger.error(f"Unexpected error in get_financial_ratio: {str(e)}")
             raise AnalysisException(analysis_type="재무비율 조회", detail=str(e))
 
+    def get_debt_ratio(self, ctry: FinancialCountry, ticker: str, db: Session) -> BaseResponse[DebtRatioResponse]:
+        """
+        부채비율 조회
+        """
+        try:
+            if ctry == "USA":
+                ticker = f"{ticker}-US"
+            country = FinancialCountry(ctry)
+            # finpos 테이블에서 조회
+            debt_ratio_data = self.get_debt_ratio_data(country, ticker, db)
+            return debt_ratio_data
+        except Exception as e:
+            logger.error(f"Unexpected error in get_debt_ratio: {str(e)}")
+            raise AnalysisException(analysis_type="부채비율 조회", detail=str(e))
+
     # 유동비율
     def get_liquidity_ratio(
         self, ctry: FinancialCountry, ticker: str, db: AsyncSession
@@ -343,9 +359,11 @@ class FinancialService:
             table_name = self.income_tables.get(ctry)
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
-                raise InvalidCountryException()
+                raise InvalidCountryException(country=ctry)
 
-            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+            # USA 기업인 경우 티커에 -US 접미사 추가
+            db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
 
             logger.debug(f"Querying income data for {ticker} with conditions: {conditions}")
             result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
@@ -360,8 +378,17 @@ class FinancialService:
             statements = self._process_income_statement_result(result)
             ttm = self._process_income_ttm_result(result)
 
-            # IncomeStatementResponse 객체 생성
-            income_statement_response = IncomeStatementResponse(code=ticker, name=name, ttm=ttm, details=statements)
+            # 3자리 대문자를 2자리 소문자로 변환
+            ctry_code = contry_mapping.get(ctry.value, "").lower()  # KOR -> kr
+
+            # IncomeStatementResponse 객체 생성 시 2자리 소문자 국가 코드 사용
+            income_statement_response = IncomeStatementResponse(
+                code=ticker,
+                name=name,
+                ctry=ctry_code,  # 2자리 소문자 국가 코드
+                ttm=ttm,
+                details=statements,
+            )
 
             # BaseResponse 생성
             logger.info(f"Successfully retrieved income data for {ticker}")
@@ -390,9 +417,11 @@ class FinancialService:
             table_name = self.cashflow_tables.get(ctry)
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
-                raise InvalidCountryException()
+                raise InvalidCountryException(country=ctry)
 
-            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+            # USA 기업인 경우 티커에 -US 접미사 추가
+            db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
 
             logger.debug(f"Querying cashflow data for {ticker} with conditions: {conditions}")
             result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
@@ -407,7 +436,8 @@ class FinancialService:
             # DB 결과에서 직접 이름 추출
             name = result[0][1] if result else ""
 
-            cashflow_response = CashFlowResponse(code=ticker, name=name, ttm=ttm, details=statements)
+            ctry_code = contry_mapping.get(ctry.value, "").lower()  # KOR -> kr
+            cashflow_response = CashFlowResponse(code=ticker, name=name, ctry=ctry_code, ttm=ttm, details=statements)
 
             logger.info(f"Successfully retrieved cashflow data for {ticker}")
             return BaseResponse[CashFlowResponse](
@@ -435,9 +465,11 @@ class FinancialService:
             table_name = self.finpos_tables.get(ctry)
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
-                raise InvalidCountryException()
+                raise InvalidCountryException(country=ctry)
 
-            conditions = {"Code": ticker, **self._get_date_conditions(start_date, end_date)}
+            # USA 기업인 경우 티커에 -US 접미사 추가
+            db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
 
             logger.debug(f"Querying finpos data for {ticker} with conditions: {conditions}")
             result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
@@ -452,7 +484,8 @@ class FinancialService:
             # DB 결과에서 직접 이름 추출
             name = result[0][1] if result else ""
 
-            finpos_response = FinPosResponse(code=ticker, name=name, ttm=ttm, details=statements)
+            ctry_code = contry_mapping.get(ctry.value, "").lower()  # KOR -> kr
+            finpos_response = FinPosResponse(code=ticker, name=name, ctry=ctry_code, ttm=ttm, details=statements)
 
             logger.info(f"Successfully retrieved finpos data for {ticker}")
             return BaseResponse[FinPosResponse](
@@ -597,6 +630,45 @@ class FinancialService:
             data=financial_ratio_response,
         )
 
+    def get_debt_ratio_data(self, country: FinancialCountry, ticker: str, db: Session) -> BaseResponse[DebtRatioResponse]:
+        """
+        부채비율 데이터 조회
+        """
+        table_name = self.finpos_tables.get(country)
+        if not table_name:
+            logger.warning(f"잘못된 국가 코드: {country}")
+            raise InvalidCountryException()
+
+        quarters = self.financial_crud.get_debt_ratio_quarters(table_name, ticker, db)
+
+        if not quarters:
+            logger.warning(f"부채비율 데이터를 찾을 수 없습니다: {ticker}")
+            raise DataNotFoundException(ticker=ticker, data_type="부채비율")
+
+        if len(quarters) < 4:
+            logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
+            raise DataNotFoundException(ticker=ticker, data_type="부채비율(4분기)")
+
+        # 벡터화된 계산
+        debt_ratios = [
+            float((self._to_decimal(q.total_dept) / self._to_decimal(q.total_asset)) * 100)
+            if self._to_decimal(q.total_asset) != 0
+            else 0.0
+            for q in quarters
+        ]
+
+        # 병렬 처리: 평균 계산과 산업 평균 조회를 동시에
+        average_debt_ratio = round(sum(debt_ratios) / len(debt_ratios), 2)
+        industry_avg = self.get_debt_ratio_industry_avg(country=country, ticker=ticker, db=db)
+
+        debt_ratio_response = DebtRatioResponse(code=ticker, ratio=average_debt_ratio, industry_avg=industry_avg)
+
+        return BaseResponse[DebtRatioResponse](
+            status_code=200,
+            message="부채비율(4분기 평균) 데이터를 성공적으로 조회했습니다.",
+            data=debt_ratio_response,
+        )
+
     # 유동비율 계산
     def get_liquidity_ratio_data(
         self, country: FinancialCountry, ticker: str, db: AsyncSession
@@ -681,13 +753,27 @@ class FinancialService:
             ),
         )
 
-    # 부채비율 업종 평균 조회
+    # 재무비율 업종 평균 조회
     def get_financial_industry_avg(self, country: FinancialCountry, ticker: str, db: Session) -> float:
         """업종 평균 부채비율 조회"""
         table_name = self.finpos_tables.get(country)
         if not table_name:
             return 0.0
 
+        return self.financial_crud.get_financial_industry_avg_data(
+            table_name=table_name,
+            base_ticker=ticker.replace("-US", "") if country == FinancialCountry.USA else ticker,
+            is_usa=country == FinancialCountry.USA,
+            ratio_type="debt",
+            db=db,
+        )
+
+    # 부채비율 업종 평균 조회
+    def get_debt_ratio_industry_avg(self, country: FinancialCountry, ticker: str, db: AsyncSession) -> float:
+        """업종 평균 부채비율 조회"""
+        table_name = self.finpos_tables.get(country)
+        if not table_name:
+            return 0.0
         return self.financial_crud.get_financial_industry_avg_data(
             table_name=table_name,
             base_ticker=ticker.replace("-US", "") if country == FinancialCountry.USA else ticker,

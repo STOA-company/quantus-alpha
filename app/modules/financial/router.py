@@ -57,13 +57,14 @@ def get_income_performance_data(
 )
 def get_income_analysis(
     request: Request,
-    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[IncomeStatementResponse]:
     try:
+        country_code = check_ticker_country_len_3(ticker).upper()
+        ctry = FinancialCountry(country_code)
         result = financial_service.get_income_analysis(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
         return result
 
@@ -79,13 +80,14 @@ def get_income_analysis(
 )
 def get_cashflow_analysis(
     request: Request,
-    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[CashFlowResponse]:
     try:
+        country_code = check_ticker_country_len_3(ticker).upper()
+        ctry = FinancialCountry(country_code)
         result = financial_service.get_cashflow_analysis(
             ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
         )
@@ -103,14 +105,16 @@ def get_cashflow_analysis(
 )
 def get_finpos_analysis(
     request: Request,
-    ctry: Annotated[FinancialCountry, Query(description="국가 코드")],
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
 ) -> BaseResponse[FinPosResponse]:
     try:
+        country_code = check_ticker_country_len_3(ticker).upper()
+        ctry = FinancialCountry(country_code)
         result = financial_service.get_finpos_analysis(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+
         return result
 
     except Exception as error:
@@ -132,9 +136,9 @@ def get_financial_ratio(
     try:
         ctry = check_ticker_country_len_3(ticker).upper()
         company_name = financial_service.get_kr_name_by_ticker(db=db, ticker=ticker)
-        result1 = financial_service.get_financial_ratio(ctry=ctry, ticker=ticker, db=db)
-        result2 = financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker, db=db)
-        result3 = financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker, db=db)
+        dept_ratio = financial_service.get_debt_ratio(ctry=ctry, ticker=ticker, db=db)
+        liquidity_ratio = financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker, db=db)
+        interest_coverage_ratio = financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker, db=db)
         ctry_two = contry_mapping.get(ctry)
 
         return BaseResponse[RatioResponse](
@@ -144,9 +148,9 @@ def get_financial_ratio(
                 code=ticker,
                 name=company_name,
                 ctry=ctry_two,
-                financial_ratios=result1.data,
-                liquidity_ratios=result2.data,
-                interest_coverage_ratios=result3.data,
+                debt_ratios=dept_ratio.data,
+                liquidity_ratios=liquidity_ratio.data,
+                interest_coverage_ratios=interest_coverage_ratio.data,
             ),
         )
 
