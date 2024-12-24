@@ -1,13 +1,13 @@
 from fastapi import logger
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 
 class FinancialCrud:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: Session):
         self.db = db
 
-    async def get_financial_ratio_quarters(self, table_name: str, ticker: str, db: AsyncSession):
+    def get_financial_ratio_quarters(self, table_name: str, ticker: str, db: Session):
         """재무비율 계산을 위한 4분기 데이터 조회"""
         query = text(f"""
             SELECT Name, total_dept, equity
@@ -17,10 +17,10 @@ class FinancialCrud:
             LIMIT 4
         """)
 
-        result = await db.execute(query, {"ticker": ticker})
+        result = db.execute(query, {"ticker": ticker})
         return result.fetchall()
 
-    async def get_debt_ratio_quarters(self, table_name: str, ticker: str, db: AsyncSession):
+    def get_debt_ratio_quarters(self, table_name: str, ticker: str, db: Session):
         """부채비율 계산을 위한 4분기 데이터 조회"""
         query = text(f"""
             SELECT Name, total_dept, total_asset
@@ -29,10 +29,10 @@ class FinancialCrud:
             ORDER BY period_q DESC
             LIMIT 4
         """)
-        result = await db.execute(query, {"ticker": ticker})
+        result = db.execute(query, {"ticker": ticker})
         return result.fetchall()
 
-    async def get_liquidity_ratio_quarters(self, table_name: str, ticker: str, db: AsyncSession):
+    def get_liquidity_ratio_quarters(self, table_name: str, ticker: str, db: Session):
         """유동비율 계산을 위한 4분기 데이터 조회"""
         query = text(f"""
             SELECT Name, current_asset, current_dept
@@ -42,10 +42,10 @@ class FinancialCrud:
             LIMIT 4
         """)
 
-        result = await db.execute(query, {"ticker": ticker})
+        result = db.execute(query, {"ticker": ticker})
         return result.fetchall()
 
-    async def get_interest_coverage_ratio_quarters(self, table_name: str, ticker: str, db: AsyncSession):
+    def get_interest_coverage_ratio_quarters(self, table_name: str, ticker: str, db: Session):
         """이자보상배율 계산을 위한 4분기 데이터 조회"""
         query = text(f"""
             SELECT Name, operating_income, fin_cost
@@ -55,11 +55,11 @@ class FinancialCrud:
             LIMIT 4
         """)
 
-        result = await db.execute(query, {"ticker": ticker})
+        result = db.execute(query, {"ticker": ticker})
         return result.fetchall()
 
-    async def get_financial_industry_avg_data(
-        self, table_name: str, base_ticker: str, is_usa: bool, ratio_type: str, db: AsyncSession
+    def get_financial_industry_avg_data(
+        self, table_name: str, base_ticker: str, is_usa: bool, ratio_type: str, db: Session
     ) -> float:
         """업종 평균 재무비율 조회"""
         ratio_calculations = {
@@ -107,7 +107,7 @@ class FinancialCrud:
         """)
 
         try:
-            result = await db.execute(query, {"base_ticker": base_ticker, "is_usa": is_usa})
+            result = db.execute(query, {"base_ticker": base_ticker, "is_usa": is_usa})
             return result.scalar_one_or_none() or 0.0
         except Exception as e:
             logger.error(f"업종 평균 {ratio_type} 비율 조회 중 오류 발생: {str(e)}")
