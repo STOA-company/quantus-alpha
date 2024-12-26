@@ -37,32 +37,6 @@ class StockInformation(Base):
     establishment_date = Column(Date, nullable=True, comment="설립일")
     listing_date = Column(Date, nullable=True, comment="상장일")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "ticker": "005930",
-                "logo_image": "https://example.com/logo/005930.png",
-                "name": "삼성전자",
-                "ctry": "KR",
-                "market": "KOSPI",
-                "listing_date": "1975-06-11",
-                "is_kospi_100": True,
-                "is_kospi_150": True,
-                "is_kospi_200": True,
-                "is_kosdaq_150": False,
-                "is_krx_300": True,
-                "is_snp_500": False,
-                "is_nasdaq_100": False,
-                "sector_1": "Information Technology",
-                "sector_2": "Technology Hardware & Equipment",
-                "sector_3": "Technology Hardware, Storage & Peripherals",
-                "sector_4": "Electronic Equipment & Components",
-                "homepage_url": "https://www.samsung.com",
-                "ceo": "경계현",
-                "establishment_date": "1969-01-13",
-            }
-        }
-
 
 class StockFactor(Base):
     __tablename__ = "stock_factor"
@@ -109,23 +83,3 @@ class StockFactor(Base):
     def market_cap_billions(self) -> float:
         """시가총액을 10억 단위로 변환"""
         return self.market_cap / 1_000_000_000
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "ticker": "005930",
-                "market_cap": 448300000000000,
-                "shared_outstanding": 5969782550,
-                "last_close": 75100,
-                "week_52_high": 77800,
-                "week_52_low": 57200,
-                "per": 14.2,
-                "pbr": 1.35,
-                "roe": 9.5,
-                "finance_status": 1,
-                "stock_trend": 1,
-                "market_condition": 2,
-                "industry_condition": 2,
-            }
-        }
-    }
