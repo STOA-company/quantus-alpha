@@ -26,6 +26,14 @@ class LatestNewsResponse(BaseModel):
     type: str
 
 
+class TopStoriesItem(BaseModel):
+    date: datetime
+    title: str
+    summary: str | None
+    emotion: str | None
+    type: str
+
+
 class TopStoriesResponse(BaseModel):
     name: str
     ticker: str
@@ -33,4 +41,5 @@ class TopStoriesResponse(BaseModel):
     ctry: str
     current_price: float
     change_rate: float
-    news: list[NewsItem]
+    items_count: int
+    news: list[TopStoriesItem]
