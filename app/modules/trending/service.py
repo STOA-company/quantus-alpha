@@ -15,8 +15,94 @@ class TrendingService:
         self.db = db
 
     def get_trending_stocks(self) -> TrendingStock:
-        kr = self._get_trending_stocks_kr()
-        us = self._get_trending_stocks_us()
+        kr = [
+            TrendingStockKr(
+                num=1, ticker="A005930", name="삼성전자", volume=12458930, current_price=73800, current_price_rate=1.23
+            ),
+            TrendingStockKr(
+                num=2,
+                ticker="A373220",
+                name="LG에너지솔루션",
+                volume=8234567,
+                current_price=425500,
+                current_price_rate=-0.82,
+            ),
+            TrendingStockKr(
+                num=3, ticker="A000660", name="SK하이닉스", volume=7123456, current_price=156700, current_price_rate=2.15
+            ),
+            TrendingStockKr(
+                num=4,
+                ticker="A207940",
+                name="삼성바이오로직스",
+                volume=5234567,
+                current_price=823000,
+                current_price_rate=-1.32,
+            ),
+            TrendingStockKr(
+                num=5, ticker="A035420", name="NAVER", volume=4567890, current_price=213500, current_price_rate=0.95
+            ),
+            TrendingStockKr(
+                num=6, ticker="A051910", name="LG화학", volume=3987654, current_price=498000, current_price_rate=-0.60
+            ),
+            TrendingStockKr(
+                num=7, ticker="A035720", name="카카오", volume=3654321, current_price=56700, current_price_rate=1.43
+            ),
+            TrendingStockKr(
+                num=8, ticker="A006400", name="삼성SDI", volume=3234567, current_price=456700, current_price_rate=-0.48
+            ),
+            TrendingStockKr(
+                num=9, ticker="A068270", name="셀트리온", volume=2987654, current_price=167800, current_price_rate=0.78
+            ),
+            TrendingStockKr(
+                num=10, ticker="A005380", name="현대차", volume=2765432, current_price=187600, current_price_rate=1.19
+            ),
+        ]
+
+        us = [
+            TrendingStockUs(
+                num=1, ticker="AAPL", name="애플", volume=98765432, current_price=169.25, current_price_rate=2.34
+            ),
+            TrendingStockUs(
+                num=2,
+                ticker="MSFT",
+                name="마이크로소프트",
+                volume=87654321,
+                current_price=402.75,
+                current_price_rate=1.56,
+            ),
+            TrendingStockUs(
+                num=3, ticker="NVDA", name="엔비디아", volume=76543210, current_price=881.28, current_price_rate=3.21
+            ),
+            TrendingStockUs(
+                num=4, ticker="GOOGL", name="알파벳", volume=65432109, current_price=152.50, current_price_rate=-0.45
+            ),
+            TrendingStockUs(
+                num=5, ticker="META", name="메타플랫폼스", volume=54321098, current_price=509.58, current_price_rate=1.87
+            ),
+            TrendingStockUs(
+                num=6, ticker="TSLA", name="테슬라", volume=43210987, current_price=172.63, current_price_rate=-2.15
+            ),
+            TrendingStockUs(
+                num=7, ticker="AMZN", name="아마존", volume=32109876, current_price=178.15, current_price_rate=0.92
+            ),
+            TrendingStockUs(
+                num=8,
+                ticker="BRK.B",
+                name="버크셔 해서웨이",
+                volume=21098765,
+                current_price=412.38,
+                current_price_rate=0.34,
+            ),
+            TrendingStockUs(
+                num=9, ticker="JPM", name="JP모건", volume=19876543, current_price=196.62, current_price_rate=-0.78
+            ),
+            TrendingStockUs(
+                num=10, ticker="V", name="비자", volume=18765432, current_price=279.87, current_price_rate=0.65
+            ),
+        ]
+
+        # kr = self._get_trending_stocks_kr()
+        # us = self._get_trending_stocks_us()
         return TrendingStock(kr=kr, us=us)
 
     def _get_trending_stocks_kr(self) -> List[TrendingStockKr]:
