@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Literal
-from exchange_calendars import ecals
+import exchange_calendars as ecals
 from app.core.config import korea_tz, utc_tz
 
 
