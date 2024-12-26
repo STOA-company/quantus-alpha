@@ -5,5 +5,6 @@ from app.models.models_stock import StockInformation
 from app.models.models_stock import StockFactor
 from app.models.models_dividend import Dividend
 from app.models.models_news import News
+from app.models.models_stock_indices import StockIndices
 
-__all__ = ["Base", "relationship", "StockInformation", "StockFactor", "Dividend", "News"]
+__all__ = ["Base", "relationship", "StockInformation", "StockFactor", "Dividend", "News", "StockIndices"]
