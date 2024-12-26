@@ -1,7 +1,7 @@
 from typing import Annotated, List, Optional
 from fastapi import APIRouter, Query, Depends
 from app.modules.common.schemas import BaseResponse
-from app.modules.news.schemas import LatestNewsResponse, NewsItem, NewsResponse
+from app.modules.news.schemas import LatestNewsResponse, NewsItem, NewsResponse, TopStoriesResponse
 from app.modules.news.services import NewsService, get_news_service
 
 router = APIRouter()
@@ -42,7 +42,7 @@ def get_latest_news(
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=result)
 
 
-# @router.get("/top_stories", response_model=BaseResponse[TopStoriesResponse])
+@router.get("/top_stories", response_model=BaseResponse[List[TopStoriesResponse]])
 def get_top_stories(
     news_service: NewsService = Depends(get_news_service),
 ):
