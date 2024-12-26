@@ -33,3 +33,7 @@ Thumbs.db
 
 check_data/
 .vscode/
+
+# Celery
+celerybeat-schedule.db
+dump.rdb
