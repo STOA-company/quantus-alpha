@@ -3,8 +3,8 @@ from app.database.crud import Base
 from sqlalchemy.schema import Index
 
 
-class News(Base):
-    __tablename__ = "news_information"
+class Disclosure(Base):
+    __tablename__ = "disclosure_information"
 
     __table_args__ = (
         # 종목 각 나라별 최신 뉴스 조회
@@ -22,7 +22,10 @@ class News(Base):
     date = Column(DateTime, nullable=True, comment="날짜, 시간")
     title = Column(String(255), nullable=True, comment="제목")
     summary = Column(String(255), nullable=True, comment="요약")
+    impact_reason = Column(String(255), nullable=True, comment="영향 요인")
+    key_points = Column(String(255), nullable=True, comment="주요 포인트")
     emotion = Column(String(20), nullable=True, comment="감정")
+    form_type = Column(String(20), nullable=True, comment="형태")
     that_time_price = Column(Float, nullable=True, comment="해당 시간 종가")
     that_time_change = Column(Float, nullable=True, comment="해당 시간 변동률")
     volume = Column(Float, nullable=True, comment="거래량")
