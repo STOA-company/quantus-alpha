@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Float, String
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, String
 from app.database.crud import Base
 from sqlalchemy.schema import Index
 
@@ -16,6 +16,7 @@ class News(Base):
     )
 
     ticker = Column(String(20), primary_key=True, nullable=False, comment="종목 티커")
+    id = Column(BigInteger, nullable=False, unique=True, autoincrement=True, comment="뉴스 아이디")
     ko_name = Column(String(100), nullable=True, comment="종목 한글명")
     en_name = Column(String(100), nullable=True, comment="종목 영문명")
     ctry = Column(String(20), nullable=True, comment="국가")
