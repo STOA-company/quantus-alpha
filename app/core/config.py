@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     RDS_DB: str = os.getenv("RDS_DB", "")
     RDS_PORT: int = os.getenv("RDS_PORT", 3306)
 
+    if ENV == "prod":
+        CELERY_LOGLEVEL: str = "ERROR"
+    else:
+        CELERY_LOGLEVEL: str = "INFO"
+
     @property
     def DATABASE_URL(self) -> str:
         return f"mysql://{self.RDS_USER}:{self.RDS_PASSWORD}@{self.RDS_HOST}:{self.RDS_PORT}/{self.RDS_DB}"
