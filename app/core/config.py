@@ -3,10 +3,14 @@ import os
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 from functools import lru_cache
-
+import pytz
 
 ENV = os.getenv("ENV", "dev")  # Default
 load_dotenv(f".env.{ENV}")
+
+# Time Zone
+korea_tz = pytz.timezone("Asia/Seoul")
+utc_tz = pytz.timezone("UTC")
 
 
 class Settings(BaseSettings):
