@@ -135,7 +135,7 @@ async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JS
     )
 
 
-async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
+def exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error(exc, exc_info=True)
     return _make_json_resp(
         status_code=HTTP_500_INTERNAL_SERVER_ERROR,

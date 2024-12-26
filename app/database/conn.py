@@ -113,7 +113,7 @@ class SQLAlchemy:
             bind=self._async_engine,
         )
 
-    async def get_db(self):
+    def get_db(self):
         """동기 데이터베이스 세션"""
         if self._session is None:
             raise Exception("must be called `init_app` or `init_db`")
