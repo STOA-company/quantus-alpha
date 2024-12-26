@@ -81,7 +81,11 @@ def kr_run_news_batch(date: str):
     price_data = {}
     for news_date, price_date in price_date_mapping.items():
         df_price = pd.DataFrame(
-            database._select(table="stock_kr_1d", columns=["Ticker", "Open", "Close", "Volume"], **dict(Date=price_date))
+            database._select(
+                table="stock_kr_1d",
+                columns=["Ticker", "Open", "Close", "High", "Low", "Volume"],
+                **dict(Date=price_date, Ticker__in=news_tickers),
+            )
         )
         if not df_price.empty:
             price_data[news_date] = df_price
@@ -102,7 +106,7 @@ def kr_run_news_batch(date: str):
             df_date["price_change"] = ((df_date["Close"] - df_date["Open"]) / df_date["Open"]) * 100
 
             # 거래대금 계산
-            df_date["trading_value"] = df_date["Close"] * df_date["Volume"]
+            df_date["trading_value"] = (df_date["Close"] + df_date["Open"]) * df_date["Volume"]
 
             # 레코드 생성
             for _, row in df_date.iterrows():
