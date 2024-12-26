@@ -27,6 +27,7 @@ class LatestNewsResponse(BaseModel):
 
 
 class TopStoriesItem(BaseModel):
+    price_impact: float
     date: datetime
     title: str
     summary: str | None
