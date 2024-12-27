@@ -20,7 +20,19 @@ def get_news_data(ctry: str, date: str):
 
 
 def kr_run_news_batch(date: str):
-    check_date = date or now_kr(is_date=True)
+    """
+    한국 뉴스 배치 함수
+    Args:
+        date (str): 원하는 s3 파일 날짜(YYYYMMDD)
+
+    Returns:
+        int: 입력된 뉴스 데이터 수
+    """
+    if date:
+        check_date = pd.to_datetime(date, format="%Y%m%d").date()
+    else:
+        check_date = now_kr(is_date=True)
+
     s3_date_str = check_date.strftime("%Y%m%d")
 
     # 뉴스 데이터 조회
@@ -142,7 +154,19 @@ def kr_run_news_batch(date: str):
 
 
 def us_run_news_batch(date: str = None):
-    check_date = date or now_kr(is_date=True)
+    """
+    미국 뉴스 배치 함수
+    Args:
+        date (str): 원하는 s3 파일 날짜(YYYYMMDD)
+
+    Returns:
+        int: 입력된 뉴스 데이터 수
+    """
+    if date:
+        check_date = pd.to_datetime(date, format="%Y%m%d").date()
+    else:
+        check_date = now_kr(is_date=True)
+
     s3_date_str = check_date.strftime("%Y%m%d")
 
     # 뉴스 데이터 조회
@@ -273,7 +297,18 @@ def us_run_news_batch(date: str = None):
 
 
 def kr_run_news_is_top_story(date: str = None):
-    check_date = date or now_kr(is_date=True)
+    """
+    한국 뉴스 주요 소식 선정 배치 함수
+    Args:
+        date (str): 원하는 날짜(YYYYMMDD)
+
+    Returns:
+        bool: 성공 여부
+    """
+    if date:
+        check_date = pd.to_datetime(date, format="%Y%m%d").date()
+    else:
+        check_date = now_kr(is_date=True)
 
     # 오늘 가격 데이터 조회
     df_price = pd.DataFrame(
@@ -312,7 +347,18 @@ def kr_run_news_is_top_story(date: str = None):
 
 
 def us_run_news_is_top_story(date: str = None):
-    check_date = date or now_kr(is_date=True)
+    """
+    미국 뉴스 주요 소식 선정 배치 함수
+    Args:
+        date (str): 원하는 s3 파일 날짜(YYYYMMDD)
+
+    Returns:
+        bool: 성공 여부
+    """
+    if date:
+        check_date = pd.to_datetime(date, format="%Y%m%d").date()
+    else:
+        check_date = now_kr(is_date=True)
 
     # 오늘 가격 데이터 조회
     df_price = pd.DataFrame(
