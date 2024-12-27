@@ -37,7 +37,7 @@ class DisclosureService:
             conditions["filing_date__like"] = f"{year}%"
         conditions["ai_processed"] = 1
 
-        columns = ["filing_id", "form_type", "ticker", "sec_url", "filing_date", "company_name", "ai_processed"]
+        columns = ["filing_id", "form_type", "ticker", "url", "filing_date", "company_name", "ai_processed"]
         offset = (page - 1) * size
         total_count = self.db._count(table=table_name, **conditions)
 
@@ -154,7 +154,7 @@ class DisclosureService:
                     "key_points_4": key_points_list[3],
                     "key_points_5": key_points_list[4],
                     "summary": translated_data.ai_summary if analysis_data.translated else analysis_data.ai_summary,
-                    "document_url": row.sec_url,
+                    "document_url": row.url,
                     "name": name if not ticker else None,
                     "price_change": price_change if not ticker else None,
                 }
