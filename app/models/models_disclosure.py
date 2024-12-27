@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, String
 from app.models.models_base import Base
 from sqlalchemy.schema import Index
 
@@ -16,7 +16,7 @@ class Disclosure(Base):
         # 종목 단일 조회
         Index("idx_ticker", "ticker", unique=False),
     )
-    id = Column(Integer, primary_key=True, nullable=False, comment="ID")
+    id = Column(BigInteger, nullable=False, primary_key=True, unique=True, autoincrement=True, comment="ID")
     ticker = Column(String(20), nullable=False, comment="종목 티커")
     ko_name = Column(String(100), nullable=True, comment="종목 한글명")
     en_name = Column(String(100), nullable=True, comment="종목 영문명")
