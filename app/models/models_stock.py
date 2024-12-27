@@ -2,7 +2,6 @@ from pydantic import model_validator
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy import Column, Date, DateTime, Float, Integer, String, Boolean
 
-from app.database.crud import Base
 from app.modules.common.enum import PrdyVrssSign
 from app.models.models_base import Base
 
