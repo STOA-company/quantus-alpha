@@ -1,4 +1,4 @@
-from app.database.crud import Base
+from app.models.models_base import Base
 from sqlalchemy.orm import relationship
 
 from app.models.models_stock import StockInformation

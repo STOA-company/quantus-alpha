@@ -1,5 +1,6 @@
 from sqlalchemy import Column, DateTime
 from sqlalchemy.sql import func
+from sqlalchemy.orm import DeclarativeBase
 
 
 class BaseMixin:
@@ -7,3 +8,7 @@ class BaseMixin:
     updated_at = Column(
         DateTime(timezone=True), server_default=func.current_timestamp(), onupdate=func.current_timestamp()
     )
+
+
+class Base(DeclarativeBase):
+    pass
