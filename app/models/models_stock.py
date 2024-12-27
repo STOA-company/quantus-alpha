@@ -120,11 +120,6 @@ class StockPrice(Base):
             raise ValueError("가격 범위가 올바르지 않습니다")
         return self
 
-    @hybrid_property
-    def volume_change_millions(self) -> float:
-        """거래대금을 백만 단위로 변환"""
-        return float(self.volume_change / 1_000_000 if self.volume_change else 0)
-
 class StockTrend(Base):
     __tablename__ = "stock_trend"
 
