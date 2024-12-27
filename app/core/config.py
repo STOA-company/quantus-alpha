@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
-        return f"mysql://{self.RDS_USER}:{self.RDS_PASSWORD}@{self.RDS_HOST}:{self.RDS_PORT}/{self.RDS_DB}"
+        return f"mysql+pymysql://{self.RDS_USER}:{self.RDS_PASSWORD}@{self.RDS_HOST}:{self.RDS_PORT}/{self.RDS_DB}"
 
     class Config:
         env_file = f".env.{ENV}"
@@ -63,7 +63,7 @@ class DatabaseConfig:
 class DevConfig(DatabaseConfig):
     def __init__(self):
         super().__init__(
-            DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
+            DB_URL=f"mysql+pymysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=True,
         )
@@ -72,7 +72,7 @@ class DevConfig(DatabaseConfig):
 class ProdConfig(DatabaseConfig):
     def __init__(self):
         super().__init__(
-            DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
+            DB_URL=f"mysql+pymysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=False,
         )
@@ -81,7 +81,7 @@ class ProdConfig(DatabaseConfig):
 class TestConfig(DatabaseConfig):
     def __init__(self):
         super().__init__(
-            DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
+            DB_URL=f"mysql+pymysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=True,
         )
