@@ -35,8 +35,5 @@ class Disclosure(Base):
     category_type = Column(String(20), nullable=True, comment="카테고리")
     extra_info = Column(String(255), nullable=True, comment="추가 정보")
     that_time_price = Column(Float, nullable=True, comment="해당 시간 종가")
-    that_time_change = Column(Float, nullable=True, comment="해당 시간 변동률")
-    volume = Column(Float, nullable=True, comment="거래량")
-    volume_change = Column(Float, nullable=True, comment="거래대금")
     is_top_story = Column(Boolean, nullable=True, comment="주요 소식 선정 여부")
     is_exist = Column(Boolean, nullable=True, comment="DB 존재 여부")
