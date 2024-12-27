@@ -61,6 +61,8 @@ def include_object(object, name, type_, reflected, compare_to):
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")
+    url = url.replace("mysql://", "mysql+pymysql://")
+    config.set_main_option("sqlalchemy.url", url)
     context.configure(
         url=url,
         target_metadata=target_metadata,
