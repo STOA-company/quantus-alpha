@@ -124,14 +124,14 @@ class StockTrend(Base):
     __tablename__ = "stock_trend"
 
     ticker = Column(String(20), primary_key=True, nullable=False, comment="종목 코드")
-    last_updated = Column(DateTime, nullable=False, index=True, comment="마지막 업데이트 시간")
+    last_updated = Column(DateTime, nullable=True, index=True, comment="마지막 업데이트 시간")
     ko_name = Column(String(100), nullable=True, comment="종목 한글명")
     en_name = Column(String(100), nullable=True, comment="종목 영문명")
-    market = Column(String(10), nullable=False, index=True, comment="시장 구분")
+    market = Column(String(10), nullable=True, index=True, comment="시장 구분")
 
     # 현재가
-    current_price = Column(Float, nullable=False, comment="현재가")
-    prev_close = Column(Float, nullable=False, comment="전일종가")
+    current_price = Column(Float, nullable=True, comment="현재가")
+    prev_close = Column(Float, nullable=True, comment="전일종가")
     change_sign = Column(
         Integer, nullable=True, comment="전일 대비 등락 부호"
     )  # 1 : 상한, 2 : 상승, 3 : 보합, 4 : 하락, 5 : 하한
