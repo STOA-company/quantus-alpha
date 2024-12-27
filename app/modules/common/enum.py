@@ -64,3 +64,10 @@ class FearAndGreedIndex(Enum):
     NEUTRAL = 50  # 41-60 // 중립
     GREED = 75  # 61-80 // 탐욕
     EXTREME_GREED = 100  # 81-100 // 매우 탐욕
+
+class PrdyVrssSign(IntEnum):
+    UP_LIMIT = 1 # 상한
+    UP = 2 # 상승
+    FLAT = 3 # 보합
+    DOWN = 4 # 하락
+    DOWN_LIMIT = 5 # 하한

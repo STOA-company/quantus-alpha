@@ -1,6 +1,9 @@
 from pydantic import model_validator
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy import Column, Date, DateTime, Float, Integer, String, Boolean
+
+from app.database.crud import Base
+from app.modules.common.enum import PrdyVrssSign
 from app.models.models_base import Base
 
 
@@ -83,6 +86,40 @@ class StockFactor(Base):
         """시가총액을 10억 단위로 변환"""
         return self.market_cap / 1_000_000_000
 
+class StockPrice(Base):
+    __tablename__ = "stock_price"
+
+    ticker = Column(String(20), primary_key=True, nullable=False, comment="종목 코드")
+    market = Column(String(10), nullable=False, index=True, comment="시장 구분")
+
+    kr_name = Column(String(100), nullable=True, comment="한글 종목명")
+    en_name = Column(String(100), nullable=True, comment="영문 종목명")
+
+    execution_time = Column(DateTime, nullable=False, comment="종목 체결 시간") # STCK_CNTG_HOUR : 종목 체결 시간
+    current_price = Column(Float, nullable=False, comment="종목 현재 가격") # STCK_PRPR : 종목 현재 가격
+
+    # OHLCV 데이터
+    open = Column(Float, nullable=False, comment="시가")
+    high = Column(Float, nullable=False, comment="고가")
+    low = Column(Float, nullable=False, comment="저가")
+    close = Column(Float, nullable=False, comment="종가")
+    volume = Column(Integer, nullable=False, comment="거래량")
+
+    # 전일 대비
+    change_sign = Column(Integer, nullable=True, comment="전일 대비 등락 부호") # PRDY_VRSS_SIGN : 전일 대비 등락 부호
+    price_change = Column(Float, nullable=True, comment="전일 대비") # PRDY_VRSS : 전일 대비
+    change_rate = Column(Float, nullable=True, comment="등락률") # PRDY_CTRT : 등락률
+
+    volume_change = Column(Float, nullable=True, comment="거래대금") # 거래대금
+
+    # Validations
+    @model_validator(mode="after")
+    def validate_price_range(self) -> "StockPrice":
+        """가격 범위 검증"""
+        if not (self.low <= self.open <= self.high and 
+                self.low <= self.close <= self.high):
+            raise ValueError("가격 범위가 올바르지 않습니다")
+        return self
 
 class StockTrend(Base):
     __tablename__ = "stock_trend"
