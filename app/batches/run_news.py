@@ -1,7 +1,6 @@
 from datetime import timedelta
 from io import BytesIO
 import pandas as pd
-from app.modules.common.enum import Country
 from quantus_aws.common.configs import s3_client
 from app.utils.date_utils import get_business_days, now_kr
 from app.database.crud import database
@@ -19,7 +18,7 @@ def get_news_data(ctry: str, date: str):
     return df
 
 
-def kr_run_news_batch(date: str):
+def kr_run_news_batch(date: str = None):
     """
     한국 뉴스 배치 함수
     Args:
@@ -36,23 +35,11 @@ def kr_run_news_batch(date: str):
     s3_date_str = check_date.strftime("%Y%m%d")
 
     # 뉴스 데이터 조회
-    df_news = get_news_data(ctry=Country.KR, date=s3_date_str)
-    df_need_news = df_news[["Code", "Name", "titles", "summary", "emotion"]]
+    df_news = get_news_data(ctry="KR", date=s3_date_str)
+    df_need_news = df_news[["date", "Code", "Name", "titles", "summary", "emotion"]]
     df_need_news = df_need_news.dropna(subset=["emotion"])
     df_need_news["Code"] = "A" + df_need_news["Code"]
     news_tickers = df_need_news["Code"].unique().tolist()
-
-    # DB에 존재하는 티커 조회
-    df_stock = pd.DataFrame(
-        database._select(
-            table="stock_kr_1d",
-            columns=["Ticker", "Open", "Close", "Volume"],
-            **dict(Date=check_date.strftime("%Y-%m-%d"), Ticker__in=news_tickers),
-        )
-    )
-
-    # DB에 존재하는 티커 목록
-    existing_tickers = df_stock["Ticker"].unique().tolist()
 
     # 뉴스 데이터의 고유한 날짜 추출
     df_need_news["date"] = pd.to_datetime(df_need_news["date"])
@@ -64,6 +51,18 @@ def kr_run_news_batch(date: str):
 
     business_days = get_business_days(country="KR", start_date=min_date - timedelta(days=7), end_date=max_date)
     business_days = sorted(business_days)
+
+    # DB에 존재하는 티커 조회
+    df_stock = pd.DataFrame(
+        database._select(
+            table="stock_kr_1d",
+            columns=["Ticker", "Open", "Close", "Volume"],
+            **dict(Date=business_days[-2].strftime("%Y-%m-%d"), Ticker__in=news_tickers),
+        )
+    )
+
+    # DB에 존재하는 티커 목록
+    existing_tickers = df_stock["Ticker"].unique().tolist()
 
     # 각 날짜의 가격 데이터 매핑 생성
     price_date_mapping = {}
@@ -114,12 +113,6 @@ def kr_run_news_batch(date: str):
             # 해당 날짜의 가격 데이터와 병합
             df_date = pd.merge(df_date, price_data[date_str], left_on="Code", right_on="Ticker", how="left")
 
-            # 변동률 계산
-            df_date["price_change"] = ((df_date["Close"] - df_date["Open"]) / df_date["Open"]) * 100
-
-            # 거래대금 계산
-            df_date["trading_value"] = (df_date["Close"] + df_date["Open"]) * df_date["Volume"]
-
             # 레코드 생성
             for _, row in df_date.iterrows():
                 if pd.isna(row["Code"]) or row["Code"] == "":
@@ -135,19 +128,44 @@ def kr_run_news_batch(date: str):
                     "summary": row["summary"],
                     "emotion": row["emotion"],
                     "that_time_price": row["Close"],
-                    "that_time_change": row["price_change"],
-                    "volume": row["Volume"],
-                    "volume_change": row["trading_value"],
                     "is_top_story": False,
                     "is_exist": row["Code"] in existing_tickers,
                 }
                 news_records.append(news_record)
 
-    # DB에 데이터 입력
+    def batch_insert(records, batch_size=1000):
+        """
+        레코드를 배치 크기로 나누어 삽입하는 함수
+        """
+
+        # NaN 값을 None으로 변환하는 함수
+        def replace_nan(record):
+            return {k: (None if pd.isna(v) else v) for k, v in record.items()}
+
+        for i in range(0, len(records), batch_size):
+            batch = records[i : i + batch_size]
+            # NaN 값을 None으로 변환
+            cleaned_batch = [replace_nan(record) for record in batch]
+
+            print(f"배치 처리 중: {i+1}~{min(i+batch_size, len(records))} / {len(records)}")
+            try:
+                database._insert(table="news_information", sets=cleaned_batch)
+                print(f"배치 {i//batch_size + 1} 성공적으로 입력됨")
+            except Exception as e:
+                print(f"배치 {i//batch_size + 1} 처리 중 오류 발생: {str(e)}")
+                raise
+
+    # DB에 데이터 입력 부분 수정
     if news_records:
+        print(f"총 입력할 레코드 수: {len(news_records)}")
+        print("첫 번째 레코드 샘플:")
+        print(news_records[0])
+
         try:
-            database._insert(table="news_information", sets=news_records)
-        except Exception:
+            batch_insert(news_records)
+            print("모든 데이터 입력 완료")
+        except Exception as e:
+            print(f"데이터베이스 입력 중 오류 발생: {str(e)}")
             raise
 
     return len(news_records)
@@ -256,14 +274,6 @@ def us_run_news_batch(date: str = None):
             # 해당 날짜의 가격 데이터와 병합
             df_date = pd.merge(df_date, price_data[date_str], left_on="Code", right_on="Ticker", how="left")
 
-            # 변동률 계산
-            df_date["price_change"] = ((df_date["Close"] - df_date["Open"]) / df_date["Open"]) * 100
-
-            # 거래대금 계산
-            df_date["trading_value"] = (
-                (df_date["Close"] + df_date["Open"] + df_date["High"] + df_date["Low"]) / 4
-            ) * df_date["Volume"]
-
             # 레코드 생성
             for _, row in df_date.iterrows():
                 if pd.isna(row["Code"]) or row["Code"] == "":
@@ -278,9 +288,6 @@ def us_run_news_batch(date: str = None):
                     "summary": row["summary"],
                     "emotion": row["emotion"],
                     "that_time_price": row["Close"],
-                    "that_time_change": row["price_change"],
-                    "volume": row["Volume"],
-                    "volume_change": row["trading_value"],
                     "is_top_story": False,
                     "is_exist": row["Code"] in existing_tickers,
                 }
@@ -296,7 +303,7 @@ def us_run_news_batch(date: str = None):
     return len(news_records)
 
 
-def kr_run_news_is_top_story(date: str = None):
+def temp_kr_run_news_is_top_story(date: str = None):
     """
     한국 뉴스 주요 소식 선정 배치 함수
     Args:
@@ -346,7 +353,7 @@ def kr_run_news_is_top_story(date: str = None):
         raise
 
 
-def us_run_news_is_top_story(date: str = None):
+def temp_us_run_news_is_top_story(date: str = None):
     """
     미국 뉴스 주요 소식 선정 배치 함수
     Args:
@@ -396,5 +403,91 @@ def us_run_news_is_top_story(date: str = None):
         raise
 
 
+def kr_run_news_is_top_story(date: str = None):
+    """
+    한국 뉴스 주요 소식 선정 배�� 함수
+    Args:
+        date (str): 원하는 날짜(YYYYMMDD)
+
+    Returns:
+        bool: 성공 여부
+    """
+    if date:
+        check_date = pd.to_datetime(date, format="%Y%m%d").date()
+    else:
+        check_date = now_kr(is_date=True)
+
+    # 오늘 가격 데이터 조회
+    df_price = pd.DataFrame(
+        database._select(
+            table="stock_trend",
+            columns=["ticker", "volume_change_1m"],
+            **dict(Date=check_date.strftime("%Y-%m-%d"), ctry="KR"),  # TODO :: ctry 바뀔 가능성 존재함.
+        )
+    )
+
+    # 거래대금 상위 5개 종목 선정
+    top_5_tickers = df_price.nlargest(5, "volume_change_1m")["ticker"].tolist()
+
+    # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
+    database._update(
+        table="news_information",
+        sets={"is_top_story": False},
+        **dict(ctry="KR", date=check_date.strftime("%Y-%m-%d")),
+    )
+
+    # 거래대금 상위 5개 종목의 is_top_story를 True로 업데이트
+    database._update(
+        table="news_information",
+        sets={"is_top_story": True},
+        **dict(ctry="KR", date=check_date.strftime("%Y-%m-%d"), ticker__in=top_5_tickers),
+    )
+
+    return True
+
+
+def us_run_news_is_top_story(date: str = None):
+    """
+    미국 뉴스 주요 소식 선정 배치 함수
+    Args:
+        date (str): 원하는 s3 파일 날짜(YYYYMMDD)
+
+    Returns:
+        bool: 성공 여부
+    """
+    if date:
+        check_date = pd.to_datetime(date, format="%Y%m%d").date()
+    else:
+        check_date = now_kr(is_date=True)
+
+    # 오늘 가격 데이터 조회
+    df_price = pd.DataFrame(
+        database._select(
+            table="stock_trend",
+            columns=["ticker", "volume_change_1m"],
+            **dict(Date=check_date.strftime("%Y-%m-%d"), ctry="US"),
+        )
+    )
+
+    # 거래대금 상위 6개 종목 선정
+    top_6_tickers = df_price.nlargest(6, "volume_change_1m")["ticker"].tolist()
+
+    # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
+    database._update(
+        table="news_information",
+        sets={"is_top_story": False},
+        **dict(ctry="US", date=check_date.strftime("%Y-%m-%d")),
+    )
+
+    # 거래대금 상위 6개 종목의 is_top_story를 True로 업데이트
+    database._update(
+        table="news_information",
+        sets={"is_top_story": True},
+        **dict(ctry="US", date=check_date.strftime("%Y-%m-%d"), ticker__in=top_6_tickers),
+    )
+
+    return True
+
+
 if __name__ == "__main__":
-    us_run_news_batch()
+    kr_run_news_batch()
