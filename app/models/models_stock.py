@@ -4,6 +4,7 @@ from sqlalchemy import Column, Date, DateTime, Float, Integer, String, Boolean
 
 from app.database.crud import Base
 from app.modules.common.enum import PrdyVrssSign
+from app.models.models_base import Base
 
 
 class StockInformation(Base):
@@ -128,11 +129,11 @@ class StockTrend(Base):
     ko_name = Column(String(100), nullable=True, comment="종목 한글명")
     en_name = Column(String(100), nullable=True, comment="종목 영문명")
     market = Column(String(10), nullable=False, index=True, comment="시장 구분")
-    
+
     # 현재가
     current_price = Column(Float, nullable=False, comment="현재가")
     prev_close = Column(Float, nullable=False, comment="전일종가")
-    
+
     # 등락률
     change_1m = Column(Float, nullable=True, comment="실시간 등락률")
     change_1d = Column(Float, nullable=True, comment="1일 등락률")
@@ -140,7 +141,7 @@ class StockTrend(Base):
     change_1mo = Column(Float, nullable=True, comment="1개월 등락률")
     change_6mo = Column(Float, nullable=True, comment="6개월 등락률")
     change_1y = Column(Float, nullable=True, comment="1년 등락률")
-    
+
     # 거래량
     volume_1m = Column(Float, nullable=True, comment="1분 거래량 비율")
     volume_1d = Column(Float, nullable=True, comment="1일 거래량 비율")
@@ -148,7 +149,7 @@ class StockTrend(Base):
     volume_1mo = Column(Float, nullable=True, comment="1개월 거래량 비율")
     volume_6mo = Column(Float, nullable=True, comment="6개월 거래량 비율")
     volume_1y = Column(Float, nullable=True, comment="1년 거래량 비율")
-    
+
     # 거래대금
     volume_change_1m = Column(Float, nullable=True, comment="1분 거래대금")
     volume_change_1d = Column(Float, nullable=True, comment="1일 거래대금")
