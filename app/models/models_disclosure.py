@@ -1,5 +1,5 @@
 from sqlalchemy import Boolean, Column, DateTime, Float, String
-from app.database.crud import Base
+from app.models.models_base import Base
 from sqlalchemy.schema import Index
 
 
