@@ -1,8 +1,5 @@
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from app.database.conn import get_db
+from fastapi import APIRouter, Depends
 from app.modules.trending.schemas import TrendingStockResponse
-from app.modules.trending.service import TrendingService, get_trending_service
 from app.modules.trending.old_service import (
     TrendingService as OldTrendingService,
     get_trending_service as get_old_trending_service,
@@ -19,10 +16,10 @@ def old_get_trending_stocks(
     return old_service.get_trending_stocks()
 
 
-@router.get("", summary="급상승 종목")
-def get_trending_stocks(
-    ctry: str = Query(default="us"),
-    service: TrendingService = Depends(get_trending_service),
-    db: Session = Depends(get_db),
-) -> TrendingStockResponse:
-    return service.get_tranding_stocks(db, ctry)
+# @router.get("", summary="급상승 종목")
+# def get_trending_stocks(
+#     ctry: str = Query(default="us"),
+#     service: TrendingService = Depends(get_trending_service),
+#     db: Session = Depends(db.get_db),
+# ) -> TrendingStockResponse:
+#     return service.get_tranding_stocks(db, ctry)
