@@ -1,4 +1,5 @@
 import logging
+from sqlalchemy import text
 import yfinance as yf
 import requests
 from typing import Tuple
@@ -94,63 +95,42 @@ class StockIndicesService:
         except Exception as e:
             logging.error(f"Error fetching data for {name}: {e}")
 
-    # async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
-    #     """최적화된 시장 등락비율 조회"""
-    #     try:
-    #         cache_key = f"{market}_ratio"
-    #         now = datetime.now()
+    # 코스피200 ticker 조회
+    def get_kospi200_ticker(self):
+        try:
+            df = self.db._select(table="stock_information", columns=["ticker"], is_kospi_200=True)
+            return pd.DataFrame(df, columns=["ticker"])
+        except Exception as e:
+            print(f"Exception in get_kospi200_ticker: {str(e)}")
+            logging.error(f"Error fetching kospi200 ticker: {e}")
 
-    #         # 캐시 확인
-    #         if cache_key in self._cache:
-    #             data, timestamp = self._cache[cache_key]
-    #             if now - timestamp < timedelta(seconds=self._cache_timeout):
-    #                 return data
+    # 코스닥150 ticker 조회
+    def get_kosdaq150_ticker(self):
+        try:
+            df = self.db._select(table="stock_information", columns=["ticker"], is_kosdaq_150=True)
+            return pd.DataFrame(df, columns=["ticker"])
+        except Exception as e:
+            print(f"Exception in get_kosdaq150_ticker: {str(e)}")
+            logging.error(f"Error fetching kosdaq150 ticker: {e}")
 
-    #         async with self._lock:
-    #             market_mapping = {"kospi": "KOSPI", "kosdaq": "KOSDAQ", "nasdaq": "NASDAQ", "sp500": "S&P500"}
-    #             market_filter = market_mapping.get(market.lower(), market)
-    #             table = "stock_kr_1d" if market_filter in ["KOSPI", "KOSDAQ"] else "stock_us_1d"
+    # 나스닥100 ticker 조회
+    def get_nasdaq100_ticker(self):
+        try:
+            df = self.db._select(table="stock_information", columns=["ticker"], is_nasdaq_100=True)
+            return pd.DataFrame(df, columns=["ticker"])
+        except Exception as e:
+            print(f"Exception in get_nasdaq100_ticker: {str(e)}")
+            logging.error(f"Error fetching nasdaq100 ticker: {e}")
 
-    #             query = text("""
-    #                 SELECT
-    #                     SUM(CASE WHEN (Close - Open) / Open * 100 > 1 THEN 1 ELSE 0 END) AS advance,
-    #                     SUM(CASE WHEN (Close - Open) / Open * 100 < -1 THEN 1 ELSE 0 END) AS decline,
-    #                     SUM(CASE WHEN ABS((Close - Open) / Open * 100) <= 1 THEN 1 ELSE 0 END) AS unchanged,
-    #                     COUNT(*) AS total
-    #                 FROM """ + table + """
-    #                 WHERE Market = :market AND Date = (
-    #                     SELECT MAX(Date) FROM """ + table + """ WHERE Market = :market
-    #                 ) AND Open != 0
-    #             """)
-
-    #             result = self.db._execute(query, {"market": market_filter})
-    #             rows = result.fetchall()
-
-    #             if not rows:
-    #                 logging.error(f"No data found for market: {market_filter}")
-    #                 return 0.0, 0.0, 0.0
-
-    #             advance, decline, unchanged, total = rows[0]
-
-    #             # Total이 0인 경우 처리
-    #             if total == 0:
-    #                 print(f"No valid stocks found for market: {market}")
-    #                 return 0.0, 0.0, 0.0
-
-    #             # TODO 일단 목데이터. 데이터 정리되면 넣을 예정
-    #             ratios = (
-    #                 round(advance / total * 100, 2),
-    #                 round(decline / total * 100, 2),
-    #                 round(unchanged / total * 100, 2),
-    #             )
-
-    #             # 캐시에 저장
-    #             self._cache[cache_key] = (ratios, now)
-    #             return ratios
-
-    #     except Exception as e:
-    #         logging.error(f"Error in get_market_ratios for {market}: {str(e)}")
-    #         return 0.0, 0.0, 0.0
+    # S&P500 ticker 조회
+    def get_sp500_ticker(self):
+        try:
+            df = self.db._select(table="stock_information", columns=["ticker"], is_snp_500=True)
+            return pd.DataFrame(df, columns=["ticker"])  # 결과를 DataFrame으로 변환
+        except Exception as e:
+            print(f"Exception in get_sp500_ticker: {str(e)}")
+            logging.error(f"Error fetching S&P500 ticker: {e}")
+            return pd.DataFrame()
 
     async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
         """최적화된 시장 등락비율 조회"""
@@ -158,25 +138,75 @@ class StockIndicesService:
             cache_key = f"{market}_ratio"
             now = datetime.now()
 
-            # 캐시 확인
             if cache_key in self._cache:
                 data, timestamp = self._cache[cache_key]
                 if now - timestamp < timedelta(seconds=self._cache_timeout):
                     return data
 
-            # 고정된 테스트 데이터 반환
-            ratios = {
-                "kospi": (45.32, 35.45, 19.23),
-                "kosdaq": (42.15, 38.65, 19.20),
-                "nasdaq": (48.25, 32.55, 19.20),
-                "sp500": (46.78, 34.02, 19.20),
-            }
+            async with self._lock:
+                market_mapping = {"kospi": "KOSPI200", "kosdaq": "KOSDAQ150", "nasdaq": "NASDAQ100", "sp500": "S&P500"}
+                market_filter = market_mapping.get(market.lower(), market)
 
-            test_ratios = ratios.get(market.lower(), (33.33, 33.33, 33.34))
+                ticker_functions = {
+                    "KOSPI200": self.get_kospi200_ticker,
+                    "KOSDAQ150": self.get_kosdaq150_ticker,
+                    "NASDAQ100": self.get_nasdaq100_ticker,
+                    "S&P500": self.get_sp500_ticker,
+                }
 
-            # 캐시에 저장
-            self._cache[cache_key] = (test_ratios, now)
-            return test_ratios
+                ticker_func = ticker_functions.get(market_filter)
+                if not ticker_func:
+                    return 0.0, 0.0, 0.0
+
+                df = ticker_func()
+                if df.empty:
+                    return 0.0, 0.0, 0.0
+
+                tickers = tuple(df["ticker"].tolist())
+                table = "stock_kr_1d" if market_filter in ["KOSPI200", "KOSDAQ150"] else "stock_us_1d"
+
+                query = text(
+                    """
+                    WITH latest_date AS (
+                        SELECT MAX(Date) as max_date
+                        FROM """
+                    + table
+                    + """
+                        WHERE ticker IN :tickers
+                    )
+                    SELECT
+                        SUM(CASE WHEN (Close - Open) / Open * 100 > 1 THEN 1 ELSE 0 END) AS advance,
+                        SUM(CASE WHEN (Close - Open) / Open * 100 < -1 THEN 1 ELSE 0 END) AS decline,
+                        SUM(CASE WHEN ABS((Close - Open) / Open * 100) <= 1 THEN 1 ELSE 0 END) AS unchanged,
+                        COUNT(*) AS total
+                    FROM """
+                    + table
+                    + """, latest_date
+                    WHERE ticker IN :tickers
+                    AND Date = latest_date.max_date
+                    AND Open != 0
+                """
+                )
+
+                result = self.db._execute(query, {"tickers": tickers})
+                rows = result.fetchall()
+
+                if not rows:
+                    return 0.0, 0.0, 0.0
+
+                advance, decline, unchanged, total = rows[0]
+
+                if total == 0:
+                    return 0.0, 0.0, 0.0
+
+                ratios = (
+                    round(advance / total * 100, 2),
+                    round(decline / total * 100, 2),
+                    round(unchanged / total * 100, 2),
+                )
+
+                self._cache[cache_key] = (ratios, now)
+                return ratios
 
         except Exception as e:
             logging.error(f"Error in get_market_ratios for {market}: {str(e)}")
@@ -253,3 +283,33 @@ class StockIndicesService:
                 sp500=empty_summary,
                 data=None,
             )
+
+    # async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
+    #     """최적화된 시장 등락비율 조회"""
+    #     try:
+    #         cache_key = f"{market}_ratio"
+    #         now = datetime.now()
+
+    #         # 캐시 확인
+    #         if cache_key in self._cache:
+    #             data, timestamp = self._cache[cache_key]
+    #             if now - timestamp < timedelta(seconds=self._cache_timeout):
+    #                 return data
+
+    #         # 고정된 테스트 데이터 반환
+    #         ratios = {
+    #             "kospi": (45.32, 35.45, 19.23),
+    #             "kosdaq": (42.15, 38.65, 19.20),
+    #             "nasdaq": (48.25, 32.55, 19.20),
+    #             "sp500": (46.78, 34.02, 19.20),
+    #         }
+
+    #         test_ratios = ratios.get(market.lower(), (33.33, 33.33, 33.34))
+
+    #         # 캐시에 저장
+    #         self._cache[cache_key] = (test_ratios, now)
+    #         return test_ratios
+
+    #     except Exception as e:
+    #         logging.error(f"Error in get_market_ratios for {market}: {str(e)}")
+    #         return 0.0, 0.0, 0.0
