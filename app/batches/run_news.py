@@ -64,6 +64,18 @@ def kr_run_news_batch(date: str = None):
     # DB에 존재하는 티커 목록
     existing_tickers = df_stock["Ticker"].unique().tolist()
 
+    # DB에 존재하는 티커 조회
+    df_stock = pd.DataFrame(
+        database._select(
+            table="stock_kr_1d",
+            columns=["Ticker", "Open", "Close", "Volume"],
+            **dict(Date=business_days[-2].strftime("%Y-%m-%d"), Ticker__in=news_tickers),
+        )
+    )
+
+    # DB에 존재하는 티커 목록
+    existing_tickers = df_stock["Ticker"].unique().tolist()
+
     # 각 날짜의 가격 데이터 매핑 생성
     price_date_mapping = {}
     current_time = now_kr(is_date=False)
