@@ -329,12 +329,15 @@ def temp_kr_run_news_is_top_story(date: str = None):
     else:
         check_date = now_kr(is_date=True)
 
+    business_days = get_business_days(country="KR", start_date=check_date - timedelta(days=7), end_date=check_date)
+    business_day = business_days[-2]
+
     # 오늘 가격 데이터 조회
     df_price = pd.DataFrame(
         database._select(
             table="stock_kr_1d",
             columns=["Ticker", "Open", "Close", "High", "Low", "Volume"],
-            **dict(Date=check_date.strftime("%Y-%m-%d"), ctry="KR"),
+            **dict(Date=business_day.strftime("%Y-%m-%d")),
         )
     )
     df_price["trading_value"] = (
@@ -344,19 +347,31 @@ def temp_kr_run_news_is_top_story(date: str = None):
     # 해당 날짜의 거래대금 상위 5개 종목 선정
     top_5_tickers = df_price.nlargest(5, "trading_value")["Ticker"].tolist()
 
+    start_date = check_date
+    end_date = start_date + timedelta(days=1)
+
     try:
         # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
         database._update(
             table="news_information",
             sets={"is_top_story": False},
-            **dict(ctry="KR", date=check_date.strftime("%Y-%m-%d")),
+            **{
+                "ctry": "KR",
+                "date__gte": start_date,
+                "date__lt": end_date,
+            },
         )
 
         # 거래대금 상위 5개 종목의 is_top_story를 True로 업데이트
         database._update(
             table="news_information",
             sets={"is_top_story": True},
-            **dict(ctry="KR", date=check_date.strftime("%Y-%m-%d"), ticker__in=top_5_tickers),
+            **{
+                "ctry": "KR",
+                "date__gte": start_date,
+                "date__lt": end_date,
+                "ticker__in": top_5_tickers,
+            },
         )
 
         return True
@@ -379,45 +394,55 @@ def temp_us_run_news_is_top_story(date: str = None):
     else:
         check_date = now_kr(is_date=True)
 
+    business_days = get_business_days(country="US", start_date=check_date - timedelta(days=7), end_date=check_date)
+    business_day = business_days[-2]
+
     # 오늘 가격 데이터 조회
     df_price = pd.DataFrame(
         database._select(
             table="stock_us_1d",
             columns=["Ticker", "Open", "Close", "High", "Low", "Volume"],
-            **dict(Date=check_date.strftime("%Y-%m-%d"), ctry="US"),
+            **dict(Date=business_day.strftime("%Y-%m-%d")),
         )
     )
     df_price["trading_value"] = (
         (df_price["Close"] + df_price["Open"] + df_price["High"] + df_price["Low"]) / 4
     ) * df_price["Volume"]
 
-    # 해당 날짜의 거래대금 상위 5개 종목 선정
+    # 해당 날짜의 거래대금 상위 6개 종목 선정
     top_6_tickers = df_price.nlargest(6, "trading_value")["Ticker"].tolist()
 
-    try:
-        # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
-        database._update(
-            table="news_information",
-            sets={"is_top_story": False},
-            **dict(ctry="US", date=check_date.strftime("%Y-%m-%d")),
-        )
+    start_date = check_date
+    end_date = start_date + timedelta(days=1)
 
-        # 거래대금 상위 5개 종목의 is_top_story를 True로 업데이트
-        database._update(
-            table="news_information",
-            sets={"is_top_story": True},
-            **dict(ctry="US", date=check_date.strftime("%Y-%m-%d"), ticker__in=top_6_tickers),
-        )
+    # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
+    database._update(
+        table="news_information",
+        sets={"is_top_story": False},
+        **{
+            "ctry": "US",
+            "date__gte": start_date,
+            "date__lt": end_date,
+        },
+    )
 
-        return True
-
-    except Exception:
-        raise
+    # 거래대금 상위 5개 종목의 is_top_story를 True로 업데이트
+    database._update(
+        table="news_information",
+        sets={"is_top_story": True},
+        **{
+            "ctry": "US",
+            "date__gte": start_date,
+            "date__lt": end_date,
+            "ticker__in": top_6_tickers,
+        },
+    )
+    return True
 
 
 def kr_run_news_is_top_story(date: str = None):
     """
-    한국 뉴스 주요 소식 선정 배�� 함수
+    한국 뉴스 주요 소식 선정 배치 함수
     Args:
         date (str): 원하는 날짜(YYYYMMDD)
 
@@ -502,4 +527,4 @@ def us_run_news_is_top_story(date: str = None):
 
 
 if __name__ == "__main__":
-    kr_run_news_batch()
+    temp_us_run_news_is_top_story(20241226)

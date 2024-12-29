@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import List
 
 import pytz
-from app.modules.news.services import get_news_service
+from app.modules.news.old_services import get_news_service
 from app.database.crud import JoinInfo, database
 from app.database.conn import db
 from app.modules.trending.schemas import TrendingStockResponse, TrendingStockKr, TrendingStockUs
