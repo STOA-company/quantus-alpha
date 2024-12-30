@@ -33,6 +33,16 @@ class NewsRenewalItem(BaseModel):
     price_impact: float | None
 
 
+class NewsDetailItem(BaseModel):
+    id: int
+    ctry: str | None
+    date: datetime
+    title: str
+    summary: str | None
+    emotion: str | None
+    price_impact: float | None
+
+
 class DisclosureRenewalItem(BaseModel):
     id: int
     date: datetime

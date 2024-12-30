@@ -2,7 +2,7 @@ from typing import Annotated, List
 from fastapi import APIRouter, Depends, Query
 from app.modules.common.schemas import BaseResponse
 from app.modules.news.services import NewsService, get_news_service
-from app.modules.news.schemas import NewsRenewalResponse, TopStoriesResponse
+from app.modules.news.schemas import NewsDetailItem, NewsRenewalResponse, NewsResponse, TopStoriesResponse
 
 
 router = APIRouter()
@@ -27,3 +27,30 @@ def top_stories(
 ):
     data = news_service.top_stories()
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
+
+
+@router.get("/detail", summary="상세 페이지 뉴스", response_model=NewsResponse[List[NewsDetailItem]])
+def news_detail(
+    ticker: Annotated[str, Query(..., description="종목 코드, 예시: AAPL, A110090")],
+    date: Annotated[str, Query(description="날짜, 예시: 20241230")] = None,
+    page: Annotated[int, Query(description="페이지 번호, 기본값: 1")] = 1,
+    size: Annotated[int, Query(description="페이지 사이즈, 기본값: 6")] = 6,
+    news_service: NewsService = Depends(get_news_service),
+):
+    data, total_count, total_page, offset, emotion_count, ctry = news_service.news_detail(
+        ticker=ticker, date=date, page=page, size=size
+    )
+    return NewsResponse(
+        status_code=200,
+        message="Successfully retrieved news data",
+        data=data,
+        total_count=total_count,
+        total_pages=total_page,
+        current_page=page,
+        offset=offset,
+        size=size,
+        positive_count=emotion_count.get("positive", 0),
+        negative_count=emotion_count.get("negative", 0),
+        neutral_count=emotion_count.get("neutral", 0),
+        ctry=ctry,
+    )
