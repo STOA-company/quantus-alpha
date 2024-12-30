@@ -357,6 +357,7 @@ class NewsService:
                 return round((row["current_price"] - row["that_time_price"]) / row["that_time_price"] * 100, 2)
 
             total_df["price_impact"] = total_df.apply(calculate_price_impact, axis=1)
+
             # 무한값과 NaN을 0으로 대체
             total_df["price_impact"] = total_df["price_impact"].replace([np.inf, -np.inf, np.nan], 0)
 
