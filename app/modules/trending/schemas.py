@@ -2,6 +2,14 @@ from typing import List
 from pydantic import BaseModel
 
 
+class TrendingStockKr(BaseModel):
+    pass
+
+
+class TrendingStockUs(BaseModel):
+    pass
+
+
 class TrendingStock(BaseModel):
     ticker: str
     rank: int

@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, String
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, String, Text
 from app.models.models_base import Base
 from sqlalchemy.schema import Index
 
@@ -23,17 +23,17 @@ class Disclosure(Base):
     ctry = Column(String(20), nullable=True, comment="국가")
     date = Column(DateTime, nullable=True, comment="날짜, 시간")
     title = Column(String(255), nullable=True, comment="제목")
-    url = Column(String(255), nullable=True, comment="URL")
-    summary = Column(String(255), nullable=True, comment="요약")
-    impact_reason = Column(String(255), nullable=True, comment="영향 요인")
-    key_points = Column(String(255), nullable=True, comment="주요 포인트")
-    en_summary = Column(String(255), nullable=True, comment="영문 요약")
-    en_impact_reason = Column(String(255), nullable=True, comment="영문 영향 요인")
-    en_key_points = Column(String(255), nullable=True, comment="영문 주요 포인트")
+    url = Column(Text, nullable=True, comment="URL")
+    summary = Column(Text, nullable=True, comment="요약")
+    impact_reason = Column(Text, nullable=True, comment="영향 요인")
+    key_points = Column(Text, nullable=True, comment="주요 포인트")
+    en_summary = Column(Text, nullable=True, comment="영문 요약")
+    en_impact_reason = Column(Text, nullable=True, comment="영문 영향 요인")
+    en_key_points = Column(Text, nullable=True, comment="영문 주요 포인트")
     emotion = Column(String(20), nullable=True, comment="감정")
-    form_type = Column(String(20), nullable=True, comment="형태")
-    category_type = Column(String(20), nullable=True, comment="카테고리")
-    extra_info = Column(String(255), nullable=True, comment="추가 정보")
+    form_type = Column(String(255), nullable=True, comment="형태")
+    category_type = Column(String(255), nullable=True, comment="카테고리")
+    extra_info = Column(Text, nullable=True, comment="추가 정보")
     that_time_price = Column(Float, nullable=True, comment="해당 시간 종가")
     is_top_story = Column(Boolean, nullable=True, comment="주요 소식 선정 여부")
     is_exist = Column(Boolean, nullable=True, comment="DB 존재 여부")
