@@ -63,7 +63,12 @@ class StockIndicesService:
                     def fetch():
                         if interval:
                             return ticker.history(period=period, interval=interval)
-                        return ticker.history(period=period)
+                        # 데이터가 있을 때까지 기간을 늘려가며 조회
+                        for days in [1, 2, 3, 4, 5]:  # 최대 5일까지 확인
+                            df = ticker.history(period=f"{days}d")
+                            if not df.empty:
+                                return df
+                        return pd.DataFrame()
 
                     df = await loop.run_in_executor(self._executor, fetch)
                     return df
@@ -73,9 +78,11 @@ class StockIndicesService:
             daily_df, min5_df = await asyncio.gather(fetch_history("1d"), fetch_history("1d", "5m"))
 
             if not daily_df.empty:
+                # 가장 최근 유효한 데이터 사용
+                valid_data = daily_df[daily_df["Open"] != 0].iloc[-1]
                 daily_data = {
-                    "open": round(float(daily_df["Open"].iloc[0]), 2),
-                    "close": round(float(daily_df["Close"].iloc[0]), 2),
+                    "open": round(float(valid_data["Open"]), 2),
+                    "close": round(float(valid_data["Close"]), 2),
                 }
                 self._cache[cache_key_daily] = (daily_data, now)
 
@@ -101,7 +108,6 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_kospi_200=True)
             return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
-            print(f"Exception in get_kospi200_ticker: {str(e)}")
             logging.error(f"Error fetching kospi200 ticker: {e}")
 
     # 코스닥150 ticker 조회
@@ -110,7 +116,6 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_kosdaq_150=True)
             return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
-            print(f"Exception in get_kosdaq150_ticker: {str(e)}")
             logging.error(f"Error fetching kosdaq150 ticker: {e}")
 
     # 나스닥100 ticker 조회
@@ -119,7 +124,6 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_nasdaq_100=True)
             return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
-            print(f"Exception in get_nasdaq100_ticker: {str(e)}")
             logging.error(f"Error fetching nasdaq100 ticker: {e}")
 
     # S&P500 ticker 조회
@@ -128,7 +132,6 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_snp_500=True)
             return pd.DataFrame(df, columns=["ticker"])  # 결과를 DataFrame으로 변환
         except Exception as e:
-            print(f"Exception in get_sp500_ticker: {str(e)}")
             logging.error(f"Error fetching S&P500 ticker: {e}")
             return pd.DataFrame()
 
@@ -146,6 +149,7 @@ class StockIndicesService:
             async with self._lock:
                 market_mapping = {"kospi": "KOSPI200", "kosdaq": "KOSDAQ150", "nasdaq": "NASDAQ100", "sp500": "S&P500"}
                 market_filter = market_mapping.get(market.lower(), market)
+                print(f"Processing market: {market_filter}")  # 시장 확인
 
                 ticker_functions = {
                     "KOSPI200": self.get_kospi200_ticker,
@@ -155,15 +159,33 @@ class StockIndicesService:
                 }
 
                 ticker_func = ticker_functions.get(market_filter)
-                if not ticker_func:
-                    return 0.0, 0.0, 0.0
-
                 df = ticker_func()
+                print(f"Tickers found for {market_filter}: {len(df) if not df.empty else 0}")  # 티커 수 확인
                 if df.empty:
+                    print(f"No tickers found in stock_information for {market_filter}")  # 티커 없음 확인
                     return 0.0, 0.0, 0.0
 
                 tickers = tuple(df["ticker"].tolist())
+                print(f"Sample tickers for {market_filter}: {tickers[:5]}")  # 샘플 티커 확인
+
                 table = "stock_kr_1d" if market_filter in ["KOSPI200", "KOSDAQ150"] else "stock_us_1d"
+                print(f"Using table: {table}")  # 사용 테이블 확인
+
+                # 날짜 데이터 확인을 위한 쿼리 추가
+                date_check_query = text(
+                    """
+                    SELECT DISTINCT Date
+                    FROM """
+                    + table
+                    + """
+                    WHERE ticker IN :tickers
+                    ORDER BY Date DESC
+                    LIMIT 5
+                    """
+                )
+                date_result = self.db._execute(date_check_query, {"tickers": tickers})
+                dates = date_result.fetchall()
+                print(f"Available dates for {market_filter}: {dates}")  # 사용 가능한 날짜 확인
 
                 query = text(
                     """
