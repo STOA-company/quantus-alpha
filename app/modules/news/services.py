@@ -344,12 +344,8 @@ class NewsService:
                 **{"ticker__in": unique_tickers},
             )
         )
-        print(f"####1df_price:, {df_price.head()}")
-
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")
-            print(f"####2total_df:, {total_df.head()}")
-            print(f"####3total_df:, {total_df[total_df['ticker']=='AAPL']}")
 
             total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
             total_df["change_1m"] = total_df["change_1m"].fillna(0.0)

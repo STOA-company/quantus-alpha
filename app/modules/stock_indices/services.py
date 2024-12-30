@@ -21,6 +21,8 @@ class StockIndicesService:
         self._lock = asyncio.Lock()
         self._background_task_running = False
         self.session = requests.Session()
+        self._nasdaq_lock = asyncio.Lock()
+        self._sp500_lock = asyncio.Lock()
 
     async def _update_cache_background(self):
         """백그라운드에서 캐시 업데이트"""
@@ -141,6 +143,7 @@ class StockIndicesService:
             cache_key = f"{market}_ratio"
             now = datetime.now()
 
+            # 캐시 체크 로직 유지
             if cache_key in self._cache:
                 data, timestamp = self._cache[cache_key]
                 if now - timestamp < timedelta(seconds=self._cache_timeout):
@@ -149,8 +152,8 @@ class StockIndicesService:
             async with self._lock:
                 market_mapping = {"kospi": "KOSPI200", "kosdaq": "KOSDAQ150", "nasdaq": "NASDAQ100", "sp500": "S&P500"}
                 market_filter = market_mapping.get(market.lower(), market)
-                print(f"Processing market: {market_filter}")  # 시장 확인
 
+                # 티커 조회 함수 매핑
                 ticker_functions = {
                     "KOSPI200": self.get_kospi200_ticker,
                     "KOSDAQ150": self.get_kosdaq150_ticker,
@@ -160,34 +163,15 @@ class StockIndicesService:
 
                 ticker_func = ticker_functions.get(market_filter)
                 df = ticker_func()
-                print(f"Tickers found for {market_filter}: {len(df) if not df.empty else 0}")  # 티커 수 확인
+
                 if df.empty:
-                    print(f"No tickers found in stock_information for {market_filter}")  # 티커 없음 확인
                     return 0.0, 0.0, 0.0
 
                 tickers = tuple(df["ticker"].tolist())
-                print(f"Sample tickers for {market_filter}: {tickers[:5]}")  # 샘플 티커 확인
-
                 table = "stock_kr_1d" if market_filter in ["KOSPI200", "KOSDAQ150"] else "stock_us_1d"
-                print(f"Using table: {table}")  # 사용 테이블 확인
 
-                # 날짜 데이터 확인을 위한 쿼리 추가
-                date_check_query = text(
-                    """
-                    SELECT DISTINCT Date
-                    FROM """
-                    + table
-                    + """
-                    WHERE ticker IN :tickers
-                    ORDER BY Date DESC
-                    LIMIT 5
-                    """
-                )
-                date_result = self.db._execute(date_check_query, {"tickers": tickers})
-                dates = date_result.fetchall()
-                print(f"Available dates for {market_filter}: {dates}")  # 사용 가능한 날짜 확인
-
-                query = text(
+                # 쿼리 최적화: 한 번의 쿼리로 필요한 모든 정보 조회
+                optimized_query = text(
                     """
                     WITH latest_date AS (
                         SELECT MAX(Date) as max_date
@@ -195,11 +179,12 @@ class StockIndicesService:
                     + table
                     + """
                         WHERE ticker IN :tickers
+                        AND Open != 0
                     )
                     SELECT
-                        SUM(CASE WHEN (Close - Open) / Open * 100 > 1 THEN 1 ELSE 0 END) AS advance,
-                        SUM(CASE WHEN (Close - Open) / Open * 100 < -1 THEN 1 ELSE 0 END) AS decline,
-                        SUM(CASE WHEN ABS((Close - Open) / Open * 100) <= 1 THEN 1 ELSE 0 END) AS unchanged,
+                        COUNT(CASE WHEN (Close - Open) / Open * 100 > 0.1 THEN 1 END) AS advance,
+                        COUNT(CASE WHEN (Close - Open) / Open * 100 < -0.1 THEN 1 END) AS decline,
+                        COUNT(CASE WHEN ABS((Close - Open) / Open * 100) <= 0.1 THEN 1 END) AS unchanged,
                         COUNT(*) AS total
                     FROM """
                     + table
@@ -207,19 +192,16 @@ class StockIndicesService:
                     WHERE ticker IN :tickers
                     AND Date = latest_date.max_date
                     AND Open != 0
-                """
+                    """
                 )
 
-                result = self.db._execute(query, {"tickers": tickers})
-                rows = result.fetchall()
+                result = self.db._execute(optimized_query, {"tickers": tickers})
+                row = result.fetchone()
 
-                if not rows:
+                if not row or row[3] == 0:  # total이 0인 경우
                     return 0.0, 0.0, 0.0
 
-                advance, decline, unchanged, total = rows[0]
-
-                if total == 0:
-                    return 0.0, 0.0, 0.0
+                advance, decline, unchanged, total = row
 
                 ratios = (
                     round(advance / total * 100, 2),
@@ -306,32 +288,38 @@ class StockIndicesService:
                 data=None,
             )
 
-    # async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
-    #     """최적화된 시장 등락비율 조회"""
-    #     try:
-    #         cache_key = f"{market}_ratio"
-    #         now = datetime.now()
+    def get_nasdaq_ticker(self):
+        """stock_indices 테이블에서 나스닥 데이터 조회"""
+        try:
+            result = self.db._select(
+                table="stock_indices", columns=["ticker", "rise_ratio", "fall_ratio", "unchanged_ratio"], ticker="nasdaq"
+            )
 
-    #         # 캐시 확인
-    #         if cache_key in self._cache:
-    #             data, timestamp = self._cache[cache_key]
-    #             if now - timestamp < timedelta(seconds=self._cache_timeout):
-    #                 return data
+            if not result:
+                return {"ticker": "nasdaq", "상승": 0.0, "하락": 0.0, "보합": 0.0}
 
-    #         # 고정된 테스트 데이터 반환
-    #         ratios = {
-    #             "kospi": (45.32, 35.45, 19.23),
-    #             "kosdaq": (42.15, 38.65, 19.20),
-    #             "nasdaq": (48.25, 32.55, 19.20),
-    #             "sp500": (46.78, 34.02, 19.20),
-    #         }
+            # 첫 번째 행의 데이터 사용
+            row = result[0]
+            return {"ticker": row[0], "상승": float(row[1]), "하락": float(row[2]), "보합": float(row[3])}
 
-    #         test_ratios = ratios.get(market.lower(), (33.33, 33.33, 33.34))
+        except Exception as e:
+            logging.error(f"Error in get_nasdaq_ticker: {str(e)}")
+            return {"ticker": "nasdaq", "상승": 0.0, "하락": 0.0, "보합": 0.0}
 
-    #         # 캐시에 저장
-    #         self._cache[cache_key] = (test_ratios, now)
-    #         return test_ratios
+    def get_snp500_ticker(self):
+        """stock_indices 테이블에서 S&P 500 데이터 조회"""
+        try:
+            result = self.db._select(
+                table="stock_indices", columns=["ticker", "rise_ratio", "fall_ratio", "unchanged_ratio"], ticker="sp500"
+            )
 
-    #     except Exception as e:
-    #         logging.error(f"Error in get_market_ratios for {market}: {str(e)}")
-    #         return 0.0, 0.0, 0.0
+            if not result:
+                return {"ticker": "sp500", "상승": 0.0, "하락": 0.0, "보합": 0.0}
+
+            # 첫 번째 행의 데이터 사용
+            row = result[0]
+            return {"ticker": row[0], "상승": float(row[1]), "하락": float(row[2]), "보합": float(row[3])}
+
+        except Exception as e:
+            logging.error(f"Error in get_snp500_ticker: {str(e)}")
+            return {"ticker": "sp500", "상승": 0.0, "하락": 0.0, "보합": 0.0}
