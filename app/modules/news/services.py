@@ -25,6 +25,7 @@ class NewsService:
         """DataFrame 전처리 및 필터링"""
 
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+        df = df[df["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
 
         df["emotion"] = np.where(
             df["emotion"] == "긍정",
@@ -340,22 +341,26 @@ class NewsService:
             self.db._select(
                 table="stock_trend",
                 columns=["ticker", "current_price", "change_1m"],
-                order="last_updated",
-                ascending=False,
                 **{"ticker__in": unique_tickers},
             )
         )
+        print(f"####1df_price:, {df_price.head()}")
 
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")
+            print(f"####2total_df:, {total_df.head()}")
+            print(f"####3total_df:, {total_df[total_df['ticker']=='AAPL']}")
 
-            total_df["current_price"] = total_df["current_price"].fillna(0.0)
+            total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
             total_df["change_1m"] = total_df["change_1m"].fillna(0.0)
             total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
 
-            total_df["price_impact"] = round(
-                (total_df["current_price"] - total_df["that_time_price"]) / total_df["that_time_price"] * 100, 2
-            )
+            def calculate_price_impact(row):
+                if row["current_price"] == 0 or row["that_time_price"] == 0:
+                    return 0
+                return round((row["current_price"] - row["that_time_price"]) / row["that_time_price"] * 100, 2)
+
+            total_df["price_impact"] = total_df.apply(calculate_price_impact, axis=1)
             # 무한값과 NaN을 0으로 대체
             total_df["price_impact"] = total_df["price_impact"].replace([np.inf, -np.inf, np.nan], 0)
 
