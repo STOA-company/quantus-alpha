@@ -24,6 +24,18 @@ class NewsService:
         )
         df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
 
+        # summary 필드 전처리
+        df["summary"] = (
+            df["summary"]
+            .str.replace(r'[\[\]"]', "", regex=True)  # 대괄호와 따옴표 제거
+            .str.replace(r"\n", " ", regex=True)  # 줄바꿈을 공백으로 변환
+            .str.replace(r"\*\*기사 요약\*\*\s*:\s*", "", regex=True)  # "**기사 요약**:" 제거
+            .str.replace(
+                r"\*\*주가에 영향을 줄 만한 내용\*\*\s*:\s*", "", regex=True
+            )  # "**주가에 영향을 줄 만한 내용**:" 제거
+            .str.strip()  # 앞뒤 공백 제거
+        )
+
         return df
 
     @staticmethod

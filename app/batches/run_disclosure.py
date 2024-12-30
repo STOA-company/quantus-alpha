@@ -369,11 +369,18 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
     else:
         check_date = now_kr(is_date=True)
 
+    business_days = get_business_days(country="KR", start_date=check_date - timedelta(days=7), end_date=check_date)
+    business_days = sorted(business_days)
+    # business_days의 모든 요소를 date 타입으로 변환
+    business_day = business_days[-2].date()
+
+    condition = dict(Date=business_day.strftime("%Y-%m-%d"), ctry="KR")
+
     df_price = pd.DataFrame(
         database._select(
             table="stock_kr_1d",
             columns=["Ticker", "Open", "Close", "High", "Low", "Volume"],
-            **dict(Date=check_date.strftime("%Y-%m-%d"), ctry="KR"),
+            **condition,
         )
     )
     df_price["trading_value"] = (

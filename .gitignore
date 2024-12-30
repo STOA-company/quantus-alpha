@@ -37,3 +37,6 @@ check_data/
 # Celery
 celerybeat-schedule.db
 dump.rdb
+
+# ngrok
+ngrok.yml
