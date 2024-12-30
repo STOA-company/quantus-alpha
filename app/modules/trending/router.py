@@ -1,4 +1,9 @@
-from fastapi import APIRouter, Depends
+from typing import List
+from fastapi import APIRouter, Depends, Query
+from app.modules.common.enum import TrendingPeriod, TrendingType
+from app.modules.trending.new_schemas import TrendingStockRequest, TrendingStock as NewTrendingStock
+from app.modules.trending.new_service import NewTrendingService, new_get_trending_service
+from app.modules.common.schemas import BaseResponse
 from app.modules.trending.old_schemas import TrendingStock
 from app.modules.trending.old_service import TrendingService, get_trending_service
 
@@ -6,17 +11,20 @@ from app.modules.trending.old_service import TrendingService, get_trending_servi
 router = APIRouter()
 
 
-@router.get("", summary="급상승 종목 조회 - 옛날 버전")
+@router.get("", summary="급상승 종목 조회")
 def get_trending_stocks(
     service: TrendingService = Depends(get_trending_service),
 ) -> TrendingStock:
     return service.get_trending_stocks()
 
 
-# @router.get("", summary="급상승 종목")
-# def get_trending_stocks(
-#     ctry: str = Query(default="us"),
-#     service: TrendingService = Depends(get_trending_service),
-#     db: Session = Depends(db.get_db),
-# ) -> TrendingStockResponse:
-#     return service.get_tranding_stocks(db, ctry)
+@router.get("/new", summary="실시간 차트")
+def get_us_trending_stocks(
+    ctry: str = Query("us", description="국가 코드"),
+    type: TrendingType = Query(TrendingType.UP, description="트렌딩 타입"),
+    period: TrendingPeriod = Query(TrendingPeriod.REALTIME, description="기간"),
+    service: NewTrendingService = Depends(new_get_trending_service),
+) -> BaseResponse[List[NewTrendingStock]]:
+    request = TrendingStockRequest(ctry=ctry, type=type, period=period)
+    data = service.get_trending_stocks(request)
+    return BaseResponse(status_code=200, message="success", data=data)

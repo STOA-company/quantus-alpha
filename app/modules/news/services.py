@@ -344,12 +344,9 @@ class NewsService:
                 **{"ticker__in": unique_tickers},
             )
         )
-        print(f"####1df_price:, {df_price.head()}")
 
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")
-            print(f"####2total_df:, {total_df.head()}")
-            print(f"####3total_df:, {total_df[total_df['ticker']=='AAPL']}")
 
             total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
             total_df["change_1m"] = total_df["change_1m"].fillna(0.0)
@@ -361,6 +358,7 @@ class NewsService:
                 return round((row["current_price"] - row["that_time_price"]) / row["that_time_price"] * 100, 2)
 
             total_df["price_impact"] = total_df.apply(calculate_price_impact, axis=1)
+            
             # 무한값과 NaN을 0으로 대체
             total_df["price_impact"] = total_df["price_impact"].replace([np.inf, -np.inf, np.nan], 0)
 

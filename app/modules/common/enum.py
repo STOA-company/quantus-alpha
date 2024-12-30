@@ -74,22 +74,16 @@ class PrdyVrssSign(IntEnum):
     DOWN_LIMIT = 5  # 하한
 
 
-class TrendingPeriod(Enum):
-    REALTIME = "realtime"
-    DAY = "day"
-    WEEK = "week"
-    MONTH = "month"
-    SIX_MONTH = "six_month"
-    YEAR = "year"
-
-
 class TrendingType(Enum):
-    UP = "up"
-    DOWN = "down"
-    VOL = "vol"
-    AMT = "amt"
+    UP = "up"  # 상승
+    DOWN = "down"  # 하락
+    VOL = "vol"  # 거래량
+    AMT = "amt"  # 거래대금
 
 
-class MarketType(Enum):
-    KR = "kr"
-    US = "us"
+class TrendingPeriod(Enum):
+    REALTIME = "1d"  # 실시간
+    DAY = "1d"  # 일
+    WEEK = "1w"  # 주
+    MONTH = "1m"  # 월
+    SIX_MONTH = "6m"  # 6

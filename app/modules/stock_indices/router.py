@@ -26,3 +26,12 @@ async def get_stock_indices(
             sp500=empty_summary,
             data=None,
         )
+
+
+@router.get("/market-status")
+def get_market_status(
+    service: StockIndicesService = Depends(StockIndicesService),
+):
+    nasdaq = service.get_nasdaq_ticker()
+    snp500 = service.get_snp500_ticker()
+    return nasdaq, snp500
