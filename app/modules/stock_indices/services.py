@@ -289,167 +289,37 @@ class StockIndicesService:
             )
 
     def get_nasdaq_ticker(self):
+        """stock_indices 테이블에서 나스닥 데이터 조회"""
         try:
-            cache_key = "nasdaq_market_status"
-            now = datetime.now()
-
-            if cache_key in self._cache:
-                data, timestamp = self._cache[cache_key]
-                if now - timestamp < timedelta(minutes=5):
-                    return data
-
-            table_name = "stock_information"
-            result = self.db._select(table=table_name, columns=["ticker"], is_nasdaq_100=True)
+            result = self.db._select(
+                table="stock_indices", columns=["ticker", "rise_ratio", "fall_ratio", "unchanged_ratio"], ticker="nasdaq"
+            )
 
             if not result:
                 return {"ticker": "nasdaq", "상승": 0.0, "하락": 0.0, "보합": 0.0}
 
-            tickers = tuple(pd.DataFrame(result, columns=["ticker"])["ticker"].tolist())
-
-            # 최적화된 쿼리
-            ratio_query = text("""
-                WITH daily_summary AS (
-                    SELECT
-                        ticker,
-                        DATE(Date) as trading_date,
-                        FIRST_VALUE(Open) OVER (PARTITION BY ticker, DATE(Date) ORDER BY Date ASC) as day_open,
-                        LAST_VALUE(Close) OVER (
-                            PARTITION BY ticker, DATE(Date)
-                            ORDER BY Date ASC
-                            RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-                        ) as day_close
-                    FROM stock_us_1m
-                    WHERE ticker IN :tickers
-                    AND DATE(Date) = DATE((
-                        SELECT MAX(Date)
-                        FROM stock_us_1m
-                        WHERE ticker IN :tickers
-                    ))
-                )
-                SELECT
-                    COUNT(CASE WHEN ((day_close - day_open) / day_open) * 100 > 0.1 THEN 1 END) as rise,
-                    COUNT(CASE WHEN ((day_close - day_open) / day_open) * 100 < -0.1 THEN 1 END) as fall,
-                    COUNT(CASE WHEN ABS(((day_close - day_open) / day_open) * 100) <= 0.1 THEN 1 END) as unchanged,
-                    COUNT(*) as total
-                FROM (
-                    SELECT DISTINCT ticker, day_open, day_close
-                    FROM daily_summary
-                    WHERE day_open != 0
-                ) final_prices
-            """)
-
-            ratio_result = self.db._execute(ratio_query, {"tickers": tickers})
-            row = ratio_result.fetchone()
-
-            if row and row[3] > 0:
-                rise, fall, unchanged, total = row
-                result = {
-                    "ticker": "nasdaq",
-                    "상승": round(rise / total * 100, 2),
-                    "하락": round(fall / total * 100, 2),
-                    "보합": round(unchanged / total * 100, 2),
-                }
-                self._cache[cache_key] = (result, now)
-                return result
-
-            empty_result = {"ticker": "nasdaq", "상승": 0.0, "하락": 0.0, "보합": 0.0}
-            self._cache[cache_key] = (empty_result, now)
-            return empty_result
+            # 첫 번째 행의 데이터 사용
+            row = result[0]
+            return {"ticker": row[0], "상승": float(row[1]), "하락": float(row[2]), "보합": float(row[3])}
 
         except Exception as e:
             logging.error(f"Error in get_nasdaq_ticker: {str(e)}")
             return {"ticker": "nasdaq", "상승": 0.0, "하락": 0.0, "보합": 0.0}
 
     def get_snp500_ticker(self):
+        """stock_indices 테이블에서 S&P 500 데이터 조회"""
         try:
-            cache_key = "sp500_market_status"
-            now = datetime.now()
-
-            if cache_key in self._cache:
-                data, timestamp = self._cache[cache_key]
-                if now - timestamp < timedelta(minutes=5):
-                    return data
-
-            table_name = "stock_information"
-            result = self.db._select(table=table_name, columns=["ticker"], is_snp_500=True)
+            result = self.db._select(
+                table="stock_indices", columns=["ticker", "rise_ratio", "fall_ratio", "unchanged_ratio"], ticker="sp500"
+            )
 
             if not result:
                 return {"ticker": "sp500", "상승": 0.0, "하락": 0.0, "보합": 0.0}
 
-            tickers = tuple(pd.DataFrame(result, columns=["ticker"])["ticker"].tolist())
-
-            ratio_query = text(
-                """
-            WITH max_date AS (
-                SELECT DATE(MAX(Date)) as latest_date
-                FROM stock_us_1m
-                WHERE ticker IN :tickers
-            ),
-            daily_prices AS (
-                SELECT
-                    ticker,
-                    Date,
-                    Open,
-                    Close
-                FROM stock_us_1m, max_date
-                WHERE ticker IN :tickers
-                AND DATE(Date) = max_date.latest_date
-                AND Open != 0
-            ),
-            today_prices AS (
-                SELECT
-                    ticker,
-                    FIRST_VALUE(Open) OVER (PARTITION BY ticker ORDER BY Date) as day_open,
-                    LAST_VALUE(Close) OVER (PARTITION BY ticker ORDER BY Date
-                        RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as day_close
-                FROM daily_prices
-            )
-            SELECT
-                COUNT(CASE WHEN ((day_close - day_open) / day_open) * 100 > 0.1 THEN 1 END) as rise,
-                COUNT(CASE WHEN ((day_close - day_open) / day_open) * 100 < -0.1 THEN 1 END) as fall,
-                COUNT(CASE WHEN ABS(((day_close - day_open) / day_open) * 100) <= 0.1 THEN 1 END) as unchanged,
-                COUNT(*) as total
-            FROM today_prices
-            WHERE day_open != 0
-            """
-            )
-
-            debug_query = text(
-                """
-            WITH max_date AS (
-                SELECT DATE(MAX(Date)) as latest_date
-                FROM stock_us_1m
-                WHERE ticker IN :tickers
-            )
-            SELECT MAX(Date) as latest_date, COUNT(DISTINCT ticker) as ticker_count
-            FROM stock_us_1m
-            WHERE ticker IN :tickers
-            """
-            )
-
-            debug_result = self.db._execute(debug_query, {"tickers": tickers})
-            debug_row = debug_result.fetchone()
-            logging.info(f"Debug info - Latest date: {debug_row[0]}, Ticker count: {debug_row[1]}")
-
-            ratio_result = self.db._execute(ratio_query, {"tickers": tickers})
-            row = ratio_result.fetchone()
-
-            if row and row[3] > 0:
-                rise, fall, unchanged, total = row
-                logging.info(f"Market status - Rise: {rise}, Fall: {fall}, Unchanged: {unchanged}, Total: {total}")
-                result = {
-                    "ticker": "sp500",
-                    "상승": round(rise / total * 100, 2),
-                    "하락": round(fall / total * 100, 2),
-                    "보합": round(unchanged / total * 100, 2),
-                }
-                self._cache[cache_key] = (result, now)
-                return result
-
-            empty_result = {"ticker": "sp500", "상승": 0.0, "하락": 0.0, "보합": 0.0}
-            self._cache[cache_key] = (empty_result, now)
-            return empty_result
+            # 첫 번째 행의 데이터 사용
+            row = result[0]
+            return {"ticker": row[0], "상승": float(row[1]), "하락": float(row[2]), "보합": float(row[3])}
 
         except Exception as e:
-            logging.error(f"Error in get_sp500_ticker: {str(e)}")
+            logging.error(f"Error in get_snp500_ticker: {str(e)}")
             return {"ticker": "sp500", "상승": 0.0, "하락": 0.0, "보합": 0.0}
