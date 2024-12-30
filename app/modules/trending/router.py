@@ -9,7 +9,7 @@ from app.modules.trending.old_service import (
 router = APIRouter()
 
 
-@router.get("old", summary="급상승 종목 조회 - 옛날 버전")
+@router.get("", summary="급상승 종목 조회 - 옛날 버전")
 def old_get_trending_stocks(
     old_service: OldTrendingService = Depends(get_old_trending_service),
 ) -> TrendingStockResponse:
