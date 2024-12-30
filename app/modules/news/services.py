@@ -306,9 +306,16 @@ class NewsService:
 
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")
-            total_df["price_impact"] = (
-                (total_df["current_price"] - total_df["that_time_price"]) / total_df["that_time_price"] * 100
+
+            total_df["current_price"] = total_df["current_price"].fillna(0.0)
+            total_df["change_1m"] = total_df["change_1m"].fillna(0.0)
+            total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
+
+            total_df["price_impact"] = round(
+                (total_df["current_price"] - total_df["that_time_price"]) / total_df["that_time_price"] * 100, 2
             )
+            # 무한값과 NaN을 0으로 대체
+            total_df["price_impact"] = total_df["price_impact"].replace([np.inf, -np.inf, np.nan], 0)
 
         # 결과 생성
         result = []
