@@ -1,6 +1,6 @@
 from pydantic import model_validator
 from sqlalchemy import Column, Date, Float, String
-from app.database.crud import Base
+from app.models.models_base import Base
 
 
 class Dividend(Base):

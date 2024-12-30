@@ -95,7 +95,7 @@ class FinancialService:
         날짜 조건 생성
         start_date (Optional[str]): YYYYMM 형식의 시작일
         end_date (Optional[str]): YYYYMM 형식의 종료일
-        ���본값은 2000년도부터 현재까지
+        기본값은 2000년도부터 현재까지
         """
         from datetime import datetime
 
@@ -407,10 +407,10 @@ class FinancialService:
                 logger.warning(f"No income data found for ticker: {ticker}")
                 raise DataNotFoundException(ticker=ticker, data_type="손익계산")
 
-            # 정렬: 연도는 내림차순, 분기는 오름차순
+            # 정렬: 연도, 분기 내림차순
             sorted_result = sorted(
                 result,
-                key=lambda x: (-int(x.period_q[:4]), int(x.period_q[4:])),  # 연도는 음수로 변환하여 내림차순
+                key=lambda x: (-int(x.period_q[:4]), -int(x.period_q[4:])),  # 연도, 분기 순으로 내림차순 정렬
             )
 
             name = sorted_result[0][1] if sorted_result else ""
@@ -469,10 +469,10 @@ class FinancialService:
                 logger.warning(f"No cashflow data found for ticker: {ticker}")
                 raise DataNotFoundException(ticker=ticker, data_type="현금흐름")
 
-            # 정렬: 연도 내림차순, 분기 오름차순
+            # 정렬: 연도, 분기 내림차순
             sorted_result = sorted(
                 result,
-                key=lambda x: (-int(x.period_q[:4]), int(x.period_q[4:])),
+                key=lambda x: (-int(x.period_q[:4]), -int(x.period_q[4:])),  # 연도, 분기 순으로 내림차순 정렬
             )
 
             statements = self._process_cashflow_result(sorted_result)
@@ -523,10 +523,10 @@ class FinancialService:
                 logger.warning(f"No finpos data found for ticker: {ticker}")
                 raise DataNotFoundException(ticker=ticker, data_type="재무상태")
 
-            # 정렬: 연도 내림차순, 분기 오름차순
+            # 정렬: 연도, 분기 내림차순
             sorted_result = sorted(
                 result,
-                key=lambda x: (-int(x.period_q[:4]), int(x.period_q[4:])),
+                key=lambda x: (-int(x.period_q[:4]), -int(x.period_q[4:])),  # 연도, 분기 순으로 내림차순 정렬
             )
 
             statements = self._process_finpos_result(sorted_result)

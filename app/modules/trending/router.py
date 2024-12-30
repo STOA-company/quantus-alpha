@@ -4,26 +4,18 @@ from app.modules.common.enum import TrendingPeriod, TrendingType
 from app.modules.trending.new_schemas import TrendingStockRequest, TrendingStock as NewTrendingStock
 from app.modules.trending.new_service import NewTrendingService, new_get_trending_service
 from app.modules.common.schemas import BaseResponse
-# from app.modules.trending.old_service import (
-#     TrendingService as OldTrendingService,
-#     get_trending_service as get_old_trending_service,
-# )
+from app.modules.trending.old_schemas import TrendingStock
+from app.modules.trending.old_service import TrendingService, get_trending_service
 
 
 router = APIRouter()
 
 
-# @router.get("", summary="급상승 종목 조회")
-# def get_trending_stocks(
-#     service: TrendingService = Depends(get_trending_service),
-# ) -> TrendingStockResponse:
-#     return service.get_trending_stocks()
-
-# @router.put("us", summary="미국 종목 트렌드 업데이트")
-# def update_us_trending_stocks(
-#     service: TrendingService = Depends(get_trending_service),
-# ) -> TrendingStockResponse:
-#     return service.insert_us_tickers_to_trend()
+@router.get("", summary="급상승 종목 조회")
+def get_trending_stocks(
+    service: TrendingService = Depends(get_trending_service),
+) -> TrendingStock:
+    return service.get_trending_stocks()
 
 
 @router.get("/new", summary="실시간 차트")

@@ -20,3 +20,34 @@ services:
             ENV: ${ENV:-prod} # default
         volumes:
             - .:/app
+
+
+    celery_worker:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        command: python -m app.celery_worker
+        environment:
+            API_ENV: prod
+        depends_on:
+            - rabbitmq
+            - redis
+            - web
+        volumes:
+            - .:/app
+
+    # rabbitmq
+    rabbitmq:
+        image: rabbitmq:3.11.1-management
+        expose:
+            - 5672
+            - 15672
+        environment:
+            - RABBITMQ_DEFAULT_USER=admin
+            - RABBITMQ_DEFAULT_PASS=admin
+
+    # redis
+    redis:
+        image: redis:6.0.6
+        expose:
+            - 6379

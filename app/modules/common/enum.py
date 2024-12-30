@@ -66,10 +66,12 @@ class FearAndGreedIndex(Enum):
     EXTREME_GREED = 100  # 81-100 // 매우 탐욕
 
 
-class TrendingChangeSign(Enum):
-    UP = "상승"
-    FLAT = "보합"
-    DOWN = "하락"
+class PrdyVrssSign(IntEnum):
+    UP_LIMIT = 1  # 상한
+    UP = 2  # 상승
+    FLAT = 3  # 보합
+    DOWN = 4  # 하락
+    DOWN_LIMIT = 5  # 하한
 
 
 class TrendingType(Enum):
@@ -84,5 +86,4 @@ class TrendingPeriod(Enum):
     DAY = "1d"  # 일
     WEEK = "1w"  # 주
     MONTH = "1m"  # 월
-    SIX_MONTH = "6m"  # 6개월
-    YEAR = "1y"  # 년
+    SIX_MONTH = "6m"  # 6

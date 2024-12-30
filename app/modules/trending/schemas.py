@@ -1,25 +1,34 @@
-# from typing import List, Optional
-# from pydantic import BaseModel
+from typing import List
+from pydantic import BaseModel
 
 
-# class TrendingStockKr(BaseModel):
-#     num: int
-#     ticker: str
-#     name: str
-#     volume: float
-#     current_price: Optional[float]
-#     current_price_rate: Optional[float]
+class TrendingStock(BaseModel):
+    ticker: str
+    rank: int
+    name_kr: str
+    name_en: str
+    current_price: float
+    change: float
+    volume: float
+    volume_change: float
 
 
-# class TrendingStockUs(BaseModel):
-#     num: int
-#     ticker: str
-#     name: str
-#     volume: float
-#     current_price: Optional[float]
-#     current_price_rate: Optional[float]
+class TrendingStockPeriodResponse(BaseModel):
+    realtime_trending_stock: TrendingStock
+    day_trending_stock: TrendingStock
+    week_trending_stock: TrendingStock
+    month_trending_stock: TrendingStock
+    six_month_trending_stock: TrendingStock
+    year_trending_stock: TrendingStock
 
 
-# class TrendingStock(BaseModel):
-#     kr: List[TrendingStockKr]
-#     us: List[TrendingStockUs]
+class TrendingStockTyperesponse(BaseModel):
+    up: List[TrendingStockPeriodResponse]
+    down: List[TrendingStockPeriodResponse]
+    vol: List[TrendingStockPeriodResponse]
+    amt: List[TrendingStockPeriodResponse]
+
+
+class TrendingStockResponse(BaseModel):
+    kr: TrendingStockTyperesponse
+    us: TrendingStockTyperesponse
