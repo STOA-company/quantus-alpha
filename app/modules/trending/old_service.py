@@ -5,7 +5,7 @@ import pytz
 from app.modules.news.old_services import get_news_service
 from app.database.crud import JoinInfo, database
 from app.database.conn import db
-from app.modules.trending.schemas import TrendingStockResponse, TrendingStockKr, TrendingStockUs
+from app.modules.trending.old_schemas import TrendingStock, TrendingStockKr, TrendingStockUs
 
 
 class TrendingService:
@@ -14,7 +14,7 @@ class TrendingService:
         self.database = database
         self.db = db
 
-    def get_trending_stocks(self) -> TrendingStockResponse:
+    def get_trending_stocks(self) -> TrendingStock:
         kr = [
             TrendingStockKr(
                 num=1, ticker="A005930", name="삼성전자", volume=12458930, current_price=73800, current_price_rate=1.23
@@ -103,7 +103,7 @@ class TrendingService:
 
         # kr = self._get_trending_stocks_kr()
         # us = self._get_trending_stocks_us()
-        return TrendingStockResponse(kr=kr, us=us)
+        return TrendingStock(kr=kr, us=us)
 
     def _get_trending_stocks_kr(self) -> List[TrendingStockKr]:
         table_name = "stock_kr_1d"
