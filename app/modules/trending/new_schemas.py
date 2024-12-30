@@ -11,8 +11,8 @@ class TrendingStockRequest(BaseModel):
 class TrendingStock(BaseModel):
     num: int
     ticker: str
-    name: str | None = ""
-    current_price: float | None = 0.0
-    current_price_rate: float | None = 0.0
-    volume: float | None = 0.0
-    amount: float | None = 0.0
+    name: str = "Temp_name"
+    current_price: float = 0.0
+    current_price_rate: float = 0.0
+    volume: float = 0.0
+    amount: float = 0.0
