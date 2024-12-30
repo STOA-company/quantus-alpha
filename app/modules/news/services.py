@@ -1,10 +1,19 @@
+from datetime import datetime
+import math
 from typing import List
 from app.modules.disclosure.mapping import document_type_mapping
 
 import numpy as np
 import pandas as pd
-from app.modules.news.schemas import DisclosureRenewalItem, NewsRenewalItem, TopStoriesItem, TopStoriesResponse
+from app.modules.news.schemas import (
+    DisclosureRenewalItem,
+    NewsDetailItem,
+    NewsRenewalItem,
+    TopStoriesItem,
+    TopStoriesResponse,
+)
 from app.database.crud import database
+from app.utils.ctry_utils import check_ticker_country_len_2
 
 
 class NewsService:
@@ -16,6 +25,7 @@ class NewsService:
         """DataFrame 전처리 및 필터링"""
 
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+        df = df[df["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
 
         df["emotion"] = np.where(
             df["emotion"] == "긍정",
@@ -37,6 +47,39 @@ class NewsService:
         )
 
         return df
+
+    @staticmethod
+    def _process_dataframe_news_detail(df: pd.DataFrame, offset: int, size: int) -> pd.DataFrame:
+        """DataFrame 전처리 및 필터링"""
+
+        df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+
+        df = df.iloc[offset : offset + size]
+
+        df["emotion"] = np.where(
+            df["emotion"] == "긍정",
+            "positive",
+            np.where(df["emotion"] == "부정", "negative", np.where(df["emotion"] == "중립", "neutral", df["emotion"])),
+        )
+        df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
+
+        # # summary 필드 전처리 # TODO :: 이 부분을 사용하게 된다면 이 메서드를 지우고 `_process_dataframe_news`를 사용하면 됨. 파싱을 현재 프론트에서 처리하고 있음
+        # df["summary"] = (
+        #     df["summary"]
+        #     .str.replace(r'[\[\]"]', "", regex=True)  # 대괄호와 따옴표 제거
+        #     .str.replace(r"\n", " ", regex=True)  # 줄바꿈을 공백으로 변환
+        #     .str.replace(r"\*\*기사 요약\*\*\s*:\s*", "", regex=True)  # "**기사 요약**:" 제거
+        #     .str.replace(
+        #         r"\*\*주가에 영향을 줄 만한 내용\*\*\s*:\s*", "", regex=True
+        #     )  # "**주가에 영향을 줄 만한 내용**:" 제거
+        #     .str.strip()  # 앞뒤 공백 제거
+        # )
+
+        return df
+
+    @staticmethod
+    def _count_emotion(df: pd.DataFrame) -> dict:
+        return df["emotion"].value_counts().to_dict()
 
     @staticmethod
     def _process_dataframe_disclosure(df: pd.DataFrame) -> pd.DataFrame:
@@ -298,8 +341,6 @@ class NewsService:
             self.db._select(
                 table="stock_trend",
                 columns=["ticker", "current_price", "change_1m"],
-                order="last_updated",
-                ascending=False,
                 **{"ticker__in": unique_tickers},
             )
         )
@@ -307,13 +348,17 @@ class NewsService:
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")
 
-            total_df["current_price"] = total_df["current_price"].fillna(0.0)
+            total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
             total_df["change_1m"] = total_df["change_1m"].fillna(0.0)
             total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
 
-            total_df["price_impact"] = round(
-                (total_df["current_price"] - total_df["that_time_price"]) / total_df["that_time_price"] * 100, 2
-            )
+            def calculate_price_impact(row):
+                if row["current_price"] == 0 or row["that_time_price"] == 0:
+                    return 0
+                return round((row["current_price"] - row["that_time_price"]) / row["that_time_price"] * 100, 2)
+
+            total_df["price_impact"] = total_df.apply(calculate_price_impact, axis=1)
+            
             # 무한값과 NaN을 0으로 대체
             total_df["price_impact"] = total_df["price_impact"].replace([np.inf, -np.inf, np.nan], 0)
 
@@ -354,6 +399,67 @@ class NewsService:
             )
 
         return result
+
+    def news_detail(self, ticker: str, date: str = None, page: int = 1, size: int = 6):
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
+        else:
+            date = datetime.strptime(date, "%Y%m%d").strftime("%Y-%m-%d")
+
+        ctry = check_ticker_country_len_2(ticker)
+
+        condition = {
+            "ticker": ticker,
+            "date__gte": f"{date} 00:00:00",
+            "date__lt": f"{date} 23:59:59",
+        }
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_information",
+                columns=["id", "ticker", "ctry", "date", "title", "summary", "emotion", "that_time_price"],
+                **condition,
+            )
+        )
+
+        offset = (page - 1) * size
+        df_news = self._process_dataframe_news_detail(df_news, offset, size)
+        total_count = df_news.shape[0]
+        total_page = math.ceil(total_count / size)
+        emotion_count = self._count_emotion(df_news)
+        df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
+        unique_tickers = df_news["ticker"].unique().tolist()
+
+        df_price = pd.DataFrame(
+            self.db._select(
+                table="stock_trend",
+                columns=["ticker", "current_price"],
+                **{"ticker__in": unique_tickers},
+            )
+        )
+        if not df_price.empty:
+            df_price["current_price"] = df_price["current_price"].fillna(0.0)
+
+            df_news = pd.merge(df_news, df_price, on="ticker", how="left")
+
+            df_news["price_impact"] = (
+                (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100
+            )
+            df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
+
+        data = []
+        for _, row in df_news.iterrows():
+            data.append(
+                NewsDetailItem(
+                    id=row["id"],
+                    ctry=row["ctry"],
+                    date=row["date"],
+                    title=row["title"],
+                    summary=row["summary"],
+                    emotion=row["emotion"],
+                    price_impact=row["price_impact"],
+                )
+            )
+        return data, total_count, total_page, offset, emotion_count, ctry
 
 
 def get_news_service() -> NewsService:
