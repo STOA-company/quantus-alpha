@@ -20,12 +20,12 @@ class NewTrendingService:
                 return f"volume_change_{request.period.value}"
 
     def get_trending_stocks(self, request: TrendingStockRequest) -> List[TrendingStock]:
-        order = self._get_trending_type(request)
-        ascending = False if request.type == TrendingType.DOWN else True
-
         # TODO : 실시간 데이터 반영 후 제거
         if request.period == TrendingPeriod.REALTIME:
             request.period = TrendingPeriod.DAY
+
+        order = self._get_trending_type(request)
+        ascending = False if request.type == TrendingType.DOWN else True
 
         trending_stocks = self.database._select(
             table="stock_trend",
