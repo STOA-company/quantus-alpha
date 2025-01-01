@@ -58,39 +58,40 @@ def run_stock_trend_by_realtime_batch():
         current_time = datetime.datetime.now()
         logging.info(f"배치 작업 시작: {current_time}")
 
-        table_name = "stock_us_1m"  # 미국 주식 1분봉 테이블
+        table_name = "stock_us_1m"
         logging.info(f"{table_name} 데이터 조회 시작")
 
-        # 최신 데이터와 직전 데이터를 한번에 조회하는 CTE 사용
-        query = """
-            WITH latest_records AS (
-                SELECT
-                    ticker,
-                    date,
-                    close,
-                    volume,
-                    LAG(close) OVER (PARTITION BY ticker ORDER BY date) as prev_close,
-                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) as rn
-                FROM stock_us_1m
-            )
-            SELECT
-                ticker,
-                date as last_updated,
-                close as current_price,
-                prev_close,
-                CASE
-                    WHEN close > prev_close THEN 2  -- 상승
-                    WHEN close < prev_close THEN 4  -- 하락
-                    ELSE 3  -- 보합
-                END as change_sign,
-                ((close - prev_close) / prev_close * 100) as change_1m,
-                volume as volume_1m,
-                (close * volume) as volume_change_1m
-            FROM latest_records
-            WHERE rn = 1
-        """
+        # 각 ticker별 최신 날짜 조회
+        latest_dates = database._select(table=table_name, columns=["Ticker", "Date"], order="Date", ascending=False)
 
-        results = database._execute(query).fetchall()
+        # Ticker별 최신 날짜만 필터링
+        latest_ticker_dates = {}
+        for row in latest_dates:
+            if row.Ticker not in latest_ticker_dates:
+                latest_ticker_dates[row.Ticker] = row.Date
+
+        # 이전 데이터 조회를 위한 JoinInfo
+        prev_join = JoinInfo(
+            primary_table=table_name,
+            secondary_table=table_name,
+            primary_column="Ticker",
+            secondary_column="Ticker",
+            columns=["Close"],
+            is_outer=True,
+            secondary_condition={
+                "Date__lt": "primary.Date",
+                "or__": [{"Ticker": ticker, "Date__lt": date} for ticker, date in latest_ticker_dates.items()],
+            },
+        )
+
+        # 최신 데이터와 직전 데이터 조회
+        results = database._select(
+            table=table_name,
+            columns=["Ticker", "Date", "Close", "Volume"],
+            join_info=prev_join,
+            **{"or__": [{"Ticker": ticker, "Date": date} for ticker, date in latest_ticker_dates.items()]},
+        )
+
         logging.info(f"{table_name} 데이터 조회 완료: {len(results)}개 종목")
 
         # 청크 단위로 벌크 업데이트
@@ -104,17 +105,21 @@ def run_stock_trend_by_realtime_batch():
 
             update_data = [
                 {
-                    "last_updated": result.last_updated,
-                    "current_price": result.current_price,
-                    "prev_close": result.prev_close,
-                    "change_sign": result.change_sign,
-                    "change_1m": result.change_1m,
-                    "volume_1m": result.volume_1m,
-                    "volume_change_1m": result.volume_change_1m,
+                    "last_updated": result.Date,
+                    "current_price": result.Close,
+                    "prev_close": result.prev_Close,
+                    "change_sign": 2
+                    if result.Close > result.prev_Close
+                    else 4
+                    if result.Close < result.prev_Close
+                    else 3,
+                    "change_1m": calculate_change(result.Close, result.prev_Close),
+                    "volume_1m": result.Volume,
+                    "volume_change_1m": result.Close * result.Volume,
                 }
                 for result in chunk
             ]
-            database._bulk_update(table="stock_trend", data=update_data, key_column="ticker")
+            database._bulk_update(table="stock_trend", data=update_data, key_column="Ticker")
 
         logging.info(f"{table_name} 업데이트 완료")
 
