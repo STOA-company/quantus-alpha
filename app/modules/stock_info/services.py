@@ -4,7 +4,6 @@ from fastapi import HTTPException
 import pandas as pd
 from sqlalchemy import and_, func, select
 from app.database.crud import database
-from app.core.exception.custom import DataNotFoundException
 from app.models.models_stock import StockInformation
 from app.modules.stock_info.schemas import Indicators, SimilarStock, StockInfo
 from app.core.logging.config import get_logger
@@ -24,26 +23,27 @@ class StockInfoService:
         """
         주식 정보 조회
         """
-        if ctry != "us":
-            raise DataNotFoundException(ticker=ctry, data_type="stock_info")
+        result = {}
 
-        file_name = self.file_name.format(ctry)
-        info_file_path = f"{self.file_path}/{file_name}"
-        df = pd.read_csv(info_file_path)
-        result = df.loc[df["ticker"] == ticker].to_dict(orient="records")[0]
-        if result is None:
-            raise DataNotFoundException(ticker=ticker, data_type="stock_info")
+        if ctry == "kr":
+            ticker = ticker.replace("A", "")
+
+        if ctry == "us":
+            file_name = self.file_name.format(ctry)
+            info_file_path = f"{self.file_path}/{file_name}"
+            df = pd.read_csv(info_file_path)
+            result = df.loc[df["ticker"] == ticker].to_dict(orient="records")[0]
 
         intro_file_path = f"{self.file_path}/summary_{ctry}.parquet"
         intro_df = pd.read_parquet(intro_file_path)
         intro_result = intro_df.loc[intro_df["Code"] == ticker].to_dict(orient="records")[0]
 
         result = StockInfo(
-            introduction=intro_result.get("translated_overview", ""),
-            homepage_url=result["URL"],
-            ceo_name=result["LastName"] + " " + result["FirstName"],
-            establishment_date=result["IncInDt"],
-            listing_date=result["oldest_date"],
+            introduction=intro_result.get("translated_overview" if ctry == "us" else "overview", ""),
+            homepage_url=result.get("URL", ""),
+            ceo_name=result.get("LastName", "") + " " + result.get("FirstName", ""),
+            establishment_date=result.get("IncInDt", ""),
+            listing_date=result.get("oldest_date", ""),
         )
 
         return result

@@ -603,18 +603,20 @@ class PriceService:
         if df.empty:
             raise DataNotFoundException(ticker, "52week")
 
-        week_52_high, week_52_low, last_day_close = self._process_price_data(df)
-        sector = await self._get_sector_by_ticker(ticker)
-        name = self._get_us_ticker_name(ticker) if ctry == "us" else df["Name"].iloc[0]
-        market_cap = await self._get_market_cap(ctry, ticker)
-        # market_cap = market_cap / 1000000000
+        week_52_high = df["week_52_high"].iloc[0]
+        week_52_low = df["week_52_low"].iloc[0]
+        last_day_close = df["last_close"].iloc[0]
+        sector = await self._get_sector_by_ticker(ticker) or ""
+        name = self._get_us_ticker_name(ticker) or ""
+        market = self._get_market(ticker) or ""
+        market_cap = await self._get_market_cap(ctry, ticker) or 0.0
 
         response_data = {
             "name": name,
             "ticker": ticker,
             "ctry": ctry,
             "logo_url": "https://kr.pinterest.com/eunju011014/%EA%B7%80%EC%97%AC%EC%9A%B4-%EC%A7%A4/",
-            "market": df["Market"].iloc[0],
+            "market": market,
             "sector": sector,
             "market_cap": market_cap,
             "last_day_close": last_day_close,
@@ -624,7 +626,7 @@ class PriceService:
         }
 
         try:
-            self._cache.set(cache_key, response_data, self.cache_ttl_day)
+            self._cache.set(cache_key, response_data, self.config.CACHE_TTL["ONE_DAY"])
         except Exception as e:
             logger.error(f"Failed to set cache for {cache_key}: {e}")
 
@@ -634,23 +636,30 @@ class PriceService:
         """
         52주 데이터 조회
         """
-        end_date = date.today()
-        start_date = end_date - timedelta(days=365)
+        # end_date = date.today()
+        # start_date = end_date - timedelta(days=365)
 
-        table_name = f"stock_{ctry}_1d"
-        columns = self.country_specific_columns.get(ctry, self.base_columns)
+        # table_name = f"stock_{ctry}_1d"
+        # columns = self.country_specific_columns.get(ctry, self.base_columns)
 
+        # result = self.database._select(
+        #     table=table_name,
+        #     columns=columns,
+        #     Ticker=ticker,
+        #     Date__gte=datetime.combine(start_date, datetime.min.time()),
+        #     Date__lte=datetime.combine(end_date, datetime.max.time()),
+        #     order="Date",
+        #     ascending=True,
+        # )
+
+        # return pd.DataFrame(result, columns=columns) if result else pd.DataFrame(columns=columns)
+        ctry_3 = contry_mapping[ctry]
+        if ctry_3 == "USA":
+            ticker = f"{ticker}-US"
         result = self.database._select(
-            table=table_name,
-            columns=columns,
-            Ticker=ticker,
-            Date__gte=datetime.combine(start_date, datetime.min.time()),
-            Date__lte=datetime.combine(end_date, datetime.max.time()),
-            order="Date",
-            ascending=True,
+            table=f"{ctry_3}_stock_factors", columns=["week_52_high", "week_52_low", "last_close"], ticker=ticker
         )
-
-        return pd.DataFrame(result, columns=columns) if result else pd.DataFrame(columns=columns)
+        return pd.DataFrame(result, columns=["week_52_high", "week_52_low", "last_close"])
 
     def _process_price_data(self, df: pd.DataFrame) -> Tuple[float, float, float]:
         """
@@ -673,6 +682,13 @@ class PriceService:
         # 가장 최근 날짜를 제외한 첫 번째 데이터의 종가를 반환
         return float(sorted_df.iloc[1]["Close"])
 
+    def _get_market(self, ticker: str) -> str:
+        """
+        종목 시장 조회
+        """
+        result = self.database._select(table="stock_information", columns=["market"], ticker=ticker)
+        return result[0].market if result else None
+
     async def _get_sector_by_ticker(self, ticker: str) -> str:
         """
         종목 섹터 조회
@@ -682,12 +698,12 @@ class PriceService:
         result = await db.execute_async_query(query)
         return result.scalar() or None
 
-    def _get_us_ticker_name(self, ticker: str) -> str:  # TODO: RDS DB에 추가하여 조회 로직 없애기
+    def _get_us_ticker_name(self, ticker: str) -> str:
         """
         US 종목 이름 조회
         """
-        result = self.database._select(table="stock_us_tickers", columns=["english_name"], ticker=ticker)
-        return result[0].english_name if result else None
+        result = self.database._select(table="stock_information", columns=["kr_name"], ticker=ticker)
+        return result[0].kr_name if result else None
 
     async def _get_market_cap(self, ctry: str, ticker: str) -> float:
         """

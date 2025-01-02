@@ -162,27 +162,31 @@ class FinancialService:
         """
         실적 데이터 조회
         """
-        if ticker:
-            if ctry == "KOR":
-                ticker = ticker
-
         try:
-            if ctry == "USA":
-                ticker = f"{ticker}-US"
             country = FinancialCountry(ctry)
             table_name = self.income_tables.get(country)
+
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
                 raise InvalidCountryException()
 
             # 섹터 정보 조회
             sector = self.get_sector_by_ticker(ticker)
-            tickers = self.get_ticker_by_sector(sector)
+            if not sector:
+                logger.warning(f"No sector information found for ticker {ticker}")
+                # 섹터 정보가 없는 경우 해당 기업의 데이터만 조회
+                tickers_with_suffix = [ticker]
+            else:
+                tickers = self.get_ticker_by_sector(sector)
+                if ctry == "USA":
+                    tickers_with_suffix = [f"{t}-US" for t in tickers]
+                else:
+                    tickers_with_suffix = tickers
 
-            tickers_with_suffix = [f"{t}-US" for t in tickers]  # 각 티커에 -US 접미사 추가
+            logger.info(f"Querying {table_name} with ticker: {ticker}, sector tickers count: {len(tickers_with_suffix)}")
 
             conditions = {
-                "Code__in": tickers_with_suffix,  # 수정된 티커 리스트 사용
+                "Code__in": tickers_with_suffix,
                 **self._get_date_conditions_ten(start_date, end_date),
             }
 
@@ -204,7 +208,7 @@ class FinancialService:
                 code=ticker,
                 name=company_name,
                 ctry=ctry,
-                sector=sector,
+                sector=sector if sector else "",
                 quarterly=quarterly_statements,
                 yearly=yearly_statements,
             )
@@ -609,13 +613,14 @@ class FinancialService:
 
     # 섹터 내 종목 조회
     def get_ticker_by_sector(self, sector: str) -> List[str]:
-        """
-        섹터 내 종목 조회
-        """
-        query = select(StockInformation.ticker).where(StockInformation.sector_3 == sector)
-        result = self.db._execute(query)
-        tickers = result.scalars().all()
-        return tickers
+        """섹터에 속한 종목 리스트 조회"""
+        if not sector:  # sector가 None이거나 빈 문자열인 경우
+            logger.warning("Sector is empty, returning empty list to prevent full table scan")
+            return []  # 빈 리스트 반환하여 전체 종목 조회 방지
+
+        result = self.db._select(table="stock_information", columns=["ticker"], sector_3=sector)
+
+        return [row.ticker for row in result] if result else []
 
     def get_shares_by_ticker(self, ticker: str, country: str) -> float:
         try:
