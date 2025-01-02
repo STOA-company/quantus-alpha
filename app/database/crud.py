@@ -98,6 +98,8 @@ class Database:
                         or_cond.append((col.in_(val)))
                     elif len(key) == 2 and key[1] == "notin":
                         or_cond.append(~(col.in_(val)))
+                    elif len(key) == 2 and key[1] == "like":
+                        or_cond.append(col.like(val))
                 if or_cond:
                     cond.append(or_(*or_cond))
                 continue
@@ -120,6 +122,8 @@ class Database:
                 cond.append((col.in_(val)))
             elif len(key) == 2 and key[1] == "notin":
                 cond.append(~(col.in_(val)))
+            elif len(key) == 2 and key[1] == "like":
+                cond.append(col.like(val))
 
         return cond
 
