@@ -1,7 +1,6 @@
 from typing import List
 from app.database.crud import database
 from app.database.conn import db
-from app.modules.common.enum import TrendingPeriod
 from app.modules.trending.new_schemas import TrendingStockRequest, TrendingStock, TrendingType
 
 
@@ -20,12 +19,8 @@ class NewTrendingService:
                 return f"volume_change_{request.period.value}"
 
     def get_trending_stocks(self, request: TrendingStockRequest) -> List[TrendingStock]:
-        # TODO : 실시간 데이터 반영 후 제거
-        if request.period == TrendingPeriod.REALTIME:
-            request.period = TrendingPeriod.DAY
-
         order = self._get_trending_type(request)
-        ascending = False if request.type == TrendingType.DOWN else True
+        ascending = False if request.type == TrendingType.UP else True
 
         trending_stocks = self.database._select(
             table="stock_trend",
