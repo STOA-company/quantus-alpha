@@ -6,6 +6,7 @@ from app.modules.common.enum import FearAndGreedIndex
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.news.old_services import NewsService, get_news_service
+from app.modules.news.schemas import LatestNewsResponse
 from app.modules.price.services import PriceService, get_price_service
 from app.modules.stock_info.schemas import FearGreedIndexItem, FearGreedIndexResponse, Indicators
 from .services import StockInfoService, get_stock_info_service
@@ -76,7 +77,7 @@ async def get_combined(
         logger.info("Successfully fetched latest news")
     except Exception as e:
         logger.error(f"Error fetching latest news: {e}")
-        latest = None
+        latest = LatestNewsResponse(date="2000-01-01 00:00:00", content="", type="")
 
     try:
         price = await price_service.get_real_time_price_data(ticker)
