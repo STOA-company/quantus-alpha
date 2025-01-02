@@ -7,7 +7,7 @@ from app.modules.disclosure.services import DisclosureService, get_disclosure_se
 router = APIRouter()
 
 
-@router.get("", response_model=DisclosureResponse)
+@router.get("/old", response_model=DisclosureResponse)
 async def get_disclosure(
     ticker: Annotated[Optional[str], Query(description="종목 코드, 예시: SHYF")] = None,
     year: Annotated[Optional[str], Query(description="연도, 예시: 2024, 기본값: 올해")] = None,
@@ -18,3 +18,30 @@ async def get_disclosure(
 ):
     result = await service.get_disclosure(ticker=ticker, year=year, language=language, page=page, size=size)
     return DisclosureResponse(status_code=200, message="Successfully retrieved disclosure data", **result)
+
+
+@router.get("", response_model=DisclosureResponse, summary="상세페이지 공시 데이터")
+async def renewal_disclosure(
+    ticker: Annotated[str, Query(..., description="종목 코드, 예시: CACI")] = None,
+    year: Annotated[Optional[str], Query(description="연도, 예시: 2024, 기본값: 올해")] = None,
+    page: Annotated[Optional[int], Query(description="페이지 번호, 기본값: 1")] = 1,
+    size: Annotated[Optional[int], Query(description="페이지 크기, 기본값: 6")] = 6,
+    service: DisclosureService = Depends(get_disclosure_service),
+):
+    data, total_count, total_pages, offset, emotion_counts = await service.renewal_disclosure(
+        ticker=ticker, year=year, page=page, size=size
+    )
+
+    return DisclosureResponse(
+        status_code=200,
+        message="Successfully retrieved disclosure data",
+        data=data,
+        total_count=total_count,
+        total_pages=total_pages,
+        current_page=page,
+        offset=offset,
+        size=size,
+        positive_count=emotion_counts["positive_count"],
+        negative_count=emotion_counts["negative_count"],
+        neutral_count=emotion_counts["neutral_count"],
+    )

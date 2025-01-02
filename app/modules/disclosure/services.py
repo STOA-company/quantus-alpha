@@ -1,10 +1,15 @@
 import json
 from datetime import datetime
+from typing import Dict
+
+import numpy as np
+import pandas as pd
 from app.core.exception.custom import DataNotFoundException
 from app.database.crud import JoinInfo, database
 from app.core.logging.config import get_logger
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.utils import check_ticker_country_len_3
+from app.utils.ctry_utils import check_ticker_country_len_2
 from .mapping import document_type_mapping
 
 
@@ -173,6 +178,108 @@ class DisclosureService:
             "name": "None",
             "price_change": None,
         }
+
+    @staticmethod
+    def _process_dataframe_disclosure(df: pd.DataFrame) -> pd.DataFrame:
+        """DataFrame 전처리 및 필터링"""
+
+        df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+
+        df["emotion"] = np.where(
+            df["emotion"] == "POSITIVE",
+            "positive",
+            np.where(
+                df["emotion"] == "NEGATIVE", "negative", np.where(df["emotion"] == "NEUTRAL", "neutral", df["emotion"])
+            ),
+        )
+        df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
+
+        return df
+
+    @staticmethod
+    def _count_emotions(df: pd.DataFrame) -> Dict[str, int]:
+        """감정 분석 결과 카운트"""
+        emotion_counts = df["emotion"].value_counts()
+        return {
+            "positive_count": int(emotion_counts.get("positive", 0)),
+            "negative_count": int(emotion_counts.get("negative", 0)),
+            "neutral_count": int(emotion_counts.get("neutral", 0)),
+        }
+
+    async def renewal_disclosure(self, ticker: str, year: str, page: int, size: int):
+        if not year:
+            year = datetime.now().strftime("%Y")
+
+        ctry = check_ticker_country_len_2(ticker)
+
+        df_disclosure = pd.DataFrame(
+            self.db._select(
+                table="disclosure_information",
+                columns=[
+                    "id",
+                    "ticker",
+                    "ko_name",
+                    "en_name",
+                    "ctry",
+                    "date",
+                    "url",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "form_type",
+                    "that_time_price",
+                ],
+                **{"ticker": ticker, "date__like": f"{year}%"},
+            )
+        )
+
+        if df_disclosure.empty:
+            raise DataNotFoundException(ticker=ticker, data_type="disclosure")
+
+        df_disclosure = self._process_dataframe_disclosure(df_disclosure)
+
+        current_price = self.db._select(table="stock_trend", columns=["ticker", "current_price"], **{"ticker": ticker})
+        df_disclosure["price_impact"] = 0.00
+        if current_price:
+            df_disclosure["price_impact"] = round(
+                (df_disclosure["that_time_price"] - current_price[0][1]) / current_price[0][1] * 100, 2
+            )
+
+        total_count = len(df_disclosure)
+        total_pages = (total_count + size - 1) // size
+        offset = (page - 1) * size
+        emotion_counts = self._count_emotions(df_disclosure)
+
+        # key_points 파싱
+        df_disclosure["key_points"] = df_disclosure["key_points"].apply(
+            lambda x: json.loads(x) if isinstance(x, str) else x
+        )
+
+        data = []
+
+        for _, row in df_disclosure.iterrows():
+            form_type = (
+                document_type_mapping.get(row["form_type"], row["form_type"]) if ctry == "us" else row["form_type"]
+            )
+            data.append(
+                {
+                    "title": row["ko_name"] + " " + form_type,
+                    "date": row["date"],
+                    "emotion": row["emotion"],
+                    "impact_reason": row["impact_reason"],
+                    "key_points_1": row["key_points"][0],
+                    "key_points_2": row["key_points"][1],
+                    "key_points_3": row["key_points"][2],
+                    "key_points_4": row["key_points"][3],
+                    "key_points_5": row["key_points"][4],
+                    "summary": row["summary"],
+                    "document_url": row["url"],
+                    "price_impact": row["price_impact"],
+                }
+            )
+
+        return data, total_count, total_pages, offset, emotion_counts
 
 
 def get_disclosure_service() -> DisclosureService:
