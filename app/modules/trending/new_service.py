@@ -26,7 +26,7 @@ class NewTrendingService:
             table="stock_trend",
             columns=[
                 "ticker",
-                "en_name",
+                "ko_name",
                 "current_price",
                 "last_updated",
                 f"change_{request.period.value}",
