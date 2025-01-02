@@ -82,8 +82,9 @@ class TrendingType(Enum):
 
 
 class TrendingPeriod(Enum):
-    REALTIME = "1d"  # 실시간
+    REALTIME = "rt"  # 실시간
     DAY = "1d"  # 일
     WEEK = "1w"  # 주
     MONTH = "1m"  # 월
-    SIX_MONTH = "6m"  # 6
+    SIX_MONTH = "6m"  # 6개월
+    YEAR = "1y"  # 년
