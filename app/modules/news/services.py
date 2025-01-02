@@ -1,6 +1,7 @@
 from datetime import datetime
 import math
 from typing import List
+from app.core.exception.custom import DataNotFoundException
 from app.modules.disclosure.mapping import document_type_mapping
 
 import numpy as np
@@ -358,7 +359,7 @@ class NewsService:
                 return round((row["current_price"] - row["that_time_price"]) / row["that_time_price"] * 100, 2)
 
             total_df["price_impact"] = total_df.apply(calculate_price_impact, axis=1)
-            
+
             # 무한값과 NaN을 0으로 대체
             total_df["price_impact"] = total_df["price_impact"].replace([np.inf, -np.inf, np.nan], 0)
 
@@ -420,6 +421,8 @@ class NewsService:
                 **condition,
             )
         )
+        if df_news.empty:
+            raise DataNotFoundException(ticker=ticker, data_type="news")
 
         offset = (page - 1) * size
         df_news = self._process_dataframe_news_detail(df_news, offset, size)
@@ -436,6 +439,7 @@ class NewsService:
                 **{"ticker__in": unique_tickers},
             )
         )
+        df_news["price_impact"] = 0.0
         if not df_price.empty:
             df_price["current_price"] = df_price["current_price"].fillna(0.0)
 
