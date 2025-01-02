@@ -20,7 +20,7 @@ class NewTrendingService:
 
     def get_trending_stocks(self, request: TrendingStockRequest) -> List[TrendingStock]:
         order = self._get_trending_type(request)
-        ascending = False if request.type == TrendingType.UP else True
+        ascending = True if request.type == TrendingType.DOWN else False
 
         trending_stocks = self.database._select(
             table="stock_trend",
