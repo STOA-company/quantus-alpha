@@ -5,7 +5,6 @@ from app.core.config import settings
 from app.batches.run_stock_trend import (
     run_stock_trend_by_1d_batch,
     run_stock_trend_by_realtime_batch,
-    run_stock_trend_tickers_batch,
 )
 from app.utils.date_utils import get_session_checker, now_kr
 from functools import wraps
@@ -62,14 +61,14 @@ def stock_trend_realtime_task():
         logging.error(f"Error in stock_trend_realtime_task: {str(e)}")
 
 
-@CELERY_APP.task(name="stock_trend_tickers")
-@check_market_closed
-def stock_trend_tickers_task():
-    """티커 정보 업데이트 배치 태스크 (장 마감 후, 자정 전)"""
-    try:
-        run_stock_trend_tickers_batch()
-    except Exception as e:
-        logging.error(f"Error in stock_trend_tickers_task: {str(e)}")
+# @CELERY_APP.task(name="stock_trend_tickers")
+# @check_market_closed
+# def stock_trend_tickers_task():
+#     """티커 정보 업데이트 배치 태스크 (장 마감 후, 자정 전)"""
+#     try:
+#         run_stock_trend_tickers_batch()
+#     except Exception as e:
+#         logging.error(f"Error in stock_trend_tickers_task: {str(e)}")
 
 
 # Test task
