@@ -23,7 +23,7 @@ class FinancialCrud:
     def get_debt_ratio_quarters(self, table_name: str, ticker: str, db: Session):
         """부채비율 계산을 위한 4분기 데이터 조회"""
         query = text(f"""
-            SELECT Name, total_dept, total_asset
+            SELECT Name, total_dept, total_equity
             FROM {table_name}
             WHERE Code = :ticker
             ORDER BY period_q DESC
