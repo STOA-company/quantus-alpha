@@ -55,7 +55,7 @@ class NewTrendingService:
             TrendingStock(
                 num=idx,
                 ticker=stock._mapping["ticker"],
-                name="Temp_name" if stock._mapping["en_name"] is None else stock._mapping["en_name"],
+                name="Temp_name" if stock._mapping["ko_name"] is None else stock._mapping["ko_name"],
                 current_price=0.0 if stock._mapping["current_price"] is None else stock._mapping["current_price"],
                 current_price_rate=0.0
                 if stock._mapping[f"change_{request.period.value}"] is None
