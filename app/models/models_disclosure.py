@@ -17,6 +17,7 @@ class Disclosure(Base):
         Index("idx_ticker", "ticker", unique=False),
     )
     id = Column(BigInteger, nullable=False, primary_key=True, unique=True, autoincrement=True, comment="ID")
+    filing_id = Column(String(255), nullable=True, unique=True, comment="파일링 ID")
     ticker = Column(String(20), nullable=False, comment="종목 티커")
     ko_name = Column(String(100), nullable=True, comment="종목 한글명")
     en_name = Column(String(100), nullable=True, comment="종목 영문명")
