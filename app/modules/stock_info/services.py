@@ -23,30 +23,44 @@ class StockInfoService:
         """
         주식 정보 조회
         """
-        result = {}
+        try:
+            result = {}
 
-        if ctry == "kr":
-            ticker = ticker.replace("A", "")
+            if ctry == "kr":
+                ticker = ticker.replace("A", "")
 
-        if ctry == "us":
-            file_name = self.file_name.format(ctry)
-            info_file_path = f"{self.file_path}/{file_name}"
-            df = pd.read_csv(info_file_path)
-            result = df.loc[df["ticker"] == ticker].to_dict(orient="records")[0]
+            if ctry == "us":
+                file_name = self.file_name.format(ctry)
+                info_file_path = f"{self.file_path}/{file_name}"
+                df = pd.read_csv(info_file_path)
+                result = df.loc[df["ticker"] == ticker].to_dict(orient="records")[0]
 
-        intro_file_path = f"{self.file_path}/summary_{ctry}.parquet"
-        intro_df = pd.read_parquet(intro_file_path)
-        intro_result = intro_df.loc[intro_df["Code"] == ticker].to_dict(orient="records")[0]
+            intro_file_path = f"{self.file_path}/summary_{ctry}.parquet"
+            intro_df = pd.read_parquet(intro_file_path)
+            intro_result = intro_df.loc[intro_df["Code"] == ticker].to_dict(orient="records")[0]
 
-        result = StockInfo(
-            introduction=intro_result.get("translated_overview" if ctry == "us" else "overview", ""),
-            homepage_url=result.get("URL", ""),
-            ceo_name=result.get("LastName", "") + " " + result.get("FirstName", ""),
-            establishment_date=result.get("IncInDt", ""),
-            listing_date=result.get("oldest_date", ""),
-        )
+            # CEO 이름 처리
+            last_name = result.get("LastName", "")
+            first_name = result.get("FirstName", "")
 
-        return result
+            # NaN 체크 및 처리
+            last_name = "" if pd.isna(last_name) else str(last_name)
+            first_name = "" if pd.isna(first_name) else str(first_name)
+
+            ceo_name = f"{last_name} {first_name}".strip()
+
+            result = StockInfo(
+                introduction=intro_result.get("translated_overview" if ctry == "us" else "overview", ""),
+                homepage_url=result.get("URL", ""),
+                ceo_name=ceo_name,
+                establishment_date=result.get("IncInDt", ""),
+                listing_date=result.get("oldest_date", ""),
+            )
+
+            return result
+        except Exception as e:
+            logger.error(f"Error in get_stock_info for {ticker}: {str(e)}")
+            return StockInfo(introduction="", homepage_url="", ceo_name="", establishment_date="", listing_date="")
 
     async def get_indicators(self, ctry: str, ticker: str) -> Indicators:
         """지표 조회"""
