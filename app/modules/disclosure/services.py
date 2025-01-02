@@ -206,9 +206,11 @@ class DisclosureService:
             "neutral_count": int(emotion_counts.get("neutral", 0)),
         }
 
-    async def renewal_disclosure(self, ticker: str, year: str, page: int, size: int):
-        if not year:
+    async def renewal_disclosure(self, ticker: str, date: str, page: int, size: int):
+        if not date:
             year = datetime.now().strftime("%Y")
+        if len(date) == 8:
+            year = date[:4]
 
         ctry = check_ticker_country_len_2(ticker)
 

@@ -23,13 +23,13 @@ async def get_disclosure(
 @router.get("", response_model=DisclosureResponse, summary="상세페이지 공시 데이터")
 async def renewal_disclosure(
     ticker: Annotated[str, Query(..., description="종목 코드, 예시: CACI")] = None,
-    year: Annotated[Optional[str], Query(description="연도, 예시: 2024, 기본값: 올해")] = None,
+    date: Annotated[Optional[str], Query(description="연도, 예시: 2024 or 20241230, 기본값: 올해")] = None,
     page: Annotated[Optional[int], Query(description="페이지 번호, 기본값: 1")] = 1,
     size: Annotated[Optional[int], Query(description="페이지 크기, 기본값: 6")] = 6,
     service: DisclosureService = Depends(get_disclosure_service),
 ):
     data, total_count, total_pages, offset, emotion_counts = await service.renewal_disclosure(
-        ticker=ticker, year=year, page=page, size=size
+        ticker=ticker, date=date, page=page, size=size
     )
 
     return DisclosureResponse(
