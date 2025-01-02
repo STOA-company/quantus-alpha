@@ -1,5 +1,5 @@
 from typing import List, Optional, Tuple
-from sqlalchemy import select, or_, case, and_
+from sqlalchemy import select, or_, case
 from sqlalchemy.orm import Session
 from app.database.crud import database
 from app.models.models_stock import StockInformation
@@ -31,20 +31,14 @@ class SearchService:
         search_query = (
             select(StockInformation)
             .where(
-                and_(
-                    StockInformation.ctry == "us",  # 일단 미국 기업만
-                    or_(
-                        StockInformation.ticker == query,
-                        StockInformation.ticker.ilike(search_term),
-                        StockInformation.kr_name.ilike(search_term),
-                        StockInformation.en_name.ilike(search_term),
-                    ),
+                or_(
+                    StockInformation.ticker == query,
+                    StockInformation.ticker.ilike(search_term),
+                    StockInformation.kr_name.ilike(search_term),
+                    StockInformation.en_name.ilike(search_term),
                 )
             )
-            .order_by(
-                # case 문법 수정 - 리스트가 아닌 개별 인자로 전달
-                case((StockInformation.ticker == query, 1), else_=2).label("sort_order")
-            )
+            .order_by(case((StockInformation.ticker == query, 1), else_=2).label("sort_order"))
             .offset(offset)
             .limit(limit)
         )
@@ -79,7 +73,6 @@ class SearchService:
             country_code = self.get_country_code(ticker, db)
             country_code = country_code.lower()
             table_name = f"stock_{country_code}_1d"
-            table_name = "stock_us_1d"
 
             result = self.db._select(
                 table=table_name, columns=["Close", "Open"], order="Date", ascending=False, limit=1, Ticker=ticker

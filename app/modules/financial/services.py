@@ -163,6 +163,12 @@ class FinancialService:
         실적 데이터 조회
         """
         try:
+            if ticker:
+                if ctry == "KOR":
+                    ticker = ticker
+
+            if ctry == "USA":
+                ticker = f"{ticker}-US"
             country = FinancialCountry(ctry)
             table_name = self.income_tables.get(country)
 
@@ -1072,13 +1078,13 @@ class FinancialService:
                 company_data[period] = {
                     "rev": float(row[4]) if row[4] is not None else 0.0,
                     "operating_income": float(row[9]) if row[9] is not None else 0.0,
-                    "net_income": float(row[19]) if row[19] is not None else 0.0,
+                    "net_income_total": float(row[18]) if row[18] is not None else 0.0,
                 }
 
             if clean_row_ticker in tickers:
                 sector_data[period]["rev"].append(float(row[4]) if row[4] is not None else 0.0)
                 sector_data[period]["operating_income"].append(float(row[9]) if row[9] is not None else 0.0)
-                sector_data[period]["net_income"].append(float(row[19]) if row[19] is not None else 0.0)
+                sector_data[period]["net_income_total"].append(float(row[18]) if row[18] is not None else 0.0)
 
         # 섹터 평균 계산
         sector_averages = {}
@@ -1089,7 +1095,9 @@ class FinancialService:
                     "operating_income": statistics.mean(values["operating_income"])
                     if values["operating_income"]
                     else 0.0,
-                    "net_income": statistics.mean(values["net_income"]) if values["net_income"] else 0.0,
+                    "net_income_total": statistics.mean(values["net_income_total"])
+                    if values["net_income_total"]
+                    else 0.0,
                 }
 
         quarterly_results = []
@@ -1097,13 +1105,12 @@ class FinancialService:
             company_values = company_data[period]
 
             # EPS 계산 시에만 1000을 곱해서 천 단위로 변환
-            eps_company = (company_values["net_income"] * 1000) / shares if shares > 0 else 0.0
+            eps_company = (company_values["net_income_total"] * 1000) / shares if shares > 0 else 0.0
             eps_industry = (
-                (sector_averages[period]["net_income"] * 1000) / shares
+                (sector_averages[period]["net_income_total"] * 1000) / shares
                 if period in sector_averages and shares > 0
                 else 0.0
             )
-
             quarterly_income = QuarterlyIncome(
                 period_q=period,
                 rev=IncomeMetric(
@@ -1115,8 +1122,8 @@ class FinancialService:
                     industry_avg=Decimal(str(sector_averages.get(period, {}).get("operating_income", 0.0))),
                 ),
                 net_income=IncomeMetric(
-                    company=Decimal(str(company_values["net_income"])),
-                    industry_avg=Decimal(str(sector_averages.get(period, {}).get("net_income", 0.0))),
+                    company=Decimal(str(company_values["net_income_total"])),
+                    industry_avg=Decimal(str(sector_averages.get(period, {}).get("net_income_total", 0.0))),
                 ),
                 eps=IncomeMetric(company=Decimal(str(eps_company)), industry_avg=Decimal(str(eps_industry))),
             )
@@ -1129,11 +1136,28 @@ class FinancialService:
         if not result:
             return []
 
+        # count 키 추가
+        company_data = defaultdict(
+            lambda: {
+                "rev": 0.0,
+                "operating_income": 0.0,
+                "net_income_total": 0.0,
+                "count": 0,  # count 키 추가
+            }
+        )
+
+        for row in result:
+            year = row[2][:4]
+            if row[0] == ticker:
+                company_data[year]["rev"] += float(row[4]) if row[4] is not None else 0.0
+                company_data[year]["operating_income"] += float(row[9]) if row[9] is not None else 0.0
+                company_data[year]["net_income_total"] += float(row[18]) if row[18] is not None else 0.0
+                company_data[year]["count"] += 1  # 데이터 추가할 때마다 count 증가
+
         tickers = self.get_ticker_by_sector(sector)
         shares = self.get_shares_by_ticker(ticker, ctry)
 
         # 회사 데이터와 섹터 데이터 분리
-        company_data = defaultdict(dict)
         sector_data = defaultdict(lambda: defaultdict(list))
 
         for row in result:
@@ -1141,18 +1165,11 @@ class FinancialService:
             clean_row_ticker = row_ticker.replace("-US", "")
             year = row[2][:4]  # 연도만 추출
 
-            if row_ticker == ticker:
-                if year not in company_data:
-                    company_data[year] = {"rev": 0.0, "operating_income": 0.0, "net_income": 0.0, "count": 0}
-                company_data[year]["rev"] += float(row[4]) if row[4] is not None else 0.0
-                company_data[year]["operating_income"] += float(row[9]) if row[9] is not None else 0.0
-                company_data[year]["net_income"] += float(row[19]) if row[19] is not None else 0.0
-                company_data[year]["count"] += 1
-
+            # 섹터 데이터만 수집 (중복 제거)
             if clean_row_ticker in tickers:
                 sector_data[year]["rev"].append(float(row[4]) if row[4] is not None else 0.0)
                 sector_data[year]["operating_income"].append(float(row[9]) if row[9] is not None else 0.0)
-                sector_data[year]["net_income"].append(float(row[19]) if row[19] is not None else 0.0)
+                sector_data[year]["net_income_total"].append(float(row[18]) if row[18] is not None else 0.0)
 
         # 섹터 평균 계산
         sector_averages = {}
@@ -1163,7 +1180,9 @@ class FinancialService:
                     "operating_income": statistics.mean(values["operating_income"])
                     if values["operating_income"]
                     else 0.0,
-                    "net_income": statistics.mean(values["net_income"]) if values["net_income"] else 0.0,
+                    "net_income_total": statistics.mean(values["net_income_total"])
+                    if values["net_income_total"]
+                    else 0.0,
                 }
 
         # 회사 데이터 연간 평균 계산
@@ -1171,16 +1190,18 @@ class FinancialService:
             if data["count"] > 0:
                 company_data[year]["rev"] /= data["count"]
                 company_data[year]["operating_income"] /= data["count"]
-                company_data[year]["net_income"] /= data["count"]
+                company_data[year]["net_income_total"] /= data["count"]
 
         yearly_results = []
         for year in sorted(company_data.keys(), reverse=True):
             company_values = company_data[year]
 
             # EPS 계산 시에만 1000을 곱해서 천 단위로 변환
-            eps_company = (company_values["net_income"] * 1000) / shares if shares > 0 else 0.0
+            eps_company = (company_values["net_income_total"] * 1000) / shares if shares > 0 else 0.0
             eps_industry = (
-                (sector_averages[year]["net_income"] * 1000) / shares if year in sector_averages and shares > 0 else 0.0
+                (sector_averages[year]["net_income_total"] * 1000) / shares
+                if year in sector_averages and shares > 0
+                else 0.0
             )
             yearly_income = QuarterlyIncome(
                 period_q=year,
@@ -1193,8 +1214,8 @@ class FinancialService:
                     industry_avg=Decimal(str(sector_averages.get(year, {}).get("operating_income", 0.0))),
                 ),
                 net_income=IncomeMetric(
-                    company=Decimal(str(company_values["net_income"])),
-                    industry_avg=Decimal(str(sector_averages.get(year, {}).get("net_income", 0.0))),
+                    company=Decimal(str(company_values["net_income_total"])),
+                    industry_avg=Decimal(str(sector_averages.get(year, {}).get("net_income_total", 0.0))),
                 ),
                 eps=IncomeMetric(company=Decimal(str(eps_company)), industry_avg=Decimal(str(eps_industry))),
             )
