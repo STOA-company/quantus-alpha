@@ -1,10 +1,13 @@
 import datetime
 import logging
-from app.database.crud import JoinInfo, database
-from datetime import timedelta
+import pandas as pd
+import numpy as np
+from sqlalchemy import create_engine, text
+from app.database.crud import database
 
 
 def run_stock_trend_tickers_batch():
+    """티커 정보 배치 처리"""
     try:
         table_name = "stock_kr_1d"
         current_time = datetime.datetime.now()
@@ -49,270 +52,330 @@ def run_stock_trend_tickers_batch():
         raise e
 
 
-def run_stock_trend_by_realtime_batch():
-    """
-    실시간 주가 추세 배치 로직
-    stock_trend 테이블 업데이트 (1분봉 데이터 기준)
-    """
+def fetch_latest_stock_data_1d(df):
+    """일별 주가 데이터 분석"""
     try:
-        current_time = datetime.datetime.now()
-        logging.info(f"배치 작업 시작: {current_time}")
+        # 날짜별로 정렬
+        df = df.sort_values(["ticker", "date"], ascending=[True, False])
 
-        table_name = "stock_us_1m"
-        logging.info(f"{table_name} 데이터 조회 시작")
+        # 현재 가격과 이전 종가 구하기
+        current_data = df.groupby("ticker").first().reset_index()
+        prev_data = df.groupby("ticker").nth(1).reset_index()
 
-        # 각 ticker별 최신 날짜 조회
-        latest_dates = database._select(table=table_name, columns=["Ticker", "Date"], order="Date", ascending=False)
+        # 결과 데이터프레임 초기화
+        results = pd.DataFrame()
+        results["ticker"] = current_data["ticker"]
+        results["last_updated"] = current_data["date"]
+        results["current_price"] = current_data["close"]
+        results["prev_close"] = prev_data["close"]
+        results["change_1d"] = (current_data["close"] - prev_data["close"]) / prev_data["close"] * 100
+        results["volume_1d"] = current_data["volume"]
+        results["volume_change_1d"] = current_data["volume"] * current_data["close"]
 
-        # Ticker별 최신 날짜만 필터링
-        latest_ticker_dates = {}
-        for row in latest_dates:
-            if row.Ticker not in latest_ticker_dates:
-                latest_ticker_dates[row.Ticker] = row.Date
+        # 각 기간별 데이터 계산
+        periods = {"1w": 7, "1m": 30, "6m": 180, "1y": 365}
 
-        # 이전 데이터 조회를 위한 JoinInfo
-        prev_join = JoinInfo(
-            primary_table=table_name,
-            secondary_table=table_name,
-            primary_column="Ticker",
-            secondary_column="Ticker",
-            columns=["Close"],
-            is_outer=True,
-            secondary_condition={
-                "Date__lt": "primary.Date",
-                "or__": [{"Ticker": ticker, "Date__lt": date} for ticker, date in latest_ticker_dates.items()],
-            },
-        )
+        for period, days in periods.items():
+            # 각 티커의 기준 날짜 계산
+            cutoff_dates = current_data.set_index("ticker").apply(lambda x: x["date"] - pd.Timedelta(days=days), axis=1)
 
-        # 최신 데이터와 직전 데이터 조회
-        results = database._select(
-            table=table_name,
-            columns=["Ticker", "Date", "Close", "Volume"],
-            join_info=prev_join,
-            **{"or__": [{"Ticker": ticker, "Date": date} for ticker, date in latest_ticker_dates.items()]},
-        )
+            # 기간별 데이터 필터링을 위한 조건 생성
+            df_period = df.copy()
+            df_period["cutoff_date"] = df_period["ticker"].map(cutoff_dates)
+            period_data = df_period[df_period["date"] >= df_period["cutoff_date"]]
 
-        logging.info(f"{table_name} 데이터 조회 완료: {len(results)}개 종목")
+            # 기간별 시작 가격 찾기
+            period_start_prices = period_data.groupby("ticker").last()[["close"]].reset_index()
 
-        # 청크 단위로 벌크 업데이트
-        chunk_size = 1000
-        total_chunks = (len(results) + chunk_size - 1) // chunk_size
+            # 기간별 거래량 계산
+            period_volumes = period_data.groupby("ticker").agg({"volume": "sum"}).reset_index()
 
-        for i in range(0, len(results), chunk_size):
-            chunk = results[i : i + chunk_size]
-            current_chunk = (i // chunk_size) + 1
-            logging.info(f"{table_name} 업데이트 진행 중: {current_chunk}/{total_chunks} 청크")
+            # 결과 데이터프레임에 추가
+            results = results.merge(period_start_prices, on="ticker", suffixes=("", f"_start_{period}"))
+            results[f"change_{period}"] = (results["current_price"] - results["close"]) / results["close"] * 100
+            results = results.drop(columns=["close"])
 
-            update_data = [
-                {
-                    "last_updated": result.Date,
-                    "current_price": result.Close,
-                    "prev_close": result.prev_Close,
-                    "change_sign": 2
-                    if result.Close > result.prev_Close
-                    else 4
-                    if result.Close < result.prev_Close
-                    else 3,
-                    "change_1m": calculate_change(result.Close, result.prev_Close),
-                    "volume_1m": result.Volume,
-                    "volume_change_1m": result.Close * result.Volume,
-                }
-                for result in chunk
-            ]
-            database._bulk_update(table="stock_trend", data=update_data, key_column="Ticker")
+            # 거래량 데이터 추가
+            results = results.merge(period_volumes, on="ticker", suffixes=("", f"_{period}"))
+            results[f"volume_{period}"] = results["volume"]
+            results[f"volume_change_{period}"] = results["volume"] * results["current_price"]
+            results = results.drop(columns=["volume"])
 
-        logging.info(f"{table_name} 업데이트 완료")
-
-        end_time = datetime.datetime.now()
-        duration = end_time - current_time
-        logging.info(f"배치 작업 완료. 소요 시간: {duration}")
+        return results
 
     except Exception as e:
-        logging.error(f"Error in run_stock_trend_by_realtime_batch: {str(e)}")
-        raise e
+        logging.error(f"Error fetching daily stock data: {str(e)}")
+        return pd.DataFrame()
+
+
+def fetch_latest_stock_data_1m(engine, df_tickers):
+    """실시간 주가 데이터 조회"""
+    try:
+        # WITH절을 사용하여 각 티커별 최신 데이터 조회
+        query = """
+            WITH latest_dates AS (
+                SELECT ticker, MAX(date) as max_date
+                FROM stock_us_1m
+                WHERE ticker IN %(tickers)s
+                GROUP BY ticker
+            )
+            SELECT
+                s.ticker,
+                s.date as last_updated,
+                s.close as current_price,
+                t.prev_close,
+                s.volume as volume_rt
+            FROM latest_dates ld
+            JOIN stock_us_1m s ON s.ticker = ld.ticker AND s.date = ld.max_date
+            LEFT JOIN stock_trend t ON s.ticker = t.ticker
+        """
+
+        df = pd.read_sql(query, engine, params={"tickers": tuple(df_tickers["ticker"].tolist())})
+
+        # 변화율 계산
+        df["change_rt"] = ((df["current_price"] - df["prev_close"]) / df["prev_close"] * 100).round(4)
+        df.loc[df["prev_close"] == 0, "change_rt"] = 0
+
+        # 거래대금 계산
+        df["volume_change_rt"] = df["volume_rt"] * df["current_price"]
+
+        # 등락 기호 계산 (2: 상승, 3: 보합, 4: 하락)
+        df["change_sign"] = np.where(
+            df["current_price"] > df["prev_close"], 2, np.where(df["current_price"] < df["prev_close"], 4, 3)
+        )
+
+        return df
+
+    except Exception as e:
+        logging.error(f"Error fetching realtime stock data: {e}")
+        return pd.DataFrame()
 
 
 def run_stock_trend_by_1d_batch():
-    """
-    실시간 주가 추세 배치 로직
-    stock_trend 테이블 업데이트
-    """
+    """일별 주가 트렌드 배치 처리"""
     try:
         current_time = datetime.datetime.now()
-        logging.info(f"배치 작업 시작: {current_time}")
+        logging.info(f"일별 배치 작업 시작: {current_time}")
 
-        table_name = "stock_kr_1d"
-        logging.info(f"{table_name} 데이터 조회 시작")
-        results = _get_stock_trend(table_name)
-        logging.info(f"{table_name} 데이터 조회 완료: {len(results)}개 종목")
+        # DB 연결 정보 가져오기
+        db_config = database.conn.engine.url
+        engine = create_engine(str(db_config))
 
-        # 청크 단위로 벌크 업데이트
+        # 전체 종목 조회
+        table_name = "stock_us_1d"  # 미국 주식 데이터 테이블
         chunk_size = 1000
-        total_chunks = (len(results) + chunk_size - 1) // chunk_size
 
-        for i in range(0, len(results), chunk_size):
-            chunk = results[i : i + chunk_size]
-            current_chunk = (i // chunk_size) + 1
-            logging.info(f"{table_name} 업데이트 진행 중: {current_chunk}/{total_chunks} 청크")
+        # 1. Ticker 조회
+        query = """
+            SELECT DISTINCT ticker
+            FROM stock_us_1d
+        """
+        df_tickers = pd.read_sql(query, engine)
+        logging.info(f"전체 종목 수: {len(df_tickers)}개")
 
-            update_data = [
-                {
-                    "last_updated": current_time,
-                    "current_price": result["current_price"],
-                    "prev_close": result["prev_close"],
-                    "change_1d": result["change_1d"],
-                    "change_1w": result["change_1w"],
-                    "change_1m": result["change_1m"],
-                    "change_6m": result["change_6m"],
-                    "change_1y": result["change_1y"],
-                    "volume_1d": result["volume_1d"],
-                    "volume_1w": result["volume_1w"],
-                    "volume_1m": result["volume_1m"],
-                    "volume_6m": result["volume_6m"],
-                    "volume_1y": result["volume_1y"],
-                    "volume_change_1d": result["volume_change_1d"],
-                    "volume_change_1w": result["volume_change_1w"],
-                    "volume_change_1m": result["volume_change_1m"],
-                    "volume_change_6m": result["volume_change_6m"],
-                    "volume_change_1y": result["volume_change_1y"],
-                }
-                for result in chunk
-            ]
-            database._bulk_update(table="stock_trend", data=update_data, key_column="Ticker")
+        # 2. 주가 데이터 조회
+        all_tickers = "','".join(df_tickers["ticker"].tolist())
+        stock_query = f"""
+            SELECT ticker, date, close, volume
+            FROM {table_name}
+            WHERE ticker IN ('{all_tickers}')
+                AND date >= DATE_SUB(CURRENT_DATE, INTERVAL 1 YEAR)
+            ORDER BY ticker asc, date desc
+        """
 
-        logging.info(f"{table_name} 업데이트 완료")
+        chunks = []
+        for chunk_df in pd.read_sql(stock_query, engine, parse_dates=["date"], chunksize=200000):
+            chunks.append(chunk_df)
+
+        df = pd.concat(chunks, ignore_index=True)
+        logging.info(f"데이터 로드 완료: shape={df.shape}")
+
+        # 3. 데이터 분석
+        stock_data = fetch_latest_stock_data_1d(df)
+        logging.info(f"데이터 분석 완료: {len(stock_data)}개 종목")
+
+        # 4. 테이블 업데이트
+        update_stock_trend_table_1d(engine, stock_data)
 
         end_time = datetime.datetime.now()
         duration = end_time - current_time
-        logging.info(f"배치 작업 완료. 소요 시간: {duration}")
+        logging.info(f"일별 배치 작업 완료. 소요 시간: {duration}")
 
     except Exception as e:
         logging.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
         raise e
+    finally:
+        if "engine" in locals():
+            engine.dispose()
 
 
-def _get_stock_trend(table_name: str):
-    """
-    Database 클래스를 활용하여 주가 추세 데이터 조회
-    """
-    # 최신 데이터 조회 - group by 대신 서브쿼리 사용
-    latest_dates = database._select(table=table_name, columns=["Ticker", "Date"], order="Date", ascending=False)
+def run_stock_trend_by_realtime_batch():
+    """실시간 주가 트렌드 배치 처리"""
+    try:
+        current_time = datetime.datetime.now()
+        logging.info(f"실시간 배치 작업 시작: {current_time}")
 
-    # Ticker별 최신 데이터만 필터링
-    latest_ticker_dates = {}
-    for row in latest_dates:
-        if row.Ticker not in latest_ticker_dates:
-            latest_ticker_dates[row.Ticker] = row.Date
+        # DB 연결 정보 가져오기
+        db_config = database.conn.engine.url
+        engine = create_engine(str(db_config))
 
-    # 메인 데이터 조회
-    main_data = database._select(
-        table=table_name,
-        columns=["Ticker", "Date", "Market", "Close", "Volume"],
-        join_info=None,
-        **{"or__": [{"Ticker": ticker, "Date": date} for ticker, date in latest_ticker_dates.items()]},
-    )
+        # 전체 종목 조회
+        table_name = "stock_us_1m"  # 미국 주식 1분봉 데이터 테이블
 
-    # 전일 데이터 조회를 위한 JoinInfo
-    prev_join = JoinInfo(
-        primary_table=table_name,
-        secondary_table=table_name,
-        primary_column="Ticker",
-        secondary_column="Ticker",
-        columns=["close", "volume"],
-        is_outer=True,
-        secondary_condition={"Date__lt": main_data[0].Date, "volume__gt": 0},
-    )
+        # 1. Ticker 조회
+        query = """
+            SELECT DISTINCT ticker
+            FROM stock_us_1m
+        """
+        df_tickers = pd.read_sql(query, engine)
+        logging.info(f"전체 종목 수: {len(df_tickers)}개")
 
-    # 1주일 전 데이터 조회를 위한 JoinInfo
-    week_join = JoinInfo(
-        primary_table=table_name,
-        secondary_table=table_name,
-        primary_column="Ticker",
-        secondary_column="Ticker",
-        columns=["close", "volume"],
-        is_outer=True,
-        secondary_condition={"Date__gte": main_data[0].Date - timedelta(days=7), "volume__gt": 0},
-    )
+        # 2. 최신 주가 데이터 조회 및 계산
+        stock_data = fetch_latest_stock_data_1m(engine, df_tickers)
+        logging.info(f"데이터 분석 완료: {len(stock_data)}개 종목")
 
-    # 1개월 전 데이터 조회를 위한 JoinInfo
-    month_1_join = JoinInfo(
-        primary_table=table_name,
-        secondary_table=table_name,
-        primary_column="Ticker",
-        secondary_column="Ticker",
-        columns=["close", "volume"],
-        is_outer=True,
-        secondary_condition={"Date__gte": main_data[0].Date - timedelta(days=30), "volume__gt": 0},
-    )
+        # 3. 테이블 업데이트
+        update_stock_trend_table_1m(engine, stock_data)
 
-    # 6개월 전 데이터 조회를 위한 JoinInfo
-    month_6_join = JoinInfo(
-        primary_table=table_name,
-        secondary_table=table_name,
-        primary_column="Ticker",
-        secondary_column="Ticker",
-        columns=["close", "volume"],
-        is_outer=True,
-        secondary_condition={"Date__gte": main_data[0].Date - timedelta(days=180), "volume__gt": 0},
-    )
+        end_time = datetime.datetime.now()
+        duration = end_time - current_time
+        logging.info(f"실시간 배치 작업 완료. 소요 시간: {duration}")
 
-    # 1년 전 데이터 조회를 위한 JoinInfo
-    year_join = JoinInfo(
-        primary_table=table_name,
-        secondary_table=table_name,
-        primary_column="Ticker",
-        secondary_column="Ticker",
-        columns=["close", "volume"],
-        is_outer=True,
-        secondary_condition={"Date__gte": main_data[0].Date - timedelta(days=365), "volume__gt": 0},
-    )
-
-    # 최종 데이터 조회
-    result = database._select(
-        table=table_name,
-        columns=["Ticker", "Date", "Market", "Close", "Volume"],
-        join_info=[prev_join, week_join, month_1_join, month_6_join, year_join],
-    )
-
-    # 결과 데이터 가공
-    processed_results = []
-    for r in result:
-        processed_result = {
-            "Ticker": r.Ticker,
-            "last_updated": r.Date,
-            "market": r.Market,
-            "current_price": r.Close,
-            "prev_close": r.prev_close,
-            "change_sign": 2 if r.Close > r.prev_close else 4 if r.Close < r.prev_close else 3,
-            "change_1d": calculate_change(r.Close, r.prev_close),
-            "change_1w": calculate_change(r.Close, r.w1_close),
-            "change_1m": calculate_change(r.Close, r.mo1_close),
-            "change_6m": calculate_change(r.Close, r.mo6_close),
-            "change_1y": calculate_change(r.Close, r.y1_close),
-            "volume_1d": r.Volume,
-            "volume_1w": r.w1_volume,
-            "volume_1m": r.mo1_volume,
-            "volume_6m": r.mo6_volume,
-            "volume_1y": r.y1_volume,
-            "volume_change_1d": r.Close * r.Volume,
-            "volume_change_1w": r.w1_close * r.w1_volume if r.w1_close and r.w1_volume else 0,
-            "volume_change_1m": r.mo1_close * r.mo1_volume if r.mo1_close and r.mo1_volume else 0,
-            "volume_change_6m": r.mo6_close * r.mo6_volume if r.mo6_close and r.mo6_volume else 0,
-            "volume_change_1y": r.y1_close * r.y1_volume if r.y1_close and r.y1_volume else 0,
-        }
-        processed_results.append(processed_result)
-
-    return processed_results
+    except Exception as e:
+        logging.error(f"Error in run_stock_trend_by_realtime_batch: {str(e)}")
+        raise e
+    finally:
+        if "engine" in locals():
+            engine.dispose()
 
 
-def calculate_change(current: float, previous: float) -> float:
-    """변화율 계산 함수"""
-    if not previous or previous == 0:
-        return 0
-    return ((current - previous) / previous) * 100
+def update_stock_trend_table_1d(engine, df: pd.DataFrame, chunk_size: int = 1000):
+    """일별 stock_trend 테이블 업데이트"""
+    try:
+        query = """
+            INSERT INTO stock_trend (
+                ticker, last_updated, current_price, prev_close,
+                change_1d, change_1w, change_1m, change_6m, change_1y,
+                volume_1d, volume_1w, volume_1m, volume_6m, volume_1y,
+                volume_change_1d, volume_change_1w, volume_change_1m,
+                volume_change_6m, volume_change_1y
+            ) VALUES (
+                :ticker, :last_updated, :current_price, :prev_close,
+                :change_1d, :change_1w, :change_1m, :change_6m, :change_1y,
+                :volume_1d, :volume_1w, :volume_1m, :volume_6m, :volume_1y,
+                :volume_change_1d, :volume_change_1w, :volume_change_1m,
+                :volume_change_6m, :volume_change_1y
+            )
+            ON DUPLICATE KEY UPDATE
+                last_updated = VALUES(last_updated),
+                current_price = VALUES(current_price),
+                prev_close = VALUES(prev_close),
+                change_1d = VALUES(change_1d),
+                change_1w = VALUES(change_1w),
+                change_1m = VALUES(change_1m),
+                change_6m = VALUES(change_6m),
+                change_1y = VALUES(change_1y),
+                volume_1d = VALUES(volume_1d),
+                volume_1w = VALUES(volume_1w),
+                volume_1m = VALUES(volume_1m),
+                volume_6m = VALUES(volume_6m),
+                volume_1y = VALUES(volume_1y),
+                volume_change_1d = VALUES(volume_change_1d),
+                volume_change_1w = VALUES(volume_change_1w),
+                volume_change_1m = VALUES(volume_change_1m),
+                volume_change_6m = VALUES(volume_change_6m),
+                volume_change_1y = VALUES(volume_change_1y)
+        """
+
+        # 데이터 청크별로 업데이트
+        for i in range(0, len(df), chunk_size):
+            chunk = df.iloc[i : i + chunk_size]
+            with engine.connect() as conn:
+                trans = conn.begin()
+                try:
+                    for _, row in chunk.iterrows():
+                        row_dict = row.where(pd.notna(row), None).to_dict()
+                        conn.execute(text(query), row_dict)
+                    trans.commit()
+                    logging.info(f"Updated records {i} to {i+len(chunk)}")
+                except Exception as e:
+                    trans.rollback()
+                    logging.error(f"Error during update of chunk {i}: {e}")
+                    raise
+
+        logging.info(f"Successfully updated {len(df)} records in total")
+
+    except Exception as e:
+        logging.error(f"Error updating stock trend table: {e}")
+        raise
 
 
-if __name__ == "__main__":
-    run_stock_trend_by_1d_batch()
-    run_stock_trend_by_realtime_batch()
-    run_stock_trend_tickers_batch()
+def update_stock_trend_table_1m(engine, df: pd.DataFrame, chunk_size: int = 1000):
+    """실시간 stock_trend 테이블 업데이트"""
+    try:
+        # 활성 티커 업데이트 쿼리
+        active_update_query = """
+            INSERT INTO stock_trend (
+                ticker, last_updated, current_price, prev_close,
+                change_sign, change_rt, volume_rt, volume_change_rt
+            ) VALUES (
+                :ticker, :last_updated, :current_price, :prev_close,
+                :change_sign, :change_rt, :volume_rt, :volume_change_rt
+            )
+            ON DUPLICATE KEY UPDATE
+                last_updated = VALUES(last_updated),
+                current_price = VALUES(current_price),
+                change_sign = VALUES(change_sign),
+                change_rt = VALUES(change_rt),
+                volume_rt = VALUES(volume_rt),
+                volume_change_rt = VALUES(volume_change_rt)
+        """
+
+        # 비활성 티커 업데이트 쿼리
+        inactive_update_query = """
+            UPDATE stock_trend
+            SET change_rt = 0,
+                volume_rt = 0,
+                volume_change_rt = 0
+            WHERE ticker NOT IN (
+                SELECT DISTINCT ticker
+                FROM stock_us_1m
+            )
+        """
+
+        # 1. 활성 티커 업데이트
+        for i in range(0, len(df), chunk_size):
+            chunk = df.iloc[i : i + chunk_size]
+            with engine.connect() as conn:
+                trans = conn.begin()
+                try:
+                    for _, row in chunk.iterrows():
+                        row_dict = row.where(pd.notna(row), None).to_dict()
+                        conn.execute(text(active_update_query), row_dict)
+                    trans.commit()
+                    logging.info(f"Updated active records {i} to {i+len(chunk)}")
+                except Exception as e:
+                    trans.rollback()
+                    logging.error(f"Error during update of chunk {i}: {e}")
+                    raise
+
+        # 2. 비활성 티커 업데이트
+        with engine.connect() as conn:
+            trans = conn.begin()
+            try:
+                conn.execute(text(inactive_update_query))
+                trans.commit()
+                logging.info("Updated inactive tickers")
+            except Exception as e:
+                trans.rollback()
+                logging.error(f"Error updating inactive tickers: {e}")
+                raise
+
+        logging.info("Successfully updated all records")
+
+    except Exception as e:
+        logging.error(f"Error updating stock trend table: {e}")
+        raise
+    finally:
+        if "engine" in locals():
+            engine.dispose()
