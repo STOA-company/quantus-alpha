@@ -345,6 +345,7 @@ class NewsService:
                 **{"ticker__in": unique_tickers},
             )
         )
+
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")
 
