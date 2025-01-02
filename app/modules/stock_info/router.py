@@ -1,5 +1,6 @@
+import logging
 import random
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.modules.common.enum import FearAndGreedIndex
 from app.modules.common.schemas import BaseResponse
@@ -12,6 +13,7 @@ from app.database.conn import db
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # @router.get("", response_model=BaseResponse[StockInfo], summary="주식 정보 조회")
@@ -46,12 +48,42 @@ async def get_combined(
     db: AsyncSession = Depends(db.get_async_db),
 ):
     ctry = check_ticker_country_len_2(ticker)
+    logger.info(f"Processing combined data for {ticker} ({ctry})")
 
-    stock_info = await stock_service.get_stock_info(ctry, ticker, db)
-    indicators = await stock_service.get_indicators(ctry, ticker)
-    summary = await summary_service.get_price_data_summary(ctry, ticker, db)
-    latest = news_service.get_latest_news(ticker=ticker)
-    price = await price_service.get_real_time_price_data(ticker)
+    try:
+        stock_info = await stock_service.get_stock_info(ctry, ticker, db)
+        logger.info("Successfully fetched stock_info")
+    except Exception as e:
+        logger.error(f"Error fetching stock_info: {e}")
+        stock_info = None
+
+    try:
+        indicators = await stock_service.get_indicators(ctry, ticker)
+        logger.info("Successfully fetched indicators")
+    except Exception as e:
+        logger.error(f"Error fetching indicators: {e}")
+        indicators = None
+
+    try:
+        summary = await summary_service.get_price_data_summary(ctry, ticker, db)
+        logger.info("Successfully fetched summary")
+    except Exception as e:
+        logger.error(f"Error fetching summary: {e}")
+        summary = None
+
+    try:
+        latest = news_service.get_latest_news(ticker=ticker)
+        logger.info("Successfully fetched latest news")
+    except Exception as e:
+        logger.error(f"Error fetching latest news: {e}")
+        latest = None
+
+    try:
+        price = await price_service.get_real_time_price_data(ticker)
+        logger.info("Successfully fetched price")
+    except Exception as e:
+        logger.error(f"Error fetching price: {e}")
+        price = None
 
     data = {
         "summary": summary,
@@ -60,6 +92,10 @@ async def get_combined(
         "latest": latest,
         "price": price,
     }
+
+    # 모든 데이터가 None인 경우에만 404 반환
+    if all(v is None for v in data.values()):
+        raise HTTPException(status_code=404, detail="No data found for the given ticker")
 
     return BaseResponse(status_code=200, message="종목 정보, 지표, 기업 정보를 성공적으로 조회했습니다.", data=data)
 

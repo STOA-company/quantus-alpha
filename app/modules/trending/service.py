@@ -4,7 +4,7 @@ from app.database.conn import db
 from app.modules.trending.schemas import TrendingStockRequest, TrendingStock, TrendingType
 
 
-class NewTrendingService:
+class TrendingService:
     def __init__(self):
         self.database = database
         self.db = db
@@ -20,14 +20,15 @@ class NewTrendingService:
 
     def get_trending_stocks(self, request: TrendingStockRequest) -> List[TrendingStock]:
         order = self._get_trending_type(request)
-        ascending = False if request.type == TrendingType.DOWN else True
+        ascending = True if request.type == TrendingType.DOWN else False
 
         trending_stocks = self.database._select(
             table="stock_trend",
             columns=[
                 "ticker",
-                "en_name",
+                "ko_name",
                 "current_price",
+                "last_updated",
                 f"change_{request.period.value}",
                 f"volume_{request.period.value}",
                 f"volume_change_{request.period.value}",
@@ -37,11 +38,24 @@ class NewTrendingService:
             limit=100,
         )
 
+        # 가장 최신 last_updated 찾기
+        latest_date = max(
+            (stock._mapping["last_updated"].date() for stock in trending_stocks if stock._mapping["last_updated"]),
+            default=None,
+        )
+
+        # 최신 날짜의 데이터만 필터링
+        filtered_stocks = [
+            stock
+            for stock in trending_stocks
+            if stock._mapping["last_updated"] and stock._mapping["last_updated"].date() == latest_date
+        ]
+
         return [
             TrendingStock(
                 num=idx,
                 ticker=stock._mapping["ticker"],
-                name="Temp_name" if stock._mapping["en_name"] is None else stock._mapping["en_name"],
+                name="Temp_name" if stock._mapping["ko_name"] is None else stock._mapping["ko_name"],
                 current_price=0.0 if stock._mapping["current_price"] is None else stock._mapping["current_price"],
                 current_price_rate=0.0
                 if stock._mapping[f"change_{request.period.value}"] is None
@@ -53,9 +67,9 @@ class NewTrendingService:
                 if stock._mapping[f"volume_change_{request.period.value}"] is None
                 else stock._mapping[f"volume_change_{request.period.value}"],
             )
-            for idx, stock in enumerate(trending_stocks, 1)
+            for idx, stock in enumerate(filtered_stocks, 1)
         ]
 
 
-def new_get_trending_service():
-    return NewTrendingService()
+def get_trending_service():
+    return TrendingService()
