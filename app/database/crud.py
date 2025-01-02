@@ -1,5 +1,5 @@
 from dataclasses import asdict, dataclass, field
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, bindparam
 from sqlalchemy import select, insert, update, delete, desc, asc, or_, and_
 from sqlalchemy.exc import IntegrityError
 from contextlib import contextmanager
@@ -309,6 +309,50 @@ class Database:
 
         except Exception as e:
             logging.error(f"Error in count operation: {str(e)}")
+            raise
+
+    def _bulk_update(self, table: str, data: list[dict], key_column: str):
+        """벌크 업데이트 실행
+
+        Args:
+            table (str): 테이블 이름
+            data (list[dict]): 업데이트할 데이터 리스트
+            key_column (str): 기준이 되는 키 컬럼명
+        """
+        try:
+            if not data:
+                return
+
+            obj = self.meta_data.tables[table]
+
+            # 임시 테이블 생성을 위한 VALUES 절 생성
+            values_list = []
+            for item in data:
+                processed_item = self.get_sets(obj, item)
+                values_list.append(processed_item)
+
+            # 벌크 업데이트 쿼리 생성
+            key_col = getattr(obj.columns, key_column)
+            stmt = (
+                update(obj)
+                .where(key_col == bindparam("_old_" + key_column))
+                .values({col: bindparam(col.name) for col in obj.columns if col.name in values_list[0]})
+            )
+
+            # 파라미터 생성
+            update_params = []
+            for item in values_list:
+                param = {"_old_" + key_column: item[key_col], **item}
+                update_params.append(param)
+
+            # 실행
+            with self.get_connection() as connection:
+                connection.execute(stmt, update_params)
+
+            logging.info(f"Bulk update completed for {len(data)} records in {table}")
+
+        except Exception as e:
+            logging.error(f"Error in bulk update operation: {str(e)}")
             raise
 
 

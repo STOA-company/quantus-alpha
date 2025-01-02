@@ -1,7 +1,6 @@
 from typing import List
 from app.database.crud import database
 from app.database.conn import db
-from app.modules.common.enum import TrendingPeriod
 from app.modules.trending.new_schemas import TrendingStockRequest, TrendingStock, TrendingType
 
 
@@ -20,12 +19,8 @@ class NewTrendingService:
                 return f"volume_change_{request.period.value}"
 
     def get_trending_stocks(self, request: TrendingStockRequest) -> List[TrendingStock]:
-        # TODO : 실시간 데이터 반영 후 제거
-        if request.period == TrendingPeriod.REALTIME:
-            request.period = TrendingPeriod.DAY
-
         order = self._get_trending_type(request)
-        ascending = False if request.type == TrendingType.DOWN else True
+        ascending = True if request.type == TrendingType.DOWN else False
 
         trending_stocks = self.database._select(
             table="stock_trend",
@@ -33,6 +28,7 @@ class NewTrendingService:
                 "ticker",
                 "en_name",
                 "current_price",
+                "last_updated",
                 f"change_{request.period.value}",
                 f"volume_{request.period.value}",
                 f"volume_change_{request.period.value}",
@@ -41,6 +37,19 @@ class NewTrendingService:
             ascending=ascending,
             limit=100,
         )
+
+        # 가장 최신 last_updated 찾기
+        latest_date = max(
+            (stock._mapping["last_updated"].date() for stock in trending_stocks if stock._mapping["last_updated"]),
+            default=None,
+        )
+
+        # 최신 날짜의 데이터만 필터링
+        filtered_stocks = [
+            stock
+            for stock in trending_stocks
+            if stock._mapping["last_updated"] and stock._mapping["last_updated"].date() == latest_date
+        ]
 
         return [
             TrendingStock(
@@ -58,7 +67,7 @@ class NewTrendingService:
                 if stock._mapping[f"volume_change_{request.period.value}"] is None
                 else stock._mapping[f"volume_change_{request.period.value}"],
             )
-            for idx, stock in enumerate(trending_stocks, 1)
+            for idx, stock in enumerate(filtered_stocks, 1)
         ]
 
 

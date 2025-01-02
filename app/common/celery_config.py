@@ -11,10 +11,17 @@ else:
 
 CELERY_APP = Celery("worker", broker=CELERY_BROKER_URL, result_backend=CELERY_RESULT_BACKEND)
 
+# 배치 작업 목록
+TASKS = [
+    "us_stock_indices_batch",
+]
+
 CELERY_APP.conf.beat_schedule = {
-    "hello-task": {
-        "task": "hello_task",
-        "schedule": crontab(minute="*/1"),
-    },
+    f"{task}-schedule": {
+        "task": task,
+        "schedule": crontab(minute="*/15"),
+    }
+    for task in TASKS
 }
+
 CELERY_APP.conf.timezone = "UTC"
