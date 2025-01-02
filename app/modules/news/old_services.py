@@ -252,25 +252,20 @@ class NewsService:
 
     def get_latest_news(self, ticker: str) -> LatestNewsResponse:
         """최신 뉴스와 공시 데이터 중 최신 데이터 조회"""
-        try:
-            # 1. 공시 데이터 조회
-            disclosure_info = self._get_disclosure_data(ticker)
+        # 1. 공시 데이터 조회
+        disclosure_info = self._get_disclosure_data(ticker)
 
-            # 2. 뉴스 데이터 조회
-            news_info = self._get_news_data(ticker)
+        # 2. 뉴스 데이터 조회
+        news_info = self._get_news_data(ticker)
 
-            # 3. 둘 다 없으면 에러
-            if not disclosure_info and not news_info:
-                raise DataNotFoundException(ticker=ticker, data_type="news and disclosure")
+        # 3. 날짜 비교하여 최신 데이터 선택
+        result = self._select_latest_data(disclosure_info, news_info)
 
-            # 4. 날짜 비교하여 최신 데이터 선택
-            result = self._select_latest_data(disclosure_info, news_info)
-
-            return LatestNewsResponse(**result)
-
-        except Exception as e:
-            logger.error(f"Error in get_latest_news for ticker {ticker}: {str(e)}")
-            raise
+        return LatestNewsResponse(
+            date=result.get("date", ""),
+            content=result.get("content", ""),
+            type=result.get("type", ""),
+        )
 
     def _parse_key_points(self, key_points: list) -> str:
         """
