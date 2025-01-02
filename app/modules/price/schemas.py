@@ -53,17 +53,17 @@ class StockKrFactorItem(BaseModel):
 
 # v2
 class PriceSummaryItem(BaseModel):
-    name: str
-    ticker: str
-    ctry: str
-    logo_url: str
-    market: str
-    sector: str
-    market_cap: float
-    last_day_close: float
-    week_52_low: float
-    week_52_high: float
-    is_market_close: bool
+    name: Optional[str] = None
+    ticker: Optional[str] = None
+    ctry: Optional[str] = None
+    logo_url: Optional[str] = None
+    market: Optional[str] = None
+    sector: Optional[str] = None
+    market_cap: Optional[float] = None
+    last_day_close: Optional[float] = None
+    week_52_low: Optional[float] = None
+    week_52_high: Optional[float] = None
+    is_market_close: Optional[bool] = None
 
 
 class PriceDailyItem(BaseModel):
