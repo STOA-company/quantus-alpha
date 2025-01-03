@@ -31,6 +31,10 @@ class StockInformation(Base):
     sector_3 = Column(String(100), nullable=True, comment="GICS Level 3 (74개 섹터)")
     sector_4 = Column(String(100), nullable=True, comment="GICS Level 4 (163개 섹터)")
 
+    # 최종 섹터
+    sector_ko = Column(String(100), nullable=True, comment="최종 섹터 (한글)")
+    sector_en = Column(String(100), nullable=True, comment="최종 섹터 (영문)")
+
     # Additional company information (nullable)
     homepage_url = Column(String(255), nullable=True, comment="회사 홈페이지 URL")
     ceo = Column(String(100), nullable=True, comment="대표이사")
