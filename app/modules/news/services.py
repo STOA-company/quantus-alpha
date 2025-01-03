@@ -136,18 +136,29 @@ class NewsService:
         df_price = pd.DataFrame(
             self.db._select(
                 table="stock_trend",
-                columns=["ticker", "current_price", "change_1m"],
-                order="last_updated",
-                ascending=False,
+                columns=["ticker", "current_price", "change_rt"],
                 **dict(ticker__in=unique_ticker),
             )
         )
+        df_news["price_impact"] = 0.0
+        df_news["change_rate"] = 0.0
         if not df_price.empty:
             df_news = pd.merge(df_news, df_price, on="ticker", how="left")
-            df_news["price_impact"] = (
-                (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100
-            )
 
+            df_news["that_time_price"] = df_news["that_time_price"].fillna(0)
+            df_news["current_price"] = df_news["current_price"].fillna(0)
+            df_news["change_rt"] = df_news["change_rt"].fillna(0)
+
+            mask = (df_news["current_price"] == 0) & (df_news["that_time_price"] != 0)
+            df_news.loc[mask, "that_time_price"] = 0
+
+            df_news["price_impact"] = round(
+                (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100,
+                2,
+            )
+            df_news["change_rate"] = round(df_news["change_rt"], 2)
+
+        df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
         data = []
         for _, row in df_news.iterrows():
             id = row["id"]
@@ -157,7 +168,7 @@ class NewsService:
             summary = row["summary"]
             emotion = row["emotion"]
             name = row["ko_name"]
-            change_rate = row["change_1m"] if row.get("change_1m") else 0.00
+            change_rate = row["change_rate"] if row.get("change_rate") else 0.00
             price_impact = row["price_impact"] if row.get("price_impact") else 0.00
             ticker = row["ticker"]
             data.append(
@@ -209,25 +220,40 @@ class NewsService:
                 **condition,
             )
         )
+
         df_disclosure = self._process_dataframe_disclosure(df_disclosure)
         unique_ticker = df_disclosure["ticker"].unique().tolist()
 
         df_price = pd.DataFrame(
             self.db._select(
                 table="stock_trend",
-                columns=["ticker", "current_price", "change_1m"],
+                columns=["ticker", "current_price", "change_rt"],
                 order="last_updated",
                 ascending=False,
                 **dict(ticker__in=unique_ticker),
             )
         )
+        df_disclosure["price_impact"] = 0.0
+        df_disclosure["change_rate"] = 0.0
         if not df_price.empty:
             df_disclosure = pd.merge(df_disclosure, df_price, on="ticker", how="left")
-            df_disclosure["price_impact"] = (
+
+            df_disclosure["that_time_price"] = df_disclosure["that_time_price"].fillna(0)
+            df_disclosure["current_price"] = df_disclosure["current_price"].fillna(0)
+            df_disclosure["change_rt"] = df_disclosure["change_rt"].fillna(0)
+
+            mask = (df_disclosure["current_price"] == 0) & (df_disclosure["that_time_price"] != 0)
+            df_disclosure.loc[mask, "that_time_price"] = 0
+
+            df_disclosure["price_impact"] = round(
                 (df_disclosure["current_price"] - df_disclosure["that_time_price"])
                 / df_disclosure["that_time_price"]
-                * 100
+                * 100,
+                2,
             )
+            df_disclosure["change_rate"] = round(df_disclosure["change_rt"], 2)
+
+        df_disclosure["price_impact"] = round(df_disclosure["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
 
         data = []
         for _, row in df_disclosure.iterrows():
@@ -241,7 +267,7 @@ class NewsService:
             key_points = row["key_points"]
             emotion = row["emotion"]
             name = row["ko_name"]
-            change_rate = row["change_1m"] if row.get("change_1m") else 0.00
+            change_rate = row["change_rate"] if row.get("change_rate") else 0.00
             price_impact = row["price_impact"] if row.get("price_impact") else 0.00
             document_url = row["url"]
             data.append(
