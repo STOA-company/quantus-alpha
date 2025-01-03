@@ -336,6 +336,8 @@ class NewsService:
         elif not df_disclosure.empty:
             total_df = df_disclosure
 
+        print(f"total_df: {total_df}")
+
         # 종목 현재가 정보 수집
         unique_tickers = total_df["ticker"].unique().tolist()
         df_price = pd.DataFrame(
@@ -345,6 +347,7 @@ class NewsService:
                 **{"ticker__in": unique_tickers},
             )
         )
+        total_df["price_impact"] = 0.0
 
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")

@@ -8,7 +8,7 @@ from app.modules.news.schemas import NewsDetailItem, NewsRenewalResponse, NewsRe
 router = APIRouter()
 
 
-@router.get("/real_time", summary="실시간 뉴스", response_model=BaseResponse[NewsRenewalResponse])
+@router.get("/renewal/real_time", summary="실시간 뉴스", response_model=BaseResponse[NewsRenewalResponse])
 def news_main(
     ctry: Annotated[str, Query(description="국가 코드, 예시: kr, us")] = None,
     news_service: NewsService = Depends(get_news_service),
@@ -29,7 +29,7 @@ def top_stories(
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
 
-@router.get("/detail", summary="상세 페이지 뉴스", response_model=NewsResponse[List[NewsDetailItem]])
+@router.get("/renewal/detail", summary="상세 페이지 뉴스", response_model=NewsResponse[List[NewsDetailItem]])
 def news_detail(
     ticker: Annotated[str, Query(..., description="종목 코드, 예시: AAPL, A110090")],
     date: Annotated[str, Query(description="날짜, 예시: 20241230")] = None,

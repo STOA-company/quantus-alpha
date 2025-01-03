@@ -17,7 +17,7 @@ api_router.include_router(financial_router, prefix="/financial", tags=["financia
 api_router.include_router(price_router, prefix="/price", tags=["price"])
 api_router.include_router(stock_indices_router, prefix="/stock-indices", tags=["stock-indices"])
 api_router.include_router(news_router, prefix="/news", tags=["news"])
-api_router.include_router(news_router_renewal, prefix="/news/renewal", tags=["news"])
+api_router.include_router(news_router_renewal, prefix="/news", tags=["news"])
 api_router.include_router(stock_info_router, prefix="/info", tags=["stock-info"])
 api_router.include_router(disclosure_router, prefix="/disclosure", tags=["disclosure"])
 api_router.include_router(dividend_router, prefix="/dividend", tags=["dividend"])
