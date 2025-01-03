@@ -9,17 +9,16 @@ from app.database.crud import database
 def run_stock_trend_tickers_batch():
     """티커 정보 배치 처리"""
     try:
-        table_name = "stock_kr_1d"
-        current_time = datetime.datetime.now()
-        logging.info(f"배치 작업 시작: {current_time}")
+        table_name = "stock_us_tickers"
 
         # 전체 종목 수 카운트
         total_count = database._count(table=table_name)
         logging.info(f"{table_name} 전체 종목 수: {total_count}개")
 
-        # stock_kr_1d에서 모든 고유 Ticker 조회
-        stock_tickers = database._select(table=table_name, columns=["Ticker", "Market"], join_info=None)
-        unique_tickers = {(row.Ticker, row.Market) for row in stock_tickers}
+        stock_tickers = database._select(
+            table=table_name, columns=["ticker", "market", "korean_name", "english_name"], join_info=None
+        )
+        unique_tickers = {(row.ticker, row.market, row.korean_name, row.english_name) for row in stock_tickers}
 
         # stock_trend 테이블의 기존 종목 수 카운트
         existing_count = database._count(table="stock_trend")
@@ -31,8 +30,8 @@ def run_stock_trend_tickers_batch():
 
         # 새로운 종목 필터링
         new_tickers = [
-            {"ticker": ticker, "market": market, "last_updated": current_time}
-            for ticker, market in unique_tickers
+            {"ticker": ticker, "market": market, "korean_name": korean_name, "english_name": english_name}
+            for ticker, market, korean_name, english_name in unique_tickers
             if ticker not in existing_ticker_set
         ]
 
@@ -42,10 +41,6 @@ def run_stock_trend_tickers_batch():
             logging.info("새로운 종목 추가 완료")
         else:
             logging.info("새로 추가할 종목이 없습니다")
-
-        end_time = datetime.datetime.now()
-        duration = end_time - current_time
-        logging.info(f"배치 작업 완료. 소요 시간: {duration}")
 
     except Exception as e:
         logging.error(f"Error in run_stock_trend_tickers_batch: {str(e)}")

@@ -8,7 +8,7 @@ from app.modules.common.schemas import BaseResponse
 router = APIRouter()
 
 
-@router.get("/", summary="실시간 차트")
+@router.get("", summary="실시간 차트")
 def get_trending_stocks(
     request: TrendingStockRequest = Depends(),
     service: TrendingService = Depends(get_trending_service),
