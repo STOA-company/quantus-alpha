@@ -3,10 +3,14 @@ import os
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 from functools import lru_cache
-
+import pytz
 
 ENV = os.getenv("ENV", "dev")  # Default
 load_dotenv(f".env.{ENV}")
+
+# Time Zone
+korea_tz = pytz.timezone("Asia/Seoul")
+utc_tz = pytz.timezone("UTC")
 
 
 class Settings(BaseSettings):
@@ -25,9 +29,14 @@ class Settings(BaseSettings):
     RDS_DB: str = os.getenv("RDS_DB", "")
     RDS_PORT: int = os.getenv("RDS_PORT", 3306)
 
+    if ENV == "prod":
+        CELERY_LOGLEVEL: str = "ERROR"
+    else:
+        CELERY_LOGLEVEL: str = "INFO"
+
     @property
     def DATABASE_URL(self) -> str:
-        return f"mysql://{self.RDS_USER}:{self.RDS_PASSWORD}@{self.RDS_HOST}:{self.RDS_PORT}/{self.RDS_DB}"
+        return f"mysql+pymysql://{self.RDS_USER}:{self.RDS_PASSWORD}@{self.RDS_HOST}:{self.RDS_PORT}/{self.RDS_DB}"
 
     class Config:
         env_file = f".env.{ENV}"

@@ -1,25 +1,19 @@
-from typing import List, Optional
+from fastapi import Query
 from pydantic import BaseModel
+from app.modules.common.enum import TrendingPeriod, TrendingType
 
 
-class TrendingStockKr(BaseModel):
-    num: int
-    ticker: str
-    name: str
-    volume: float
-    current_price: Optional[float]
-    current_price_rate: Optional[float]
-
-
-class TrendingStockEn(BaseModel):
-    num: int
-    ticker: str
-    name: str
-    volume: float
-    current_price: Optional[float]
-    current_price_rate: Optional[float]
+class TrendingStockRequest(BaseModel):
+    ctry: str = Query("us", description="국가 코드")
+    type: TrendingType = Query(TrendingType.UP, description="트렌딩 타입")
+    period: TrendingPeriod = Query(TrendingPeriod.REALTIME, description="기간")
 
 
 class TrendingStock(BaseModel):
-    kr: List[TrendingStockKr]
-    en: List[TrendingStockEn]
+    num: int
+    ticker: str
+    name: str = "Temp_name"
+    volume: float = 0.0
+    amount: float = 0.0
+    current_price: float = 0.0
+    current_price_rate: float = 0.0

@@ -1,6 +1,5 @@
 from dataclasses import asdict, dataclass, field
-from sqlalchemy import MetaData
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import MetaData, bindparam
 from sqlalchemy import select, insert, update, delete, desc, asc, or_, and_
 from sqlalchemy.exc import IntegrityError
 from contextlib import contextmanager
@@ -19,10 +18,6 @@ class JoinInfo:
     columns: list = field(default_factory=list)
     is_outer: bool = False
     secondary_condition: dict = field(default_factory=dict)
-
-
-class Base(DeclarativeBase):
-    pass
 
 
 class Database:
@@ -103,6 +98,8 @@ class Database:
                         or_cond.append((col.in_(val)))
                     elif len(key) == 2 and key[1] == "notin":
                         or_cond.append(~(col.in_(val)))
+                    elif len(key) == 2 and key[1] == "like":
+                        or_cond.append(col.like(val))
                 if or_cond:
                     cond.append(or_(*or_cond))
                 continue
@@ -125,6 +122,8 @@ class Database:
                 cond.append((col.in_(val)))
             elif len(key) == 2 and key[1] == "notin":
                 cond.append(~(col.in_(val)))
+            elif len(key) == 2 and key[1] == "like":
+                cond.append(col.like(val))
 
         return cond
 
@@ -213,11 +212,24 @@ class Database:
             if columns is None:
                 cols = [obj]
             else:
-                cols = list(map(lambda x: getattr(obj.columns, x), columns))
+                primary_cols = []
+                if join_info:
+                    for col in columns:
+                        if col not in join_info.columns:
+                            try:
+                                primary_cols.append(getattr(obj.columns, col))
+                            except AttributeError:
+                                continue
+                else:
+                    primary_cols = [getattr(obj.columns, col) for col in columns]
+                cols = primary_cols
 
             if join_info:
                 join_table_obj = self.meta_data.tables[join_info.secondary_table]
-                join_cols = list(map(lambda x: getattr(join_table_obj.columns, x), join_info.columns))
+                join_cols = []
+                for col in join_info.columns:
+                    if col in columns:
+                        join_cols.append(getattr(join_table_obj.columns, col))
                 cols.extend(join_cols)
 
             cond = self.get_condition(obj, **kwargs)
@@ -301,6 +313,50 @@ class Database:
 
         except Exception as e:
             logging.error(f"Error in count operation: {str(e)}")
+            raise
+
+    def _bulk_update(self, table: str, data: list[dict], key_column: str):
+        """벌크 업데이트 실행
+
+        Args:
+            table (str): 테이블 이름
+            data (list[dict]): 업데이트할 데이터 리스트
+            key_column (str): 기준이 되는 키 컬럼명
+        """
+        try:
+            if not data:
+                return
+
+            obj = self.meta_data.tables[table]
+
+            # 임시 테이블 생성을 위한 VALUES 절 생성
+            values_list = []
+            for item in data:
+                processed_item = self.get_sets(obj, item)
+                values_list.append(processed_item)
+
+            # 벌크 업데이트 쿼리 생성
+            key_col = getattr(obj.columns, key_column)
+            stmt = (
+                update(obj)
+                .where(key_col == bindparam("_old_" + key_column))
+                .values({col: bindparam(col.name) for col in obj.columns if col.name in values_list[0]})
+            )
+
+            # 파라미터 생성
+            update_params = []
+            for item in values_list:
+                param = {"_old_" + key_column: item[key_col], **item}
+                update_params.append(param)
+
+            # 실행
+            with self.get_connection() as connection:
+                connection.execute(stmt, update_params)
+
+            logging.info(f"Bulk update completed for {len(data)} records in {table}")
+
+        except Exception as e:
+            logging.error(f"Error in bulk update operation: {str(e)}")
             raise
 
 

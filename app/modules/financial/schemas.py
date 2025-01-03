@@ -60,7 +60,9 @@ class IncomeStatementDetail(BaseModel):
 class IncomeStatementResponse(BaseModel):
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
+    ctry: str = Field(max_length=20)
     ttm: IncomeStatementDetail
+    total: List[IncomeStatementDetail]
     details: List[IncomeStatementDetail]
 
 
@@ -84,7 +86,9 @@ class CashFlowDetail(BaseModel):
 class CashFlowResponse(BaseModel):
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
+    ctry: str = Field(max_length=20)
     ttm: CashFlowDetail
+    total: List[CashFlowDetail]
     details: List[CashFlowDetail]
 
 
@@ -128,7 +132,9 @@ class FinPosDetail(BaseModel):
 class FinPosResponse(BaseModel):
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
+    ctry: str = Field(max_length=20)
     ttm: FinPosDetail
+    total: List[FinPosDetail]
     details: List[FinPosDetail]
 
 
@@ -164,6 +170,7 @@ class IncomePerformanceResponse(BaseModel):
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
     ctry: str = Field(max_length=20)
+    sector: Optional[str]
     quarterly: List[QuarterlyIncome]  # 분기별 데이터
     yearly: List[QuarterlyIncome]  # 연간 데이터
 
@@ -172,6 +179,11 @@ class IncomePerformanceResponse(BaseModel):
 
 
 class FinancialRatioResponse(BaseModel):
+    ratio: float
+    industry_avg: Optional[float] = None  # 업종 평균
+
+
+class DebtRatioResponse(BaseModel):
     ratio: float
     industry_avg: Optional[float] = None  # 업종 평균
 
@@ -190,6 +202,6 @@ class RatioResponse(BaseModel):
     code: str = Field(max_length=20)
     name: str = Field(max_length=100)
     ctry: str = Field(max_length=20)
-    financial_ratios: FinancialRatioResponse
+    debt_ratios: DebtRatioResponse
     liquidity_ratios: LiquidityRatioResponse
     interest_coverage_ratios: InterestCoverageRatioResponse

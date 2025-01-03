@@ -1,65 +1,111 @@
-from typing import List
-from sqlalchemy import select, or_, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Optional, Tuple
+from sqlalchemy import select, or_, case
+from sqlalchemy.orm import Session
+from app.database.crud import database
 from app.models.models_stock import StockInformation
 from app.modules.common.enum import TranslateCountry
 from app.modules.search.schemas import SearchItem
 
 
 class SearchService:
-    async def search(self, query: str, ctry: str, offset: int, limit: int, db: AsyncSession) -> List[SearchItem]:
+    def __init__(self):
+        self.db = database
+
+    def search(self, query: str, ctry: TranslateCountry, offset: int, limit: int, db: Session) -> List[SearchItem]:
         """
         입력받는 query에 따른 종목 검색 기능
-        - 무한 스크롤을 위한 페이징 지원
-        - 대소문자 구분 없는 검색
-        - 부분 문자열 검색 지원
 
         Args:
             query (str): 검색어
+            ctry (TranslateCountry): 언어 설정
+            offset (int): 시작 위치
+            limit (int): 요청할 항목 수 (실제 반환되는 개수는 limit 또는 limit-1)
             db (AsyncSession): 데이터베이스 세션
-            offset (int): 시작 위치 (기본값: 0)
-            limit (int): 반환할 항목 수 (기본값: 20)
 
         Returns:
             List[SearchItem]: 검색 결과 리스트
         """
-
         # 검색어 전처리
         search_term = f"%{query}%"
-
-        # 모든 종목에 대해 검색
-        search_query = select(StockInformation).where(
-            or_(
-                func.lower(StockInformation.kr_name).like(func.lower(search_term)),
-                func.lower(StockInformation.en_name).like(func.lower(search_term)),
+        # 검색 쿼리 최적화
+        search_query = (
+            select(StockInformation)
+            .where(
+                or_(
+                    StockInformation.ticker == query,
+                    StockInformation.ticker.ilike(search_term),
+                    StockInformation.kr_name.ilike(search_term),
+                    StockInformation.en_name.ilike(search_term),
+                )
             )
+            .order_by(case((StockInformation.ticker == query, 1), else_=2).label("sort_order"))
+            .offset(offset)
+            .limit(limit)
         )
 
-        # 페이징 적용
-        search_query = search_query.offset(offset).limit(limit)
-
-        # 쿼리 실행
-        result = await db.execute(search_query)
+        result = db.execute(search_query)
         search_result = result.scalars().all()
 
         search_items = []
         for item in search_result:
-            if ctry == TranslateCountry.KO:
-                name = item.kr_name
-            elif ctry == TranslateCountry.EN:
-                name = item.en_name
+            name = item.kr_name if ctry == TranslateCountry.KO else item.en_name
 
+            # db 세션 전달
+            current_price, price_rate = self._get_current_price(item.ticker, db)
             search_items.append(
                 SearchItem(
                     ticker=item.ticker,
                     name=name,
                     language=ctry,
-                    current_price=None,
-                    current_price_rate=None,
+                    current_price=current_price,
+                    current_price_rate=price_rate,
                 )
             )
-        print(f"출력 결과 : {ctry}")
+
         return search_items
+
+    def _get_current_price(self, ticker: str, db: Session) -> Tuple[Optional[float], Optional[float]]:
+        """
+        현재 주가 조회, 등락률 계산
+        등락률 계산 방법: (Close - Open) / Open * 100
+        """
+        try:
+            country_code = self.get_country_code(ticker, db)
+            country_code = country_code.lower()
+            table_name = f"stock_{country_code}_1d"
+
+            result = self.db._select(
+                table=table_name, columns=["Close", "Open"], order="Date", ascending=False, limit=1, Ticker=ticker
+            )
+
+            if not result or len(result) == 0:
+                return None, None
+
+            row = result[0]
+
+            try:
+                close = float(row._mapping["Close"])
+                open_price = float(row._mapping["Open"])
+
+                if open_price == 0:
+                    rate = 0
+                else:
+                    rate = round(((close - open_price) / open_price) * 100, 2)
+
+                return close, rate
+
+            except (KeyError, ValueError, AttributeError):
+                return None, None
+
+        except Exception:
+            return None, None
+
+    def get_country_code(self, ticker: str, db: Session) -> str:
+        """
+        ticker로 국가 코드 조회
+        """
+        result = db.execute(select(StockInformation.ctry).where(StockInformation.ticker == ticker))
+        return result.scalar_one()
 
 
 def get_search_service() -> SearchService:
