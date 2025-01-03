@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Literal
 import exchange_calendars as ecals
 from app.core.config import korea_tz, utc_tz
+import logging
 
 
 def now_kr(is_date: bool = False):
@@ -56,3 +57,32 @@ def get_business_days(
     schedule = calendar.sessions_in_range(start_date, end_date)
 
     return schedule.tolist()
+
+
+# 장 오픈 시간 조회
+def get_time_checker(country: Literal["KR", "US"]) -> bool:
+    """
+    현재 시간이 장 운영 시간 안에 있는지 확인
+    KR: 09:00 ~ 15:30
+    US: 09:30 ~ 16:00 (UTC 기준)
+    """
+    try:
+        if country == "KR":
+            date = datetime.now(korea_tz)
+            current_time = date.hour * 60 + date.minute
+            market_open = 9 * 60
+            market_close = 15 * 60 + 30
+
+            return market_open <= current_time <= market_close
+
+        elif country == "US":
+            date = datetime.now(utc_tz)
+            current_time = date.hour * 60 + date.minute
+            market_open = 9 * 60 + 30
+            market_close = 16 * 60
+
+            return market_open <= current_time <= market_close
+
+    except Exception as e:
+        logging.error(f"Error in get_time_checker: {str(e)}")
+        return False
