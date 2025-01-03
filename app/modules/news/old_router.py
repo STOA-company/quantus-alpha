@@ -42,7 +42,7 @@ def get_latest_news(
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=result)
 
 
-@router.get("/top_stories", response_model=BaseResponse[List[TopStoriesResponse]])
+@router.get("/old/top_stories", response_model=BaseResponse[List[TopStoriesResponse]])
 def get_top_stories(
     news_service: NewsService = Depends(get_news_service),
 ):
