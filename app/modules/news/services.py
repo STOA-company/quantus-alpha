@@ -44,7 +44,8 @@ class NewsService:
             .str.replace(
                 r"\*\*주가에 영향을 줄 만한 내용\*\*\s*:\s*", "", regex=True
             )  # "**주가에 영향을 줄 만한 내용**:" 제거
-            .str.strip()  # 앞뒤 공백 제거
+            .str.replace(r"\s+\*\*뉴스 감성분석\*\*.*$", "", regex=True)  # 뉴스 감성분석 이후 내용 제거
+            .str.replace(r". -", ".-", regex=True)
         )
 
         return df
