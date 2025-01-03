@@ -20,6 +20,15 @@ class JoinInfo:
     secondary_condition: dict = field(default_factory=dict)
 
 
+ALLOWED_AGGREGATE_FUNCTIONS = {
+    "count": func.count,
+    "sum": func.sum,
+    "avg": func.avg,
+    "min": func.min,
+    "max": func.max,
+}
+
+
 class Database:
     def __init__(self):
         c = get_database_config()
@@ -202,11 +211,14 @@ class Database:
         ascending: bool = False,
         join_info: JoinInfo | None = None,
         distinct: bool = False,
+        group_by: list | None = None,
+        aggregates: dict | None = None,
         limit: int = 0,
         offset: int = 0,
         **kwargs,
     ):
-        """SELECT 쿼리 실행"""
+        """ """
+
         try:
             obj = self.meta_data.tables[table]
 
@@ -233,6 +245,21 @@ class Database:
                         join_cols.append(getattr(join_table_obj.columns, col))
                 cols.extend(join_cols)
 
+            if aggregates:
+                for alias, (col_name, func_name) in aggregates.items():
+                    if func_name not in ("count", "sum", "avg", "min", "max"):
+                        raise ValueError(
+                            f"Invalid aggregate function: {func_name}. "
+                            f"Allowed functions are: count, sum, avg, min, max"
+                        )
+
+                    if not hasattr(obj.columns, col_name):
+                        raise ValueError(f"Invalid column for aggregation: {col_name}")
+
+                    column = getattr(obj.columns, col_name)
+                    agg_func = getattr(func, func_name)
+                    cols.append(agg_func(column).label(alias))
+
             cond = self.get_condition(obj, **kwargs)
             stmt = select(*cols)
 
@@ -244,6 +271,10 @@ class Database:
             if join_info:
                 join_condition = self._join(join_info)
                 stmt = stmt.select_from(join_condition)
+
+            if group_by:
+                group_cols = [getattr(obj.columns, col) for col in group_by]
+                stmt = stmt.group_by(*group_cols)
 
             if order:
                 order_col = getattr(obj.columns, order)
