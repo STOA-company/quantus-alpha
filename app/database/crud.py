@@ -201,6 +201,7 @@ class Database:
         order: str | None = None,
         ascending: bool = False,
         join_info: JoinInfo | None = None,
+        distinct: bool = False,
         limit: int = 0,
         offset: int = 0,
         **kwargs,
@@ -233,7 +234,12 @@ class Database:
                 cols.extend(join_cols)
 
             cond = self.get_condition(obj, **kwargs)
-            stmt = select(*cols).where(*cond)
+            stmt = select(*cols)
+
+            if distinct:
+                stmt = stmt.distinct()
+
+            stmt = stmt.where(*cond)
 
             if join_info:
                 join_condition = self._join(join_info)
