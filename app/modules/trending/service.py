@@ -22,6 +22,12 @@ class TrendingService:
         order = self._get_trending_type(request)
         ascending = True if request.type == TrendingType.DOWN else False
 
+        latest_date_query = self.database._select(
+            table="stock_trend", columns=["last_updated"], order="last_updated", ascending=False, limit=1
+        )
+
+        latest_date = latest_date_query[0]._mapping["last_updated"].date() if latest_date_query else None
+
         trending_stocks = self.database._select(
             table="stock_trend",
             columns=[
@@ -35,21 +41,9 @@ class TrendingService:
             ],
             order=order,
             ascending=ascending,
+            last_updated=latest_date,
             limit=100,
         )
-
-        # 가장 최신 last_updated 찾기
-        latest_date = max(
-            (stock._mapping["last_updated"].date() for stock in trending_stocks if stock._mapping["last_updated"]),
-            default=None,
-        )
-
-        # 최신 날짜의 데이터만 필터링
-        filtered_stocks = [
-            stock
-            for stock in trending_stocks
-            if stock._mapping["last_updated"] and stock._mapping["last_updated"].date() == latest_date
-        ]
 
         return [
             TrendingStock(
@@ -67,7 +61,7 @@ class TrendingService:
                 if stock._mapping[f"volume_change_{request.period.value}"] is None
                 else stock._mapping[f"volume_change_{request.period.value}"],
             )
-            for idx, stock in enumerate(filtered_stocks, 1)
+            for idx, stock in enumerate(trending_stocks, 1)
         ]
 
 
