@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from app.database.crud import database
 from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
+from app.utils.date_utils import get_time_checker
 
 
 class StockIndicesService:
@@ -247,6 +248,12 @@ class StockIndicesService:
 
                     rise_ratio, fall_ratio, unchanged_ratio = ratios
 
+                    # 장 오픈 시간 조회
+                    if name == "kospi" or name == "kosdaq":
+                        is_open = get_time_checker("KR")
+                    else:
+                        is_open = get_time_checker("US")
+
                     indices_summary[name] = IndexSummary(
                         prev_close=daily_data["close"],
                         change=round(change, 2),
@@ -254,6 +261,7 @@ class StockIndicesService:
                         rise_ratio=rise_ratio,
                         fall_ratio=fall_ratio,
                         unchanged_ratio=unchanged_ratio,
+                        is_open=is_open,
                     )
                 else:
                     indices_summary[name] = IndexSummary(
@@ -263,6 +271,7 @@ class StockIndicesService:
                         rise_ratio=0.00,
                         fall_ratio=0.00,
                         unchanged_ratio=0.00,
+                        is_open=False,
                     )
 
                 indices_data[name] = self._cache.get(cache_key_min5, ({}, None))[0]
