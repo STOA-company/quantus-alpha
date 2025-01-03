@@ -209,8 +209,10 @@ class DisclosureService:
     async def renewal_disclosure(self, ticker: str, date: str, page: int, size: int):
         if not date:
             year = datetime.now().strftime("%Y")
-        if len(date) == 8:
+        elif len(date) == 8:
             year = date[:4]
+        else:
+            year = date
 
         ctry = check_ticker_country_len_2(ticker)
 
