@@ -4,7 +4,7 @@ from requests import Session
 from sqlalchemy import select
 from app.core.logging.config import get_logger
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
 from fastapi import HTTPException, Depends
 import math
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -680,8 +680,8 @@ class FinancialService:
         ]
 
         # 병렬 처리: 평균 계산과 산업 평균 조회를 동시에
-        average_debt_ratio = round(sum(debt_ratios) / len(debt_ratios), 2)
-        industry_avg = self.get_financial_industry_avg(country=country, ticker=ticker, db=db)
+        average_debt_ratio = self._round_and_clean(sum(debt_ratios) / len(debt_ratios))
+        industry_avg = self._round_and_clean(self.get_financial_industry_avg(country=country, ticker=ticker, db=db))
 
         financial_ratio_response = FinancialRatioResponse(
             code=ticker, ratio=average_debt_ratio, industry_avg=industry_avg
@@ -721,8 +721,8 @@ class FinancialService:
         ]
 
         # 병렬 처리: 평균 계산과 산업 평균 조회를 동시에
-        average_debt_ratio = round(sum(debt_ratios) / len(debt_ratios), 2)
-        industry_avg = self.get_debt_ratio_industry_avg(country=country, ticker=ticker, db=db)
+        average_debt_ratio = self._round_and_clean(sum(debt_ratios) / len(debt_ratios))
+        industry_avg = self._round_and_clean(self.get_debt_ratio_industry_avg(country=country, ticker=ticker, db=db))
 
         debt_ratio_response = DebtRatioResponse(code=ticker, ratio=average_debt_ratio, industry_avg=industry_avg)
 
@@ -764,8 +764,8 @@ class FinancialService:
         ]
 
         # 병렬 처리: 평균 계산과 산업 평균 조회를 동시에
-        average_liquidity_ratio = round(sum(liquidity_ratios) / len(liquidity_ratios), 2)
-        industry_avg = self.get_liquidity_industry_avg(country=country, ticker=ticker, db=db)
+        average_liquidity_ratio = self._round_and_clean(sum(liquidity_ratios) / len(liquidity_ratios))
+        industry_avg = self._round_and_clean(self.get_liquidity_industry_avg(country=country, ticker=ticker, db=db))
 
         return BaseResponse[LiquidityRatioResponse](
             status_code=200,
@@ -805,8 +805,10 @@ class FinancialService:
             for q in quarters
         ]
 
-        average_ratio = round(sum(interest_coverage_ratios) / len(interest_coverage_ratios), 2)
-        industry_avg = self.get_interest_coverage_industry_avg(country=country, ticker=ticker, db=db)
+        average_ratio = self._round_and_clean(sum(interest_coverage_ratios) / len(interest_coverage_ratios))
+        industry_avg = self._round_and_clean(
+            self.get_interest_coverage_industry_avg(country=country, ticker=ticker, db=db)
+        )
 
         return BaseResponse[InterestCoverageRatioResponse](
             status_code=200,
@@ -823,12 +825,14 @@ class FinancialService:
         if not table_name:
             return 0.0
 
-        return self.financial_crud.get_financial_industry_avg_data(
-            table_name=table_name,
-            base_ticker=ticker.replace("-US", "") if country == FinancialCountry.USA else ticker,
-            is_usa=country == FinancialCountry.USA,
-            ratio_type="debt",
-            db=db,
+        return self._round_and_clean(
+            self.financial_crud.get_financial_industry_avg_data(
+                table_name=table_name,
+                base_ticker=ticker.replace("-US", "") if country == FinancialCountry.USA else ticker,
+                is_usa=country == FinancialCountry.USA,
+                ratio_type="debt",
+                db=db,
+            )
         )
 
     # 부채비율 업종 평균 조회
@@ -837,12 +841,14 @@ class FinancialService:
         table_name = self.finpos_tables.get(country)
         if not table_name:
             return 0.0
-        return self.financial_crud.get_financial_industry_avg_data(
-            table_name=table_name,
-            base_ticker=ticker.replace("-US", "") if country == FinancialCountry.USA else ticker,
-            is_usa=country == FinancialCountry.USA,
-            ratio_type="debt",
-            db=db,
+        return self._round_and_clean(
+            self.financial_crud.get_financial_industry_avg_data(
+                table_name=table_name,
+                base_ticker=ticker.replace("-US", "") if country == FinancialCountry.USA else ticker,
+                is_usa=country == FinancialCountry.USA,
+                ratio_type="debt",
+                db=db,
+            )
         )
 
     def get_liquidity_industry_avg(self, country: FinancialCountry, ticker: str, db: Session) -> float:
@@ -851,12 +857,14 @@ class FinancialService:
         if not table_name:
             return 0.0
 
-        return self.financial_crud.get_financial_industry_avg_data(
-            table_name=table_name,
-            base_ticker=ticker.replace("-US", "") if country == FinancialCountry.USA else ticker,
-            is_usa=country == FinancialCountry.USA,
-            ratio_type="liquidity",
-            db=db,
+        return self._round_and_clean(
+            self.financial_crud.get_financial_industry_avg_data(
+                table_name=table_name,
+                base_ticker=ticker.replace("-US", "") if country == FinancialCountry.USA else ticker,
+                is_usa=country == FinancialCountry.USA,
+                ratio_type="liquidity",
+                db=db,
+            )
         )
 
     def get_interest_coverage_industry_avg(self, country: FinancialCountry, ticker: str, db: Session) -> float:
@@ -865,12 +873,14 @@ class FinancialService:
         if not table_name:
             return 0.0
 
-        return self.financial_crud.get_financial_industry_avg_data(
-            table_name=table_name,
-            base_ticker=ticker.replace("-US", "") if country == FinancialCountry.USA else ticker,
-            is_usa=country == FinancialCountry.USA,
-            ratio_type="interest",
-            db=db,
+        return self._round_and_clean(
+            self.financial_crud.get_financial_industry_avg_data(
+                table_name=table_name,
+                base_ticker=ticker.replace("-US", "") if country == FinancialCountry.USA else ticker,
+                is_usa=country == FinancialCountry.USA,
+                ratio_type="interest",
+                db=db,
+            )
         )
 
     ########################################## ttm 메서드 #########################################
@@ -1340,6 +1350,19 @@ class FinancialService:
                 values[field_name] = self._to_decimal(value)
 
         return FinPosDetail(**values)
+
+    def _round_and_clean(self, value: Union[float, Decimal]) -> Union[float, int]:
+        """
+        소수점 첫째자리에서 반올림하고, 소수점이 0이면 정수로 변환
+        Decimal과 float 타입 모두 처리
+        """
+        # Decimal을 float로 변환
+        if isinstance(value, Decimal):
+            value = float(value)
+
+        rounded = round(value, 1)
+        # float의 is_integer() 메서드 사용
+        return int(rounded) if float(rounded).is_integer() else rounded
 
 
 def get_financial_service(common_service: CommonService = Depends(get_common_service)) -> FinancialService:
