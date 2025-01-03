@@ -16,7 +16,7 @@ class StockIndicesService:
         self.db = database
         self.symbols = {"kospi": "^KS11", "kosdaq": "^KQ11", "nasdaq": "^IXIC", "sp500": "^GSPC"}
         self._cache = {}
-        self._cache_timeout = 300
+        self._cache_timeout = 86400
         self._executor = ThreadPoolExecutor(max_workers=4)
         self._lock = asyncio.Lock()
         self._background_task_running = False
@@ -49,6 +49,7 @@ class StockIndicesService:
             cache_key_min5 = f"{name}_min5"
             now = datetime.now()
 
+            # 캐시가 있고 유효한 경우 그대로 반환
             if cache_key_daily in self._cache and cache_key_min5 in self._cache:
                 cached_daily, timestamp_daily = self._cache[cache_key_daily]
                 cached_min5, timestamp_min5 = self._cache[cache_key_min5]
@@ -79,27 +80,34 @@ class StockIndicesService:
 
             daily_df, min5_df = await asyncio.gather(fetch_history("1d"), fetch_history("1d", "5m"))
 
+            # 일별 데이터 처리
             if not daily_df.empty:
-                # 가장 최근 유효한 데이터 사용
-                valid_data = daily_df[daily_df["Open"] != 0].iloc[-1]
-                daily_data = {
-                    "open": round(float(valid_data["Open"]), 2),
-                    "close": round(float(valid_data["Close"]), 2),
-                }
-                self._cache[cache_key_daily] = (daily_data, now)
+                valid_data = daily_df[daily_df["Open"] != 0]
+                if not valid_data.empty:
+                    latest_data = valid_data.iloc[-1]
+                    daily_data = {
+                        "open": round(float(latest_data["Open"]), 2),
+                        "close": round(float(latest_data["Close"]), 2),
+                    }
+                    self._cache[cache_key_daily] = (daily_data, now)
+                    logging.info(f"Cached daily data for {name}: {cache_key_daily}")
 
+            # 5분 데이터 처리
             if not min5_df.empty:
-                min5_data = {
-                    index.strftime("%Y-%m-%d %H:%M:%S"): TimeData(
-                        open=round(row["Open"], 2),
-                        high=round(row["High"], 2),
-                        low=round(row["Low"], 2),
-                        close=round(row["Close"], 2),
-                        volume=round(row["Volume"], 2),
-                    )
-                    for index, row in min5_df.iterrows()
-                }
-                self._cache[cache_key_min5] = (min5_data, now)
+                valid_data = min5_df[min5_df["Open"] != 0]
+                if not valid_data.empty:
+                    min5_data = {
+                        index.strftime("%Y-%m-%d %H:%M:%S"): TimeData(
+                            open=round(row["Open"], 2),
+                            high=round(row["High"], 2),
+                            low=round(row["Low"], 2),
+                            close=round(row["Close"], 2),
+                            volume=round(row["Volume"], 2),
+                        )
+                        for index, row in valid_data.iterrows()
+                    }
+                    self._cache[cache_key_min5] = (min5_data, now)
+                    logging.info(f"Cached 5-minute data for {name}: {cache_key_min5}")
 
         except Exception as e:
             logging.error(f"Error fetching data for {name}: {e}")
