@@ -1,10 +1,10 @@
 from fastapi import Query
 from pydantic import BaseModel
-from app.modules.common.enum import TrendingPeriod, TrendingType
+from app.modules.common.enum import TrendingPeriod, TrendingType, TrendingCountry
 
 
 class TrendingStockRequest(BaseModel):
-    ctry: str = Query("us", description="국가 코드")
+    ctry: TrendingCountry = Query(TrendingCountry.US, description="국가 코드")
     type: TrendingType = Query(TrendingType.UP, description="트렌딩 타입")
     period: TrendingPeriod = Query(TrendingPeriod.REALTIME, description="기간")
 
