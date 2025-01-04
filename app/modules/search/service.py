@@ -1,6 +1,6 @@
 from typing import List, Optional, Tuple
 from sqlalchemy import select, or_, case
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from app.database.crud import database
 from app.models.models_stock import StockInformation
 from app.modules.common.enum import TranslateCountry
@@ -11,9 +11,7 @@ class SearchService:
     def __init__(self):
         self.db = database
 
-    async def search(
-        self, query: str, ctry: TranslateCountry, offset: int, limit: int, db: AsyncSession
-    ) -> List[SearchItem]:
+    def search(self, query: str, ctry: TranslateCountry, offset: int, limit: int, db: Session) -> List[SearchItem]:
         """
         입력받는 query에 따른 종목 검색 기능
 
@@ -40,15 +38,12 @@ class SearchService:
                     StockInformation.en_name.ilike(search_term),
                 )
             )
-            .order_by(
-                # case 문법 수정 - 리스트가 아닌 개별 인자로 전달
-                case((StockInformation.ticker == query, 1), else_=2).label("sort_order")
-            )
+            .order_by(case((StockInformation.ticker == query, 1), else_=2).label("sort_order"))
             .offset(offset)
             .limit(limit)
         )
 
-        result = await db.execute(search_query)
+        result = db.execute(search_query)
         search_result = result.scalars().all()
 
         search_items = []
@@ -56,7 +51,7 @@ class SearchService:
             name = item.kr_name if ctry == TranslateCountry.KO else item.en_name
 
             # db 세션 전달
-            current_price, price_rate = await self._get_current_price(item.ticker, db)
+            current_price, price_rate = self._get_current_price(item.ticker, db)
             search_items.append(
                 SearchItem(
                     ticker=item.ticker,
@@ -69,13 +64,13 @@ class SearchService:
 
         return search_items
 
-    async def _get_current_price(self, ticker: str, db: AsyncSession) -> Tuple[Optional[float], Optional[float]]:
+    def _get_current_price(self, ticker: str, db: Session) -> Tuple[Optional[float], Optional[float]]:
         """
         현재 주가 조회, 등락률 계산
         등락률 계산 방법: (Close - Open) / Open * 100
         """
         try:
-            country_code = await self.get_country_code(ticker, db)
+            country_code = self.get_country_code(ticker, db)
             country_code = country_code.lower()
             table_name = f"stock_{country_code}_1d"
 
@@ -105,11 +100,11 @@ class SearchService:
         except Exception:
             return None, None
 
-    async def get_country_code(self, ticker: str, db: AsyncSession) -> str:
+    def get_country_code(self, ticker: str, db: Session) -> str:
         """
         ticker로 국가 코드 조회
         """
-        result = await db.execute(select(StockInformation.ctry).where(StockInformation.ticker == ticker))
+        result = db.execute(select(StockInformation.ctry).where(StockInformation.ticker == ticker))
         return result.scalar_one()
 
 

@@ -1,558 +1,499 @@
-from functools import lru_cache
-from typing import Dict, Optional, List
-import pytz
-from datetime import datetime, timedelta
-import pandas as pd
-import numpy as np
+from datetime import datetime
+import math
+from typing import List
 from app.core.exception.custom import DataNotFoundException
-from app.modules.common.utils import check_ticker_country_len_2, check_ticker_country_len_3
-from app.modules.news.schemas import LatestNewsResponse, NewsItem, TopStoriesResponse
-from quantus_aws.common.configs import s3_client
+from app.modules.disclosure.mapping import document_type_mapping
+
+import numpy as np
+import pandas as pd
+from app.modules.news.schemas import (
+    DisclosureRenewalItem,
+    NewsDetailItem,
+    NewsRenewalItem,
+    TopStoriesItem,
+    TopStoriesResponse,
+)
 from app.database.crud import database
-from app.core.logging.config import get_logger
-
-
-KST_TIMEZONE = pytz.timezone("Asia/Seoul")
-NEWS_CONTRY_MAP = {
-    "kr": "KR",
-    "us": "US",
-    "jp": "JP",
-    "hk": "HK",
-}
-
-logger = get_logger(__name__)
+from app.utils.ctry_utils import check_ticker_country_len_2
 
 
 class NewsService:
     def __init__(self):
-        self._bucket_name = "quantus-news"
         self.db = database
 
-    def _fetch_s3_data(self, date_str: str, country_path: str) -> Optional[bytes]:
-        """S3에서 데이터를 가져오는 내부 메서드"""
-        try:
-            file_path = f"{country_path}/{date_str}.parquet"
-            response = s3_client.get_object(Bucket=self._bucket_name, Key=file_path)
-            return response["Body"].read()
-        except Exception:
-            return None
-
     @staticmethod
-    def _process_dataframe(df: pd.DataFrame, ticker: Optional[str] = None) -> pd.DataFrame:
+    def _process_dataframe_news(df: pd.DataFrame) -> pd.DataFrame:
         """DataFrame 전처리 및 필터링"""
-        if ticker:
-            df = df[df["Code"] == ticker]
 
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+        df = df[df["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
 
         df["emotion"] = np.where(
             df["emotion"] == "긍정",
             "positive",
             np.where(df["emotion"] == "부정", "negative", np.where(df["emotion"] == "중립", "neutral", df["emotion"])),
         )
+        df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
+
+        # summary 필드 전처리
+        df["summary"] = (
+            df["summary"]
+            .str.replace(r'[\[\]"]', "", regex=True)  # 대괄호와 따옴표 제거
+            .str.replace(r"\n", " ", regex=True)  # 줄바꿈을 공백으로 변환
+            .str.replace(r"\*\*기사 요약\*\*\s*:\s*", "", regex=True)  # "**기사 요약**:" 제거
+            .str.replace(
+                r"\*\*주가에 영향을 줄 만한 내용\*\*\s*:\s*", "", regex=True
+            )  # "**주가에 영향을 줄 만한 내용**:" 제거
+            .str.replace(r"\s+\*\*뉴스 감성분석\*\*.*$", "", regex=True)  # 뉴스 감성분석 이후 내용 제거
+            .str.replace(r". -", ".-", regex=True)
+        )
 
         return df
 
     @staticmethod
-    def _count_emotions(df: pd.DataFrame) -> Dict[str, int]:
-        """감정 분석 결과 카운트"""
-        emotion_counts = df["emotion"].value_counts()
-        return {
-            "positive_count": int(emotion_counts.get("positive", 0)),
-            "negative_count": int(emotion_counts.get("negative", 0)),
-            "neutral_count": int(emotion_counts.get("neutral", 0)),
-        }
+    def _process_dataframe_news_detail(df: pd.DataFrame, offset: int, size: int) -> pd.DataFrame:
+        """DataFrame 전처리 및 필터링"""
 
-    def _create_news_items(self, df: pd.DataFrame, include_stock_info: bool = False) -> List[NewsItem]:
-        """DataFrame을 NewsItem 리스트로 변환"""
+        df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+
+        df = df.iloc[offset : offset + size]
+
+        df["emotion"] = np.where(
+            df["emotion"] == "긍정",
+            "positive",
+            np.where(df["emotion"] == "부정", "negative", np.where(df["emotion"] == "중립", "neutral", df["emotion"])),
+        )
+        df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
+
+        # # summary 필드 전처리 # TODO :: 이 부분을 사용하게 된다면 이 메서드를 지우고 `_process_dataframe_news`를 사용하면 됨. 파싱을 현재 프론트에서 처리하고 있음
+        # df["summary"] = (
+        #     df["summary"]
+        #     .str.replace(r'[\[\]"]', "", regex=True)  # 대괄호와 따옴표 제거
+        #     .str.replace(r"\n", " ", regex=True)  # 줄바꿈을 공백으로 변환
+        #     .str.replace(r"\*\*기사 요약\*\*\s*:\s*", "", regex=True)  # "**기사 요약**:" 제거
+        #     .str.replace(
+        #         r"\*\*주가에 영향을 줄 만한 내용\*\*\s*:\s*", "", regex=True
+        #     )  # "**주가에 영향을 줄 만한 내용**:" 제거
+        #     .str.strip()  # 앞뒤 공백 제거
+        # )
+
+        return df
+
+    @staticmethod
+    def _count_emotion(df: pd.DataFrame) -> dict:
+        return df["emotion"].value_counts().to_dict()
+
+    @staticmethod
+    def _process_dataframe_disclosure(df: pd.DataFrame) -> pd.DataFrame:
+        """DataFrame 전처리 및 필터링"""
+        df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+
+        df["emotion"] = np.where(
+            df["emotion"] == "POSITIVE",
+            "positive",
+            np.where(
+                df["emotion"] == "NEGATIVE", "negative", np.where(df["emotion"] == "NEUTRAL", "neutral", df["emotion"])
+            ),
+        )
+        df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
+
+        df["key_points"] = df["key_points"].str.replace(r'[\[\]"]', "", regex=True)
+
+        return df
+
+    def news_main(self, ctry: str = None) -> List[NewsRenewalItem]:
+        condition = {"is_exist": True}
+        if ctry:
+            if ctry == "kr":
+                condition["ctry"] = "KR"
+            elif ctry == "us":
+                condition["ctry"] = "US"
+
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_information",
+                columns=[
+                    "id",
+                    "ticker",
+                    "ko_name",
+                    "en_name",
+                    "ctry",
+                    "date",
+                    "title",
+                    "summary",
+                    "emotion",
+                    "that_time_price",
+                ],
+                order="date",
+                ascending=False,
+                limit=100,
+                **condition,
+            )
+        )
+        df_news = self._process_dataframe_news(df_news)
+        unique_ticker = df_news["ticker"].unique().tolist()
+
+        df_price = pd.DataFrame(
+            self.db._select(
+                table="stock_trend",
+                columns=["ticker", "current_price", "change_rt"],
+                **dict(ticker__in=unique_ticker),
+            )
+        )
+        df_news["price_impact"] = 0.0
+        df_news["change_rate"] = 0.0
+        if not df_price.empty:
+            df_news = pd.merge(df_news, df_price, on="ticker", how="left")
+
+            df_news["that_time_price"] = df_news["that_time_price"].fillna(0)
+            df_news["current_price"] = df_news["current_price"].fillna(0)
+            df_news["change_rt"] = df_news["change_rt"].fillna(0)
+
+            mask = (df_news["current_price"] == 0) & (df_news["that_time_price"] != 0)
+            df_news.loc[mask, "that_time_price"] = 0
+
+            df_news["price_impact"] = round(
+                (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100,
+                2,
+            )
+            df_news["change_rate"] = round(df_news["change_rt"], 2)
+
+        df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
+        data = []
+        for _, row in df_news.iterrows():
+            id = row["id"]
+            date = row["date"]
+            ctry = row["ctry"]
+            title = row["title"]
+            summary = row["summary"]
+            emotion = row["emotion"]
+            name = row["ko_name"]
+            change_rate = row["change_rate"] if row.get("change_rate") else 0.00
+            price_impact = row["price_impact"] if row.get("price_impact") else 0.00
+            ticker = row["ticker"]
+            data.append(
+                NewsRenewalItem(
+                    id=id,
+                    date=date,
+                    ctry=ctry,
+                    title=title,
+                    summary=summary,
+                    emotion=emotion,
+                    name=name,
+                    change_rate=change_rate,
+                    price_impact=price_impact,
+                    ticker=ticker,
+                )
+            )
+
+        return data
+
+    def disclosure_main(self, ctry: str = None) -> List[DisclosureRenewalItem]:
+        condition = {}
+        if ctry:
+            if ctry == "kr":
+                condition["ctry"] = "KR"
+            elif ctry == "us":
+                condition["ctry"] = "US"
+
+        df_disclosure = pd.DataFrame(
+            self.db._select(
+                table="disclosure_information",
+                columns=[
+                    "id",
+                    "ticker",
+                    "ko_name",
+                    "en_name",
+                    "ctry",
+                    "date",
+                    "url",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "form_type",
+                    "that_time_price",
+                ],
+                order="date",
+                ascending=False,
+                limit=100,
+                **condition,
+            )
+        )
+
+        df_disclosure = self._process_dataframe_disclosure(df_disclosure)
+        unique_ticker = df_disclosure["ticker"].unique().tolist()
+
+        df_price = pd.DataFrame(
+            self.db._select(
+                table="stock_trend",
+                columns=["ticker", "current_price", "change_rt"],
+                order="last_updated",
+                ascending=False,
+                **dict(ticker__in=unique_ticker),
+            )
+        )
+        df_disclosure["price_impact"] = 0.0
+        df_disclosure["change_rate"] = 0.0
+        if not df_price.empty:
+            df_disclosure = pd.merge(df_disclosure, df_price, on="ticker", how="left")
+
+            df_disclosure["that_time_price"] = df_disclosure["that_time_price"].fillna(0)
+            df_disclosure["current_price"] = df_disclosure["current_price"].fillna(0)
+            df_disclosure["change_rt"] = df_disclosure["change_rt"].fillna(0)
+
+            mask = (df_disclosure["current_price"] == 0) & (df_disclosure["that_time_price"] != 0)
+            df_disclosure.loc[mask, "that_time_price"] = 0
+
+            df_disclosure["price_impact"] = round(
+                (df_disclosure["current_price"] - df_disclosure["that_time_price"])
+                / df_disclosure["that_time_price"]
+                * 100,
+                2,
+            )
+            df_disclosure["change_rate"] = round(df_disclosure["change_rt"], 2)
+
+        df_disclosure["price_impact"] = round(df_disclosure["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
+
+        data = []
+        for _, row in df_disclosure.iterrows():
+            id = row["id"]
+            date = row["date"]
+            ctry = row["ctry"]
+            ticker = row["ticker"]
+            title = row["ko_name"] + " " + document_type_mapping.get(row.form_type, row.form_type)
+            summary = row["summary"]
+            impact_reason = row["impact_reason"]
+            key_points = row["key_points"]
+            emotion = row["emotion"]
+            name = row["ko_name"]
+            change_rate = row["change_rate"] if row.get("change_rate") else 0.00
+            price_impact = row["price_impact"] if row.get("price_impact") else 0.00
+            document_url = row["url"]
+            data.append(
+                DisclosureRenewalItem(
+                    id=id,
+                    date=date,
+                    ctry=ctry,
+                    title=title,
+                    summary=summary,
+                    impact_reason=impact_reason,
+                    key_points=key_points,
+                    emotion=emotion,
+                    name=name,
+                    change_rate=change_rate,
+                    price_impact=price_impact,
+                    document_url=document_url,
+                    ticker=ticker,
+                )
+            )
+
+        return data
+
+    def top_stories(self):
+        condition = {"is_top_story": 1}
+        # 뉴스 데이터 수집
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_information",
+                columns=[
+                    "ticker",
+                    "ko_name",
+                    "en_name",
+                    "ctry",
+                    "date",
+                    "title",
+                    "summary",
+                    "emotion",
+                    "that_time_price",
+                ],
+                order="date",
+                ascending=False,
+                limit=100,
+                **condition,
+            )
+        )
+        if not df_news.empty:
+            df_news = self._process_dataframe_news(df_news)
+            df_news["type"] = "news"
+
+        # 공시 데이터 수집
+        df_disclosure = pd.DataFrame(
+            self.db._select(
+                table="disclosure_information",
+                columns=[
+                    "ticker",
+                    "ko_name",
+                    "en_name",
+                    "ctry",
+                    "date",
+                    "url",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "form_type",
+                    "that_time_price",
+                ],
+                order="date",
+                ascending=False,
+                limit=100,
+                **condition,
+            )
+        )
+        if not df_disclosure.empty:
+            df_disclosure = self._process_dataframe_disclosure(df_disclosure)
+            df_disclosure["title"] = (
+                df_disclosure["ko_name"]
+                + " "
+                + df_disclosure.apply(lambda x: document_type_mapping.get(x.form_type, x.form_type), axis=1)
+            )
+            df_disclosure["summary"] = df_disclosure.apply(
+                lambda x: f"{x.summary} {x.key_points}" if x.key_points else x.summary, axis=1
+            )
+            df_disclosure["type"] = "disclosure"
+
+        # 데이터 통합 및 정렬
+        total_df = pd.DataFrame()
+        if not df_news.empty and not df_disclosure.empty:
+            total_df = pd.concat([df_news, df_disclosure], ignore_index=True)
+            total_df = total_df.sort_values(by=["date"], ascending=[False])
+        elif not df_news.empty:
+            total_df = df_news
+        elif not df_disclosure.empty:
+            total_df = df_disclosure
+
+        print(f"total_df: {total_df}")
+
+        # 종목 현재가 정보 수집
+        unique_tickers = total_df["ticker"].unique().tolist()
+        df_price = pd.DataFrame(
+            self.db._select(
+                table="stock_trend",
+                columns=["ticker", "current_price", "change_1m"],
+                **{"ticker__in": unique_tickers},
+            )
+        )
+        total_df["price_impact"] = 0.0
+
+        if not df_price.empty:
+            total_df = pd.merge(total_df, df_price, on="ticker", how="left")
+
+            total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
+            total_df["change_1m"] = total_df["change_1m"].fillna(0.0)
+            total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
+
+            def calculate_price_impact(row):
+                if row["current_price"] == 0 or row["that_time_price"] == 0:
+                    return 0
+                return round((row["current_price"] - row["that_time_price"]) / row["that_time_price"] * 100, 2)
+
+            total_df["price_impact"] = total_df.apply(calculate_price_impact, axis=1)
+
+            # 무한값과 NaN을 0으로 대체
+            total_df["price_impact"] = total_df["price_impact"].replace([np.inf, -np.inf, np.nan], 0)
+
+        # 결과 생성
         result = []
-        for _, row in df.iterrows():
-            news_item = {
-                "date": pd.to_datetime(row["date"]) if not isinstance(row["date"], datetime) else row["date"],
-                "title": row["titles"],
-                "summary": row["summary"] if pd.notna(row["summary"]) else None,
-                "emotion": row["emotion"].lower() if pd.notna(row["emotion"]) else None,
-                "name": None,
-                "change_rate": None,
-            }
-
-            if include_stock_info:
-                news_item.update(
-                    {
-                        "name": row["Name"] if pd.notna(row["Name"]) else "None",
-                        "change_rate": float(row["change_rate"]) if pd.notna(row["change_rate"]) else 0.00,
-                    }
-                )
-
-            # NewsItem 객체로 변환
-            result.append(NewsItem(**news_item))
-
-        return result
-
-    @staticmethod
-    @lru_cache(maxsize=1)
-    def _get_current_date() -> str:
-        """현재 KST 날짜를 가져오는 캐시된 메서드"""
-        return datetime.now(KST_TIMEZONE).strftime("%Y%m%d")
-
-    @staticmethod
-    def _ticker_preprocess(ticker: str, ctry: str) -> str:
-        if ctry == "us":
-            return ticker
-        elif ctry == "kr":
-            return ticker[1:]
-        elif ctry == "jp":
-            return ticker[1:]
-        elif ctry == "hk":
-            return ticker[2:]
-
-    @staticmethod
-    def get_current_market_country() -> str:
-        """
-        현재 시간 기준으로 활성화된 시장 국가 반환
-        한국 시간 07:00-19:00 -> 한국 시장
-        한국 시간 19:00-07:00 -> 미국 시장
-        """
-        current_time = datetime.now(KST_TIMEZONE)
-        current_hour = current_time.hour
-
-        if 7 <= current_hour < 19:
-            return "kr"
-        else:
-            return "us"
-
-    @staticmethod
-    def _format_date(date_str):  # TODO: 홈 - 뉴스데이터 로직 수정 필요
-        date_obj = datetime.strptime(date_str, "%Y%m%d")
-        # 하루 전 날짜로 변경
-        prev_day = date_obj - timedelta(days=1)
-        return prev_day.strftime("%Y-%m-%d")
-
-    def _get_stock_info(self, df: pd.DataFrame, ctry: str, date_str: str) -> pd.DataFrame:
-        """주식 정보(종목명, 가격변화율) 조회"""
-        table_name = f"stock_{ctry}_1d"
-
-        tickers = df["Code"].unique().tolist()
-        logger.debug(f"Querying tickers: {tickers}")
-
-        if ctry == "kr":
-            tickers = [f"A{ticker}" for ticker in tickers]
-
-        kr_columns = ["Date", "Ticker", "Open", "Close", "Name"]
-        us_columns = ["Date", "Ticker", "Open", "Close"]
-
-        if ctry == "kr":
-            db_columns = kr_columns
-        else:
-            db_columns = us_columns
-
-        while True:
-            stock_data = self.db._select(table=table_name, columns=db_columns, Date=date_str, Ticker__in=tickers)
-            if stock_data:
-                break
-            else:
-                # 문자열 날짜를 datetime으로 변환하여 계산
-                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-                date_obj = date_obj - timedelta(days=1)
-                date_str = date_obj.strftime("%Y-%m-%d")
-
-        logger.debug(f"stock_data: {stock_data}")
-
-        if not stock_data:
-            logger.warning(f"No stock data found for tickers: {tickers} on date: {date_str}")
-            # DataFrame에 새 컬럼 추가
-            df_copy = df.copy()
-            df_copy["Name"] = "None"
-            df_copy["change_rate"] = 0.00
-            return df_copy
-
-        # 결과를 리스트 형태로 변환
-        stock_data_list = [
-            {
-                "Date": row[0],
-                "Ticker": row[1],
-                "Open": float(row[2]),
-                "Close": float(row[3]),
-                "Name": str(row[4] if ctry == "kr" else None),
-            }
-            for row in stock_data
-        ]
-
-        # 리스트를 DataFrame으로 변환
-        stock_df = pd.DataFrame(stock_data_list)
-
-        stock_df["change_rate"] = round((stock_df["Close"] - stock_df["Open"]) / stock_df["Open"] * 100, 2)
-
-        if ctry == "kr":
-            stock_df["Ticker"] = stock_df["Ticker"].str[1:]
-
-        # 원본 DataFrame 복사 후 병합
-        df_copy = df.copy()
-        merged_df = pd.merge(
-            df_copy, stock_df[["Ticker", "change_rate"]], left_on=["Code"], right_on=["Ticker"], how="left"
-        ).drop(columns=["Ticker"])
-
-        # 누락된 데이터 처리
-        merged_df["Name"] = merged_df["Name"].fillna("None")
-        merged_df["change_rate"] = merged_df["change_rate"].fillna(0.00)
-
-        return merged_df
-
-    def get_news(self, page: int, size: int, ticker: Optional[str] = None, date: Optional[str] = None) -> Dict[str, any]:
-        """뉴스 데이터 조회"""
-        if page < 1:
-            raise ValueError("Page number must be greater than 0")
-        if size < 1:
-            raise ValueError("Page size must be greater than 0")
-
-        # 시간대에 맞춘 ctry 기본값 설정
-        ctry = self.get_current_market_country()
-
-        if ticker:
-            ctry = check_ticker_country_len_2(ticker)
-            ticker = self._ticker_preprocess(ticker, ctry)
-
-        # 날짜 및 경로 설정
-        date_str = date or self._get_current_date()
-        country_path = f"merged_data/{NEWS_CONTRY_MAP[ctry]}"
-
-        # S3 데이터 가져오기
-        s3_data = self._fetch_s3_data(date_str, country_path)
-        if s3_data is None:
-            raise DataNotFoundException(ticker=ticker or "all", data_type="news")
-
-        # DataFrame 처리
-        df = pd.read_parquet(pd.io.common.BytesIO(s3_data))
-        df = self._process_dataframe(df, ticker)
-
-        # 감정 카운트 및 페이지네이션 처리
-        emotion_counts = self._count_emotions(df)
-        total_records = len(df)
-        start_idx = (page - 1) * size
-        df_paged = df.iloc[start_idx : start_idx + size]
-
-        if not ticker:
-            formatted_date = self._format_date(date_str)
-            df_paged = self._get_stock_info(df_paged, ctry, formatted_date)
-            news_items = self._create_news_items(df_paged, include_stock_info=True)
-        else:
-            news_items = self._create_news_items(df_paged, include_stock_info=False)
-        # 결과 반환
-        return {
-            "total_count": total_records,
-            "total_pages": (total_records + size - 1) // size,
-            "current_page": page,
-            "offset": start_idx,
-            "size": size,
-            "data": news_items,
-            "ctry": ctry,
-            **emotion_counts,
-        }
-
-    def get_latest_news(self, ticker: str) -> LatestNewsResponse:
-        """최신 뉴스와 공시 데이터 중 최신 데이터 조회"""
-        try:
-            # 1. 공시 데이터 조회
-            disclosure_info = self._get_disclosure_data(ticker)
-
-            # 2. 뉴스 데이터 조회
-            news_info = self._get_news_data(ticker)
-
-            # 3. 둘 다 없으면 에러
-            if not disclosure_info and not news_info:
-                raise DataNotFoundException(ticker=ticker, data_type="news and disclosure")
-
-            # 4. 날짜 비교하여 최신 데이터 선택
-            result = self._select_latest_data(disclosure_info, news_info)
-
-            return LatestNewsResponse(**result)
-
-        except Exception as e:
-            logger.error(f"Error in get_latest_news for ticker {ticker}: {str(e)}")
-            raise
-
-    def _parse_key_points(self, key_points: list) -> str:
-        """key_points 리스트를 파싱하여 작은따옴표만 큰따옴표로 변경"""
-        try:
-            # 리스트의 각 항목을 큰따옴표로 감싸기
-            quoted_items = [f"{item}" for item in key_points]
-            # 대괄호로 감싸서 반환
-            return "[" + " ".join(quoted_items) + "]"
-        except Exception as e:
-            logger.error(f"Error parsing key points: {str(e)}")
-            return str(key_points)
-
-    def _get_disclosure_data(self, ticker: str) -> Optional[Dict]:
-        """공시 데이터 조회 및 분석 데이터 함께 반환"""
-        try:
-            # 공시 기본 데이터 조회
-            year = datetime.now().strftime("%Y")
-            ctry = check_ticker_country_len_3(ticker)
-
-            disclosure_data = self.db._select(
-                table=f"{ctry}_disclosure",
-                columns=["filing_id", "filing_date"],
-                order="filing_date",
-                ascending=False,
-                limit=1,
-                ticker=ticker,
-                filing_date__like=f"{year}%",
-                ai_processed=1,
-            )
-
-            if not disclosure_data:
-                return None
-
-            # 분석 데이터 조회
-            analysis_data = self.db._select(
-                table=f"{ctry}_disclosure_analysis",
-                columns=["ai_summary", "market_impact", "impact_reason", "key_points", "translated"],
-                filing_id=disclosure_data[0][0],
-            )
-
-            if not analysis_data:
-                return None
-
-            analysis_data = list(analysis_data[0])
-            if analysis_data[-1]:
-                translated_data = self.db._select(
-                    table=f"{ctry}_disclosure_analysis_translation",
-                    columns=["ai_summary", "key_points"],
-                    filing_id=disclosure_data[0][0],
-                )
-                analysis_data[0] = translated_data[0][0]
-                analysis_data[3] = translated_data[0][1]
-            key_points_parsed = self._parse_key_points(analysis_data[3])
-            content = f"{analysis_data[0]} {key_points_parsed}"
-            return {"date": disclosure_data[0][1], "content": content, "type": "disclosure"}
-
-        except Exception as e:
-            logger.error(f"Error fetching disclosure data: {str(e)}")
-            return None
-
-    def _get_news_data(self, ticker: str) -> Optional[Dict]:
-        """뉴스 데이터 조회"""
-        try:
-            ctry = check_ticker_country_len_2(ticker)
-            processed_ticker = self._ticker_preprocess(ticker, ctry)
-
-            # S3 데이터 조회
-            s3_data = self._fetch_s3_data(self._get_current_date(), f"merged_data/{NEWS_CONTRY_MAP[ctry]}")
-
-            if not s3_data:
-                return None
-
-            # DataFrame 처리
-            df = pd.read_parquet(pd.io.common.BytesIO(s3_data))
-            df = self._process_dataframe(df, processed_ticker)
-
-            if df.empty:
-                return None
-
-            latest_news = df.iloc[0]
-            return {"date": latest_news["date"], "content": latest_news["summary"], "type": "news"}
-
-        except Exception as e:
-            logger.error(f"Error fetching news data: {str(e)}")
-            return None
-
-    def _select_latest_data(self, disclosure_info: Optional[Dict], news_info: Optional[Dict]) -> Dict:
-        """두 데이터 중 최신 데이터 선택"""
-        if not disclosure_info:
-            if news_info:
-                # 뉴스 데이터의 content 처리
-                news_info["content"] = self._parse_news_content(news_info["content"])
-            return news_info
-        if not news_info:
-            return disclosure_info
-
-        disclosure_date = pd.to_datetime(disclosure_info["date"])
-        news_date = pd.to_datetime(news_info["date"])
-
-        result = disclosure_info if disclosure_date > news_date else news_info
-
-        # 뉴스인 경우 content 처리
-        if result["type"] == "news":
-            result["content"] = self._parse_news_content(result["content"])
-
-        return result
-
-    def _parse_news_content(self, content: str) -> str:
-        """뉴스 content에서 기사 요약 부분만 추출하고 정리"""
-        try:
-            # "기사 요약" 섹션 추출
-            if "**기사 요약**" in content:
-                summary_section = content.split("**기사 요약**")[1].split("**주가에")[0]
-
-                # 불필요한 문자 제거
-                cleaned_content = summary_section.replace("\n", "")
-                # 연속된 공백을 하나로
-                cleaned_content = " ".join(cleaned_content.split())
-                return cleaned_content.strip(" :")
-            return content
-        except Exception as e:
-            logger.error(f"Error parsing news content: {str(e)}")
-            return content
-
-        # 1. 최신 뉴스 1주치 데이터 조회
-        # 2. 최신 공시 1주치 데이터 조회
-        # 3. 뉴스는 date, 공시는 filing_date로 outer 병합
-        # 4. response에 보내질 ticker를 넣을 빈리스트 생성
-        # 5. 빈리스트에 최신부터 유니크한 티커 11개 추가
-        # 6. 최신부터 11개의 종목 조회 11개가 안되면 11개 될때까지 ticker 조회
-        # 7. 해당 종목의 2주치 뉴스, 공시 데이터 ticker별로 분류
-        # 8. 해당 종목의 주가 데이터 조회
-        # 9. 각 종목별 뉴스, 공시 데이터와 가격 데이터 병합
-
-    def get_top_stories(self) -> TopStoriesResponse:
-        try:
-            # 시장 및 날짜 설정
-            ctry = self.get_current_market_country()
-            db_country = "usa" if ctry == "us" else "kr"
-            current_date = datetime.now(KST_TIMEZONE)
-            date_str = current_date.strftime("%Y%m%d")
-            end_date = current_date.strftime("%Y-%m-%d")
-            start_date = (current_date - timedelta(days=7)).strftime("%Y-%m-%d")
-
-            # 1. S3에서 최신 뉴스 데이터 조회
-            country_path = f"merged_data/{NEWS_CONTRY_MAP[ctry]}"
-            s3_data = self._fetch_s3_data(date_str, country_path)
-            if s3_data is None:
-                raise DataNotFoundException(ticker="all", data_type="news")
-
-            news_df = pd.read_parquet(pd.io.common.BytesIO(s3_data))
-            news_df = self._process_dataframe(news_df)
-            news_df = news_df.rename(columns={"titles": "title"})
-
-            # 2. DB에서 최신 공시 데이터 조회
-            disclosure_data = self.db._select(
-                table="usa_disclosure",
-                columns=["filing_id", "filing_date", "ticker"],
-                order="filing_date",
-                ascending=False,
-                filing_date__gte=start_date,
-                filing_date__lte=end_date,
-                ai_processed=1,
-            )
-
-            if disclosure_data:
-                disclosure_df = pd.DataFrame(disclosure_data, columns=["filing_id", "date", "ticker"])
-                disclosure_df["date"] = pd.to_datetime(disclosure_df["date"])
-            else:
-                disclosure_df = pd.DataFrame(columns=["filing_id", "date", "ticker"])
-
-            # 3. 뉴스와 공시 데이터 티커 기준으로 분석
-            news_tickers = pd.DataFrame(news_df["Code"].value_counts()).reset_index()
-            news_tickers.columns = ["ticker", "count"]
-
-            disclosure_tickers = pd.DataFrame(disclosure_df["ticker"].value_counts()).reset_index()
-            disclosure_tickers.columns = ["ticker", "count"]
-
-            # 4 & 5. 티커 리스트 생성 및 상위 11개 선정
-            all_tickers = (
-                pd.concat([news_tickers.set_index("ticker"), disclosure_tickers.set_index("ticker")])
-                .groupby(level=0)
-                .sum()
-                .sort_values("count", ascending=False)
-            )
-
-            top_tickers = all_tickers.head(11).index.tolist()
-
-            # 6 & 7. 선택된 티커의 데이터 처리
-            result_data = []
-            for ticker in top_tickers:
-                # 8. 주가 데이터 조회
-                stock_data = self.db._select(
-                    table=f"stock_{ctry}_1d",
-                    columns=["Date", "Close", "Open", "Name"],
-                    Date=end_date,
-                    Ticker=f"A{ticker}" if ctry == "kr" else ticker,
-                )
-
-                if not stock_data:
-                    continue
-
-                # 9. 종목 정보 구성
-                stock_info = {
-                    "name": stock_data[0][3],
-                    "ticker": ticker,
-                    "logo_image": f"https://storage.quantus.kr/logo/{ctry}/{ticker}.png",
-                    "ctry": ctry,
-                    "current_price": float(stock_data[0][1]),
-                    "change_rate": round(
-                        ((float(stock_data[0][1]) - float(stock_data[0][2])) / float(stock_data[0][2])) * 100, 2
-                    ),
-                }
-
-                # 해당 종목의 뉴스 데이터 처리
-                ticker_news = news_df[news_df["Code"] == ticker].copy()
-                news_items = [
-                    NewsItem(
+        for ticker in unique_tickers:
+            ticker_news = total_df[total_df["ticker"] == ticker]
+            if ticker_news.empty:
+                continue
+
+            news_items = []
+            for _, row in ticker_news.iterrows():
+                price_impact = float(row["price_impact"]) if pd.notnull(row["price_impact"]) else 0.0
+                news_items.append(
+                    TopStoriesItem(
+                        price_impact=price_impact,
                         date=row["date"],
                         title=row["title"],
-                        summary=row["summary"] if pd.notna(row["summary"]) else None,
-                        emotion=row["emotion"].lower() if pd.notna(row["emotion"]) else None,
-                        name=stock_info["name"],
-                        change_rate=stock_info["change_rate"],
+                        summary=row["summary"],
+                        emotion=row["emotion"],
+                        type=row["type"],
                     )
-                    for _, row in ticker_news.iterrows()
-                ]
+                )
 
-                # 해당 종목의 공시 데이터 처리
-                ticker_disclosure = disclosure_df[disclosure_df["ticker"] == ticker]
-                for _, disc in ticker_disclosure.iterrows():
-                    analysis_data = self.db._select(
-                        table=f"{db_country}_disclosure_analysis",
-                        columns=["ai_summary", "market_impact", "impact_reason", "key_points", "translated"],
-                        filing_id=disc["filing_id"],
-                    )
+            result.append(
+                TopStoriesResponse(
+                    name=ticker_news.iloc[0]["ko_name"],
+                    ticker=ticker,
+                    logo_image="추후 반영",
+                    ctry=ticker_news.iloc[0]["ctry"],
+                    current_price=ticker_news.iloc[0]["current_price"]
+                    if ticker_news.iloc[0].get("current_price")
+                    else 0.0,
+                    change_rate=ticker_news.iloc[0]["change_1m"] if ticker_news.iloc[0].get("change_1m") else 0.0,
+                    items_count=len(news_items),
+                    news=news_items,
+                )
+            )
 
-                    if analysis_data:
-                        analysis = analysis_data[0]
-                        summary = analysis[0]
-                        key_points = analysis[3]
+        return result
 
-                        if analysis[4]:  # translated 확인
-                            translated_data = self.db._select(
-                                table=f"{db_country}_disclosure_analysis_translation",
-                                columns=["ai_summary", "key_points"],
-                                filing_id=disc["filing_id"],
-                            )
-                            if translated_data:
-                                summary = translated_data[0][0]
-                                key_points = translated_data[0][1]
+    def news_detail(self, ticker: str, date: str = None, page: int = 1, size: int = 6):
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
+        else:
+            date = datetime.strptime(date, "%Y%m%d").strftime("%Y-%m-%d")
 
-                        content = f"{summary} {self._parse_key_points(key_points)}"
+        ctry = check_ticker_country_len_2(ticker)
 
-                        news_items.append(
-                            NewsItem(
-                                date=disc["date"],
-                                title=disc["title"],
-                                summary=content,
-                                emotion=None,
-                                name=stock_info["name"],
-                                change_rate=stock_info["change_rate"],
-                            )
-                        )
+        condition = {
+            "ticker": ticker,
+            "date__gte": f"{date} 00:00:00",
+            "date__lt": f"{date} 23:59:59",
+        }
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_information",
+                columns=["id", "ticker", "ctry", "date", "title", "summary", "emotion", "that_time_price"],
+                **condition,
+            )
+        )
+        if df_news.empty:
+            raise DataNotFoundException(ticker=ticker, data_type="news")
 
-                # 날짜순 정렬
-                news_items.sort(key=lambda x: x.date, reverse=True)
-                stock_info["news"] = news_items
+        offset = (page - 1) * size
+        df_news = self._process_dataframe_news_detail(df_news, offset, size)
+        total_count = df_news.shape[0]
+        total_page = math.ceil(total_count / size)
+        emotion_count = self._count_emotion(df_news)
+        df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
+        unique_tickers = df_news["ticker"].unique().tolist()
 
-                result_data.append(stock_info)
+        df_price = pd.DataFrame(
+            self.db._select(
+                table="stock_trend",
+                columns=["ticker", "current_price"],
+                **{"ticker__in": unique_tickers},
+            )
+        )
+        df_news["price_impact"] = 0.0
+        if not df_price.empty:
+            df_price["current_price"] = df_price["current_price"].fillna(0.0)
 
-            # 결과가 없으면 예외 발생
-            if not result_data:
-                raise DataNotFoundException(ticker="all", data_type="top_stories")
+            df_news = pd.merge(df_news, df_price, on="ticker", how="left")
 
-            # 가장 관련성 높은(뉴스+공시가 많은) 종목 선택
-            top_story = max(result_data, key=lambda x: len(x["news"]))
+            df_news["price_impact"] = (
+                (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100
+            )
+            df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
 
-            return TopStoriesResponse(**top_story)
-
-        except Exception as e:
-            logger.error(f"Error in get_top_stories: {str(e)}")
-            raise
+        data = []
+        for _, row in df_news.iterrows():
+            data.append(
+                NewsDetailItem(
+                    id=row["id"],
+                    ctry=row["ctry"],
+                    date=row["date"],
+                    title=row["title"],
+                    summary=row["summary"],
+                    emotion=row["emotion"],
+                    price_impact=row["price_impact"],
+                )
+            )
+        return data, total_count, total_page, offset, emotion_count, ctry
 
 
 def get_news_service() -> NewsService:

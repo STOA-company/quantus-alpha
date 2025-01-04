@@ -1,6 +1,5 @@
 from dataclasses import asdict, dataclass, field
-from sqlalchemy import MetaData
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import MetaData, bindparam
 from sqlalchemy import select, insert, update, delete, desc, asc, or_, and_
 from sqlalchemy.exc import IntegrityError
 from contextlib import contextmanager
@@ -21,8 +20,13 @@ class JoinInfo:
     secondary_condition: dict = field(default_factory=dict)
 
 
-class Base(DeclarativeBase):
-    pass
+ALLOWED_AGGREGATE_FUNCTIONS = {
+    "count": func.count,
+    "sum": func.sum,
+    "avg": func.avg,
+    "min": func.min,
+    "max": func.max,
+}
 
 
 class Database:
@@ -103,6 +107,8 @@ class Database:
                         or_cond.append((col.in_(val)))
                     elif len(key) == 2 and key[1] == "notin":
                         or_cond.append(~(col.in_(val)))
+                    elif len(key) == 2 and key[1] == "like":
+                        or_cond.append(col.like(val))
                 if or_cond:
                     cond.append(or_(*or_cond))
                 continue
@@ -125,6 +131,8 @@ class Database:
                 cond.append((col.in_(val)))
             elif len(key) == 2 and key[1] == "notin":
                 cond.append(~(col.in_(val)))
+            elif len(key) == 2 and key[1] == "like":
+                cond.append(col.like(val))
 
         return cond
 
@@ -202,11 +210,15 @@ class Database:
         order: str | None = None,
         ascending: bool = False,
         join_info: JoinInfo | None = None,
+        distinct: bool = False,
+        group_by: list | None = None,
+        aggregates: dict | None = None,
         limit: int = 0,
         offset: int = 0,
         **kwargs,
     ):
-        """SELECT 쿼리 실행"""
+        """ """
+
         try:
             obj = self.meta_data.tables[table]
 
@@ -233,12 +245,36 @@ class Database:
                         join_cols.append(getattr(join_table_obj.columns, col))
                 cols.extend(join_cols)
 
+            if aggregates:
+                for alias, (col_name, func_name) in aggregates.items():
+                    if func_name not in ("count", "sum", "avg", "min", "max"):
+                        raise ValueError(
+                            f"Invalid aggregate function: {func_name}. "
+                            f"Allowed functions are: count, sum, avg, min, max"
+                        )
+
+                    if not hasattr(obj.columns, col_name):
+                        raise ValueError(f"Invalid column for aggregation: {col_name}")
+
+                    column = getattr(obj.columns, col_name)
+                    agg_func = getattr(func, func_name)
+                    cols.append(agg_func(column).label(alias))
+
             cond = self.get_condition(obj, **kwargs)
-            stmt = select(*cols).where(*cond)
+            stmt = select(*cols)
+
+            if distinct:
+                stmt = stmt.distinct()
+
+            stmt = stmt.where(*cond)
 
             if join_info:
                 join_condition = self._join(join_info)
                 stmt = stmt.select_from(join_condition)
+
+            if group_by:
+                group_cols = [getattr(obj.columns, col) for col in group_by]
+                stmt = stmt.group_by(*group_cols)
 
             if order:
                 order_col = getattr(obj.columns, order)
@@ -314,6 +350,50 @@ class Database:
 
         except Exception as e:
             logging.error(f"Error in count operation: {str(e)}")
+            raise
+
+    def _bulk_update(self, table: str, data: list[dict], key_column: str):
+        """벌크 업데이트 실행
+
+        Args:
+            table (str): 테이블 이름
+            data (list[dict]): 업데이트할 데이터 리스트
+            key_column (str): 기준이 되는 키 컬럼명
+        """
+        try:
+            if not data:
+                return
+
+            obj = self.meta_data.tables[table]
+
+            # 임시 테이블 생성을 위한 VALUES 절 생성
+            values_list = []
+            for item in data:
+                processed_item = self.get_sets(obj, item)
+                values_list.append(processed_item)
+
+            # 벌크 업데이트 쿼리 생성
+            key_col = getattr(obj.columns, key_column)
+            stmt = (
+                update(obj)
+                .where(key_col == bindparam("_old_" + key_column))
+                .values({col: bindparam(col.name) for col in obj.columns if col.name in values_list[0]})
+            )
+
+            # 파라미터 생성
+            update_params = []
+            for item in values_list:
+                param = {"_old_" + key_column: item[key_col], **item}
+                update_params.append(param)
+
+            # 실행
+            with self.get_connection() as connection:
+                connection.execute(stmt, update_params)
+
+            logging.info(f"Bulk update completed for {len(data)} records in {table}")
+
+        except Exception as e:
+            logging.error(f"Error in bulk update operation: {str(e)}")
             raise
 
 

@@ -1,132 +1,74 @@
-from datetime import datetime, timedelta
 from typing import List
-
-import pytz
-from app.modules.news.services import get_news_service
-from app.database.crud import JoinInfo, database
+from app.database.crud import database
 from app.database.conn import db
-from app.modules.trending.schemas import TrendingStock, TrendingStockKr, TrendingStockUs
+from app.modules.trending.schemas import TrendingStockRequest, TrendingStock, TrendingType
 
 
 class TrendingService:
     def __init__(self):
-        self.news_service = get_news_service()
         self.database = database
         self.db = db
 
-    def get_trending_stocks(self) -> TrendingStock:
-        kr = self._get_trending_stocks_kr()
-        us = self._get_trending_stocks_us()
-        return TrendingStock(kr=kr, us=us)
+    def _get_trending_type(self, request: TrendingStockRequest) -> str:
+        match request.type:
+            case TrendingType.UP | TrendingType.DOWN:
+                return f"change_{request.period.value}"
+            case TrendingType.VOL:
+                return f"volume_{request.period.value}"
+            case TrendingType.AMT:
+                return f"volume_change_{request.period.value}"
 
-    def _get_trending_stocks_kr(self) -> List[TrendingStockKr]:
-        table_name = "stock_kr_1d"
+    def get_trending_stocks(self, request: TrendingStockRequest) -> List[TrendingStock]:
+        order = self._get_trending_type(request)
+        ascending = True if request.type == TrendingType.DOWN else False
 
-        kst = pytz.timezone("Asia/Seoul")
-        today = datetime.now(kst)
-        weekday = today.weekday()
-
-        if weekday == 0:
-            check_date = today - timedelta(days=3)
-        elif weekday == 6:
-            check_date = today - timedelta(days=2)
-        else:
-            check_date = today - timedelta(days=1)
-
-        while True:
-            date_str = check_date.strftime("%Y-%m-%d")
-            query_result = self.database._select(
-                table=table_name,
-                columns=["Ticker", "Name", "Volume", "Open", "Close", "Date"],
-                order="Volume",
-                ascending=False,
-                limit=10,
-                Date=date_str,
-            )
-            if query_result:
-                break
-            else:
-                check_date = check_date - timedelta(days=1)
-
-        result = []
-        for idx, row in enumerate(query_result, start=1):
-            current_price = float(row.Close) if row.Close is not None else 0.0
-            open_price = float(row.Open) if row.Open is not None else 0.0
-
-            price_rate = round(((current_price - open_price) / open_price * 100), 2) if open_price != 0 else 0.0
-
-            stock = TrendingStockKr(
-                num=idx,
-                ticker=str(row.Ticker),
-                name=str(row.Name),
-                volume=float(row.Volume) if row.Volume is not None else 0.0,
-                current_price=current_price,
-                current_price_rate=price_rate,
-            )
-            result.append(stock)
-
-        return result
-
-    def _get_trending_stocks_us(self) -> List[TrendingStockUs]:
-        table_name = "stock_us_1d"
-
-        kst = pytz.timezone("Asia/Seoul")
-        today = datetime.now(kst)
-        weekday = today.weekday()
-
-        if weekday == 0:
-            check_date = today - timedelta(days=3)
-        elif weekday == 6:
-            check_date = today - timedelta(days=2)
-        else:
-            check_date = today - timedelta(days=1)
-
-        # 조인 정보 설정
-        join_info = JoinInfo(
-            primary_table=table_name,
-            secondary_table="stock_us_tickers",
-            primary_column="Ticker",
-            secondary_column="ticker",
-            columns=["korean_name"],
-            is_outer=False,
+        latest_date_query = self.database._select(
+            table="stock_trend",
+            columns=["last_updated"],
+            order="last_updated",
+            ascending=False,
+            ctry=request.ctry.value,
+            limit=1,
         )
 
-        while True:
-            date_str = check_date.strftime("%Y-%m-%d")
-            query_result = self.database._select(
-                table=table_name,
-                columns=["Ticker", "Volume", "Open", "Close", "korean_name"],
-                order="Volume",
-                ascending=False,
-                limit=10,
-                join_info=join_info,
-                Date=date_str,
-            )
-            if query_result:
-                break
-            else:
-                check_date = check_date - timedelta(days=1)
-                if (today - check_date).days > 4:
-                    break
+        latest_date = latest_date_query[0]._mapping["last_updated"] if latest_date_query else None
 
-        result = []
-        for idx, row in enumerate(query_result, start=1):
-            current_price = float(row.Close) if row.Close is not None else 0.0
-            open_price = float(row.Open) if row.Open is not None else 0.0
+        trending_stocks = self.database._select(
+            table="stock_trend",
+            columns=[
+                "ticker",
+                "kr_name",
+                "current_price",
+                "last_updated",
+                f"change_{request.period.value}",
+                f"volume_{request.period.value}",
+                f"volume_change_{request.period.value}",
+            ],
+            order=order,
+            ascending=ascending,
+            ctry=request.ctry.value,
+            last_updated=latest_date,
+            limit=100,
+        )
 
-            price_rate = round(((current_price - open_price) / open_price * 100), 2) if open_price != 0 else 0.0
-
-            stock = TrendingStockUs(
+        return [
+            TrendingStock(
                 num=idx,
-                ticker=str(row.Ticker),
-                name=str(row.korean_name),
-                volume=float(row.Volume) if row.Volume is not None else 0.0,
-                current_price=current_price,
-                current_price_rate=price_rate,
+                ticker=stock._mapping["ticker"],
+                name="Temp_name" if stock._mapping["kr_name"] is None else stock._mapping["kr_name"],
+                current_price=0.0 if stock._mapping["current_price"] is None else stock._mapping["current_price"],
+                current_price_rate=0.0
+                if stock._mapping[f"change_{request.period.value}"] is None
+                else stock._mapping[f"change_{request.period.value}"],
+                volume=0.0
+                if stock._mapping[f"volume_{request.period.value}"] is None
+                else stock._mapping[f"volume_{request.period.value}"],
+                amount=0.0
+                if stock._mapping[f"volume_change_{request.period.value}"] is None
+                else stock._mapping[f"volume_change_{request.period.value}"],
             )
-            result.append(stock)
-
-        return result
+            for idx, stock in enumerate(trending_stocks, 1)
+        ]
 
 
 def get_trending_service():

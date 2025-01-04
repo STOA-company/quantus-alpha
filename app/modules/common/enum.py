@@ -64,3 +64,30 @@ class FearAndGreedIndex(Enum):
     NEUTRAL = 50  # 41-60 // 중립
     GREED = 75  # 61-80 // 탐욕
     EXTREME_GREED = 100  # 81-100 // 매우 탐욕
+
+
+class PrdyVrssSign(IntEnum):
+    DOWN = -1  # 하락
+    UP = 1  # 상승
+    FLAT = 0  # 보합
+
+
+class TrendingType(Enum):
+    UP = "up"  # 상승
+    DOWN = "down"  # 하락
+    VOL = "vol"  # 거래량
+    AMT = "amt"  # 거래대금
+
+
+class TrendingPeriod(Enum):
+    REALTIME = "rt"  # 실시간
+    DAY = "1d"  # 일
+    WEEK = "1w"  # 주
+    MONTH = "1m"  # 월
+    SIX_MONTH = "6m"  # 6개월
+    YEAR = "1y"  # 년
+
+
+class TrendingCountry(Enum):
+    KR = "kr"
+    US = "us"

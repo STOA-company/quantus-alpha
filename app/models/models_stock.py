@@ -1,8 +1,8 @@
 from pydantic import model_validator
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy import Column, Date, Float, Integer, String, Boolean
+from sqlalchemy import Column, Date, DateTime, Float, Integer, String, Boolean
 
-from app.database.crud import Base
+from app.models.models_base import Base
 
 
 class StockInformation(Base):
@@ -31,37 +31,14 @@ class StockInformation(Base):
     sector_3 = Column(String(100), nullable=True, comment="GICS Level 3 (74개 섹터)")
     sector_4 = Column(String(100), nullable=True, comment="GICS Level 4 (163개 섹터)")
 
+    # 한글 섹터
+    sector_ko = Column(String(100), nullable=True, comment="최종 섹터 (한글)")
+
     # Additional company information (nullable)
     homepage_url = Column(String(255), nullable=True, comment="회사 홈페이지 URL")
     ceo = Column(String(100), nullable=True, comment="대표이사")
     establishment_date = Column(Date, nullable=True, comment="설립일")
     listing_date = Column(Date, nullable=True, comment="상장일")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "ticker": "005930",
-                "logo_image": "https://example.com/logo/005930.png",
-                "name": "삼성전자",
-                "ctry": "KR",
-                "market": "KOSPI",
-                "listing_date": "1975-06-11",
-                "is_kospi_100": True,
-                "is_kospi_150": True,
-                "is_kospi_200": True,
-                "is_kosdaq_150": False,
-                "is_krx_300": True,
-                "is_snp_500": False,
-                "is_nasdaq_100": False,
-                "sector_1": "Information Technology",
-                "sector_2": "Technology Hardware & Equipment",
-                "sector_3": "Technology Hardware, Storage & Peripherals",
-                "sector_4": "Electronic Equipment & Components",
-                "homepage_url": "https://www.samsung.com",
-                "ceo": "경계현",
-                "establishment_date": "1969-01-13",
-            }
-        }
 
 
 class StockFactor(Base):
@@ -110,22 +87,79 @@ class StockFactor(Base):
         """시가총액을 10억 단위로 변환"""
         return self.market_cap / 1_000_000_000
 
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "ticker": "005930",
-                "market_cap": 448300000000000,
-                "shared_outstanding": 5969782550,
-                "last_close": 75100,
-                "week_52_high": 77800,
-                "week_52_low": 57200,
-                "per": 14.2,
-                "pbr": 1.35,
-                "roe": 9.5,
-                "finance_status": 1,
-                "stock_trend": 1,
-                "market_condition": 2,
-                "industry_condition": 2,
-            }
-        }
-    }
+
+class StockPrice(Base):
+    __tablename__ = "stock_price"
+
+    ticker = Column(String(20), primary_key=True, nullable=False, comment="종목 코드")
+    market = Column(String(10), nullable=False, index=True, comment="시장 구분")
+
+    kr_name = Column(String(100), nullable=True, comment="한글 종목명")
+    en_name = Column(String(100), nullable=True, comment="영문 종목명")
+
+    execution_time = Column(DateTime, nullable=False, comment="종목 체결 시간")  # STCK_CNTG_HOUR : 종목 체결 시간
+    current_price = Column(Float, nullable=False, comment="종목 현재 가격")  # STCK_PRPR : 종목 현재 가격
+
+    # OHLCV 데이터
+    open = Column(Float, nullable=False, comment="시가")
+    high = Column(Float, nullable=False, comment="고가")
+    low = Column(Float, nullable=False, comment="저가")
+    close = Column(Float, nullable=False, comment="종가")
+    volume = Column(Integer, nullable=False, comment="거래량")
+
+    # 전일 대비
+    change_sign = Column(Integer, nullable=True, comment="전일 대비 등락 부호")  # PRDY_VRSS_SIGN : 전일 대비 등락 부호
+    price_change = Column(Float, nullable=True, comment="전일 대비")  # PRDY_VRSS : 전일 대비
+    change_rate = Column(Float, nullable=True, comment="등락률")  # PRDY_CTRT : 등락률
+
+    volume_change = Column(Float, nullable=True, comment="거래대금")  # 거래대금
+
+    # Validations
+    @model_validator(mode="after")
+    def validate_price_range(self) -> "StockPrice":
+        """가격 범위 검증"""
+        if not (self.low <= self.open <= self.high and self.low <= self.close <= self.high):
+            raise ValueError("가격 범위가 올바르지 않습니다")
+        return self
+
+
+class StockTrend(Base):
+    __tablename__ = "stock_trend"
+
+    ticker = Column(String(20), primary_key=True, nullable=False, comment="종목 코드")
+    last_updated = Column(DateTime, nullable=True, index=True, comment="마지막 업데이트 시간")
+    ko_name = Column(String(100), nullable=True, comment="종목 한글명")
+    en_name = Column(String(100), nullable=True, comment="종목 영문명")
+    ctry = Column(String(20), nullable=True, comment="국가")
+    market = Column(String(10), nullable=True, index=True, comment="시장 구분")
+
+    # 현재가
+    current_price = Column(Float, nullable=True, comment="현재가")
+    prev_close = Column(Float, nullable=True, comment="전일종가")
+    change_sign = Column(
+        Integer, nullable=True, comment="전일 대비 등락 부호"
+    )  # 1 : 상한, 2 : 상승, 3 : 보합, 4 : 하락, 5 : 하한
+
+    # 등락률
+    change_rt = Column(Float, nullable=True, comment="실시간 등락률")
+    change_1d = Column(Float, nullable=True, comment="1일 등락률")
+    change_1w = Column(Float, nullable=True, comment="1주 등락률")
+    change_1m = Column(Float, nullable=True, comment="1개월 등락률")
+    change_6m = Column(Float, nullable=True, comment="6개월 등락률")
+    change_1y = Column(Float, nullable=True, comment="1년 등락률")
+
+    # 거래량
+    volume_rt = Column(Float, nullable=True, comment="1분 거래량 비율")
+    volume_1d = Column(Float, nullable=True, comment="1일 거래량 비율")
+    volume_1w = Column(Float, nullable=True, comment="1주 거래량 비율")
+    volume_1m = Column(Float, nullable=True, comment="1개월 거래량 비율")
+    volume_6m = Column(Float, nullable=True, comment="6개월 거래량 비율")
+    volume_1y = Column(Float, nullable=True, comment="1년 거래량 비율")
+
+    # 거래대금
+    volume_change_rt = Column(Float, nullable=True, comment="1분 거래대금")
+    volume_change_1d = Column(Float, nullable=True, comment="1일 거래대금")
+    volume_change_1w = Column(Float, nullable=True, comment="1주 거래대금")
+    volume_change_1m = Column(Float, nullable=True, comment="1개월 거래대금")
+    volume_change_6m = Column(Float, nullable=True, comment="6개월 거래대금")
+    volume_change_1y = Column(Float, nullable=True, comment="1년 거래대금")
