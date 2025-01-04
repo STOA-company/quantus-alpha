@@ -67,11 +67,9 @@ class FearAndGreedIndex(Enum):
 
 
 class PrdyVrssSign(IntEnum):
-    UP_LIMIT = 1  # 상한
-    UP = 2  # 상승
-    FLAT = 3  # 보합
-    DOWN = 4  # 하락
-    DOWN_LIMIT = 5  # 하한
+    DOWN = -1  # 하락
+    UP = 1  # 상승
+    FLAT = 0  # 보합
 
 
 class TrendingType(Enum):

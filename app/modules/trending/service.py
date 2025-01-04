@@ -23,16 +23,21 @@ class TrendingService:
         ascending = True if request.type == TrendingType.DOWN else False
 
         latest_date_query = self.database._select(
-            table="stock_trend", columns=["last_updated"], order="last_updated", ascending=False, limit=1
+            table="stock_trend",
+            columns=["last_updated"],
+            order="last_updated",
+            ascending=False,
+            ctry=request.ctry.value,
+            limit=1,
         )
 
-        latest_date = latest_date_query[0]._mapping["last_updated"].date() if latest_date_query else None
+        latest_date = latest_date_query[0]._mapping["last_updated"] if latest_date_query else None
 
         trending_stocks = self.database._select(
             table="stock_trend",
             columns=[
                 "ticker",
-                "ko_name",
+                "kr_name",
                 "current_price",
                 "last_updated",
                 f"change_{request.period.value}",
@@ -41,6 +46,7 @@ class TrendingService:
             ],
             order=order,
             ascending=ascending,
+            ctry=request.ctry.value,
             last_updated=latest_date,
             limit=100,
         )
@@ -49,7 +55,7 @@ class TrendingService:
             TrendingStock(
                 num=idx,
                 ticker=stock._mapping["ticker"],
-                name="Temp_name" if stock._mapping["ko_name"] is None else stock._mapping["ko_name"],
+                name="Temp_name" if stock._mapping["kr_name"] is None else stock._mapping["kr_name"],
                 current_price=0.0 if stock._mapping["current_price"] is None else stock._mapping["current_price"],
                 current_price_rate=0.0
                 if stock._mapping[f"change_{request.period.value}"] is None

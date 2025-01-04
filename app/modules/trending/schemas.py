@@ -4,7 +4,7 @@ from app.modules.common.enum import TrendingPeriod, TrendingType, TrendingCountr
 
 
 class TrendingStockRequest(BaseModel):
-    ctry: TrendingCountry = Query(TrendingCountry.KR, description="국가 코드")
+    ctry: TrendingCountry = Query(TrendingCountry.US, description="국가 코드")
     type: TrendingType = Query(TrendingType.UP, description="트렌딩 타입")
     period: TrendingPeriod = Query(TrendingPeriod.REALTIME, description="기간")
 
