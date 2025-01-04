@@ -88,3 +88,8 @@ class TrendingPeriod(Enum):
     MONTH = "1m"  # 월
     SIX_MONTH = "6m"  # 6개월
     YEAR = "1y"  # 년
+
+
+class TrendingCountry(Enum):
+    KR = "kr"
+    US = "us"
