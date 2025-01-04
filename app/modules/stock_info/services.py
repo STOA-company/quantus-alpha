@@ -62,6 +62,14 @@ class StockInfoService:
             logger.error(f"Error in get_stock_info for {ticker}: {str(e)}")
             return StockInfo(introduction="", homepage_url="", ceo_name="", establishment_date="", listing_date="")
 
+    def round_and_clean(self, value: float) -> float:
+        """
+        소수점 첫째자리에서 반올림하고, 소수점이 0이면 정수로 변환
+        예: 15.7 -> 15.7, 15.0 -> 15
+        """
+        rounded = round(value, 1)
+        return int(rounded) if rounded.is_integer() else rounded
+
     async def get_indicators(self, ctry: str, ticker: str) -> Indicators:
         """지표 조회"""
         if ctry == "us":
@@ -91,7 +99,8 @@ class StockInfoService:
             )
 
         # 관련 섹터의 ticker 조회
-        sector_tickers = await self.get_related_sectors(ticker)
+        sector_ticker = ticker.replace("-US", "")
+        sector_tickers = await self.get_related_sectors(sector_ticker)
 
         # US 시장인 경우 -US 접미사 추가
         if ctry == "us":
@@ -101,11 +110,17 @@ class StockInfoService:
         if sector_tickers:
             sector_results = self.db._select(table=table_name, columns=columns, **{"ticker__in": sector_tickers})
 
-            # 섹터 평균 계산 (소수점 2자리로 반올림)
+            # 섹터 평균 계산 (소수점 1자리로 반올림, 소수점이 0이면 정수로)
             if sector_results:
-                sector_per = round(sum(stock.per for stock in sector_results if stock.per) / len(sector_results), 2)
-                sector_pbr = round(sum(stock.pbr for stock in sector_results if stock.pbr) / len(sector_results), 2)
-                sector_roe = round(sum(stock.roe for stock in sector_results if stock.roe) / len(sector_results), 2)
+                sector_per = self.round_and_clean(
+                    sum(stock.per for stock in sector_results if stock.per) / len(sector_results)
+                )
+                sector_pbr = self.round_and_clean(
+                    sum(stock.pbr for stock in sector_results if stock.pbr) / len(sector_results)
+                )
+                sector_roe = self.round_and_clean(
+                    sum(stock.roe for stock in sector_results if stock.roe) / len(sector_results)
+                )
             else:
                 sector_per = sector_pbr = sector_roe = 0
         else:
@@ -114,11 +129,11 @@ class StockInfoService:
         status_options = ["좋음", "보통", "나쁨"]
 
         return Indicators(
-            per=round(current_stock[0].per, 2),
+            per=self.round_and_clean(current_stock[0].per),
             industry_per=sector_per,
-            pbr=round(current_stock[0].pbr, 2),
+            pbr=self.round_and_clean(current_stock[0].pbr),
             industry_pbr=sector_pbr,
-            roe=round(current_stock[0].roe, 2),
+            roe=self.round_and_clean(current_stock[0].roe),
             industry_roe=sector_roe,
             financial_data=random.choice(status_options),
             price_trend=random.choice(status_options),
@@ -133,10 +148,14 @@ class StockInfoService:
         result = self.db._execute(query)
         sector = result.scalars().first()
 
+        print(f"ewtasrtyadsrhdfh: {sector}")
+
         # 관련 섹터의 ticker 조회
         query = select(StockInformation).where(StockInformation.sector_3 == sector)
         result = self.db._execute(query)
         related_sectors = result.scalars().all()
+
+        print(f"ewtasrtyadsrhdfh: {related_sectors}")
 
         return related_sectors
 

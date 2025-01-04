@@ -309,7 +309,9 @@ class StockIndicesService:
         """stock_indices 테이블에서 나스닥 데이터 조회"""
         try:
             result = self.db._select(
-                table="stock_indices", columns=["ticker", "rise_ratio", "fall_ratio", "unchanged_ratio"], ticker="nasdaq"
+                table="stock_indices",
+                columns=["ticker", "rise_ratio", "rise_soft_ratio", "fall_ratio", "fall_soft_ratio", "unchanged_ratio"],
+                ticker="nasdaq",
             )
 
             if not result:
@@ -317,7 +319,22 @@ class StockIndicesService:
 
             # 첫 번째 행의 데이터 사용
             row = result[0]
-            return {"ticker": row[0], "상승": float(row[1]), "하락": float(row[2]), "보합": float(row[3])}
+
+            # 상승 = 급상승 + 약상승
+            total_rise = float(row[1]) + float(row[2])  # rise_ratio + rise_soft_ratio
+
+            # 하락 = 급하락 + 약하락
+            total_fall = float(row[3]) + float(row[4])  # fall_ratio + fall_soft_ratio
+
+            # 보합은 그대로
+            unchanged = float(row[5])  # unchanged_ratio
+
+            return {
+                "ticker": row[0],
+                "상승": round(total_rise, 2),
+                "하락": round(total_fall, 2),
+                "보합": round(unchanged, 2),
+            }
 
         except Exception as e:
             logging.error(f"Error in get_nasdaq_ticker: {str(e)}")
@@ -327,7 +344,9 @@ class StockIndicesService:
         """stock_indices 테이블에서 S&P 500 데이터 조회"""
         try:
             result = self.db._select(
-                table="stock_indices", columns=["ticker", "rise_ratio", "fall_ratio", "unchanged_ratio"], ticker="sp500"
+                table="stock_indices",
+                columns=["ticker", "rise_ratio", "rise_soft_ratio", "fall_ratio", "fall_soft_ratio", "unchanged_ratio"],
+                ticker="sp500",
             )
 
             if not result:
@@ -335,7 +354,22 @@ class StockIndicesService:
 
             # 첫 번째 행의 데이터 사용
             row = result[0]
-            return {"ticker": row[0], "상승": float(row[1]), "하락": float(row[2]), "보합": float(row[3])}
+
+            # 상승 = 급상승 + 약상승
+            total_rise = float(row[1]) + float(row[2])  # rise_ratio + rise_soft_ratio
+
+            # 하락 = 급하락 + 약하락
+            total_fall = float(row[3]) + float(row[4])  # fall_ratio + fall_soft_ratio
+
+            # 보합은 그대로
+            unchanged = float(row[5])  # unchanged_ratio
+
+            return {
+                "ticker": row[0],
+                "상승": round(total_rise, 2),
+                "하락": round(total_fall, 2),
+                "보합": round(unchanged, 2),
+            }
 
         except Exception as e:
             logging.error(f"Error in get_snp500_ticker: {str(e)}")
