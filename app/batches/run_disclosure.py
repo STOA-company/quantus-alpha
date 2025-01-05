@@ -125,10 +125,6 @@ def us_run_disclosure_batch(date: str = None):
     # 필수 컬럼 추가
     df_merge["ctry"] = "US"
     df_merge["that_time_price"] = df_merge["Close"]
-    df_merge["that_time_change"] = (df_merge["Close"] - df_merge["Open"]) / df_merge["Open"]
-    df_merge["volume_change"] = (
-        (df_merge["Open"] + df_merge["High"] + df_merge["Low"] + df_merge["Close"]) / 4
-    ) * df_merge["Volume"]
     df_merge["is_top_story"] = False
     df_merge["is_exist"] = df_merge["ticker"].isin(df_price["Ticker"].unique().tolist())
 
@@ -197,19 +193,6 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
     WHERE DATE(t.created_at) = :check_date
     AND t.lang = 'ko-KR'
     """)
-    # query = text("""
-    # SELECT
-    #     d.form_type, d.ticker, d.filing_date, d.url,
-    #     a.ai_summary as en_summary, a.impact_reason as en_impact_reason, a.key_points as en_key_points, a.market_impact as en_market_impact,
-    #     t.ai_summary as kr_summary, t.impact_reason as kr_impact_reason, t.key_points as kr_key_points
-    # FROM usa_disclosure d
-    # LEFT JOIN usa_disclosure_analysis a ON d.filing_id = a.filing_id
-    # LEFT JOIN usa_disclosure_analysis_translation t ON d.filing_id = t.filing_id
-    # WHERE d.ai_processed = TRUE
-    # AND DATE(d.processed_at) >= :start_datetime
-    # AND DATE(d.processed_at) < :end_datetime
-    # AND t.lang = 'ko-KR'
-    # """)
 
     # _execute 메서드로 쿼리 실행
     result = database._execute(query, {"check_date": check_date_str})
@@ -232,6 +215,7 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
             "kr_key_points",
         ],
     )
+    print(f"########df_disclosure: {df_disclosure}")
     ticker_list = df_disclosure["ticker"].unique().tolist()
     filing_dates = df_disclosure["filing_date"].dt.date.unique()
 
@@ -244,70 +228,73 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
 
     business_days = get_business_days(country="US", start_date=min_date - timedelta(days=7), end_date=max_date)
     business_days = sorted(business_days)
+    exclude_dates = ["2025-01-03"]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
     # business_days의 모든 요소를 date 타입으로 변환
     business_days = [bd.date() if isinstance(bd, pd.Timestamp) else bd for bd in business_days]
 
     # 각 날짜의 가격 데이터 매핑 생성
-    price_dates = {}
+    price_date_mapping = {}
     current_time = now_kr(is_date=False)
     today_str = current_time.strftime("%Y-%m-%d")
 
-    for filing_date in filing_dates:
-        filing_date_str = filing_date.strftime("%Y-%m-%d")
+    for disclosure_date in pd.to_datetime(filing_dates):
+        disclosure_date = disclosure_date.date()  # date 객체로 변환
+        disclosure_date_str = disclosure_date.strftime("%Y-%m-%d")
 
-        if filing_date_str == today_str:
-            price_dates[filing_date] = business_days[-2].strftime("%Y-%m-%d")
+        if disclosure_date_str == today_str:
+            price_date_mapping[disclosure_date] = business_days[-2].strftime("%Y-%m-%d")
         else:
-            # 해당 날짜가 영업일인지 확인
-            if filing_date in business_days:
-                price_dates[filing_date] = filing_date_str
+            if disclosure_date in business_days:
+                price_date_mapping[disclosure_date] = disclosure_date_str
             else:
-                # 해당 날짜 이전의 가장 최근 영업일 찾기
-                found_previous_day = False
                 for bd in reversed(business_days):
-                    if bd < filing_date:
-                        price_dates[filing_date] = bd.strftime("%Y-%m-%d")
-                        found_previous_day = True
+                    if bd < disclosure_date:
+                        price_date_mapping[disclosure_date] = bd.strftime("%Y-%m-%d")
                         break
 
-                if not found_previous_day:
-                    print(f"No previous business day found for {filing_date_str}")  # 디버깅용 출력
-
     # 종목 이름 데이터 조회
-    df_stock = pd.DataFrame(
+    df_stock_data = pd.DataFrame(
         database._select(
-            table="stock_us_tickers",
-            columns=["ticker", "korean_name", "english_name"],
+            table="stock_information",
+            columns=["ticker", "kr_name", "en_name"],
             **dict(ticker__in=ticker_list),
         )
     )
+    existing_tickers = df_stock_data["ticker"].unique().tolist()
 
-    df_merge = pd.merge(df_disclosure, df_stock, on="ticker", how="left")
+    df_merge = pd.merge(df_disclosure, df_stock_data, on="ticker", how="left")
 
     # 모든 가격 데이터 조회
-    unique_price_dates = list(set(price_dates.values()))
+    unique_price_dates = list(set(price_date_mapping.values()))
     df_price = pd.DataFrame(
         database._select(
             table="stock_us_1d",
-            columns=["Ticker", "Date", "Open", "High", "Low", "Close", "Volume"],
+            columns=["Ticker", "Date", "Close"],
             **dict(Date__in=unique_price_dates, Ticker__in=ticker_list),
         )
     )
 
     # price_dates 매핑을 사용하여 가격 데이터 병합
-    df_merge["price_date"] = df_merge["filing_date"].dt.date.map(lambda x: price_dates.get(x))
+    df_merge["price_date"] = df_merge["filing_date"].dt.date.map(lambda x: price_date_mapping.get(x))
 
     # Date 컬럼을 문자열로 변환
     df_price["Date"] = df_price["Date"].dt.strftime("%Y-%m-%d")
 
     # 가격 데이터 병합
     df_merge = pd.merge(df_merge, df_price, left_on=["ticker", "price_date"], right_on=["Ticker", "Date"], how="left")
+    # print(f'########df_merge: {df_merge[["ticker", "price_date", "Date", "Close"]]}')
+    # print(f'filing_dates: {filing_dates}')
+    # print(f'business_days: {business_days}')
+    # print(f'price_date_mapping: {price_date_mapping}')
+
+    # return 0
 
     # 필수 컬럼 추가
     df_merge["ctry"] = "US"
     df_merge["that_time_price"] = df_merge["Close"]
     df_merge["is_top_story"] = False
-    df_merge["is_exist"] = df_merge["ticker"].isin(df_price["Ticker"].unique().tolist())
+    df_merge["is_exist"] = df_merge["ticker"].isin(existing_tickers)
 
     # insert할 레코드 생성
     disclosure_records = []
@@ -315,8 +302,8 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
         disclosure_record = {
             "filing_id": row["filing_id"],
             "ticker": row["ticker"],
-            "ko_name": row["korean_name"],
-            "en_name": row["english_name"],
+            "ko_name": row["kr_name"],
+            "en_name": row["en_name"],
             "ctry": row["ctry"],
             "date": row["filing_date"],
             "title": None,
@@ -338,41 +325,69 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
         disclosure_records.append(disclosure_record)
 
     # disclosure_records = pd.DataFrame(disclosure_records)
-    # disclosure_records.to_csv("33333us_disclosure_records.csv", index=False)
-    # print(f'disclosure_records######1: {len(disclosure_records)}')
-    # print(disclosure_records[disclosure_records['filing_id']]['filing_id'].tolist())
+    # disclosure_records.to_csv("D:/kyungmin/mementoai/alpha-finder/check_data/disclosure/33333us_disclosure_records.csv", index=False)
     # return 0
 
-    def batch_insert(records, batch_size=1000):
-        """레코드를 배치 크기로 나누어 삽입하는 함수"""
+    def batch_insert(records, batch_size=500):
+        """
+        레코드를 배치 크기로 나누어 삽입하는 함수
+        중복된 filing_id는 skip
+        """
 
-        # NaN 값을 None으로 변환하는 함수
-        def replace_nan(record):
-            return {k: (None if pd.isna(v) else v) for k, v in record.items()}
+        def replace_nan(records_batch):
+            return [{k: (None if pd.isna(v) else v) for k, v in record.items()} for record in records_batch]
 
-        for i in range(0, len(records), batch_size):
-            batch = records[i : i + batch_size]
-            # NaN 값을 None으로 변환
-            cleaned_batch = [replace_nan(record) for record in batch]
+        # 기존 filing_id 조회 (chunk 단위로)
+        chunk_size = 5000
+        existing_filing_ids = set()
+        offset = 0
+        while True:
+            chunk = pd.DataFrame(
+                database._select(
+                    table="disclosure_information",
+                    columns=["filing_id"],
+                    limit=chunk_size,
+                    offset=offset,
+                    **dict(ctry="US"),
+                )
+            )
+            if chunk.empty:
+                break
+            existing_filing_ids.update(chunk["filing_id"].dropna())
+            offset += chunk_size
 
-            print(f"배치 처리 중: {i+1}~{min(i+batch_size, len(records))} / {len(records)}")
-            try:
-                database._insert(table="disclosure_information", sets=cleaned_batch)
-                print(f"배치 {i//batch_size + 1} 성공적으로 입력됨")
-            except Exception as e:
-                print(f"배치 {i//batch_size + 1} 처리 중 오류 발생: {str(e)}")
-                raise
+        total = len(records)
+        processed = 0
+        skipped = 0
 
-    # 데이터베이스 입력
+        # 배치 단위로 처리
+        for i in range(0, total, batch_size):
+            batch_records = records[i : i + batch_size]
+            batch_df = pd.DataFrame(batch_records)
+
+            # 중복 체크 (filing_id 기준)
+            unique_batch = batch_df[~batch_df["filing_id"].isin(existing_filing_ids)]
+
+            if not unique_batch.empty:
+                cleaned_batch = replace_nan(unique_batch.to_dict("records"))
+                try:
+                    database._insert(table="disclosure_information", sets=cleaned_batch)
+                    processed += len(cleaned_batch)
+                    existing_filing_ids.update(unique_batch["filing_id"])
+                except Exception as e:
+                    print(f"배치 처리 중 오류: {str(e)}")
+                    raise
+
+            skipped += len(batch_records) - len(unique_batch)
+            print(f"진행률: {i+len(batch_records)}/{total} (처리: {processed}, 스킵: {skipped})")
+
+    # DB에 데이터 입력
     if disclosure_records:
         print(f"총 입력할 레코드 수: {len(disclosure_records)}")
-        print("첫 번째 레코드 샘플:")
-        print(disclosure_records[0])
 
         try:
             batch_insert(disclosure_records)
             print("모든 데이터 입력 완료")
-            return len(disclosure_records)
         except Exception as e:
             print(f"데이터베이스 입력 중 오류 발생: {str(e)}")
             raise
@@ -577,19 +592,6 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
     end_datetime = check_date  # noqa
 
     # Raw SQL 쿼리 작성
-    # query = text("""
-    # SELECT
-    #     a.filing_id, a.ai_summary as en_summary, a.market_impact as en_market_impact, a.impact_reason as en_impact_reason, a.key_points as en_key_points,
-    #     d.company_name as ko_name, d.form_type, d.category_type, d.extra_info, d.ticker, d.url, d.processed_at as filing_date,
-    #     t.ai_summary as kr_summary, t.impact_reason as kr_impact_reason, t.key_points as kr_key_points
-    # FROM kor_disclosure_analysis_translation t
-    # LEFT JOIN kor_disclosure d ON t.filing_id = d.filing_id
-    # LEFT JOIN kor_disclosure_analysis a ON t.filing_id = a.filing_id
-    # WHERE DATE(t.created_at) = :check_date
-    # AND t.created_at >= :start_datetime
-    # AND t.created_at < :end_datetime
-    # AND t.lang = 'ko-KR'
-    # """)
     query = text("""
     SELECT
         a.filing_id, a.ai_summary as en_summary, a.market_impact as en_market_impact, a.impact_reason as en_impact_reason, a.key_points as en_key_points,
@@ -640,7 +642,8 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
     business_days = sorted(business_days)
     # business_days의 모든 요소를 date 타입으로 변환
     business_days = [bd.date() if isinstance(bd, pd.Timestamp) else bd for bd in business_days]
-    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") != "2024-12-30"]
+    exclude_dates = ["2024-12-30", "2025-01-03"]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
 
     # 각 날짜의 가격 데이터 매핑 생성
     price_dates = {}
@@ -665,6 +668,16 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
                         found_previous_day = True  # noqa
                         break
 
+    df_stock_data = pd.DataFrame(
+        database._select(
+            table="stock_information",
+            columns=["ticker", "kr_name", "en_name"],
+            **dict(ticker__in=ticker_list),
+        )
+    )
+    df_stock_data["ticker"] = df_stock_data["ticker"].str.replace("A", "")
+    existing_tickers = df_stock_data["ticker"].unique().tolist()
+
     # 모든 가격 데이터 조회
     unique_price_dates = list(set(price_dates.values()))
     df_price = pd.DataFrame(
@@ -685,12 +698,15 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
 
     # 가격 데이터 병합
     df_merge = pd.merge(df_merge, df_price, left_on=["ticker", "price_date"], right_on=["Ticker", "Date"], how="left")
+    df_merge = pd.merge(df_merge, df_stock_data, on="ticker", how="left")
 
     # 필수 컬럼 추가
     df_merge["ctry"] = "KR"
     df_merge["that_time_price"] = df_merge["Close"]
     df_merge["is_top_story"] = False
-    df_merge["is_exist"] = df_merge["ticker"].isin(df_price["Ticker"].unique().tolist())
+    df_merge["is_exist"] = df_merge["ticker"].isin(existing_tickers)
+    # print(f'df_merge##$: {df_merge["ticker"]}')
+    # print(f'existing_tickers###%: {existing_tickers}')
 
     # insert할 레코드 생성
     disclosure_records = []
@@ -698,8 +714,8 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
         disclosure_record = {
             "filing_id": row["filing_id"],
             "ticker": "A" + row["ticker"],
-            "ko_name": row["ko_name"],
-            "en_name": None,
+            "ko_name": row["kr_name"],
+            "en_name": row["en_name"],
             "ctry": row["ctry"],
             "date": row["filing_date"],
             "title": None,
@@ -721,29 +737,64 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
         disclosure_records.append(disclosure_record)
 
     # disclosure_records = pd.DataFrame(disclosure_records)
-    # disclosure_records.to_csv("44444kr_disclosure_records.csv", index=False)
+    # disclosure_records.to_csv("D:/kyungmin/mementoai/alpha-finder/check_data/disclosure/44444kr_disclosure_records.csv", index=False)
     # print(f'disclosure_records######1: {len(disclosure_records)}')
     # return len(disclosure_records)
 
-    def batch_insert(records, batch_size=1000):
-        """레코드를 배치 크기로 나누어 삽입하는 함수"""
+    def batch_insert(records, batch_size=500):
+        """
+        레코드를 배치 크기로 나누어 삽입하는 함수
+        중복된 filing_id는 skip
+        """
 
-        # NaN 값을 None으로 변환하는 함수
-        def replace_nan(record):
-            return {k: (None if pd.isna(v) else v) for k, v in record.items()}
+        def replace_nan(records_batch):
+            return [{k: (None if pd.isna(v) else v) for k, v in record.items()} for record in records_batch]
 
-        for i in range(0, len(records), batch_size):
-            batch = records[i : i + batch_size]
-            # NaN 값을 None으로 변환
-            cleaned_batch = [replace_nan(record) for record in batch]
+        # 기존 filing_id 조회 (chunk 단위로)
+        chunk_size = 5000
+        existing_filing_ids = set()
+        offset = 0
+        while True:
+            chunk = pd.DataFrame(
+                database._select(
+                    table="disclosure_information",
+                    columns=["filing_id"],
+                    limit=chunk_size,
+                    offset=offset,
+                    **dict(ctry="KR"),
+                )
+            )
+            if chunk.empty:
+                break
+            existing_filing_ids.update(chunk["filing_id"].dropna())
+            offset += chunk_size
 
-            print(f"배치 처리 중: {i+1}~{min(i+batch_size, len(records))} / {len(records)}")
-            try:
-                database._insert(table="disclosure_information", sets=cleaned_batch)
-                print(f"배치 {i//batch_size + 1} 성공적으로 입력됨")
-            except Exception as e:
-                print(f"배치 {i//batch_size + 1} 처리 중 오류 발생: {str(e)}")
-                raise
+        total = len(records)
+        processed = 0
+        skipped = 0
+
+        # 배치 단위로 처리
+        for i in range(0, total, batch_size):
+            batch_records = records[i : i + batch_size]
+            batch_df = pd.DataFrame(batch_records)
+
+            # 중복 체크 (filing_id 기준)
+            unique_batch = batch_df[~batch_df["filing_id"].isin(existing_filing_ids)]
+
+            if not unique_batch.empty:
+                cleaned_batch = replace_nan(unique_batch.to_dict("records"))
+                try:
+                    database._insert(table="disclosure_information", sets=cleaned_batch)
+                    processed += len(cleaned_batch)
+                    existing_filing_ids.update(unique_batch["filing_id"])
+                except Exception as e:
+                    print(f"배치 처리 중 오류: {str(e)}")
+                    raise
+
+            skipped += len(batch_records) - len(unique_batch)
+            print(f"진행률: {i+len(batch_records)}/{total} (처리: {processed}, 스킵: {skipped})")
+
+        return processed, skipped
 
     # 기존의 데이터베이스 입력 부분을 아래와 같이 수정
     if disclosure_records:
@@ -801,21 +852,39 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
     else:
         check_date = now_kr(is_date=True)
 
-    business_days = get_business_days(country="KR", start_date=check_date - timedelta(days=7), end_date=check_date)
-    business_days = sorted(business_days)
+    business_days = get_business_days(country="KR", start_date=check_date - timedelta(days=14), end_date=check_date)
+    exclude_dates = ["2024-12-30", "2025-01-03"]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
     # business_days의 모든 요소를 date 타입으로 변환
     if check_date == now_kr(is_date=True):
-        business_day = business_days[-2]
+        business_day = business_days[-1]
     else:
         business_day = business_days[-1]
 
-    condition = dict(Date=business_day.strftime("%Y-%m-%d"))
+    start_date = check_date - timedelta(days=1)
+    end_date = check_date
+
+    df_disclosure = pd.DataFrame(
+        database._select(
+            table="disclosure_information",
+            columns=["ticker"],
+            **dict(
+                date__gte=start_date,
+                date__lt=end_date,
+                ctry="KR",
+            ),
+        )
+    )
+    unique_disclosure_tickers = df_disclosure["ticker"].unique().tolist()
 
     df_price = pd.DataFrame(
         database._select(
             table="stock_kr_1d",
             columns=["Ticker", "Open", "Close", "High", "Low", "Volume"],
-            **condition,
+            **dict(
+                Date=business_day.strftime("%Y-%m-%d"),
+                Ticker__in=unique_disclosure_tickers,
+            ),
         )
     )
     df_price["trading_value"] = (
@@ -824,15 +893,12 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
 
     top_5_tickers = df_price.nlargest(5, "trading_value")["Ticker"].tolist()
 
-    start_date = check_date
-    end_date = start_date + timedelta(days=1)
-
     try:
         # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
         database._update(
             table="disclosure_information",
             sets={"is_top_story": False},
-            **dict(ctry="KR", date__gte=start_date - timedelta(days=1), date__lt=end_date),
+            **dict(ctry="KR", is_top_story=True),
         )
 
         # 거래대금 상위 5개 종목의 is_top_story를 True로 업데이트
@@ -862,17 +928,36 @@ def temp_us_run_disclosure_is_top_story(date: str = None):
     else:
         check_date = now_kr(is_date=True)
 
-    business_days = get_business_days(country="US", start_date=check_date - timedelta(days=7), end_date=check_date)
+    business_days = get_business_days(country="US", start_date=check_date - timedelta(days=14), end_date=check_date)
+    exclude_dates = ["2025-01-03"]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
+
     if check_date == now_kr(is_date=True):
-        business_day = business_days[-2]
+        business_day = business_days[-1]
     else:
         business_day = business_days[-1]
+
+    start_date = check_date - timedelta(days=1)
+    end_date = check_date
+
+    df_disclosure = pd.DataFrame(
+        database._select(
+            table="disclosure_information",
+            columns=["ticker"],
+            **dict(
+                date__gte=start_date,
+                date__lt=end_date,
+                ctry="US",
+            ),
+        )
+    )
+    unique_disclosure_tickers = df_disclosure["ticker"].unique().tolist()
 
     df_price = pd.DataFrame(
         database._select(
             table="stock_us_1d",
             columns=["Ticker", "Open", "Close", "High", "Low", "Volume"],
-            **dict(Date=business_day.strftime("%Y-%m-%d")),
+            **dict(Date=business_day.strftime("%Y-%m-%d"), Ticker__in=unique_disclosure_tickers),
         )
     )
     df_price["trading_value"] = (
@@ -881,15 +966,12 @@ def temp_us_run_disclosure_is_top_story(date: str = None):
 
     top_6_tickers = df_price.nlargest(6, "trading_value")["Ticker"].tolist()
 
-    start_date = check_date
-    end_date = start_date + timedelta(days=1)
-
     try:
         # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
         database._update(
             table="disclosure_information",
             sets={"is_top_story": False},
-            **dict(ctry="US", date__gte=start_date - timedelta(days=1), date__lt=end_date),
+            **dict(ctry="US", is_top_story=True),
         )
 
         # 거래대금 상위 6개 종목의 is_top_story를 True로 업데이트
@@ -992,4 +1074,6 @@ if __name__ == "__main__":
     # kr_run_disclosure_batch(20241230)
     # temp_us_run_disclosure_is_top_story()
     # renewal_us_run_disclosure_batch(batch_min=15, date="20241218080000")
-    renewal_kr_run_disclosure_batch(batch_min=15, date="20250102080000")
+    # renewal_kr_run_disclosure_batch(batch_min=15, date="20250102080000")
+    # renewal_kr_run_disclosure_batch(date="20250103080000")
+    temp_kr_run_disclosure_is_top_story()
