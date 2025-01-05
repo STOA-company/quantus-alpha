@@ -4,7 +4,6 @@ from app.common.celery_config import CELERY_APP
 from app.core.config import settings
 from app.batches.run_stock_trend import (
     run_stock_trend_by_1d_batch,
-    run_stock_trend_by_realtime_batch,
 )
 from app.utils.date_utils import get_session_checker, now_kr
 from functools import wraps
@@ -51,16 +50,6 @@ def stock_trend_1d_task():
         logging.error(f"Error in stock_trend_1d_task: {str(e)}")
 
 
-@CELERY_APP.task(name="stock_trend_realtime")
-@check_market_open
-def stock_trend_realtime_task():
-    """실시간 주가 트렌드 배치 태스크 (장중 15분 간격)"""
-    try:
-        run_stock_trend_by_realtime_batch()
-    except Exception as e:
-        logging.error(f"Error in stock_trend_realtime_task: {str(e)}")
-
-
 # @CELERY_APP.task(name="stock_trend_tickers")
 # @check_market_closed
 # def stock_trend_tickers_task():
@@ -92,10 +81,6 @@ CELERY_APP.conf.beat_schedule = {
     "daily-stock-trend": {
         "task": "stock_trend_1d",
         "schedule": crontab(hour="6", minute="00"),  # 매일 06:00 KST (미국장 마감 1시간 후)
-    },
-    "realtime-stock-trend": {
-        "task": "stock_trend_realtime",
-        "schedule": crontab(hour="22-23,0-4", minute="*/15"),  # 22:30-04:00 KST 동안 15분마다
     },
     # 'ticker-update': {
     #     'task': 'stock_trend_tickers',
