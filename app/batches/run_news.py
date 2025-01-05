@@ -51,18 +51,7 @@ def kr_run_news_batch(date: str = None):
 
     business_days = get_business_days(country="KR", start_date=min_date - timedelta(days=7), end_date=max_date)
     business_days = sorted(business_days)
-
-    # DB에 존재하는 티커 조회
-    df_stock = pd.DataFrame(
-        database._select(
-            table="stock_kr_1d",
-            columns=["Ticker", "Open", "Close", "Volume"],
-            **dict(Date=business_days[-2].strftime("%Y-%m-%d"), Ticker__in=news_tickers),
-        )
-    )
-
-    # DB에 존재하는 티커 목록
-    existing_tickers = df_stock["Ticker"].unique().tolist()
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") != "2024-12-30"]
 
     # DB에 존재하는 티커 조회
     df_stock = pd.DataFrame(
@@ -225,7 +214,7 @@ def us_run_news_batch(date: str = None):
 
     business_days = get_business_days(country="US", start_date=min_date - timedelta(days=7), end_date=max_date)
     business_days = sorted(business_days)
-
+    # business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") != "2025-01-02"]
     # 각 날짜의 가격 데이터 매핑 생성
     price_date_mapping = {}
     current_time = now_kr(is_date=False)
@@ -277,6 +266,11 @@ def us_run_news_batch(date: str = None):
     # News 테이블에 입력할 데이터 준비
     news_records = []
 
+    def safe_value(value):
+        if pd.isna(value):
+            return None
+        return value
+
     # 날짜별로 처리
     for date_str in unique_dates:
         # 해당 날짜의 뉴스 데이터 필터링
@@ -291,15 +285,15 @@ def us_run_news_batch(date: str = None):
                 if pd.isna(row["Code"]) or row["Code"] == "":
                     continue  # Code가 없는 경우 건너뛰기
                 news_record = {
-                    "ticker": row["Code"],
-                    "ko_name": row["korean_name"],
-                    "en_name": row["english_name"],
+                    "ticker": safe_value(row["Code"]),
+                    "ko_name": safe_value(row["korean_name"]),
+                    "en_name": safe_value(row["english_name"]),
                     "ctry": "US",
                     "date": row["date"],
-                    "title": row["titles"],
-                    "summary": row["summary"],
-                    "emotion": row["emotion"],
-                    "that_time_price": row["Close"],
+                    "title": safe_value(row["titles"]),
+                    "summary": safe_value(row["summary"]),
+                    "emotion": safe_value(row["emotion"]),
+                    "that_time_price": None if pd.isna(row["Close"]) else float(row["Close"]),
                     "is_top_story": False,
                     "is_exist": row["Code"] in existing_tickers,
                 }
@@ -330,14 +324,36 @@ def temp_kr_run_news_is_top_story(date: str = None):
         check_date = now_kr(is_date=True)
 
     business_days = get_business_days(country="KR", start_date=check_date - timedelta(days=7), end_date=check_date)
-    business_day = business_days[-2]
+    business_days = [
+        bd for bd in business_days if bd.strftime("%Y-%m-%d") != "2024-12-30" and bd.strftime("%Y-%m-%d") != "2025-01-02"
+    ]
+    if check_date == now_kr(is_date=True):
+        business_day = business_days[-2]
+    else:
+        business_day = business_days[-1]
+
+    start_date = check_date - timedelta(days=1)
+    end_date = check_date
+
+    news_data = pd.DataFrame(
+        database._select(
+            table="news_information",
+            columns=["ticker"],
+            **dict(
+                ctry="KR",
+                date__gte=start_date,
+                date__lt=end_date,
+            ),
+        )
+    )
+    unique_news_tickers = news_data["ticker"].unique().tolist()
 
     # 오늘 가격 데이터 조회
     df_price = pd.DataFrame(
         database._select(
             table="stock_kr_1d",
             columns=["Ticker", "Open", "Close", "High", "Low", "Volume"],
-            **dict(Date=business_day.strftime("%Y-%m-%d")),
+            **dict(Date=business_day.strftime("%Y-%m-%d"), Ticker__in=unique_news_tickers),
         )
     )
     df_price["trading_value"] = (
@@ -347,9 +363,6 @@ def temp_kr_run_news_is_top_story(date: str = None):
     # 해당 날짜의 거래대금 상위 5개 종목 선정
     top_5_tickers = df_price.nlargest(5, "trading_value")["Ticker"].tolist()
 
-    start_date = check_date
-    end_date = start_date + timedelta(days=1)
-
     try:
         # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
         database._update(
@@ -357,8 +370,7 @@ def temp_kr_run_news_is_top_story(date: str = None):
             sets={"is_top_story": False},
             **{
                 "ctry": "KR",
-                "date__gte": start_date,
-                "date__lt": end_date,
+                "is_top_story": True,
             },
         )
 
@@ -395,14 +407,36 @@ def temp_us_run_news_is_top_story(date: str = None):
         check_date = now_kr(is_date=True)
 
     business_days = get_business_days(country="US", start_date=check_date - timedelta(days=7), end_date=check_date)
-    business_day = business_days[-2]
+    business_days = [
+        bd for bd in business_days if bd.strftime("%Y-%m-%d") != "2024-12-30" and bd.strftime("%Y-%m-%d") != "2025-01-02"
+    ]
+    if check_date == now_kr(is_date=True):
+        business_day = business_days[-2]
+    else:
+        business_day = business_days[-1]
+
+    start_date = check_date - timedelta(days=1)
+    end_date = check_date
+
+    news_data = pd.DataFrame(
+        database._select(
+            table="news_information",
+            columns=["ticker", "is_exist"],
+            **dict(
+                ctry="US",
+                date__gte=start_date,
+                date__lt=end_date,
+            ),
+        )
+    )
+    unique_news_tickers = news_data["ticker"].unique().tolist()
 
     # 오늘 가격 데이터 조회
     df_price = pd.DataFrame(
         database._select(
             table="stock_us_1d",
             columns=["Ticker", "Open", "Close", "High", "Low", "Volume"],
-            **dict(Date=business_day.strftime("%Y-%m-%d")),
+            **dict(Date=business_day.strftime("%Y-%m-%d"), Ticker__in=unique_news_tickers),
         )
     )
     df_price["trading_value"] = (
@@ -412,17 +446,13 @@ def temp_us_run_news_is_top_story(date: str = None):
     # 해당 날짜의 거래대금 상위 6개 종목 선정
     top_6_tickers = df_price.nlargest(6, "trading_value")["Ticker"].tolist()
 
-    start_date = check_date
-    end_date = start_date + timedelta(days=1)
-
     # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
     database._update(
         table="news_information",
         sets={"is_top_story": False},
         **{
             "ctry": "US",
-            "date__gte": start_date,
-            "date__lt": end_date,
+            "is_top_story": True,
         },
     )
 
@@ -432,8 +462,8 @@ def temp_us_run_news_is_top_story(date: str = None):
         sets={"is_top_story": True},
         **{
             "ctry": "US",
-            "date__gte": start_date,
-            "date__lt": end_date,
+            "date__gte": f"{start_date}",
+            "date__lt": f"{end_date}",
             "ticker__in": top_6_tickers,
         },
     )
@@ -527,4 +557,8 @@ def us_run_news_is_top_story(date: str = None):
 
 
 if __name__ == "__main__":
-    temp_us_run_news_is_top_story(20241226)
+    # for date in range(20241221, 20241230):
+    us_run_news_batch(20241231)
+    # temp_us_run_news_is_top_story(date="20241230")
+    # temp_kr_run_news_is_top_story()
+    # temp_kr_run_news_is_top_story()
