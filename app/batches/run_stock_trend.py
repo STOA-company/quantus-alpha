@@ -9,38 +9,46 @@ from app.database.crud import database
 def run_stock_trend_tickers_batch():
     """티커 정보 배치 처리"""
     try:
-        table_name = "stock_us_tickers"
-
-        # 전체 종목 수 카운트
-        total_count = database._count(table=table_name)
-        logging.info(f"{table_name} 전체 종목 수: {total_count}개")
-
-        stock_tickers = database._select(
-            table=table_name, columns=["ticker", "market", "korean_name", "english_name"], join_info=None
+        us_im_tickers = database._select(table="stock_us_1m", columns=["ticker"], distinct=True)
+        us_1d_tickers = database._select(table="stock_us_1d", columns=["ticker"], distinct=True)
+        kr_1d_tickers = database._select(table="stock_kr_1d", columns=["ticker"], distinct=True)
+        info_tickers = database._select(
+            table="stock_information", columns=["ticker", "kr_name", "en_name", "market", "ctry"], distinct=True
         )
-        unique_tickers = {(row.ticker, row.market, row.korean_name, row.english_name) for row in stock_tickers}
 
-        # stock_trend 테이블의 기존 종목 수 카운트
-        existing_count = database._count(table="stock_trend")
-        logging.info(f"기존 stock_trend 종목 수: {existing_count}개")
+        # Convert query results to sets for intersection
+        us_1m_set = {row[0] for row in us_im_tickers}
+        us_1d_set = {row[0] for row in us_1d_tickers}
+        kr_1d_set = {row[0] for row in kr_1d_tickers}
+        info_set = {row[0] for row in info_tickers}
 
-        # stock_trend 테이블의 기존 Ticker 조회
-        existing_tickers = database._select(table="stock_trend", columns=["ticker"], join_info=None)
-        existing_ticker_set = {row.ticker for row in existing_tickers}
+        # Find common tickers
+        us_common_tickers = us_1m_set & us_1d_set & info_set
+        kr_common_tickers = kr_1d_set & info_set
 
-        # 새로운 종목 필터링
-        new_tickers = [
-            {"ticker": ticker, "market": market, "korean_name": korean_name, "english_name": english_name}
-            for ticker, market, korean_name, english_name in unique_tickers
-            if ticker not in existing_ticker_set
+        # Prepare data for insertion using list comprehension
+        us_insert_data = [
+            {"ticker": row[0], "kr_name": row[1], "en_name": row[2], "market": row[3], "ctry": row[4]}
+            for row in info_tickers
+            if row[0] in us_common_tickers
         ]
 
-        if new_tickers:
-            logging.info(f"새로운 종목 수: {len(new_tickers)}개")
-            database._insert(table="stock_trend", sets=new_tickers)
-            logging.info("새로운 종목 추가 완료")
-        else:
-            logging.info("새로 추가할 종목이 없습니다")
+        kr_insert_data = [
+            {"ticker": row[0], "kr_name": row[1], "en_name": row[2], "market": row[3], "ctry": row[4]}
+            for row in info_tickers
+            if row[0] in kr_common_tickers
+        ]
+
+        # Insert data into stock_trend table
+        if us_insert_data:
+            database._insert(table="stock_trend", sets=us_insert_data)
+            logging.info(f"Inserted {len(us_insert_data)} US stocks into stock_trend table")
+
+        if kr_insert_data:
+            database._insert(table="stock_trend", sets=kr_insert_data)
+            logging.info(f"Inserted {len(kr_insert_data)} KR stocks into stock_trend table")
+
+        logging.info("Stock trend tickers batch completed successfully")
 
     except Exception as e:
         logging.error(f"Error in run_stock_trend_tickers_batch: {str(e)}")
