@@ -15,16 +15,18 @@ def run_stock_trend_tickers_batch():
         info_tickers = database._select(
             table="stock_information", columns=["ticker", "kr_name", "en_name", "market", "ctry"], distinct=True
         )
+        existing_tickers = database._select(table="stock_trend", columns=["ticker"], distinct=True)
 
         # Convert query results to sets for intersection
         us_1m_set = {row[0] for row in us_im_tickers}
         us_1d_set = {row[0] for row in us_1d_tickers}
         kr_1d_set = {row[0] for row in kr_1d_tickers}
         info_set = {row[0] for row in info_tickers}
+        existing_set = {row[0] for row in existing_tickers}
 
-        # Find common tickers
-        us_common_tickers = us_1m_set & us_1d_set & info_set
-        kr_common_tickers = kr_1d_set & info_set
+        # Find common tickers that don't exist in stock_trend
+        us_common_tickers = (us_1m_set & us_1d_set & info_set) - existing_set
+        kr_common_tickers = (kr_1d_set & info_set) - existing_set
 
         # Prepare data for insertion using list comprehension
         us_insert_data = [
@@ -42,11 +44,11 @@ def run_stock_trend_tickers_batch():
         # Insert data into stock_trend table
         if us_insert_data:
             database._insert(table="stock_trend", sets=us_insert_data)
-            logging.info(f"Inserted {len(us_insert_data)} US stocks into stock_trend table")
+            logging.info(f"Inserted {len(us_insert_data)} new US stocks into stock_trend table")
 
         if kr_insert_data:
             database._insert(table="stock_trend", sets=kr_insert_data)
-            logging.info(f"Inserted {len(kr_insert_data)} KR stocks into stock_trend table")
+            logging.info(f"Inserted {len(kr_insert_data)} new KR stocks into stock_trend table")
 
         logging.info("Stock trend tickers batch completed successfully")
 
