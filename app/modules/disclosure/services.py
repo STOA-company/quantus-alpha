@@ -232,6 +232,7 @@ class DisclosureService:
                     "key_points",
                     "emotion",
                     "form_type",
+                    "category_type",
                     "that_time_price",
                 ],
                 **{"ticker": ticker, "date__like": f"{year}%"},
@@ -266,9 +267,11 @@ class DisclosureService:
             form_type = (
                 document_type_mapping.get(row["form_type"], row["form_type"]) if ctry == "us" else row["form_type"]
             )
+            ko_name = row.get("ko_name", "") or ""
+            category_type = "[" + row.get("category_type", "") + "]" if row.get("category_type", "") else ""
             data.append(
                 {
-                    "title": row["ko_name"] + " " + form_type,
+                    "title": f"{ko_name} {form_type} {category_type}".strip(),
                     "date": row["date"],
                     "emotion": row["emotion"],
                     "impact_reason": row["impact_reason"],
