@@ -22,6 +22,7 @@ from app.database.conn import db
 from app.core.logging.config import get_logger
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import contry_mapping
+from app.utils.data_utils import remove_parentheses
 
 
 logger = get_logger(__name__)
@@ -600,16 +601,20 @@ class PriceService:
             return PriceSummaryItem(**cached_data)
 
         df = self._fetch_52week_data(ctry, ticker)
-        if df.empty:
-            raise DataNotFoundException(ticker, "52week")
+        if not df.empty:
+            week_52_high = df["week_52_high"].iloc[0] or 0.0
+            week_52_low = df["week_52_low"].iloc[0]
+            last_day_close = df["last_close"].iloc[0]
+        else:
+            week_52_high = 0.0
+            week_52_low = 0.0
+            last_day_close = 0.0
 
-        week_52_high = df["week_52_high"].iloc[0]
-        week_52_low = df["week_52_low"].iloc[0]
-        last_day_close = df["last_close"].iloc[0]
         sector = await self._get_sector_by_ticker(ticker) or ""
         name = self._get_us_ticker_name(ticker) or ""
         market = self._get_market(ticker) or ""
         market_cap = await self._get_market_cap(ctry, ticker) or 0.0
+        name = remove_parentheses(name)
 
         response_data = {
             "name": name,
@@ -656,6 +661,7 @@ class PriceService:
         ctry_3 = contry_mapping[ctry]
         if ctry_3 == "USA":
             ticker = f"{ticker}-US"
+        print(f"####end {ctry_3} {ticker}")
         result = self.database._select(
             table=f"{ctry_3}_stock_factors", columns=["week_52_high", "week_52_low", "last_close"], ticker=ticker
         )

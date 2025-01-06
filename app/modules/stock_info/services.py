@@ -87,6 +87,7 @@ class StockInfoService:
             columns=columns,
             **{"ticker": ticker},
         )
+        status_options = ["좋음", "보통", "나쁨"]
 
         if not current_stock:
             return Indicators(
@@ -96,6 +97,10 @@ class StockInfoService:
                 industry_pbr=0,
                 roe=0,
                 industry_roe=0,
+                financial_data="보통",
+                price_trend="보통",
+                market_situation="보통",
+                industry_situation="보통",
             )
 
         # 관련 섹터의 ticker 조회
@@ -125,8 +130,6 @@ class StockInfoService:
                 sector_per = sector_pbr = sector_roe = 0
         else:
             sector_per = sector_pbr = sector_roe = 0
-
-        status_options = ["좋음", "보통", "나쁨"]
 
         return Indicators(
             per=self.round_and_clean(current_stock[0].per),
