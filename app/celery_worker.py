@@ -11,6 +11,7 @@ from app.batches.run_stock_trend import (
     run_stock_trend_tickers_batch,
     run_stock_trend_by_realtime_batch,
 )
+from app.batches.run_stock_indices import us_run_stock_indices_batch
 from app.utils.date_utils import get_session_checker, now_kr
 
 
@@ -71,7 +72,7 @@ def hello_task():
 
 # US Stock Indices task
 @CELERY_APP.task(name="us_stock_indices_batch", ignore_result=True)
-def us_run_stock_indices_batch():
+def us_stock_indices_batch():
     """미국 주가지수 데이터 업데이트"""
     try:
         us_run_stock_indices_batch()
