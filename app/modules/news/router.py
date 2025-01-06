@@ -1,5 +1,5 @@
-from typing import Annotated, List
-from fastapi import APIRouter, Depends, Query
+from typing import Annotated, List, Literal
+from fastapi import APIRouter, Depends, Query, Request, Response
 from app.modules.common.schemas import BaseResponse
 from app.modules.news.services import NewsService, get_news_service
 from app.modules.news.schemas import NewsDetailItem, NewsRenewalResponse, NewsResponse, TopStoriesResponse
@@ -23,10 +23,24 @@ def news_main(
 
 @router.get("/top_stories", summary="주요소식 모아보기", response_model=BaseResponse[List[TopStoriesResponse]])
 def top_stories(
+    request: Request,
     news_service: NewsService = Depends(get_news_service),
 ):
-    data = news_service.top_stories()
+    data = news_service.top_stories(request=request)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
+
+
+@router.post("/api/stories/{ticker}/{type}/{id}", summary="주요소식 조회 여부 업데이트")
+async def mark_story_as_viewed(
+    ticker: str,
+    type: Literal["news", "disclosure"],
+    id: int,
+    response: Response,
+    request: Request,
+    news_service: NewsService = Depends(get_news_service),
+):
+    news_service.mark_story_as_viewed(ticker=ticker, type=type, id=id, request=request, response=response)
+    return BaseResponse(status_code=200, message="Successfully updated story view status")
 
 
 @router.get("/renewal/detail", summary="상세 페이지 뉴스", response_model=NewsResponse[List[NewsDetailItem]])

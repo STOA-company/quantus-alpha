@@ -71,12 +71,14 @@ class LatestNewsResponse(BaseModel):
 
 
 class TopStoriesItem(BaseModel):
+    id: int
     price_impact: float
     date: datetime
     title: str
     summary: str | None
     emotion: str | None
     type: str
+    is_viewed: bool
 
 
 class TopStoriesResponse(BaseModel):
@@ -87,4 +89,5 @@ class TopStoriesResponse(BaseModel):
     current_price: float
     change_rate: float
     items_count: int
+    is_viewed: bool
     news: list[TopStoriesItem]

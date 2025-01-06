@@ -1,7 +1,10 @@
 from datetime import datetime
+import json
 import math
 import re
 from typing import List
+
+from fastapi import Request, Response
 from app.core.exception.custom import DataNotFoundException
 from app.modules.disclosure.mapping import document_type_mapping
 
@@ -291,13 +294,22 @@ class NewsService:
 
         return data
 
-    def top_stories(self):
+    def top_stories(self, request: Request):
+        viewed_stories = []
+        if request.cookies.get("viewed_stories"):
+            cookie_data = request.cookies.get("viewed_stories", "[]")
+            try:
+                viewed_stories = json.loads(cookie_data)
+            except json.JSONDecodeError:
+                viewed_stories = []
+
         condition = {"is_top_story": 1, "is_exist": True}
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
             self.db._select(
                 table="news_information",
                 columns=[
+                    "id",
                     "ticker",
                     "ko_name",
                     "en_name",
@@ -323,6 +335,7 @@ class NewsService:
             self.db._select(
                 table="disclosure_information",
                 columns=[
+                    "id",
                     "ticker",
                     "ko_name",
                     "en_name",
@@ -364,8 +377,6 @@ class NewsService:
         elif not df_disclosure.empty:
             total_df = df_disclosure
 
-        print(f"total_df: {total_df}")
-
         # 종목 현재가 정보 수집
         unique_tickers = total_df["ticker"].unique().tolist()
         df_price = pd.DataFrame(
@@ -402,16 +413,25 @@ class NewsService:
                 continue
 
             news_items = []
+            ticker_has_unviewed = False
             for _, row in ticker_news.iterrows():
+                news_key = f'{ticker}_{row["type"]}_{row["id"]}'
+                is_viewed = news_key in viewed_stories
+
+                if not is_viewed:
+                    ticker_has_unviewed = True
+
                 price_impact = float(row["price_impact"]) if pd.notnull(row["price_impact"]) else 0.0
                 news_items.append(
                     TopStoriesItem(
+                        id=row["id"],
                         price_impact=price_impact,
                         date=row["date"],
                         title=self.remove_parentheses(row["title"]),
                         summary=row["summary"],
                         emotion=row["emotion"],
                         type=row["type"],
+                        is_viewed=is_viewed,
                     )
                 )
             ko_name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
@@ -427,10 +447,37 @@ class NewsService:
                     change_rate=ticker_news.iloc[0]["change_1m"] if ticker_news.iloc[0].get("change_1m") else 0.0,
                     items_count=len(news_items),
                     news=news_items,
+                    is_viewed=not ticker_has_unviewed,
                 )
             )
+        result.sort(key=lambda x: x.is_viewed, reverse=False)
 
         return result
+
+    def mark_story_as_viewed(self, ticker: str, type: str, id: int, request: Request, response: Response) -> bool:
+        # 기존 쿠키 확인
+        current_viewed = request.cookies.get("viewed_stories", "[]")
+        viewed_list = json.loads(current_viewed)
+
+        # 새로운 조회 기록 추가
+        story_key = f"{ticker}_{type}_{id}"
+        if story_key not in viewed_list:
+            viewed_list.append(story_key)
+
+            if len(viewed_list) > 100:  # 최대 100개 기록 유지
+                viewed_list.pop(0)
+
+        # 쿠키 업데이트
+        response.set_cookie(
+            key="viewed_stories",
+            value=json.dumps(viewed_list),
+            max_age=86400,  # 24시간
+            httponly=True,
+            # secure=True,
+            samesite="lax",
+        )
+
+        return True
 
     def news_detail(self, ticker: str, date: str = None, page: int = 1, size: int = 6):
         if not date:
