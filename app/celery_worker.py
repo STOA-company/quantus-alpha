@@ -6,6 +6,7 @@ from app.batches.run_stock_trend import (
     run_stock_trend_by_1d_batch,
     run_stock_trend_by_realtime_batch,
 )
+from app.batches.run_stock_indices import us_run_stock_indices_batch
 from app.utils.date_utils import get_session_checker, now_kr
 from functools import wraps
 
@@ -79,7 +80,7 @@ def hello_task():
 
 # Existing tasks
 @CELERY_APP.task(name="us_stock_indices_batch", ignore_result=True)
-def us_run_stock_indices_batch():
+def us_stock_indices_batch():
     try:
         us_run_stock_indices_batch()
     except Exception as e:
