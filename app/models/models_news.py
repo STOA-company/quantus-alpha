@@ -25,6 +25,7 @@ class News(Base):
     title = Column(String(255), nullable=True, comment="제목")
     summary = Column(Text, nullable=True, comment="요약")
     emotion = Column(String(20), nullable=True, comment="감정")
+    links = Column(Text, nullable=True, comment="링크")
     that_time_price = Column(Float, nullable=True, comment="해당 시간 종가")
     is_top_story = Column(Boolean, nullable=True, comment="주요 소식 선정 여부")
     is_exist = Column(Boolean, nullable=True, comment="DB 존재 여부")

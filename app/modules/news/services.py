@@ -189,7 +189,7 @@ class NewsService:
         return data
 
     def disclosure_main(self, ctry: str = None) -> List[DisclosureRenewalItem]:
-        condition = {}
+        condition = {"is_exist": True}
         if ctry:
             if ctry == "kr":
                 condition["ctry"] = "KR"
