@@ -31,12 +31,13 @@ class SearchService:
         search_query = (
             select(StockInformation)
             .where(
+                StockInformation.can_use,
                 or_(
                     StockInformation.ticker == query,
                     StockInformation.ticker.ilike(search_term),
                     StockInformation.kr_name.ilike(search_term),
                     StockInformation.en_name.ilike(search_term),
-                )
+                ),
             )
             .order_by(case((StockInformation.ticker == query, 1), else_=2).label("sort_order"))
             .offset(offset)
