@@ -40,6 +40,8 @@ class StockInformation(Base):
     establishment_date = Column(Date, nullable=True, comment="설립일")
     listing_date = Column(Date, nullable=True, comment="상장일")
 
+    can_use = Column(Boolean, default=True, comment="사용 가능 여부")
+
 
 class StockFactor(Base):
     __tablename__ = "stock_factor"
