@@ -128,7 +128,7 @@ class StockTrend(Base):
 
     ticker = Column(String(20), primary_key=True, nullable=False, comment="종목 코드")
     last_updated = Column(DateTime, nullable=True, index=True, comment="마지막 업데이트 시간")
-    ko_name = Column(String(100), nullable=True, comment="종목 한글명")
+    kr_name = Column(String(100), nullable=True, comment="종목 한글명")
     en_name = Column(String(100), nullable=True, comment="종목 영문명")
     ctry = Column(String(20), nullable=True, comment="국가")
     market = Column(String(10), nullable=True, index=True, comment="시장 구분")

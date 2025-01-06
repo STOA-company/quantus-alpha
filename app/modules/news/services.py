@@ -1,5 +1,6 @@
 from datetime import datetime
 import math
+import re
 from typing import List
 from app.core.exception.custom import DataNotFoundException
 from app.modules.disclosure.mapping import document_type_mapping
@@ -189,7 +190,7 @@ class NewsService:
         return data
 
     def disclosure_main(self, ctry: str = None) -> List[DisclosureRenewalItem]:
-        condition = {}
+        condition = {"is_exist": True}
         if ctry:
             if ctry == "kr":
                 condition["ctry"] = "KR"
@@ -254,7 +255,7 @@ class NewsService:
             df_disclosure["change_rate"] = round(df_disclosure["change_rt"], 2)
 
         df_disclosure["price_impact"] = round(df_disclosure["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
-
+        df_disclosure["ko_name"] = df_disclosure["ko_name"].apply(self.remove_parentheses)
         data = []
         for _, row in df_disclosure.iterrows():
             id = row["id"]
@@ -407,18 +408,18 @@ class NewsService:
                     TopStoriesItem(
                         price_impact=price_impact,
                         date=row["date"],
-                        title=row["title"],
+                        title=self.remove_parentheses(row["title"]),
                         summary=row["summary"],
                         emotion=row["emotion"],
                         type=row["type"],
                     )
                 )
-
+            ko_name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
             result.append(
                 TopStoriesResponse(
-                    name=ticker_news.iloc[0]["ko_name"],
+                    name=ko_name,
                     ticker=ticker,
-                    logo_image="추후 반영",
+                    logo_image="추후 반영1",
                     ctry=ticker_news.iloc[0]["ctry"],
                     current_price=ticker_news.iloc[0]["current_price"]
                     if ticker_news.iloc[0].get("current_price")
@@ -494,6 +495,15 @@ class NewsService:
                 )
             )
         return data, total_count, total_page, offset, emotion_count, ctry
+
+    def remove_parentheses(self, text):
+        if not text:  # None이나 빈 문자열 체크
+            return text
+        # \(.*?\)$ : 마지막에 있는 괄호와 그 내용을 매칭
+        # .*? : 괄호 안의 모든 문자 (non-greedy)
+        # $ : 문자열의 끝
+        cleaned_text = re.sub(r"\(.*?\)$", "", text).strip()
+        return cleaned_text
 
 
 def get_news_service() -> NewsService:
