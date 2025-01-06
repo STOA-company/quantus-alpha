@@ -352,13 +352,14 @@ class Database:
             logging.error(f"Error in count operation: {str(e)}")
             raise
 
-    def _bulk_update(self, table: str, data: list[dict], key_column: str):
+    def _bulk_update(self, table: str, data: list[dict], key_column: str, chunk_size: int = 1000):
         """벌크 업데이트 실행
 
         Args:
             table (str): 테이블 이름
             data (list[dict]): 업데이트할 데이터 리스트
             key_column (str): 기준이 되는 키 컬럼명
+            chunk_size (int): 한 번에 처리할 레코드 수
         """
         try:
             if not data:
@@ -366,31 +367,38 @@ class Database:
 
             obj = self.meta_data.tables[table]
 
-            # 임시 테이블 생성을 위한 VALUES 절 생성
-            values_list = []
-            for item in data:
-                processed_item = self.get_sets(obj, item)
-                values_list.append(processed_item)
+            # 키 컬럼 존재 여부 확인
+            if key_column not in obj.columns:
+                raise ValueError(f"Key column '{key_column}' does not exist in table '{table}'")
 
-            # 벌크 업데이트 쿼리 생성
+            # 데이터의 모든 컬럼이 테이블에 존재하는지 확인
+            sample_data = data[0]
+            invalid_columns = [col for col in sample_data if col not in obj.columns]
+            if invalid_columns:
+                raise ValueError(f"Invalid columns found: {invalid_columns}")
+
             key_col = getattr(obj.columns, key_column)
-            stmt = (
-                update(obj)
-                .where(key_col == bindparam("_old_" + key_column))
-                .values({col: bindparam(col.name) for col in obj.columns if col.name in values_list[0]})
-            )
 
-            # 파라미터 생성
-            update_params = []
-            for item in values_list:
-                param = {"_old_" + key_column: item[key_col], **item}
-                update_params.append(param)
+            # 청크 단위로 처리
+            for i in range(0, len(data), chunk_size):
+                chunk = data[i : i + chunk_size]
 
-            # 실행
-            with self.get_connection() as connection:
-                connection.execute(stmt, update_params)
+                values_list = [self.get_sets(obj, item) for item in chunk]
 
-            logging.info(f"Bulk update completed for {len(data)} records in {table}")
+                stmt = (
+                    update(obj)
+                    .where(key_col == bindparam("_old_" + key_column))
+                    .values({col: bindparam(col.name) for col in obj.columns if col.name in values_list[0]})
+                )
+
+                update_params = [{"_old_" + key_column: item[key_col], **item} for item in values_list]
+
+                with self.get_connection() as connection:
+                    connection.execute(stmt, update_params)
+
+                logging.info(
+                    f"Bulk update completed for chunk {i//chunk_size + 1}, " f"processed {len(chunk)} records in {table}"
+                )
 
         except Exception as e:
             logging.error(f"Error in bulk update operation: {str(e)}")
