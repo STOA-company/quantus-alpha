@@ -292,7 +292,7 @@ class NewsService:
         return data
 
     def top_stories(self):
-        condition = {"is_top_story": 1}
+        condition = {"is_top_story": 1, "is_exist": True}
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
             self.db._select(
@@ -419,7 +419,7 @@ class NewsService:
                 TopStoriesResponse(
                     name=ko_name,
                     ticker=ticker,
-                    logo_image="추후 반영1",
+                    logo_image="추후 반영",
                     ctry=ticker_news.iloc[0]["ctry"],
                     current_price=ticker_news.iloc[0]["current_price"]
                     if ticker_news.iloc[0].get("current_price")
@@ -444,6 +444,7 @@ class NewsService:
             "ticker": ticker,
             "date__gte": f"{date} 00:00:00",
             "date__lt": f"{date} 23:59:59",
+            "is_exist": True,
         }
         df_news = pd.DataFrame(
             self.db._select(
