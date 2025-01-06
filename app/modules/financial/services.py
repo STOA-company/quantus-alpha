@@ -612,7 +612,7 @@ class FinancialService:
         if ticker.endswith("-US"):
             ticker = ticker[:-3]
 
-        query = select(StockInformation.sector_3).where(StockInformation.ticker == ticker)
+        query = select(StockInformation.sector_2).where(StockInformation.ticker == ticker)
         result = self.db._execute(query)
         sector = result.scalar_one_or_none()
         return sector
@@ -624,7 +624,7 @@ class FinancialService:
             logger.warning("Sector is empty, returning empty list to prevent full table scan")
             return []  # 빈 리스트 반환하여 전체 종목 조회 방지
 
-        result = self.db._select(table="stock_information", columns=["ticker"], sector_3=sector)
+        result = self.db._select(table="stock_information", columns=["ticker"], sector_2=sector)
 
         return [row.ticker for row in result] if result else []
 
