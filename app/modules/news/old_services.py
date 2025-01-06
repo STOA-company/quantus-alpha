@@ -290,7 +290,7 @@ class NewsService:
             order="date",
             ascending=False,
             limit=1,
-            **dict(ticker=ticker),
+            **dict(ticker=ticker, is_exist=True),
         )
         if disclosure_data:
             date = disclosure_data[0][0].strftime("%Y-%m-%d %H:%M:%S")
@@ -308,7 +308,7 @@ class NewsService:
             order="date",
             ascending=False,
             limit=1,
-            **dict(ticker=ticker),
+            **dict(ticker=ticker, is_exist=True),
         )
         if news_data:
             date = news_data[0][0].strftime("%Y-%m-%d %H:%M:%S")
