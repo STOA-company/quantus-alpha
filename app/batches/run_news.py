@@ -291,11 +291,6 @@ def us_run_news_batch(date: str = None):
     # News 테이블에 입력할 데이터 준비
     news_records = []
 
-    def safe_value(value):
-        if pd.isna(value):
-            return None
-        return value
-
     # 날짜별로 처리
     for date_str in unique_dates:
         # 해당 날짜의 뉴스 데이터 필터링

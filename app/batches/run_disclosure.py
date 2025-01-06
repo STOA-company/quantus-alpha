@@ -893,9 +893,6 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
 
     top_5_tickers = df_price.nlargest(5, "trading_value")["Ticker"].tolist()
 
-    start_date = check_date
-    end_date = start_date + timedelta(days=1)
-
     try:
         # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
         database._update(
@@ -968,9 +965,6 @@ def temp_us_run_disclosure_is_top_story(date: str = None):
     )
 
     top_6_tickers = df_price.nlargest(6, "trading_value")["Ticker"].tolist()
-
-    start_date = check_date
-    end_date = start_date + timedelta(days=1)
 
     try:
         # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
