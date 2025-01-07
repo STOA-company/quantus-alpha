@@ -30,8 +30,9 @@ origins = [
     "http://127.0.0.1:3000",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "https://alpha-dev.quantus.kr/",
-    "https://develop.alphafinder.dev/",
+    "https://alpha-dev.quantus.kr",
+    "https://develop.alphafinder.dev",
+    "https://alphafinder-stage.vercel.app",
 ]
 
 app.add_middleware(
