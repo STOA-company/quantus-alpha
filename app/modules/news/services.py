@@ -311,7 +311,6 @@ class NewsService:
                 table="news_information",
                 columns=[
                     "id",
-                    "id",
                     "ticker",
                     "ko_name",
                     "en_name",
@@ -337,7 +336,6 @@ class NewsService:
             self.db._select(
                 table="disclosure_information",
                 columns=[
-                    "id",
                     "id",
                     "ticker",
                     "ko_name",
@@ -417,7 +415,6 @@ class NewsService:
 
             news_items = []
             ticker_has_unviewed = False
-            ticker_has_unviewed = False
             for _, row in ticker_news.iterrows():
                 news_key = f'{ticker}_{row["type"]}_{row["id"]}'
                 is_viewed = news_key in viewed_stories
@@ -460,7 +457,6 @@ class NewsService:
                     is_viewed=not ticker_has_unviewed,
                 )
             )
-        result.sort(key=lambda x: x.is_viewed, reverse=False)
         result.sort(key=lambda x: x.is_viewed, reverse=False)
 
         return result
@@ -529,7 +525,6 @@ class NewsService:
                 **{"ticker__in": unique_tickers},
             )
         )
-        df_news["summary1"], df_news["summary2"] = self._split_parsing_summary(df_news["summary"])
         df_news["summary1"], df_news["summary2"] = self._split_parsing_summary(df_news["summary"])
         df_news["price_impact"] = 0.0
         if not df_price.empty:
