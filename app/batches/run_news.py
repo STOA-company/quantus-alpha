@@ -4,7 +4,6 @@ import pandas as pd
 from quantus_aws.common.configs import s3_client
 from app.utils.date_utils import get_business_days, now_kr
 from app.database.crud import database
-import argparse
 
 
 def get_data_from_bucket(bucket, key, dir):
@@ -428,6 +427,7 @@ def temp_kr_run_news_is_top_story(date: str = None):
                 ctry="KR",
                 date__gte=start_date,
                 date__lt=end_date,
+                is_exist=True,
             ),
         )
     )
@@ -496,7 +496,7 @@ def temp_us_run_news_is_top_story(date: str = None):
     business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
 
     if check_date == now_kr(is_date=True):
-        business_day = business_days[-1]
+        business_day = business_days[-2]
     else:
         business_day = business_days[-1]
 
@@ -511,6 +511,7 @@ def temp_us_run_news_is_top_story(date: str = None):
                 ctry="US",
                 date__gte=start_date,
                 date__lt=end_date,
+                is_exist=True,
             ),
         )
     )
@@ -642,23 +643,24 @@ def us_run_news_is_top_story(date: str = None):
 
 
 if __name__ == "__main__":
-    # temp_us_run_news_is_top_story()
+    temp_us_run_news_is_top_story()
+    temp_kr_run_news_is_top_story()
     # for date in range(20241201, 20241211):
     #     us_run_news_batch(date=str(date))
     ########################################
-    parser = argparse.ArgumentParser(description="뉴스 데이터 수집 배치")
-    parser.add_argument("--country", type=str, choices=["us", "kr"], required=True, help="수집할 국가 선택 (us 또는 kr)")
-    parser.add_argument("--date", type=str, help="수집할 날짜 (YYYYMMDD 형식)")
+    # parser = argparse.ArgumentParser(description="뉴스 데이터 수집 배치")
+    # parser.add_argument("--country", type=str, choices=["us", "kr"], required=True, help="수집할 국가 선택 (us 또는 kr)")
+    # parser.add_argument("--date", type=str, help="수집할 날짜 (YYYYMMDD 형식)")
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
 
-    if args.country == "us":
-        if args.date:
-            us_run_news_batch(date=args.date)
-        else:
-            us_run_news_batch()
-    elif args.country == "kr":
-        if args.date:
-            kr_run_news_batch(date=args.date)
-        else:
-            kr_run_news_batch()
+    # if args.country == "us":
+    #     if args.date:
+    #         us_run_news_batch(date=args.date)
+    #     else:
+    #         us_run_news_batch()
+    # elif args.country == "kr":
+    #     if args.date:
+    #         kr_run_news_batch(date=args.date)
+    #     else:
+    #         kr_run_news_batch()

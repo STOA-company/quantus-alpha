@@ -30,6 +30,7 @@ class IndicesResponse(BaseModel):
 class IndicesData(BaseModel):
     status_code: int
     message: str
+    time: str
     kospi: IndexSummary
     kosdaq: IndexSummary
     nasdaq: IndexSummary
