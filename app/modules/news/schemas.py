@@ -38,8 +38,9 @@ class NewsDetailItem(BaseModel):
     ctry: str | None
     date: datetime
     title: str
-    summary1: str | None
-    summary2: str | None
+    summary: str | None
+    # summary1: str | None
+    # summary2: str | None
     emotion: str | None
     price_impact: float | None
 

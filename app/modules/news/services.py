@@ -538,8 +538,9 @@ class NewsService:
                     ctry=row["ctry"],
                     date=row["date"],
                     title=row["title"],
-                    summary1=row["summary1"],
-                    summary2=row["summary2"],
+                    summary=row["summary"],
+                    # summary1=row["summary1"],
+                    # summary2=row["summary2"],
                     emotion=row["emotion"],
                     price_impact=row["price_impact"],
                 )
