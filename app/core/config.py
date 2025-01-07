@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # App settings
     ENV: str = ENV
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
-    PROJECT_NAME: str = f"Alphafinder API 1.0 - {ENV}"
+    PROJECT_NAME: str = "Alphafinder API 1.0"
     API_V1_STR: str = "/api/v1"
     API_V2_STR: str = "/api/v2"
     DATA_DIR: str = os.getenv("DATA_DIR", "./data")
@@ -69,15 +69,6 @@ class DevConfig(DatabaseConfig):
         )
 
 
-class StageConfig(DatabaseConfig):
-    def __init__(self):
-        super().__init__(
-            DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
-            DB_POOL_RECYCLE=3600,
-            DB_ECHO=True,
-        )
-
-
 class ProdConfig(DatabaseConfig):
     def __init__(self):
         super().__init__(
@@ -99,5 +90,5 @@ class TestConfig(DatabaseConfig):
 def get_database_config():
     """Get database configuration based on environment"""
 
-    config = dict(prod=ProdConfig, dev=DevConfig, test=TestConfig, stage=StageConfig)
+    config = dict(prod=ProdConfig, dev=DevConfig, test=TestConfig)
     return config[settings.ENV]()
