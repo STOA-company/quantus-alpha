@@ -37,6 +37,9 @@ class StockInfoService:
             if not intro_df_filtered.empty:
                 intro_result = intro_df_filtered.to_dict(orient="records")[0]
 
+            if ctry == "kr":
+                ticker = "A" + ticker
+
             # DB에서 데이터 읽기
             table_name = "stock_information"
             columns = ["ticker", "homepage_url", "ceo", "establishment_date", "listing_date"]
