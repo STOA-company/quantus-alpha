@@ -55,7 +55,7 @@ class TrendingService:
             TrendingStock(
                 num=idx,
                 ticker=stock._mapping["ticker"],
-                name=f"{stock._mapping['kr_name']} ({stock._mapping['ticker']})",
+                name=f"{stock._mapping['kr_name'].replace('(ADR)', '')} ({stock._mapping['ticker']})",
                 current_price=stock._mapping["current_price"],
                 current_price_rate=stock._mapping[f"change_{request.period.value}"],
                 volume=stock._mapping[f"volume_{request.period.value}"],

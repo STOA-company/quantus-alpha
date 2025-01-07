@@ -1,7 +1,10 @@
 from datetime import datetime
+import json
 import math
 import re
 from typing import List
+
+from fastapi import Request, Response
 from app.core.exception.custom import DataNotFoundException
 from app.modules.disclosure.mapping import document_type_mapping
 
@@ -291,13 +294,22 @@ class NewsService:
 
         return data
 
-    def top_stories(self):
+    def top_stories(self, request: Request):
+        viewed_stories = []
+        if request.cookies.get("viewed_stories"):
+            cookie_data = request.cookies.get("viewed_stories", "[]")
+            try:
+                viewed_stories = json.loads(cookie_data)
+            except json.JSONDecodeError:
+                viewed_stories = []
+
         condition = {"is_top_story": 1, "is_exist": True}
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
             self.db._select(
                 table="news_information",
                 columns=[
+                    "id",
                     "ticker",
                     "ko_name",
                     "en_name",
@@ -323,6 +335,7 @@ class NewsService:
             self.db._select(
                 table="disclosure_information",
                 columns=[
+                    "id",
                     "ticker",
                     "ko_name",
                     "en_name",
@@ -364,8 +377,6 @@ class NewsService:
         elif not df_disclosure.empty:
             total_df = df_disclosure
 
-        print(f"total_df: {total_df}")
-
         # 종목 현재가 정보 수집
         unique_tickers = total_df["ticker"].unique().tolist()
         df_price = pd.DataFrame(
@@ -402,16 +413,25 @@ class NewsService:
                 continue
 
             news_items = []
+            ticker_has_unviewed = False
             for _, row in ticker_news.iterrows():
+                news_key = f'{ticker}_{row["type"]}_{row["id"]}'
+                is_viewed = news_key in viewed_stories
+
+                if not is_viewed:
+                    ticker_has_unviewed = True
+
                 price_impact = float(row["price_impact"]) if pd.notnull(row["price_impact"]) else 0.0
                 news_items.append(
                     TopStoriesItem(
+                        id=row["id"],
                         price_impact=price_impact,
                         date=row["date"],
                         title=self.remove_parentheses(row["title"]),
                         summary=row["summary"],
                         emotion=row["emotion"],
                         type=row["type"],
+                        is_viewed=is_viewed,
                     )
                 )
             ko_name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
@@ -427,10 +447,37 @@ class NewsService:
                     change_rate=ticker_news.iloc[0]["change_1m"] if ticker_news.iloc[0].get("change_1m") else 0.0,
                     items_count=len(news_items),
                     news=news_items,
+                    is_viewed=not ticker_has_unviewed,
                 )
             )
+        result.sort(key=lambda x: x.is_viewed, reverse=False)
 
         return result
+
+    def mark_story_as_viewed(self, ticker: str, type: str, id: int, request: Request, response: Response) -> bool:
+        # 기존 쿠키 확인
+        current_viewed = request.cookies.get("viewed_stories", "[]")
+        viewed_list = json.loads(current_viewed)
+
+        # 새로운 조회 기록 추가
+        story_key = f"{ticker}_{type}_{id}"
+        if story_key not in viewed_list:
+            viewed_list.append(story_key)
+
+            if len(viewed_list) > 100:  # 최대 100개 기록 유지
+                viewed_list.pop(0)
+
+        # 쿠키 업데이트
+        response.set_cookie(
+            key="viewed_stories",
+            value=json.dumps(viewed_list),
+            max_age=86400,  # 24시간
+            httponly=True,
+            # secure=True,
+            samesite="lax",
+        )
+
+        return True
 
     def news_detail(self, ticker: str, date: str = None, page: int = 1, size: int = 6):
         if not date:
@@ -471,6 +518,7 @@ class NewsService:
                 **{"ticker__in": unique_tickers},
             )
         )
+        df_news["summary1"], df_news["summary2"] = self._split_parsing_summary(df_news["summary"])
         df_news["price_impact"] = 0.0
         if not df_price.empty:
             df_price["current_price"] = df_price["current_price"].fillna(0.0)
@@ -490,7 +538,8 @@ class NewsService:
                     ctry=row["ctry"],
                     date=row["date"],
                     title=row["title"],
-                    summary=row["summary"],
+                    summary1=row["summary1"],
+                    summary2=row["summary2"],
                     emotion=row["emotion"],
                     price_impact=row["price_impact"],
                 )
@@ -505,6 +554,66 @@ class NewsService:
         # $ : 문자열의 끝
         cleaned_text = re.sub(r"\(.*?\)$", "", text).strip()
         return cleaned_text
+
+    def _split_parsing_summary(self, summaries):
+        """
+        DataFrame의 summary 컬럼을 summary1과 summary2로 나누는 함수
+
+        Args:
+            summaries (pd.Series): 뉴스 요약 텍스트가 담긴 Series
+
+        Returns:
+            tuple[pd.Series, pd.Series]: (summary1_series, summary2_series) 형태로 반환
+        """
+
+        def split_single_summary(summary):
+            if not summary:
+                return None, None
+
+            # 기본 구분자로 나누기
+            parts = summary.split("**기사 요약**")
+            if len(parts) < 2:
+                return summary, ""
+
+            # summary1 추출 (기사 요약 부분)
+            summary1_part = parts[1].split("**주가에")[0].strip(" :\n-")
+            summary1_lines = [line.strip(" -") for line in summary1_part.split("\n") if line.strip()]
+            summary1 = "\n".join(f"- {line}" for line in summary1_lines if line)
+
+            # summary2 추출 (주가 영향 및 감성분석 부분)
+            remaining_text = "**주가에" + "".join(parts[1:])
+            impact_part = remaining_text.split("**뉴스 감성분석**")[0]
+            sentiment_part = remaining_text.split("**뉴스 감성분석**")[1]
+
+            # # 감성 값 추출
+            # sentiment = sentiment_part.split(":")[1].split("\n")[0].strip()
+
+            # 주가 영향 부분 처리
+            impact_lines = [line.strip(" -") for line in impact_part.split("\n") if line.strip()]
+            impact_lines = [line for line in impact_lines if not line.startswith("**")]
+            impact_text = "\n".join(f"- {line}" for line in impact_lines if line)
+
+            # 감성분석 부분 처리
+            sentiment_lines = [line.strip(" -") for line in sentiment_part.split("\n") if line.strip()]
+            sentiment_lines = [line for line in sentiment_lines if not line.startswith("**") and ":" not in line]
+            sentiment_text = "\n".join(f"- {line}" for line in sentiment_lines if line)
+            # sentiment_text = sentiment_text.replace("있음.", "있어요.").replace("보임.", "보여요.").replace("없음", "없어요.").replace("존재함", "존재해요.")
+
+            # summary2 조합
+            summary2 = f"주가에 영향을 줄 수 있어요\n{impact_text}\n\n세네카 AI는 해당 뉴스가 {{emotion}} 이라고 판단했어요\n{sentiment_text}"
+
+            return summary1, summary2
+
+        # Series의 각 요소에 대해 split_single_summary 함수 적용
+        summary1_list = []
+        summary2_list = []
+
+        for summary in summaries:
+            s1, s2 = split_single_summary(summary)
+            summary1_list.append(s1)
+            summary2_list.append(s2)
+
+        return pd.Series(summary1_list, index=summaries.index), pd.Series(summary2_list, index=summaries.index)
 
 
 def get_news_service() -> NewsService:
