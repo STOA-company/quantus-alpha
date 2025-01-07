@@ -16,8 +16,10 @@ services:
             dockerfile: Dockerfile
         ports:
             - "8000:8000"
+        env_file:
+            - .env.${ENV:-dev}
         environment:
-            ENV: ${ENV:-prod} # default
+            ENV: ${ENV:-dev}
         volumes:
             - .:/app
 
@@ -27,8 +29,10 @@ services:
             context: .
             dockerfile: Dockerfile
         command: python -m app.celery_worker
+        env_file:
+            - .env.${ENV:-dev}
         environment:
-            API_ENV: prod
+            ENV: ${ENV:-dev}
         depends_on:
             - rabbitmq
             - redis
