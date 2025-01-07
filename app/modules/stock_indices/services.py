@@ -10,6 +10,7 @@ import pandas as pd
 from app.database.crud import database
 from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
 from app.utils.date_utils import get_time_checker
+from zoneinfo import ZoneInfo
 
 
 class StockIndicesService:
@@ -226,7 +227,6 @@ class StockIndicesService:
             return 0.0, 0.0, 0.0
 
     async def get_indices_data(self) -> IndicesData:
-        """지수 데이터 조회"""
         try:
             tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in self.symbols.items()]
             await asyncio.gather(*tasks)
@@ -236,6 +236,9 @@ class StockIndicesService:
 
             indices_summary = {}
             indices_data = {}
+            response_time = None
+            kr_last_time = None
+            us_last_time = None
 
             for name, ratios in zip(self.symbols.keys(), ratio_results):
                 cache_key_daily = f"{name}_daily"
@@ -243,16 +246,32 @@ class StockIndicesService:
 
                 if cache_key_daily in self._cache:
                     daily_data, _ = self._cache[cache_key_daily]
+                    min5_data, _ = self._cache.get(cache_key_min5, ({}, None))
+
                     change = daily_data["close"] - daily_data["open"]
                     change_percent = round((change / daily_data["open"]) * 100, 2) if daily_data["open"] != 0 else 0.00
 
                     rise_ratio, fall_ratio, unchanged_ratio = ratios
 
-                    # 장 오픈 시간 조회
-                    if name == "kospi" or name == "kosdaq":
+                    if name in ["kospi", "kosdaq"]:
                         is_open = get_time_checker("KR")
-                    else:
+                        if is_open and min5_data:
+                            last_timestamp = list(min5_data.keys())[-1] if min5_data else None
+                            if last_timestamp:
+                                kr_time = datetime.strptime(last_timestamp, "%Y-%m-%d %H:%M:%S")
+                                kr_last_time = kr_time.strftime("%H:%M")
+                                response_time = kr_last_time
+                    else:  # nasdaq, sp500
                         is_open = get_time_checker("US")
+                        if min5_data:
+                            last_timestamp = list(min5_data.keys())[-1] if min5_data else None
+                            if last_timestamp:
+                                us_time = datetime.strptime(last_timestamp, "%Y-%m-%d %H:%M:%S")
+                                us_time = us_time.replace(tzinfo=ZoneInfo("America/New_York"))
+                                kr_time = us_time.astimezone(ZoneInfo("Asia/Seoul"))
+                                us_last_time = kr_time.strftime("%H:%M")
+                                if not get_time_checker("KR"):  # 한국 시장이 닫혀있을 때
+                                    response_time = us_last_time
 
                     indices_summary[name] = IndexSummary(
                         prev_close=daily_data["close"],
@@ -263,6 +282,7 @@ class StockIndicesService:
                         unchanged_ratio=unchanged_ratio,
                         is_open=is_open,
                     )
+
                 else:
                     indices_summary[name] = IndexSummary(
                         prev_close=0.00,
@@ -276,9 +296,24 @@ class StockIndicesService:
 
                 indices_data[name] = self._cache.get(cache_key_min5, ({}, None))[0]
 
+            # 시장이 모두 닫혀있을 때 마지막 거래 시간 사용
+            if response_time is None:
+                current_kr_time = datetime.now(ZoneInfo("Asia/Seoul"))
+                current_hour = current_kr_time.hour
+                current_minute = current_kr_time.minute
+                current_time = current_hour * 60 + current_minute
+
+                # 한국장 종료(15:30) 후 미국장 시작(22:30) 전
+                if (15 * 60 + 30) <= current_time < (22 * 60 + 30):
+                    response_time = kr_last_time if kr_last_time else "15:30"
+                # 미국장 종료(06:00) 후 한국장 시작(09:00) 전
+                else:
+                    response_time = us_last_time if us_last_time else "06:00"
+
             return IndicesData(
                 status_code=200,
                 message="데이터를 성공적으로 조회했습니다.",
+                time=response_time,  # HH:MM 포맷의 시간
                 kospi=indices_summary["kospi"],
                 kosdaq=indices_summary["kosdaq"],
                 nasdaq=indices_summary["nasdaq"],
@@ -298,6 +333,7 @@ class StockIndicesService:
             return IndicesData(
                 status_code=404,
                 message=f"데이터 조회 중 오류가 발생했습니다: {e}",
+                time=datetime.now(ZoneInfo("Asia/Seoul")).strftime("%H:%M"),  # HH:MM 포맷으로 변경
                 kospi=empty_summary,
                 kosdaq=empty_summary,
                 nasdaq=empty_summary,
