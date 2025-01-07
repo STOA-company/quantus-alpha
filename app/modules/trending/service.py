@@ -55,17 +55,11 @@ class TrendingService:
             TrendingStock(
                 num=idx,
                 ticker=stock._mapping["ticker"],
-                name="Temp_name" if stock._mapping["kr_name"] is None else stock._mapping["kr_name"],
-                current_price=0.0 if stock._mapping["current_price"] is None else stock._mapping["current_price"],
-                current_price_rate=0.0
-                if stock._mapping[f"change_{request.period.value}"] is None
-                else stock._mapping[f"change_{request.period.value}"],
-                volume=0.0
-                if stock._mapping[f"volume_{request.period.value}"] is None
-                else stock._mapping[f"volume_{request.period.value}"],
-                amount=0.0
-                if stock._mapping[f"volume_change_{request.period.value}"] is None
-                else stock._mapping[f"volume_change_{request.period.value}"],
+                name=f"{stock._mapping['kr_name']} ({stock._mapping['ticker']})",
+                current_price=stock._mapping["current_price"],
+                current_price_rate=stock._mapping[f"change_{request.period.value}"],
+                volume=stock._mapping[f"volume_{request.period.value}"],
+                amount=stock._mapping[f"volume_change_{request.period.value}"],
             )
             for idx, stock in enumerate(trending_stocks, 1)
         ]
