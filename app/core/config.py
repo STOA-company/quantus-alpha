@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     RDS_DB: str = os.getenv("RDS_DB", "")
     RDS_PORT: int = os.getenv("RDS_PORT", 3306)
 
+    RABBITMQ_USER: str = os.getenv("RABBITMQ_USER", "admin")
+    RABBITMQ_PASSWORD: str = os.getenv("RABBITMQ_PASSWORD", "admin")
+    RABBITMQ_PORT: int = os.getenv("RABBITMQ_PORT", 5672)
+
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
+    REDIS_PORT: int = os.getenv("REDIS_PORT", 6379)
+
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
     else:

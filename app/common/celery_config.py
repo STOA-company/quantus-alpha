@@ -1,9 +1,16 @@
+import os
 from celery import Celery
 from celery.schedules import crontab
+from app.core.config import settings
 
+IN_DOCKER = os.getenv("IN_DOCKER", "false").lower() == "true"
 
-CELERY_BROKER_URL = "pyamqp://admin:admin@rabbitmq//"
-CELERY_RESULT_BACKEND = "redis://redis"
+if IN_DOCKER:
+    CELERY_BROKER_URL = f"pyamqp://{settings.RABBITMQ_USER}:{settings.RABBITMQ_PASSWORD}@rabbitmq//"
+    CELERY_RESULT_BACKEND = f"redis://{settings.REDIS_PASSWORD}@redis"
+else:
+    CELERY_BROKER_URL = f"pyamqp://{settings.RABBITMQ_USER}:{settings.RABBITMQ_PASSWORD}@localhost//"
+    CELERY_RESULT_BACKEND = f"redis://{settings.REDIS_PASSWORD}@localhost"
 
 
 CELERY_APP = Celery("worker", broker=CELERY_BROKER_URL, result_backend=CELERY_RESULT_BACKEND)
