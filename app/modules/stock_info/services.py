@@ -24,40 +24,39 @@ class StockInfoService:
         주식 정보 조회
         """
         try:
-            result = {}
-
             if ctry == "kr":
                 ticker = ticker.replace("A", "")
 
-            if ctry == "us":
-                file_name = self.file_name.format(ctry)
-                info_file_path = f"{self.file_path}/{file_name}"
-                df = pd.read_csv(info_file_path)
-                result = df.loc[df["ticker"] == ticker].to_dict(orient="records")[0]
+            intro_result = {}
+            result = {}
 
+            # Parquet 파일에서 데이터 읽기
             intro_file_path = f"{self.file_path}/summary_{ctry}.parquet"
             intro_df = pd.read_parquet(intro_file_path)
-            intro_result = intro_df.loc[intro_df["Code"] == ticker].to_dict(orient="records")[0]
+            intro_df_filtered = intro_df[intro_df["Code"] == ticker]
+            if not intro_df_filtered.empty:
+                intro_result = intro_df_filtered.to_dict(orient="records")[0]
 
-            # CEO 이름 처리
-            last_name = result.get("LastName", "")
-            first_name = result.get("FirstName", "")
+            # DB에서 데이터 읽기
+            table_name = "stock_information"
+            columns = ["ticker", "homepage_url", "ceo", "establishment_date", "listing_date"]
+            db_result = self.db._select(table=table_name, columns=columns, **{"ticker": ticker})
+            if db_result:
+                result = db_result[0]._asdict()
+                # datetime.date 타입인 경우에만 문자열로 변환
+                if result.get("establishment_date") and hasattr(result["establishment_date"], "strftime"):
+                    result["establishment_date"] = result["establishment_date"].strftime("%Y-%m-%d")
+                if result.get("listing_date") and hasattr(result["listing_date"], "strftime"):
+                    result["listing_date"] = result["listing_date"].strftime("%Y-%m-%d")
 
-            # NaN 체크 및 처리
-            last_name = "" if pd.isna(last_name) else str(last_name)
-            first_name = "" if pd.isna(first_name) else str(first_name)
-
-            ceo_name = f"{last_name} {first_name}".strip()
-
-            result = StockInfo(
+            return StockInfo(
                 introduction=intro_result.get("translated_overview" if ctry == "us" else "overview", ""),
-                homepage_url=result.get("URL", ""),
-                ceo_name=ceo_name,
-                establishment_date=result.get("IncInDt", ""),
-                listing_date=result.get("oldest_date", ""),
+                homepage_url=result.get("homepage_url", ""),
+                ceo_name=result.get("ceo", ""),
+                establishment_date=result.get("establishment_date", ""),
+                listing_date=result.get("listing_date", ""),
             )
 
-            return result
         except Exception as e:
             logger.error(f"Error in get_stock_info for {ticker}: {str(e)}")
             return StockInfo(introduction="", homepage_url="", ceo_name="", establishment_date="", listing_date="")
@@ -147,14 +146,14 @@ class StockInfoService:
     # 관련 섹터 조회
     async def get_related_sectors(self, ticker: str) -> List[str]:
         # 섹터 조회
-        query = select(StockInformation.sector_3).where(StockInformation.ticker == ticker)
+        query = select(StockInformation.sector_2).where(StockInformation.ticker == ticker)
         result = self.db._execute(query)
         sector = result.scalars().first()
 
         print(f"ewtasrtyadsrhdfh: {sector}")
 
         # 관련 섹터의 ticker 조회
-        query = select(StockInformation).where(StockInformation.sector_3 == sector)
+        query = select(StockInformation).where(StockInformation.sector_2 == sector)
         result = self.db._execute(query)
         related_sectors = result.scalars().all()
 
@@ -181,12 +180,12 @@ class StockInfoService:
         if not stock_info:
             raise HTTPException(status_code=404, detail=f"Stock not found: {ticker}")
 
-        sector = stock_info.sector_3
+        sector = stock_info.sector_2
 
         # 같은 섹터의 다른 종목들을 랜덤하게 6개 조회
         query = (
             select(StockInformation)
-            .where(and_(StockInformation.sector_3 == sector, StockInformation.ticker != ticker))
+            .where(and_(StockInformation.sector_2 == sector, StockInformation.ticker != ticker))
             .order_by(func.rand())
             .limit(6)
         )

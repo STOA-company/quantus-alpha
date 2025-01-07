@@ -700,7 +700,7 @@ class PriceService:
         종목 섹터 조회
         """
         db = self._async_db
-        query = select(StockInformation.sector_3).where(StockInformation.ticker == ticker)
+        query = select(StockInformation.sector_2).where(StockInformation.ticker == ticker, StockInformation.can_use)
         result = await db.execute_async_query(query)
         return result.scalar() or None
 
@@ -708,7 +708,7 @@ class PriceService:
         """
         US 종목 이름 조회
         """
-        result = self.database._select(table="stock_information", columns=["kr_name"], ticker=ticker)
+        result = self.database._select(table="stock_information", columns=["kr_name"], ticker=ticker, can_use=True)
         return result[0].kr_name if result else None
 
     async def _get_market_cap(self, ctry: str, ticker: str) -> float:

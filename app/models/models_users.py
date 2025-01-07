@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String, Text, Boolean, BigInteger, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, String, Text, Boolean, BigInteger, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.models_base import Base, BaseMixin
 
@@ -43,3 +43,15 @@ class AlphafinderWatchlist(BaseMixin, Base):
 
     def __str__(self) -> str:
         return f"Watchlist(id={self.id!r}, user_id={self.user_id!r}, ticker={self.ticker!r})"
+
+
+class AlphaUserRefreshToken(BaseMixin, Base):
+    __tablename__ = "alphafinder_user_refresh_token"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    access_token_hash = Column(String(length=64), index=True, nullable=False)
+    refresh_token = Column(String(length=1000), nullable=False)
+    access_token = Column(String(length=1000), nullable=False)
+    token_data = Column(Text, nullable=False)
+    is_app = Column(Boolean, server_default="0")
