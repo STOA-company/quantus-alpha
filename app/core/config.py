@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # App settings
     ENV: str = ENV
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
-    PROJECT_NAME: str = "Alphafinder API 1.0"
+    PROJECT_NAME: str = f"Alphafinder API 1.0 - {ENV}"
     API_V1_STR: str = "/api/v1"
     API_V2_STR: str = "/api/v2"
     DATA_DIR: str = os.getenv("DATA_DIR", "./data")
@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     RDS_PASSWORD: str = os.getenv("RDS_PASSWORD", "")
     RDS_DB: str = os.getenv("RDS_DB", "")
     RDS_PORT: int = os.getenv("RDS_PORT", 3306)
+
+    RABBITMQ_USER: str = os.getenv("RABBITMQ_USER", "admin")
+    RABBITMQ_PASSWORD: str = os.getenv("RABBITMQ_PASSWORD", "admin")
+    RABBITMQ_PORT: int = os.getenv("RABBITMQ_PORT", 5672)
+
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
+    REDIS_PORT: int = os.getenv("REDIS_PORT", 6379)
+
+    CELERY_CONCURRENCY: int = os.getenv("CELERY_CONCURRENCY", 5)
 
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
@@ -69,6 +78,15 @@ class DevConfig(DatabaseConfig):
         )
 
 
+class StageConfig(DatabaseConfig):
+    def __init__(self):
+        super().__init__(
+            DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
+            DB_POOL_RECYCLE=3600,
+            DB_ECHO=True,
+        )
+
+
 class ProdConfig(DatabaseConfig):
     def __init__(self):
         super().__init__(
@@ -90,5 +108,5 @@ class TestConfig(DatabaseConfig):
 def get_database_config():
     """Get database configuration based on environment"""
 
-    config = dict(prod=ProdConfig, dev=DevConfig, test=TestConfig)
+    config = dict(prod=ProdConfig, dev=DevConfig, test=TestConfig, stage=StageConfig)
     return config[settings.ENV]()
