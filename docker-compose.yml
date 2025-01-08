@@ -28,7 +28,7 @@ services:
         build:
             context: .
             dockerfile: Dockerfile
-        command: ${ENV:-dev} == "dev" && python -m app.celery_worker || echo "Celery disabled in non-dev environment"
+        command: sh -c '[ "${ENV:-dev}" = "dev" ] && python -m app.celery_worker || echo "Celery disabled in non-dev environment"'
         env_file:
             - .env.${ENV:-dev}
         environment:

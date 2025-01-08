@@ -2,6 +2,12 @@ import logging
 from functools import wraps
 from typing import Literal
 
+from app.batches.run_news import (
+    kr_run_news_batch,
+    temp_kr_run_news_is_top_story,
+    temp_us_run_news_is_top_story,
+    us_run_news_batch,
+)
 from app.common.celery_config import CELERY_APP
 from app.core.config import settings
 from app.modules.common.enum import TrendingCountry
@@ -12,6 +18,12 @@ from app.batches.run_stock_trend import (
 )
 from app.batches.run_stock_indices import us_run_stock_indices_batch
 from app.utils.date_utils import get_session_checker, now_kr
+from app.batches.run_disclosure import (
+    renewal_kr_run_disclosure_batch,
+    temp_kr_run_disclosure_is_top_story,
+    renewal_us_run_disclosure_batch,
+    temp_us_run_disclosure_is_top_story,
+)
 
 
 def check_market_status(country: Literal["US", "KR"], require_open: bool = True, skip_on_failure: bool = True):
@@ -119,6 +131,54 @@ def hello_task():
     message = f"Hello, World! Current time: {current_time}"
     print(message)
     logging.info(message)
+
+
+@CELERY_APP.task(name="kr_news_batch", ignore_result=True)
+def kr_news_batch():
+    """한국 뉴스 배치"""
+    kr_run_news_batch()
+
+
+@CELERY_APP.task(name="kr_news_is_top_story", ignore_result=True)
+def kr_news_is_top_story():
+    """한국 뉴스 상위 스토리 업데이트"""
+    temp_kr_run_news_is_top_story()
+
+
+@CELERY_APP.task(name="us_news_batch", ignore_result=True)
+def us_news_batch():
+    """미국 뉴스 배치"""
+    us_run_news_batch()
+
+
+@CELERY_APP.task(name="us_news_is_top_story", ignore_result=True)
+def us_news_is_top_story():
+    """미국 뉴스 상위 스토리 업데이트"""
+    temp_us_run_news_is_top_story()
+
+
+@CELERY_APP.task(name="kr_disclosure_batch", ignore_result=True)
+def kr_disclosure_batch():
+    """한국 공시 배치"""
+    renewal_kr_run_disclosure_batch()
+
+
+@CELERY_APP.task(name="kr_disclosure_is_top_story", ignore_result=True)
+def kr_disclosure_is_top_story():
+    """한국 공시 상위 스토리 업데이트"""
+    temp_kr_run_disclosure_is_top_story()
+
+
+@CELERY_APP.task(name="us_disclosure_batch", ignore_result=True)
+def us_disclosure_batch():
+    """미국 공시 배치"""
+    renewal_us_run_disclosure_batch()
+
+
+@CELERY_APP.task(name="us_disclosure_is_top_story", ignore_result=True)
+def us_disclosure_is_top_story():
+    """미국 공시 상위 스토리 업데이트"""
+    temp_us_run_disclosure_is_top_story()
 
 
 # Worker 시작점
