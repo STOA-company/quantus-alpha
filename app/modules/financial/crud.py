@@ -73,7 +73,7 @@ class FinancialCrud:
 
         query = text(f"""
             WITH sector AS (
-                SELECT sector_3
+                SELECT sector_2
                 FROM stock_information
                 WHERE ticker = :base_ticker
             ),
@@ -84,7 +84,7 @@ class FinancialCrud:
                         ELSE si.ticker
                     END AS ticker
                 FROM stock_information si
-                JOIN sector s ON si.sector_3 = s.sector_3
+                JOIN sector s ON si.sector_2 = s.sector_2
                 WHERE si.ticker != :base_ticker
             ),
             company_ratios AS (
