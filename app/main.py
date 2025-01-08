@@ -33,6 +33,7 @@ origins = [
     "https://alpha-dev.quantus.kr",
     "https://develop.alphafinder.dev",
     "https://alphafinder-stage.vercel.app",
+    "https://stage.alphafinder.dev",
 ]
 
 app.add_middleware(
