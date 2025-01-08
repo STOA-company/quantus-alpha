@@ -28,11 +28,12 @@ services:
         build:
             context: .
             dockerfile: Dockerfile
-        command: python -m app.celery_worker
+        command: ${ENV:-dev} == "dev" && python -m app.celery_worker || echo "Celery disabled in non-dev environment"
         env_file:
             - .env.${ENV:-dev}
         environment:
-            ENV: ${ENV:-dev}
+            - IN_DOCKER=true
+            - ENV=${ENV:-dev}
         depends_on:
             - rabbitmq
             - redis

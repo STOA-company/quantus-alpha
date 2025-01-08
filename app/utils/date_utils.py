@@ -63,23 +63,23 @@ def get_business_days(
 def get_time_checker(country: Literal["KR", "US"]) -> bool:
     """
     현재 시간이 장 운영 시간 안에 있는지 확인
-    KR: 09:00 ~ 15:30
-    US: 09:30 ~ 16:00 (UTC 기준)
+    KR: 09:00 ~ 15:30 (KST)
+    US: 13:30 ~ 20:00 (UTC) = 09:30 ~ 16:00 (ET)
     """
     try:
         if country == "KR":
             date = datetime.now(korea_tz)
             current_time = date.hour * 60 + date.minute
-            market_open = 9 * 60
-            market_close = 15 * 60 + 30
+            market_open = 9 * 60  # 09:00 KST
+            market_close = 15 * 60 + 30  # 15:30 KST
 
             return market_open <= current_time <= market_close
 
         elif country == "US":
             date = datetime.now(utc_tz)
             current_time = date.hour * 60 + date.minute
-            market_open = 9 * 60 + 30
-            market_close = 16 * 60
+            market_open = 13 * 60 + 30  # 13:30 UTC = 09:30 ET
+            market_close = 20 * 60  # 20:00 UTC = 16:00 ET
 
             return market_open <= current_time <= market_close
 

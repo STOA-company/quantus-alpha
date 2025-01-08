@@ -8,17 +8,20 @@ case $ENVIRONMENT in
     prod|production)
         ENV_FILE=.env.prod
         ENV=prod
-        BRANCH=main  # 운영 환경은 main 브랜치 사용
+        BRANCH=main
+        RUN_CELERY=false
         ;;
     stage|staging)
         ENV_FILE=.env.stage
         ENV=stage
-        BRANCH=stage  # 스테이징 환경은 stage 브랜치 사용
+        BRANCH=stage
+        RUN_CELERY=false
         ;;
     dev|development)
         ENV_FILE=.env.dev
         ENV=dev
-        BRANCH=dev  # 개발 환경은 dev 브랜치 사용
+        BRANCH=dev
+        RUN_CELERY=true
         ;;
     *)
         echo "Unknown environment: $ENVIRONMENT"
@@ -75,15 +78,21 @@ docker builder prune -f || true
 
 # 새 컨테이너 빌드 및 실행
 echo "Building and starting new containers..."
-ENV=$ENV docker-compose --env-file $ENV_FILE up --build -d
+if [ "$ENV" = "dev" ]; then
+    # dev 환경: 모든 서비스 실행 (celery 포함)
+    ENV=$ENV docker-compose --env-file $ENV_FILE up --build -d
+else
+    # stage, prod 환경: celery 제외하고 실행
+    ENV=$ENV docker-compose --env-file $ENV_FILE up --build -d nginx web
+fi
 
 # 컨테이너 시작 대기
 echo "Waiting for containers to start..."
 sleep 10
 
-# Health check
+# Health check도 환경에 따라 수정
 echo "Starting health checks..."
-max_attempts=12  # 최대 60초 대기 (5초 x 12번)
+max_attempts=12
 attempt=1
 while [ $attempt -le $max_attempts ]; do
     echo "Health check attempt $attempt of $max_attempts..."
@@ -91,29 +100,38 @@ while [ $attempt -le $max_attempts ]; do
     # API health check
     api_status=$(curl -s -o /dev/null -w "%{http_code}" localhost:80/docs || echo "000")
 
-    # Celery worker health check
-    celery_status=$(docker-compose exec -T celery_worker celery -A app.celery_worker status 2>/dev/null | grep "OK" || echo "")
+    if [ "$ENV" = "dev" ]; then
+        # dev 환경에서만 celery 관련 health check 실행
+        celery_status=$(docker-compose exec -T celery_worker celery -A app.celery_worker status 2>/dev/null | grep "OK" || echo "")
+        rabbitmq_status=$(docker-compose exec -T rabbitmq rabbitmq-diagnostics -q ping 2>/dev/null || echo "")
+        redis_status=$(docker-compose exec -T redis redis-cli ping 2>/dev/null || echo "")
 
-    # RabbitMQ health check
-    rabbitmq_status=$(docker-compose exec -T rabbitmq rabbitmq-diagnostics -q ping 2>/dev/null || echo "")
+        if [ "$api_status" = "200" ] && [ ! -z "$celery_status" ] && [ ! -z "$rabbitmq_status" ] && [ "$redis_status" = "PONG" ]; then
+            echo "Deployment successful! All services are running."
+            echo "API Status: $api_status"
+            echo "Celery Status: OK"
+            echo "RabbitMQ Status: OK"
+            echo "Redis Status: OK"
+            exit 0
+        fi
 
-    # Redis health check
-    redis_status=$(docker-compose exec -T redis redis-cli ping 2>/dev/null || echo "")
+        echo "Services not ready yet:"
+        echo "- API status: $api_status"
+        echo "- Celery: ${celery_status:-Not Ready}"
+        echo "- RabbitMQ: ${rabbitmq_status:-Not Ready}"
+        echo "- Redis: ${redis_status:-Not Ready}"
+    else
+        # stage, prod 환경에서는 API health check만 실행
+        if [ "$api_status" = "200" ]; then
+            echo "Deployment successful! API is running."
+            echo "API Status: $api_status"
+            exit 0
+        fi
 
-    if [ "$api_status" = "200" ] && [ ! -z "$celery_status" ] && [ ! -z "$rabbitmq_status" ] && [ "$redis_status" = "PONG" ]; then
-        echo "Deployment successful! All services are running."
-        echo "API Status: $api_status"
-        echo "Celery Status: OK"
-        echo "RabbitMQ Status: OK"
-        echo "Redis Status: OK"
-        exit 0
+        echo "Services not ready yet:"
+        echo "- API status: $api_status"
     fi
 
-    echo "Services not ready yet:"
-    echo "- API status: $api_status"
-    echo "- Celery: ${celery_status:-Not Ready}"
-    echo "- RabbitMQ: ${rabbitmq_status:-Not Ready}"
-    echo "- Redis: ${redis_status:-Not Ready}"
     echo "Waiting 5 seconds..."
     sleep 5
     attempt=$((attempt + 1))

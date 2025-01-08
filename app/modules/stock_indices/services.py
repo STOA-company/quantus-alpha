@@ -236,10 +236,10 @@ class StockIndicesService:
 
             indices_summary = {}
             indices_data = {}
-            response_time = None
             kr_last_time = None
             us_last_time = None
 
+            # 각 지수별 데이터 처리
             for name, ratios in zip(self.symbols.keys(), ratio_results):
                 cache_key_daily = f"{name}_daily"
                 cache_key_min5 = f"{name}_min5"
@@ -248,31 +248,22 @@ class StockIndicesService:
                     daily_data, _ = self._cache[cache_key_daily]
                     min5_data, _ = self._cache.get(cache_key_min5, ({}, None))
 
+                    # 마지막 거래 시간 저장
+                    if min5_data:
+                        last_timestamp = list(min5_data.keys())[-1]
+                        if last_timestamp:
+                            last_time = datetime.strptime(last_timestamp, "%Y-%m-%d %H:%M:%S")
+                            if name in ["kospi", "kosdaq"]:
+                                kr_last_time = last_time.strftime("%H:%M")
+                            else:  # nasdaq, sp500
+                                us_last_time = last_time.strftime("%H:%M")
+
                     change = daily_data["close"] - daily_data["open"]
                     change_percent = round((change / daily_data["open"]) * 100, 2) if daily_data["open"] != 0 else 0.00
 
                     rise_ratio, fall_ratio, unchanged_ratio = ratios
 
-                    if name in ["kospi", "kosdaq"]:
-                        is_open = get_time_checker("KR")
-                        if min5_data:
-                            last_timestamp = list(min5_data.keys())[-1]
-                            if last_timestamp:
-                                kr_time = datetime.strptime(last_timestamp, "%Y-%m-%d %H:%M:%S")
-                                kr_last_time = kr_time.strftime("%H:%M")
-                                if is_open:  # 시장이 열려있을 때만 실시간 시간 반영
-                                    response_time = kr_last_time
-                    else:  # nasdaq, sp500
-                        is_open = get_time_checker("US")
-                        if min5_data:
-                            last_timestamp = list(min5_data.keys())[-1]
-                            if last_timestamp:
-                                us_time = datetime.strptime(last_timestamp, "%Y-%m-%d %H:%M:%S")
-                                us_time = us_time.replace(tzinfo=ZoneInfo("America/New_York"))
-                                kr_time = us_time.astimezone(ZoneInfo("Asia/Seoul"))
-                                us_last_time = kr_time.strftime("%H:%M")
-                                if is_open and not get_time_checker("KR"):  # 미국 시장이 열려있고 한국 시장이 닫혀있을 때
-                                    response_time = us_last_time
+                    is_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
 
                     indices_summary[name] = IndexSummary(
                         prev_close=daily_data["close"],
@@ -283,7 +274,6 @@ class StockIndicesService:
                         unchanged_ratio=unchanged_ratio,
                         is_open=is_open,
                     )
-
                 else:
                     indices_summary[name] = IndexSummary(
                         prev_close=0.00,
@@ -297,29 +287,28 @@ class StockIndicesService:
 
                 indices_data[name] = self._cache.get(cache_key_min5, ({}, None))[0]
 
-            # 최종 시간 결정
-            if response_time is None:
-                current_kr_time = datetime.now(ZoneInfo("Asia/Seoul"))
-                current_time = current_kr_time.hour * 60 + current_kr_time.minute
+            # 시간 결정 로직
+            current_kr_time = datetime.now(ZoneInfo("UTC")).astimezone(ZoneInfo("Asia/Seoul"))
+            current_minutes = current_kr_time.hour * 60 + current_kr_time.minute
 
-                kr_market_open = (9 * 60) <= current_time <= (15 * 60 + 30)  # 09:00 ~ 15:30
-                us_market_open = (22 * 60 + 30) <= current_time or current_time <= (6 * 60)  # 22:30 ~ 06:00
+            kr_is_open = get_time_checker("KR")
+            us_is_open = get_time_checker("US")
 
-                if kr_market_open:
-                    response_time = kr_last_time if kr_last_time else current_kr_time.strftime("%H:%M")
-                elif us_market_open:
-                    response_time = us_last_time if us_last_time else current_kr_time.strftime("%H:%M")
+            if kr_is_open and kr_last_time:
+                response_time = kr_last_time
+            elif us_is_open and us_last_time:
+                response_time = us_last_time
+            else:
+                # 둘 다 닫혀있을 때
+                if 15 * 60 + 30 <= current_minutes < 23 * 60 + 30:  # 15:30 ~ 23:30
+                    response_time = "15:30"
                 else:
-                    # 장 종료 후 기본 시간 설정
-                    if (15 * 60 + 30) <= current_time < (22 * 60 + 30):  # 한국장 종료 후 미국장 시작 전
-                        response_time = kr_last_time if kr_last_time else "15:30"
-                    else:  # 미국장 종료 후 한국장 시작 전
-                        response_time = us_last_time if us_last_time else "06:00"
+                    response_time = "06:00"
 
             return IndicesData(
                 status_code=200,
                 message="데이터를 성공적으로 조회했습니다.",
-                time=response_time,  # HH:MM 포맷의 시간
+                time=response_time,
                 kospi=indices_summary["kospi"],
                 kosdaq=indices_summary["kosdaq"],
                 nasdaq=indices_summary["nasdaq"],
@@ -339,7 +328,7 @@ class StockIndicesService:
             return IndicesData(
                 status_code=404,
                 message=f"데이터 조회 중 오류가 발생했습니다: {e}",
-                time=datetime.now(ZoneInfo("Asia/Seoul")).strftime("%H:%M"),  # HH:MM 포맷으로 변경
+                time=datetime.now(ZoneInfo("Asia/Seoul")).strftime("%H:%M"),
                 kospi=empty_summary,
                 kosdaq=empty_summary,
                 nasdaq=empty_summary,
