@@ -892,21 +892,23 @@ class FinancialService:
         if not result:
             return IncomeStatementDetail()
 
-        # 최근 12개월 데이터 선택
-        recent_12_months = result[-12:]
+        # 기간으로 정렬 (최신 데이터가 앞으로 오도록)
+        sorted_result = sorted(result, key=lambda x: x.period_q, reverse=True)
 
-        # 첫 번째 row에서 컬럼 추출 (exclude_columns 제외)
-        exclude_columns = ["Code", "Name", "StmtDt"]  # period_q는 제외하지 않음
+        # 최근 12개월 데이터 선택
+        recent_12_months = sorted_result[:4]
+
+        # 첫 번째 row에서 컬럼 추출
+        exclude_columns = ["Code", "Name", "StmtDt"]
         first_row = recent_12_months[0]
 
-        # TTM 계산을 위한 딕셔너리 초기화
+        # TTM 계산
         ttm_dict = {
             col: sum(self._to_decimal(getattr(row, col, 0)) for row in recent_12_months)
             for col, val in zip(first_row._fields, first_row)
             if col not in exclude_columns and col != "period_q"
         }
 
-        # TTM 값에는 'TTM'이라고 표시
         ttm_dict["period_q"] = "TTM"
 
         return self._create_income_statement_detail(ttm_dict)
@@ -919,10 +921,13 @@ class FinancialService:
         if not result:
             return CashFlowDetail()
 
-        # 최근 12개월 데이터 선택
-        recent_12_months = result[-12:]
+        # 기간으로 정렬 (최신 데이터가 앞으로 오도록)
+        sorted_result = sorted(result, key=lambda x: x.period_q, reverse=True)
 
-        # 첫 번재 row에서 컬 추출
+        # 최근 12개월 데이터 선택
+        recent_12_months = sorted_result[:4]
+
+        # 첫 번째 row에서 컬럼 추출
         exclude_columns = ["Code", "Name", "StmtDt"]
         first_row = recent_12_months[0]
 
@@ -946,10 +951,13 @@ class FinancialService:
         if not result:
             return FinPosDetail()
 
-        # 최근 12개월 데이터 선택
-        recent_12_months = result[-12:]
+        # 기간으로 정렬 (최신 데이터가 앞으로 오도록)
+        sorted_result = sorted(result, key=lambda x: x.period_q, reverse=True)
 
-        # 첫 번재 row에서 컬럼 추출
+        # 최근 12개월 데이터 선택
+        recent_12_months = sorted_result[:4]
+
+        # 첫 번째 row에서 컬럼 추출
         exclude_columns = ["Code", "Name", "StmtDt"]
         first_row = recent_12_months[0]
 
@@ -1073,7 +1081,8 @@ class FinancialService:
             return []
 
         tickers = self.get_ticker_by_sector(sector)
-        shares = self.get_shares_by_ticker(ticker, ctry)
+        all_shares = self.get_all_shares_by_tickers(tickers, ctry)
+        company_shares = all_shares.get(ticker, 0)
 
         # 회사 데이터와 섹터 데이터 분리
         company_data = defaultdict(dict)
@@ -1081,7 +1090,16 @@ class FinancialService:
 
         for row in result:
             row_ticker = row[0]
-            clean_row_ticker = row_ticker.replace("-US", "")
+            # 국가별 티커 처리
+            if ctry == "USA":
+                clean_row_ticker = row_ticker.replace("-US", "")
+                shares_ticker = row_ticker
+                multiplier = 1000
+            else:
+                clean_row_ticker = row_ticker
+                shares_ticker = row_ticker
+                multiplier = 100000000
+
             period = row[2]
 
             if row_ticker == ticker:
@@ -1092,14 +1110,20 @@ class FinancialService:
                 }
 
             if clean_row_ticker in tickers:
+                shares = all_shares.get(shares_ticker, 0)
+                net_income = float(row[18]) if row[18] is not None else 0.0
+                # 국가별 단위에 맞춰 EPS 계산
+                eps = (net_income * multiplier) / shares if shares > 0 else 0.0
+
                 sector_data[period]["rev"].append(float(row[4]) if row[4] is not None else 0.0)
                 sector_data[period]["operating_income"].append(float(row[9]) if row[9] is not None else 0.0)
-                sector_data[period]["net_income_total"].append(float(row[18]) if row[18] is not None else 0.0)
+                sector_data[period]["net_income_total"].append(net_income)
+                sector_data[period]["eps"].append(eps)
 
         # 섹터 평균 계산
         sector_averages = {}
         for period, values in sector_data.items():
-            if values["rev"] or values["operating_income"] or values["net_income"]:
+            if values["rev"] or values["operating_income"] or values["net_income_total"]:
                 sector_averages[period] = {
                     "rev": statistics.mean(values["rev"]) if values["rev"] else 0.0,
                     "operating_income": statistics.mean(values["operating_income"])
@@ -1108,19 +1132,21 @@ class FinancialService:
                     "net_income_total": statistics.mean(values["net_income_total"])
                     if values["net_income_total"]
                     else 0.0,
+                    "eps": statistics.mean(values["eps"])  # 각 회사 EPS의 평균 계산
+                    if values["eps"]
+                    else 0.0,
                 }
 
         quarterly_results = []
         for period in sorted(company_data.keys(), reverse=True):
             company_values = company_data[period]
 
-            # EPS 계산 시에만 1000을 곱해서 천 단위로 변환
-            eps_company = (company_values["net_income_total"] * 1000) / shares if shares > 0 else 0.0
-            eps_industry = (
-                (sector_averages[period]["net_income_total"] * 1000) / shares
-                if period in sector_averages and shares > 0
-                else 0.0
+            # 회사의 EPS 계산도 국가별 단위에 맞춤
+            multiplier = 100000000 if ctry != "USA" else 1000
+            eps_company = (
+                (company_values["net_income_total"] * multiplier) / company_shares if company_shares > 0 else 0.0
             )
+
             quarterly_income = QuarterlyIncome(
                 period_q=period,
                 rev=IncomeMetric(
@@ -1135,7 +1161,10 @@ class FinancialService:
                     company=Decimal(str(company_values["net_income_total"])),
                     industry_avg=Decimal(str(sector_averages.get(period, {}).get("net_income_total", 0.0))),
                 ),
-                eps=IncomeMetric(company=Decimal(str(eps_company)), industry_avg=Decimal(str(eps_industry))),
+                eps=IncomeMetric(
+                    company=Decimal(str(eps_company)),
+                    industry_avg=Decimal(str(sector_averages.get(period, {}).get("eps", 0.0))),
+                ),
             )
             quarterly_results.append(quarterly_income)
 
@@ -1152,7 +1181,7 @@ class FinancialService:
                 "rev": 0.0,
                 "operating_income": 0.0,
                 "net_income_total": 0.0,
-                "count": 0,  # count 키 추가
+                "count": 0,
             }
         )
 
@@ -1162,29 +1191,46 @@ class FinancialService:
                 company_data[year]["rev"] += float(row[4]) if row[4] is not None else 0.0
                 company_data[year]["operating_income"] += float(row[9]) if row[9] is not None else 0.0
                 company_data[year]["net_income_total"] += float(row[18]) if row[18] is not None else 0.0
-                company_data[year]["count"] += 1  # 데이터 추가할 때마다 count 증가
+                company_data[year]["count"] += 1
 
         tickers = self.get_ticker_by_sector(sector)
-        shares = self.get_shares_by_ticker(ticker, ctry)
+
+        # shares 조회 결과 확인
+        all_shares = self.get_all_shares_by_tickers(tickers, ctry)
+        company_shares = all_shares.get(ticker, 0)
 
         # 회사 데이터와 섹터 데이터 분리
         sector_data = defaultdict(lambda: defaultdict(list))
 
         for row in result:
             row_ticker = row[0]
-            clean_row_ticker = row_ticker.replace("-US", "")
+            # 국가별 티커 처리
+            if ctry == "USA":
+                clean_row_ticker = row_ticker.replace("-US", "")
+                shares_ticker = row_ticker
+                multiplier = 1000  # 백만 달러 -> 천 달러
+            else:
+                clean_row_ticker = row_ticker
+                shares_ticker = row_ticker
+                multiplier = 100000000  # 억원 -> 원
+
             year = row[2][:4]  # 연도만 추출
 
-            # 섹터 데이터만 수집 (중복 제거)
+            # 섹터 데이터 수집 (중복 제거)
             if clean_row_ticker in tickers:
+                shares = all_shares.get(shares_ticker, 0)
+                net_income = float(row[18]) if row[18] is not None else 0.0
+                eps = (net_income * multiplier) / shares if shares > 0 else 0.0
+
                 sector_data[year]["rev"].append(float(row[4]) if row[4] is not None else 0.0)
                 sector_data[year]["operating_income"].append(float(row[9]) if row[9] is not None else 0.0)
-                sector_data[year]["net_income_total"].append(float(row[18]) if row[18] is not None else 0.0)
+                sector_data[year]["net_income_total"].append(net_income)
+                sector_data[year]["eps"].append(eps)
 
         # 섹터 평균 계산
         sector_averages = {}
         for year, values in sector_data.items():
-            if values["rev"] or values["operating_income"] or values["net_income"]:
+            if values["rev"] or values["operating_income"] or values["net_income_total"]:
                 sector_averages[year] = {
                     "rev": statistics.mean(values["rev"]) if values["rev"] else 0.0,
                     "operating_income": statistics.mean(values["operating_income"])
@@ -1193,6 +1239,7 @@ class FinancialService:
                     "net_income_total": statistics.mean(values["net_income_total"])
                     if values["net_income_total"]
                     else 0.0,
+                    "eps": statistics.mean(values["eps"]) if values["eps"] else 0.0,
                 }
 
         # 회사 데이터 연간 평균 계산
@@ -1206,13 +1253,12 @@ class FinancialService:
         for year in sorted(company_data.keys(), reverse=True):
             company_values = company_data[year]
 
-            # EPS 계산 시에만 1000을 곱해서 천 단위로 변환
-            eps_company = (company_values["net_income_total"] * 1000) / shares if shares > 0 else 0.0
-            eps_industry = (
-                (sector_averages[year]["net_income_total"] * 1000) / shares
-                if year in sector_averages and shares > 0
-                else 0.0
+            # 국가별 단위에 맞춰 EPS 계산
+            multiplier = 100000000 if ctry != "USA" else 1000
+            eps_company = (
+                (company_values["net_income_total"] * multiplier) / company_shares if company_shares > 0 else 0.0
             )
+
             yearly_income = QuarterlyIncome(
                 period_q=year,
                 rev=IncomeMetric(
@@ -1227,11 +1273,45 @@ class FinancialService:
                     company=Decimal(str(company_values["net_income_total"])),
                     industry_avg=Decimal(str(sector_averages.get(year, {}).get("net_income_total", 0.0))),
                 ),
-                eps=IncomeMetric(company=Decimal(str(eps_company)), industry_avg=Decimal(str(eps_industry))),
+                eps=IncomeMetric(
+                    company=Decimal(str(eps_company)),
+                    industry_avg=Decimal(str(sector_averages.get(year, {}).get("eps", 0.0))),
+                ),
             )
             yearly_results.append(yearly_income)
 
         return yearly_results[:10]
+
+    def get_all_shares_by_tickers(self, tickers: List[str], country: str) -> Dict[str, float]:
+        """한 번에 모든 티커의 shares 조회"""
+        try:
+            if country == "USA":
+                tickers = [ticker + "-US" for ticker in tickers]
+
+            country_enum = FinancialCountry(country)
+            table_name = f"{country_enum.value}_stock_factors"
+
+            # 기존 _select 메서드 사용, in 조건으로 한 번에 조회
+            result = self.db._select(
+                table=table_name,
+                ticker__in=tickers,
+                limit=len(tickers),  # 각 티커당 최신 데이터 1개씩
+            )
+
+            SHARED_OUTSTANDING_INDEX = 2
+            shares_dict = {}
+
+            for row in result:
+                ticker = row[0]  # ticker는 첫 번째 컬럼
+                shares_value = row[SHARED_OUTSTANDING_INDEX]
+                shares_dict[ticker] = float(shares_value) if shares_value is not None else 0.0
+
+            return shares_dict
+
+        except Exception as e:
+            logger.error(f"Error getting shares for multiple tickers: {e}")
+            print(f"에러 발생: {str(e)}")
+            return {}
 
     # 손익계산서
     def _process_income_statement_result(

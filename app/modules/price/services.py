@@ -23,6 +23,7 @@ from app.core.logging.config import get_logger
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import contry_mapping
 from app.utils.data_utils import remove_parentheses
+from app.utils.date_utils import get_time_checker
 
 
 logger = get_logger(__name__)
@@ -615,6 +616,7 @@ class PriceService:
         market = self._get_market(ticker) or ""
         market_cap = await self._get_market_cap(ctry, ticker) or 0.0
         name = remove_parentheses(name)
+        is_market_open = get_time_checker(ctry.upper())
 
         response_data = {
             "name": name,
@@ -627,7 +629,7 @@ class PriceService:
             "last_day_close": last_day_close,
             "week_52_low": week_52_low,
             "week_52_high": week_52_high,
-            "is_market_close": True,
+            "is_market_close": is_market_open,
         }
 
         try:
