@@ -1115,14 +1115,6 @@ class FinancialService:
                 # 국가별 단위에 맞춰 EPS 계산
                 eps = (net_income * multiplier) / shares if shares > 0 else 0.0
 
-                print("\n=== EPS 계산 디버깅 ===")
-                print(f"국가: {ctry}")
-                print(f"티커: {row_ticker}")
-                print(f"당기순이익: {net_income}")
-                print(f"단위 변환: {net_income} * {multiplier} = {net_income * multiplier}")
-                print(f"shares: {shares}")
-                print(f"계산된 EPS: {eps}")
-
                 sector_data[period]["rev"].append(float(row[4]) if row[4] is not None else 0.0)
                 sector_data[period]["operating_income"].append(float(row[9]) if row[9] is not None else 0.0)
                 sector_data[period]["net_income_total"].append(net_income)
