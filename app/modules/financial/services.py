@@ -892,21 +892,23 @@ class FinancialService:
         if not result:
             return IncomeStatementDetail()
 
-        # 최근 12개월 데이터 선택
-        recent_12_months = result[-12:]
+        # 기간으로 정렬 (최신 데이터가 앞으로 오도록)
+        sorted_result = sorted(result, key=lambda x: x.period_q, reverse=True)
 
-        # 첫 번째 row에서 컬럼 추출 (exclude_columns 제외)
-        exclude_columns = ["Code", "Name", "StmtDt"]  # period_q는 제외하지 않음
+        # 최근 12개월 데이터 선택
+        recent_12_months = sorted_result[:4]
+
+        # 첫 번째 row에서 컬럼 추출
+        exclude_columns = ["Code", "Name", "StmtDt"]
         first_row = recent_12_months[0]
 
-        # TTM 계산을 위한 딕셔너리 초기화
+        # TTM 계산
         ttm_dict = {
             col: sum(self._to_decimal(getattr(row, col, 0)) for row in recent_12_months)
             for col, val in zip(first_row._fields, first_row)
             if col not in exclude_columns and col != "period_q"
         }
 
-        # TTM 값에는 'TTM'이라고 표시
         ttm_dict["period_q"] = "TTM"
 
         return self._create_income_statement_detail(ttm_dict)
@@ -919,10 +921,13 @@ class FinancialService:
         if not result:
             return CashFlowDetail()
 
-        # 최근 12개월 데이터 선택
-        recent_12_months = result[-12:]
+        # 기간으로 정렬 (최신 데이터가 앞으로 오도록)
+        sorted_result = sorted(result, key=lambda x: x.period_q, reverse=True)
 
-        # 첫 번재 row에서 컬 추출
+        # 최근 12개월 데이터 선택
+        recent_12_months = sorted_result[:4]
+
+        # 첫 번째 row에서 컬럼 추출
         exclude_columns = ["Code", "Name", "StmtDt"]
         first_row = recent_12_months[0]
 
@@ -946,10 +951,13 @@ class FinancialService:
         if not result:
             return FinPosDetail()
 
-        # 최근 12개월 데이터 선택
-        recent_12_months = result[-12:]
+        # 기간으로 정렬 (최신 데이터가 앞으로 오도록)
+        sorted_result = sorted(result, key=lambda x: x.period_q, reverse=True)
 
-        # 첫 번재 row에서 컬럼 추출
+        # 최근 12개월 데이터 선택
+        recent_12_months = sorted_result[:4]
+
+        # 첫 번째 row에서 컬럼 추출
         exclude_columns = ["Code", "Name", "StmtDt"]
         first_row = recent_12_months[0]
 
