@@ -37,6 +37,13 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
     # _execute 메서드로 쿼리 실행
     result = database._execute(query, {"check_date": check_date_str})
 
+    if result.rowcount == 0:
+        error_msg = f"""
+        `미국 공시 데이터 누락: usa_disclosure_analysis_translation 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     # 결과를 DataFrame으로 변환
     df_disclosure = pd.DataFrame(
         result.fetchall(),
