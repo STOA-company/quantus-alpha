@@ -5,6 +5,10 @@ from app.utils.date_utils import get_business_days, now_kr
 from sqlalchemy import text
 
 
+KR_EXCLUDE_DATES = ["2024-12-30"]
+US_EXCLUDE_DATES = []
+
+
 def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
     run_batch_min = batch_min
 
@@ -51,12 +55,15 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
             "kr_key_points",
         ],
     )
-    print(f"########df_disclosure: {df_disclosure}")
     ticker_list = df_disclosure["ticker"].unique().tolist()
     filing_dates = df_disclosure["filing_date"].dt.date.unique()
 
     if len(filing_dates) == 0:
-        return 0
+        error_msg = f"""
+        `미국 공시 데이터 누락: usa_disclosure_analysis_translation 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
 
     # 영업일 목록 조회
     max_date = max(filing_dates)
@@ -64,8 +71,7 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
 
     business_days = get_business_days(country="US", start_date=min_date - timedelta(days=7), end_date=max_date)
     business_days = sorted(business_days)
-    exclude_dates = []
-    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in US_EXCLUDE_DATES]
     # business_days의 모든 요소를 date 타입으로 변환
     business_days = [bd.date() if isinstance(bd, pd.Timestamp) else bd for bd in business_days]
 
@@ -97,6 +103,13 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
             **dict(ticker__in=ticker_list),
         )
     )
+    if df_stock_data.empty:
+        error_msg = f"""
+        `미국 공시 데이터 누락: stock_information 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     existing_tickers = df_stock_data["ticker"].unique().tolist()
 
     df_merge = pd.merge(df_disclosure, df_stock_data, on="ticker", how="left")
@@ -110,6 +123,12 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
             **dict(Date__in=unique_price_dates, Ticker__in=ticker_list),
         )
     )
+    if df_price.empty:
+        error_msg = f"""
+        `미국 공시 데이터 누락: stock_us_1d 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
 
     # price_dates 매핑을 사용하여 가격 데이터 병합
     df_merge["price_date"] = df_merge["filing_date"].dt.date.map(lambda x: price_date_mapping.get(x))
@@ -119,12 +138,6 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
 
     # 가격 데이터 병합
     df_merge = pd.merge(df_merge, df_price, left_on=["ticker", "price_date"], right_on=["Ticker", "Date"], how="left")
-    # print(f'########df_merge: {df_merge[["ticker", "price_date", "Date", "Close"]]}')
-    # print(f'filing_dates: {filing_dates}')
-    # print(f'business_days: {business_days}')
-    # print(f'price_date_mapping: {price_date_mapping}')
-
-    # return 0
 
     # 필수 컬럼 추가
     df_merge["ctry"] = "US"
@@ -159,10 +172,6 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
             "is_exist": row["is_exist"],
         }
         disclosure_records.append(disclosure_record)
-
-    # disclosure_records = pd.DataFrame(disclosure_records)
-    # disclosure_records.to_csv("D:/kyungmin/mementoai/alpha-finder/check_data/disclosure/33333us_disclosure_records.csv", index=False)
-    # return 0
 
     def batch_insert(records, batch_size=500):
         """
@@ -226,7 +235,11 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
             print("모든 데이터 입력 완료")
         except Exception as e:
             print(f"데이터베이스 입력 중 오류 발생: {str(e)}")
-            raise
+            error_msg = f"""
+            미국 공시 데이터 처리 실패
+            * 처리 날짜: {check_date}
+            """
+            raise ValueError(error_msg)
 
     return len(disclosure_records)
 
@@ -258,6 +271,13 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
     # _execute 메서드로 쿼리 실행
     # result = database._execute(query, {"check_date": check_date_str, "start_datetime": start_datetime, "end_datetime": end_datetime})
     result = database._execute(query, {"check_date": check_date_str})
+    if result.rowcount == 0:
+        error_msg = f"""
+        `미국 공시 데이터 누락: kor_disclosure_analysis_translation 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     # 결과를 DataFrame으로 변환
     df_disclosure = pd.DataFrame(
         result.fetchall(),
@@ -294,8 +314,7 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
     business_days = sorted(business_days)
     # business_days의 모든 요소를 date 타입으로 변환
     business_days = [bd.date() if isinstance(bd, pd.Timestamp) else bd for bd in business_days]
-    exclude_dates = ["2024-12-30"]
-    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in KR_EXCLUDE_DATES]
 
     # 각 날짜의 가격 데이터 매핑 생성
     price_dates = {}
@@ -327,6 +346,13 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
             **dict(ticker__in=ticker_list),
         )
     )
+    if df_stock_data.empty:
+        error_msg = f"""
+        `한국 공시 데이터 누락: stock_information 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     df_stock_data["ticker"] = df_stock_data["ticker"].str.replace("A", "")
     existing_tickers = df_stock_data["ticker"].unique().tolist()
 
@@ -339,6 +365,12 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
             **dict(Date__in=unique_price_dates, Ticker__in=ticker_list),
         )
     )
+    if df_price.empty:
+        error_msg = f"""
+        `한국 공시 데이터 누락: stock_kr_1d 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
 
     # price_dates 매핑을 사용하여 가격 데이터 병합
     df_merge = df_disclosure.copy()
@@ -459,8 +491,13 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
             print("모든 데이터 입력 완료")
             return len(disclosure_records)
         except Exception as e:
-            print(f"데이터베이스 입력 중 오류 발생: {str(e)}")
-            raise
+            print(f"미국 공시 데이터 처리 실패: {str(e)}")
+            error_msg = f"""
+            미국 공시 데이터 처리 실패
+            * 처리 날짜: {check_date}
+            * 에러 메시지: {str(e)}
+            """
+            raise ValueError(error_msg)
 
     return len(disclosure_records)
 
@@ -505,8 +542,7 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
         check_date = now_kr(is_date=True)
 
     business_days = get_business_days(country="KR", start_date=check_date - timedelta(days=14), end_date=check_date)
-    exclude_dates = ["2024-12-30", "2025-01-03"]
-    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in KR_EXCLUDE_DATES]
     # business_days의 모든 요소를 date 타입으로 변환
     if check_date == now_kr(is_date=True):
         business_day = business_days[-2]
@@ -527,6 +563,13 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
             ),
         )
     )
+    if df_disclosure.empty:
+        error_msg = f"""
+        `한국 공시 데이터 누락: news_information 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     unique_disclosure_tickers = df_disclosure["ticker"].unique().tolist()
 
     df_price = pd.DataFrame(
@@ -539,6 +582,13 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
             ),
         )
     )
+    if df_price.empty:
+        error_msg = f"""
+        `한국 공시 데이터 누락: stock_kr_1d 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     df_price["trading_value"] = (
         (df_price["Close"] + df_price["Open"] + df_price["High"] + df_price["Low"]) / 4 * df_price["Volume"]
     )
@@ -560,7 +610,12 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
             **dict(ctry="KR", date__gte=start_date, date__lt=end_date, ticker__in=top_5_tickers),
         )
     except Exception as e:
-        raise e
+        error_msg = f"""
+        한국 공시 데이터 처리 실패
+        * 처리 날짜: {check_date}
+        * 에러 메시지: {str(e)}
+        """
+        raise ValueError(error_msg)
 
     return True
 
@@ -581,8 +636,7 @@ def temp_us_run_disclosure_is_top_story(date: str = None):
         check_date = now_kr(is_date=True)
 
     business_days = get_business_days(country="US", start_date=check_date - timedelta(days=14), end_date=check_date)
-    exclude_dates = []
-    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in US_EXCLUDE_DATES]
 
     if check_date == now_kr(is_date=True):
         business_day = business_days[-2]
@@ -603,6 +657,13 @@ def temp_us_run_disclosure_is_top_story(date: str = None):
             ),
         )
     )
+    if df_disclosure.empty:
+        error_msg = f"""
+        `미국 공시 데이터 누락: news_information 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     unique_disclosure_tickers = df_disclosure["ticker"].unique().tolist()
 
     df_price = pd.DataFrame(
@@ -612,6 +673,13 @@ def temp_us_run_disclosure_is_top_story(date: str = None):
             **dict(Date=business_day.strftime("%Y-%m-%d"), Ticker__in=unique_disclosure_tickers),
         )
     )
+    if df_price.empty:
+        error_msg = f"""
+        `미국 공시 데이터 누락: stock_us_1d 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     df_price["trading_value"] = (
         (df_price["Close"] + df_price["Open"] + df_price["High"] + df_price["Low"]) / 4 * df_price["Volume"]
     )
@@ -633,7 +701,12 @@ def temp_us_run_disclosure_is_top_story(date: str = None):
             **dict(ctry="US", date__gte=start_date, date__lt=end_date, ticker__in=top_6_tickers),
         )
     except Exception as e:
-        raise e
+        error_msg = f"""
+        미국 공시 데이터 처리 실패
+        * 처리 날짜: {check_date}
+        * 에러 메시지: {str(e)}
+        """
+        raise ValueError(error_msg)
 
     return True
 
@@ -721,11 +794,11 @@ def us_run_disclosure_is_top_story(date: str = None):
         raise e
 
 
-if __name__ == "__main__":
-    # us_run_disclosure_batch(20241223)
-    # kr_run_disclosure_batch(20241230)
-    # temp_us_run_disclosure_is_top_story()
-    # renewal_us_run_disclosure_batch(batch_min=15, date="20241218080000")
-    # renewal_kr_run_disclosure_batch(batch_min=15, date="20250102080000")
-    # renewal_kr_run_disclosure_batch(date="20250103080000")
-    temp_kr_run_disclosure_is_top_story()
+# if __name__ == "__main__":
+# us_run_disclosure_batch(20241223)
+# kr_run_disclosure_batch(20241230)
+# temp_us_run_disclosure_is_top_story()
+# renewal_us_run_disclosure_batch(batch_min=15, date="20241218080000")
+# renewal_kr_run_disclosure_batch(batch_min=15, date="20250102080000")
+# renewal_kr_run_disclosure_batch(date="20250103080000")
+# temp_kr_run_disclosure_is_top_story()
