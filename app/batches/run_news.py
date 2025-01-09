@@ -6,6 +6,10 @@ from app.utils.date_utils import get_business_days, now_kr
 from app.database.crud import database
 
 
+KR_EXCLUDE_DATES = ["2024-12-30"]
+US_EXCLUDE_DATES = []
+
+
 def get_data_from_bucket(bucket, key, dir):
     response = s3_client.get_object(Bucket=bucket, Key=f"{dir}/{key}")
     return response["Body"].read()
@@ -36,6 +40,13 @@ def kr_run_news_batch(date: str = None):
 
     # 뉴스 데이터 조회 및 전처리
     df_news = get_news_data(ctry="KR", date=s3_date_str)
+    if df_news.empty:
+        error_msg = f"""
+        `뉴스 데이터 누락: s3 뉴스 데이터 체크 필요합니다.`
+        * s3_date: {check_date}
+        """
+        raise ValueError(error_msg)
+
     df_need_news = (
         df_news[["date", "Code", "titles", "summary", "emotion", "links"]]
         .dropna(subset=["emotion"])
@@ -54,8 +65,7 @@ def kr_run_news_batch(date: str = None):
 
     business_days = get_business_days(country="KR", start_date=min_date - timedelta(days=7), end_date=max_date)
     business_days = sorted(business_days)
-    exclude_dates = ["2024-12-30", "2025-01-03"]
-    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in KR_EXCLUDE_DATES]
     business_days_dict = {bd.strftime("%Y-%m-%d"): bd for bd in business_days}
     # print(f'business_days_dict#####4#: {business_days_dict}')
     # return 0
@@ -68,6 +78,13 @@ def kr_run_news_batch(date: str = None):
             **dict(ticker__in=news_tickers),
         )
     )
+    if df_stock_data.empty:
+        error_msg = f"""
+        `종목 데이터 누락: stock_information 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     existing_tickers = df_stock_data["ticker"].unique().tolist()
 
     # 날짜 매핑 생성
@@ -111,11 +128,15 @@ def kr_run_news_batch(date: str = None):
         check_news_tickers = df_date["Code"].unique().tolist()
 
         if date_str in price_date_mapping:
-            # print(f'date_str#####1#: {date_str}')
             price_df = get_price_data(price_date_mapping[date_str], check_news_tickers)
-            # print(f'price_df#####3#: {price_df.head()}')
+            if price_df.empty:
+                error_msg = f"""
+                `주가 데이터 누락: stock_kr_1d 테이블 데이터 체크 필요합니다.`
+                * business_day: {check_date}
+                """
+                raise ValueError(error_msg)
+
             df_date = pd.merge(df_date, price_df[["Ticker", "Close"]], left_on="Code", right_on="Ticker", how="left")
-            # print(f'df_date#####2#: {df_date.head()}')
             df_date = pd.merge(df_date, df_stock_data, left_on="Code", right_on="ticker", how="left")
 
             # 레코드 생성
@@ -138,11 +159,6 @@ def kr_run_news_batch(date: str = None):
                     "is_exist": row["Code"] in existing_tickers,
                 }
                 news_records.append(news_record)
-
-    # df_news_records = pd.DataFrame(news_records)
-    # print(df_news_records.head())
-    # df_news_records.to_csv("D:/kyungmin/mementoai/alpha-finder/data_check/news/news_records_kr.csv", index=False)
-    # return 0
 
     def batch_insert(records, batch_size=500):
         """
@@ -208,7 +224,12 @@ def kr_run_news_batch(date: str = None):
             print("모든 데이터 입력 완료")
         except Exception as e:
             print(f"데이터베이스 입력 중 오류 발생: {str(e)}")
-            raise
+            error_msg = f"""
+            뉴스 데이터 처리 실패
+            * 처리 날짜: {check_date}
+            * 에러 메시지: {str(e)}
+            """
+            raise ValueError(error_msg)
 
     return len(news_records)
 
@@ -231,6 +252,13 @@ def us_run_news_batch(date: str = None):
 
     # 뉴스 데이터 조회 및 전처리
     df_news = get_news_data(ctry="US", date=s3_date_str)
+    if df_news.empty:
+        error_msg = f"""
+        `뉴스 데이터 누락: s3 뉴스 데이터 체크 필요합니다.`
+        * s3_date: {check_date}
+        """
+        raise ValueError(error_msg)
+
     df_need_news = df_news[["Code", "date", "titles", "summary", "emotion", "links"]].dropna(subset=["emotion"])
 
     news_tickers = df_need_news["Code"].unique().tolist()
@@ -241,6 +269,13 @@ def us_run_news_batch(date: str = None):
             table="stock_information", columns=["ticker", "kr_name", "en_name"], **dict(ticker__in=news_tickers)
         )
     )
+    if df_stock_data.empty:
+        error_msg = f"""
+        `종목 데이터 누락: stock_information 테이블 데이터 체크 필요합니다.`
+        * s3_date: {check_date}
+        """
+        raise ValueError(error_msg)
+
     existing_tickers = df_stock_data["ticker"].unique().tolist()
 
     # 뉴스 데이터의 고유한 날짜 추출
@@ -253,8 +288,7 @@ def us_run_news_batch(date: str = None):
 
     business_days = get_business_days(country="US", start_date=min_date - timedelta(days=7), end_date=max_date)
     business_days = sorted(business_days)
-    exclude_dates = ["2025-01-03"]
-    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in US_EXCLUDE_DATES]
     business_days_dict = {bd.strftime("%Y-%m-%d"): bd for bd in business_days}
 
     # 날짜 매핑 생성
@@ -298,6 +332,12 @@ def us_run_news_batch(date: str = None):
 
         if date_str in price_date_mapping:
             price_df = get_price_data(price_date_mapping[date_str], check_news_tickers)
+            if price_df.empty:
+                error_msg = f"""
+                `주가 데이터 누락: 데이터 체크 필요합니다.`
+                * business_day: {check_date}
+                """
+                raise ValueError(error_msg)
             df_date = pd.merge(df_date, price_df[["Ticker", "Close"]], left_on="Code", right_on="Ticker", how="left")
 
             # 종목 정보 병합
@@ -388,7 +428,11 @@ def us_run_news_batch(date: str = None):
             print("모든 데이터 입력 완료")
         except Exception as e:
             print(f"데이터베이스 입력 중 오류 발생: {str(e)}")
-            raise
+            error_msg = f"""
+            뉴스 데이터 처리 실패
+            * 처리 날짜: {check_date}
+            """
+            raise ValueError(error_msg)
 
     return len(news_records)
 
@@ -408,8 +452,7 @@ def temp_kr_run_news_is_top_story(date: str = None):
         check_date = now_kr(is_date=True)
 
     business_days = get_business_days(country="KR", start_date=check_date - timedelta(days=14), end_date=check_date)
-    exclude_dates = ["2024-12-30", "2025-01-03"]
-    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in KR_EXCLUDE_DATES]
 
     if check_date == now_kr(is_date=True):
         business_day = business_days[-2]
@@ -431,6 +474,13 @@ def temp_kr_run_news_is_top_story(date: str = None):
             ),
         )
     )
+    if news_data.empty:
+        error_msg = f"""
+        `뉴스 데이터 누락: 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     unique_news_tickers = news_data["ticker"].unique().tolist()
 
     # 오늘 가격 데이터 조회
@@ -441,6 +491,13 @@ def temp_kr_run_news_is_top_story(date: str = None):
             **dict(Date=business_day.strftime("%Y-%m-%d"), Ticker__in=unique_news_tickers),
         )
     )
+    if df_price.empty:
+        error_msg = f"""
+        `주가 데이터 누락: 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     df_price["trading_value"] = (
         (df_price["Close"] + df_price["Open"] + df_price["High"] + df_price["Low"]) / 4
     ) * df_price["Volume"]
@@ -474,7 +531,11 @@ def temp_kr_run_news_is_top_story(date: str = None):
         return True
 
     except Exception:
-        raise
+        error_msg = f"""
+        한국 뉴스 주요 소식 선정 배치 실패
+        * 처리 날짜: {check_date}
+        """
+        raise ValueError(error_msg)
 
 
 def temp_us_run_news_is_top_story(date: str = None):
@@ -492,8 +553,7 @@ def temp_us_run_news_is_top_story(date: str = None):
         check_date = now_kr(is_date=True)
 
     business_days = get_business_days(country="US", start_date=check_date - timedelta(days=14), end_date=check_date)
-    exclude_dates = ["2025-01-03"]
-    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in exclude_dates]
+    business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in US_EXCLUDE_DATES]
 
     if check_date == now_kr(is_date=True):
         business_day = business_days[-2]
@@ -515,6 +575,13 @@ def temp_us_run_news_is_top_story(date: str = None):
             ),
         )
     )
+    if news_data.empty:
+        error_msg = f"""
+        `뉴스 데이터 누락: news_information 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     unique_news_tickers = news_data["ticker"].unique().tolist()
 
     # 오늘 가격 데이터 조회
@@ -525,6 +592,13 @@ def temp_us_run_news_is_top_story(date: str = None):
             **dict(Date=business_day.strftime("%Y-%m-%d"), Ticker__in=unique_news_tickers),
         )
     )
+    if df_price.empty:
+        error_msg = f"""
+        `주가 데이터 누락: stock_us_1d 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
+
     df_price["trading_value"] = (
         (df_price["Close"] + df_price["Open"] + df_price["High"] + df_price["Low"]) / 4
     ) * df_price["Volume"]
@@ -532,28 +606,35 @@ def temp_us_run_news_is_top_story(date: str = None):
     # 해당 날짜의 거래대금 상위 6개 종목 선정
     top_6_tickers = df_price.nlargest(6, "trading_value")["Ticker"].tolist()
 
-    # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
-    database._update(
-        table="news_information",
-        sets={"is_top_story": False},
-        **{
-            "ctry": "US",
-            "is_top_story": True,
-        },
-    )
+    try:
+        # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화
+        database._update(
+            table="news_information",
+            sets={"is_top_story": False},
+            **{
+                "ctry": "US",
+                "is_top_story": True,
+            },
+        )
 
-    # 거래대금 상위 5개 종목의 is_top_story를 True로 업데이트
-    database._update(
-        table="news_information",
-        sets={"is_top_story": True},
-        **{
-            "ctry": "US",
-            "date__gte": f"{start_date}",
-            "date__lt": f"{end_date}",
-            "ticker__in": top_6_tickers,
-        },
-    )
-    return True
+        # 거래대금 상위 5개 종목의 is_top_story를 True로 업데이트
+        database._update(
+            table="news_information",
+            sets={"is_top_story": True},
+            **{
+                "ctry": "US",
+                "date__gte": f"{start_date}",
+                "date__lt": f"{end_date}",
+                "ticker__in": top_6_tickers,
+            },
+        )
+        return True
+    except Exception:
+        error_msg = f"""
+        미국 뉴스 주요 소식 선정 배치 실패
+        * 처리 날짜: {check_date}
+        """
+        raise ValueError(error_msg)
 
 
 def kr_run_news_is_top_story(date: str = None):
@@ -642,25 +723,25 @@ def us_run_news_is_top_story(date: str = None):
     return True
 
 
-if __name__ == "__main__":
-    temp_us_run_news_is_top_story()
-    temp_kr_run_news_is_top_story()
-    # for date in range(20241201, 20241211):
-    #     us_run_news_batch(date=str(date))
-    ########################################
-    # parser = argparse.ArgumentParser(description="뉴스 데이터 수집 배치")
-    # parser.add_argument("--country", type=str, choices=["us", "kr"], required=True, help="수집할 국가 선택 (us 또는 kr)")
-    # parser.add_argument("--date", type=str, help="수집할 날짜 (YYYYMMDD 형식)")
+# if __name__ == "__main__":
+#     temp_us_run_news_is_top_story()
+#     temp_kr_run_news_is_top_story()
+# for date in range(20241201, 20241211):
+#     us_run_news_batch(date=str(date))
+########################################
+# parser = argparse.ArgumentParser(description="뉴스 데이터 수집 배치")
+# parser.add_argument("--country", type=str, choices=["us", "kr"], required=True, help="수집할 국가 선택 (us 또는 kr)")
+# parser.add_argument("--date", type=str, help="수집할 날짜 (YYYYMMDD 형식)")
 
-    # args = parser.parse_args()
+# args = parser.parse_args()
 
-    # if args.country == "us":
-    #     if args.date:
-    #         us_run_news_batch(date=args.date)
-    #     else:
-    #         us_run_news_batch()
-    # elif args.country == "kr":
-    #     if args.date:
-    #         kr_run_news_batch(date=args.date)
-    #     else:
-    #         kr_run_news_batch()
+# if args.country == "us":
+#     if args.date:
+#         us_run_news_batch(date=args.date)
+#     else:
+#         us_run_news_batch()
+# elif args.country == "kr":
+#     if args.date:
+#         kr_run_news_batch(date=args.date)
+#     else:
+#         kr_run_news_batch()

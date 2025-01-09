@@ -10,6 +10,7 @@ from app.batches.run_news import (
 )
 from app.common.celery_config import CELERY_APP
 from app.core.config import settings
+from app.core.extra import SlackNotifier
 from app.modules.common.enum import TrendingCountry
 from app.batches.run_stock_trend import (
     run_stock_trend_by_1d_batch,
@@ -17,13 +18,15 @@ from app.batches.run_stock_trend import (
     run_stock_trend_by_realtime_batch,
 )
 from app.batches.run_stock_indices import us_run_stock_indices_batch
-from app.utils.date_utils import get_session_checker, now_kr
+from app.utils.date_utils import get_session_checker, get_time_checker, now_kr
 from app.batches.run_disclosure import (
     renewal_kr_run_disclosure_batch,
     temp_kr_run_disclosure_is_top_story,
     renewal_us_run_disclosure_batch,
     temp_us_run_disclosure_is_top_story,
 )
+
+notifier = SlackNotifier()
 
 
 def check_market_status(country: Literal["US", "KR"], require_open: bool = True, skip_on_failure: bool = True):
@@ -38,9 +41,17 @@ def check_market_status(country: Literal["US", "KR"], require_open: bool = True,
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            current_time = now_kr()
-            session_checker = get_session_checker(country, current_time)
-            is_market_open = session_checker.is_session(current_time)
+            check_date = now_kr(is_date=True)  # 영업일 체크용
+
+            # 1. 영업일 체크
+            session_checker = get_session_checker(country, check_date)
+            is_business_day = session_checker.is_session(check_date)
+
+            # 2. 운영 시간 체크
+            is_trading_hours = get_time_checker(country)
+
+            # 3. 둘 다 만족해야 장이 열린 것으로 판단
+            is_market_open = is_business_day and is_trading_hours
 
             if is_market_open == require_open:
                 return func(*args, **kwargs)
@@ -136,49 +147,97 @@ def hello_task():
 @CELERY_APP.task(name="kr_news_batch", ignore_result=True)
 def kr_news_batch():
     """한국 뉴스 배치"""
-    kr_run_news_batch()
+    notifier.notify_info("KR_news_batch process started")
+    try:
+        records_count = kr_run_news_batch()
+        notifier.notify_success(f"KR_news_batch process completed processed: {records_count}")
+    except Exception as e:
+        notifier.notify_error(f"KR_news_batch process failed: {str(e)}")
+        raise
 
 
 @CELERY_APP.task(name="kr_news_is_top_story", ignore_result=True)
 def kr_news_is_top_story():
     """한국 뉴스 상위 스토리 업데이트"""
-    temp_kr_run_news_is_top_story()
+    notifier.notify_info("KR_news_is_top_story process started")
+    try:
+        temp_kr_run_news_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        notifier.notify_success("KR_news_is_top_story process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_news_is_top_story process failed: {str(e)}")
+        raise
 
 
 @CELERY_APP.task(name="us_news_batch", ignore_result=True)
 def us_news_batch():
     """미국 뉴스 배치"""
-    us_run_news_batch()
+    notifier.notify_info("US_news_batch process started")
+    try:
+        us_run_news_batch()
+        notifier.notify_success("US_news_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_news_batch process failed: {str(e)}")
+        raise
 
 
 @CELERY_APP.task(name="us_news_is_top_story", ignore_result=True)
 def us_news_is_top_story():
     """미국 뉴스 상위 스토리 업데이트"""
-    temp_us_run_news_is_top_story()
+    notifier.notify_info("US_news_is_top_story process started")
+    try:
+        temp_us_run_news_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        notifier.notify_success("US_news_is_top_story process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_news_is_top_story process failed: {str(e)}")
+        raise
 
 
 @CELERY_APP.task(name="kr_disclosure_batch", ignore_result=True)
 def kr_disclosure_batch():
     """한국 공시 배치"""
-    renewal_kr_run_disclosure_batch()
+    notifier.notify_info("KR_disclosure_batch process started")
+    try:
+        renewal_kr_run_disclosure_batch()
+        notifier.notify_success("KR_disclosure_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_disclosure_batch process failed: {str(e)}")
+        raise
 
 
 @CELERY_APP.task(name="kr_disclosure_is_top_story", ignore_result=True)
 def kr_disclosure_is_top_story():
     """한국 공시 상위 스토리 업데이트"""
-    temp_kr_run_disclosure_is_top_story()
+    notifier.notify_info("KR_disclosure_is_top_story process started")
+    try:
+        temp_kr_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        notifier.notify_success("KR_disclosure_is_top_story process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_disclosure_is_top_story process failed: {str(e)}")
+        raise
 
 
 @CELERY_APP.task(name="us_disclosure_batch", ignore_result=True)
 def us_disclosure_batch():
     """미국 공시 배치"""
-    renewal_us_run_disclosure_batch()
+    notifier.notify_info("US_disclosure_batch process started")
+    try:
+        renewal_us_run_disclosure_batch()
+        notifier.notify_success("US_disclosure_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_disclosure_batch process failed: {str(e)}")
+        raise
 
 
 @CELERY_APP.task(name="us_disclosure_is_top_story", ignore_result=True)
 def us_disclosure_is_top_story():
     """미국 공시 상위 스토리 업데이트"""
-    temp_us_run_disclosure_is_top_story()
+    notifier.notify_info("US_disclosure_is_top_story process started")
+    try:
+        temp_us_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        notifier.notify_success("US_disclosure_is_top_story process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_disclosure_is_top_story process failed: {str(e)}")
+        raise
 
 
 # Worker 시작점
@@ -187,11 +246,11 @@ if __name__ == "__main__":
     CELERY_APP.worker_main(
         argv=[
             "worker",
-            "--beat",  # beat 서버 통합 실행
+            "--beat",
             f"--loglevel={settings.CELERY_LOGLEVEL}",
             "-n",
             "worker@%h",
             f"--concurrency={CONCURRENCY}",
-            "--max-tasks-per-child=1000",  # 메모리 누수 방지
+            "--max-tasks-per-child=1000",
         ]
     )
