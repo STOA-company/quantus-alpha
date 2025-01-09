@@ -10,7 +10,7 @@ from app.batches.run_news import (
 )
 from app.common.celery_config import CELERY_APP
 from app.core.config import settings
-from app.core.extra import SlackNotifier
+from app.core.extra.SlackNotifier import SlackNotifier
 from app.modules.common.enum import TrendingCountry
 from app.batches.run_stock_trend import (
     run_stock_trend_by_1d_batch,
