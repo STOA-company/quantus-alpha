@@ -93,7 +93,10 @@ def kr_run_news_batch(date: str = None):
         news_date_str = news_date.strftime("%Y-%m-%d")
 
         if news_date_str == today_str:
-            price_date_mapping[news_date_str] = business_days[-2].strftime("%Y-%m-%d")
+            if news_date_str not in business_days_dict:
+                price_date_mapping[news_date_str] = business_days[-1].strftime("%Y-%m-%d")
+            else:
+                price_date_mapping[news_date_str] = business_days[-2].strftime("%Y-%m-%d")
         else:
             news_date = news_date.date()
             if news_date_str in business_days_dict:
@@ -297,7 +300,10 @@ def us_run_news_batch(date: str = None):
         news_date_str = news_date.strftime("%Y-%m-%d")
 
         if news_date_str == today_str:
-            price_date_mapping[news_date_str] = business_days[-2].strftime("%Y-%m-%d")
+            if news_date_str not in business_days_dict:
+                price_date_mapping[news_date_str] = business_days[-1].strftime("%Y-%m-%d")
+            else:
+                price_date_mapping[news_date_str] = business_days[-2].strftime("%Y-%m-%d")
         else:
             news_date = news_date.date()
             if news_date_str in business_days_dict:
