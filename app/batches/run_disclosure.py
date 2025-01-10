@@ -89,7 +89,10 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
         disclosure_date_str = disclosure_date.strftime("%Y-%m-%d")
 
         if disclosure_date_str == today_str:
-            price_date_mapping[disclosure_date] = business_days[-2].strftime("%Y-%m-%d")
+            if disclosure_date_str not in business_days:
+                price_date_mapping[disclosure_date] = business_days[-1].strftime("%Y-%m-%d")
+            else:
+                price_date_mapping[disclosure_date] = business_days[-2].strftime("%Y-%m-%d")
         else:
             if disclosure_date in business_days:
                 price_date_mapping[disclosure_date] = disclosure_date_str
@@ -248,7 +251,7 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
     return len(disclosure_records)
 
 
-def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # TODO :: 12월 30일 스킵하는 것 지우기!!!
+def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):
     run_batch_min = batch_min  # 15분 단위로 배치 실행
 
     if date:
@@ -329,7 +332,10 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
         filing_date_str = filing_date.strftime("%Y-%m-%d")
 
         if filing_date_str == today_str:
-            price_dates[filing_date] = business_days[-2].strftime("%Y-%m-%d")
+            if filing_date_str not in business_days:
+                price_dates[filing_date] = business_days[-1].strftime("%Y-%m-%d")
+            else:
+                price_dates[filing_date] = business_days[-2].strftime("%Y-%m-%d")
         else:
             # 해당 날짜가 영업일인지 확인
             if filing_date in business_days:
@@ -506,28 +512,28 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):  # T
     return len(disclosure_records)
 
 
-def update_disclosure_that_time_price(date: str = None):
-    if date:
-        check_date = pd.to_datetime(date, format="%Y%m%d").date()
-    else:
-        check_date = now_kr(is_date=True)
+# def update_disclosure_that_time_price(date: str = None): # TODO :: 작성 중
+#     if date:
+#         check_date = pd.to_datetime(date, format="%Y%m%d").date()
+#     else:
+#         check_date = now_kr(is_date=True)
 
-    df_disclosure = pd.DataFrame(
-        database._select(
-            table="disclosure_information",
-            columns=["id", "ticker", "date"],
-            **dict(date__like=check_date.strftime("%Y-%m-%d")),
-        )
-    )
-    unique_tickers = df_disclosure["ticker"].unique().tolist()
+#     df_disclosure = pd.DataFrame(
+#         database._select(
+#             table="disclosure_information",
+#             columns=["id", "ticker", "date"],
+#             **dict(date__like=check_date.strftime("%Y-%m-%d")),
+#         )
+#     )
+#     unique_tickers = df_disclosure["ticker"].unique().tolist()
 
-    df_price = pd.DataFrame(  # noqa
-        database._select(
-            table="stock_kr_1d",
-            columns=["Ticker", "Date", "Close"],
-            **dict(Date=check_date.strftime("%Y-%m-%d"), Ticker__in=unique_tickers),
-        )
-    )
+#     df_price = pd.DataFrame(  # noqa
+#         database._select(
+#             table="stock_kr_1d",
+#             columns=["Ticker", "Date", "Close"],
+#             **dict(Date=check_date.strftime("%Y-%m-%d"), Ticker__in=unique_tickers),
+#         )
+#     )
 
 
 def temp_kr_run_disclosure_is_top_story(date: str = None):
