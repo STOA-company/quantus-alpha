@@ -3,10 +3,7 @@ import pandas as pd
 from app.database.crud import database
 from app.utils.date_utils import get_business_days, now_kr
 from sqlalchemy import text
-
-
-KR_EXCLUDE_DATES = ["2024-12-30"]
-US_EXCLUDE_DATES = []
+from app.common.constants import US_EXCLUDE_DATES, KR_EXCLUDE_DATES
 
 
 def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
