@@ -162,7 +162,7 @@ def kr_news_is_top_story():
     notifier.notify_info("KR_news_is_top_story process started")
     try:
         temp_kr_run_news_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
-        # notifier.notify_success("KR_news_is_top_story process completed")
+        notifier.notify_success("KR_news_is_top_story process completed")
     except Exception as e:
         notifier.notify_error(f"KR_news_is_top_story process failed: {str(e)}")
         raise
@@ -186,57 +186,57 @@ def us_news_is_top_story():
     notifier.notify_info("US_news_is_top_story process started")
     try:
         temp_us_run_news_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
-        # notifier.notify_success("US_news_is_top_story process completed")
-    except Exception:
-        # notifier.notify_error(f"US_news_is_top_story process failed: {str(e)}")
+        notifier.notify_success("US_news_is_top_story process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_news_is_top_story process failed: {str(e)}")
         raise
 
 
 @CELERY_APP.task(name="kr_disclosure_batch", ignore_result=True)
 def kr_disclosure_batch():
     """한국 공시 배치"""
-    notifier.notify_info("KR_disclosure_batch process started")
+    # notifier.notify_info("KR_disclosure_batch process started") # TODO :: 추후 활성화
     try:
         renewal_kr_run_disclosure_batch()
-        # notifier.notify_success("KR_disclosure_batch process completed")
+        # notifier.notify_success("KR_disclosure_batch process completed") # TODO :: 추후 활성화
     except Exception:
-        # notifier.notify_error(f"KR_disclosure_batch process failed: {str(e)}")
+        # notifier.notify_error(f"KR_disclosure_batch process failed: {str(e)}") # TODO :: 추후 활성화
         raise
 
 
 @CELERY_APP.task(name="kr_disclosure_is_top_story", ignore_result=True)
 def kr_disclosure_is_top_story():
     """한국 공시 상위 스토리 업데이트"""
-    # notifier.notify_info("KR_disclosure_is_top_story process started")
+    # notifier.notify_info("KR_disclosure_is_top_story process started") # TODO :: 추후 활성화
     try:
         temp_kr_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
-        # notifier.notify_success("KR_disclosure_is_top_story process completed")
+        # notifier.notify_success("KR_disclosure_is_top_story process completed") # TODO :: 추후 활성화
     except Exception:
-        # notifier.notify_error(f"KR_disclosure_is_top_story process failed: {str(e)}")
+        # notifier.notify_error(f"KR_disclosure_is_top_story process failed: {str(e)}") # TODO :: 추후 활성화
         raise
 
 
 @CELERY_APP.task(name="us_disclosure_batch", ignore_result=True)
 def us_disclosure_batch():
     """미국 공시 배치"""
-    # notifier.notify_info("US_disclosure_batch process started")
+    # notifier.notify_info("US_disclosure_batch process started") # TODO :: 추후 활성화
     try:
         renewal_us_run_disclosure_batch()
-        # notifier.notify_success("US_disclosure_batch process completed")
+        # notifier.notify_success("US_disclosure_batch process completed") # TODO :: 추후 활성화
     except Exception:
-        # notifier.notify_error(f"US_disclosure_batch process failed: {str(e)}")
+        # notifier.notify_error(f"US_disclosure_batch process failed: {str(e)}") # TODO :: 추후 활성화
         raise
 
 
 @CELERY_APP.task(name="us_disclosure_is_top_story", ignore_result=True)
 def us_disclosure_is_top_story():
     """미국 공시 상위 스토리 업데이트"""
-    # notifier.notify_info("US_disclosure_is_top_story process started")
+    # notifier.notify_info("US_disclosure_is_top_story process started") # TODO :: 추후 활성화
     try:
         temp_us_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
-        # notifier.notify_success("US_disclosure_is_top_story process completed")
+        # notifier.notify_success("US_disclosure_is_top_story process completed") # TODO :: 추후 활성화
     except Exception:
-        # notifier.notify_error(f"US_disclosure_is_top_story process failed: {str(e)}")
+        # notifier.notify_error(f"US_disclosure_is_top_story process failed: {str(e)}") # TODO :: 추후 활성화
         raise
 
 
