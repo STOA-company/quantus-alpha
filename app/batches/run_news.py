@@ -1,13 +1,11 @@
+import argparse  # noqa
 from datetime import timedelta
 from io import BytesIO
 import pandas as pd
 from quantus_aws.common.configs import s3_client
 from app.utils.date_utils import get_business_days, now_kr
 from app.database.crud import database
-
-
-KR_EXCLUDE_DATES = ["2024-12-30"]
-US_EXCLUDE_DATES = []
+from app.common.constants import US_EXCLUDE_DATES, KR_EXCLUDE_DATES
 
 
 def get_data_from_bucket(bucket, key, dir):
@@ -132,7 +130,7 @@ def kr_run_news_batch(date: str = None):
             if price_df.empty:
                 error_msg = f"""
                 `주가 데이터 누락: stock_kr_1d 테이블 데이터 체크 필요합니다.`
-                * business_day: {check_date}
+                * business_day: {date_str}
                 """
                 raise ValueError(error_msg)
 
@@ -334,8 +332,8 @@ def us_run_news_batch(date: str = None):
             price_df = get_price_data(price_date_mapping[date_str], check_news_tickers)
             if price_df.empty:
                 error_msg = f"""
-                `주가 데이터 누락: 데이터 체크 필요합니다.`
-                * business_day: {check_date}
+                `주가 데이터 누락: stock_us_1d 테이블 데이터 체크 필요합니다.`
+                * business_day: {date_str}
                 """
                 raise ValueError(error_msg)
             df_date = pd.merge(df_date, price_df[["Ticker", "Close"]], left_on="Code", right_on="Ticker", how="left")
@@ -729,19 +727,19 @@ def us_run_news_is_top_story(date: str = None):
 # for date in range(20241201, 20241211):
 #     us_run_news_batch(date=str(date))
 ########################################
-# parser = argparse.ArgumentParser(description="뉴스 데이터 수집 배치")
-# parser.add_argument("--country", type=str, choices=["us", "kr"], required=True, help="수집할 국가 선택 (us 또는 kr)")
-# parser.add_argument("--date", type=str, help="수집할 날짜 (YYYYMMDD 형식)")
+parser = argparse.ArgumentParser(description="뉴스 데이터 수집 배치")
+parser.add_argument("--country", type=str, choices=["us", "kr"], required=True, help="수집할 국가 선택 (us 또는 kr)")
+parser.add_argument("--date", type=str, help="수집할 날짜 (YYYYMMDD 형식)")
 
-# args = parser.parse_args()
+args = parser.parse_args()
 
-# if args.country == "us":
-#     if args.date:
-#         us_run_news_batch(date=args.date)
-#     else:
-#         us_run_news_batch()
-# elif args.country == "kr":
-#     if args.date:
-#         kr_run_news_batch(date=args.date)
-#     else:
-#         kr_run_news_batch()
+if args.country == "us":
+    if args.date:
+        us_run_news_batch(date=args.date)
+    else:
+        us_run_news_batch()
+elif args.country == "kr":
+    if args.date:
+        kr_run_news_batch(date=args.date)
+    else:
+        kr_run_news_batch()

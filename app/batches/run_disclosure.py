@@ -3,10 +3,7 @@ import pandas as pd
 from app.database.crud import database
 from app.utils.date_utils import get_business_days, now_kr
 from sqlalchemy import text
-
-
-KR_EXCLUDE_DATES = ["2024-12-30"]
-US_EXCLUDE_DATES = []
+from app.common.constants import US_EXCLUDE_DATES, KR_EXCLUDE_DATES
 
 
 def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
@@ -36,6 +33,13 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
 
     # _execute 메서드로 쿼리 실행
     result = database._execute(query, {"check_date": check_date_str})
+
+    if result.rowcount == 0:
+        error_msg = f"""
+        `미국 공시 데이터 누락: usa_disclosure_analysis_translation 테이블 데이터 체크 필요합니다.`
+        * business_day: {check_date}
+        """
+        raise ValueError(error_msg)
 
     # 결과를 DataFrame으로 변환
     df_disclosure = pd.DataFrame(
