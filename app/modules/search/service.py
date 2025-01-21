@@ -45,70 +45,65 @@ class SearchService:
         if not search_result:
             return []
 
-        tickers = [row._mapping["ticker"] for row in search_result]
-        country_codes = {
-            row._mapping["ticker"]: row._mapping["ctry"].lower() 
-            for row in search_result
-        }
+        country_groups = {}
+        search_map = {}  # 검색 결과 미리 매핑
+        for row in search_result:
+            mapping = row._mapping
+            ticker = mapping["ticker"]
+            country = mapping["ctry"]
+            country_groups.setdefault(country.lower(), []).append(ticker)
+            search_map[ticker] = {
+                "name": mapping["kr_name"] if ctry == TranslateCountry.KO else mapping["en_name"],
+                "language": ctry
+            }
 
-        current_prices = self._get_current_prices(tickers, country_codes)
+        prices = {}
+        for country, tickers in country_groups.items():
+            table_name = f"stock_{country}_1d"
+            try:
+                # IN 절 -> 한 번의 쿼리로 여러 종목 조회
+                price_results = self.db._select(
+                    table=table_name,
+                    columns=["Ticker", "Close", "Open", "Date"],
+                    Ticker__in=tickers,
+                    order="Date",
+                    ascending=False,
+                    limit=len(tickers)  # 각 티커 별 최신 데이터
+                )
+                
+                # 티커별 최신 데이터만 저장
+                for row in price_results:
+                    mapping = row._mapping
+                    ticker = mapping["Ticker"]
+                    if ticker not in prices:
+                        try:
+                            close = float(mapping["Close"])
+                            open_price = float(mapping["Open"])
+                            rate = 0 if open_price == 0 else round(((close - open_price) / open_price) * 100, 2)
+                            prices[ticker] = (close, rate)
+                        except (ValueError, TypeError):
+                            prices[ticker] = (None, None)
+                            
+            except Exception as e:
+                prices.update({ticker: (None, None) for ticker in tickers})
 
         search_items = []
         for row in search_result:
             ticker = row._mapping["ticker"]
-            name = row._mapping["kr_name"] if ctry == TranslateCountry.KO else row._mapping["en_name"]
-            current_price = current_prices.get(ticker, (None, None))
+            item_info = search_map[ticker]
+            current_price, rate = prices.get(ticker, (None, None))
             
             search_items.append(
                 SearchItem(
                     ticker=ticker,
-                    name=name,
-                    language=ctry,
-                    current_price=current_price[0],
-                    current_price_rate=current_price[1],
+                    name=item_info["name"],
+                    language=item_info["language"],
+                    current_price=current_price,
+                    current_price_rate=rate
                 )
             )
 
         return search_items
     
-    def _get_current_prices(self, tickers: List[str], country_codes: Dict[str, str]) -> Dict[str, Tuple[float, float]]:
-        result = {}
-        
-        country_groups = {}
-        for ticker in tickers:
-            country = country_codes.get(ticker)
-            if country:
-                country_groups.setdefault(country.lower(), []).append(ticker)
-        
-        for country, country_tickers in country_groups.items():
-            table_name = f"stock_{country}_1d"
-            try:
-                prices = self.db._select(
-                    table=table_name,
-                    columns=["Ticker", "Close", "Open"],
-                    Ticker__in=country_tickers,
-                    order="Date",
-                    ascending=False
-                )
-                
-                latest_prices = {}
-                for row in prices:
-                    ticker = row._mapping["Ticker"]
-                    if ticker not in latest_prices:
-                        try:
-                            close = float(row._mapping["Close"])
-                            open_price = float(row._mapping["Open"])
-                            
-                            rate = 0 if open_price == 0 else round(((close - open_price) / open_price) * 100, 2)
-                            latest_prices[ticker] = (close, rate)
-                        except (KeyError, ValueError, AttributeError, TypeError):
-                            latest_prices[ticker] = (None, None)
-                
-                result.update(latest_prices)
-            except Exception:
-                result.update({ticker: (None, None) for ticker in country_tickers})
-
-        return result
-
 def get_search_service() -> SearchService:
     return SearchService()
