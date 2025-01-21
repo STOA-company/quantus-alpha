@@ -13,8 +13,7 @@ def news_main(
     ctry: Annotated[str, Query(description="국가 코드, 예시: kr, us")] = None,
     news_service: NewsService = Depends(get_news_service),
 ):
-    news_data = news_service.news_main(ctry=ctry)
-    disclosure_data = news_service.disclosure_main(ctry=ctry)
+    news_data, disclosure_data = news_service.get_renewal_data(ctry=ctry)
 
     response_data = NewsRenewalResponse(news=news_data, disclosure=disclosure_data)
 

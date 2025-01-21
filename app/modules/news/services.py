@@ -2,7 +2,7 @@ from datetime import datetime
 import json
 import math
 import re
-from typing import List
+from typing import List, Tuple, Union
 
 from fastapi import Request, Response
 
@@ -18,7 +18,7 @@ from app.modules.news.schemas import (
     TopStoriesItem,
     TopStoriesResponse,
 )
-from app.database.crud import database
+from app.database.crud import database, JoinInfo
 from app.utils.ctry_utils import check_ticker_country_len_2
 
 
@@ -106,194 +106,128 @@ class NewsService:
 
         return df
 
-    def news_main(self, ctry: str = None) -> List[NewsRenewalItem]:
+    def get_renewal_data(self, ctry: str = None) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
         condition = {"is_exist": True}
         if ctry:
-            if ctry == "kr":
-                condition["ctry"] = "KR"
-            elif ctry == "us":
-                condition["ctry"] = "US"
+            condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
+
+        news_join_info = JoinInfo(
+            primary_table="news_information",
+            secondary_table="stock_trend",
+            primary_column="ticker",
+            secondary_column="ticker",
+            columns=["current_price", "change_rt"],
+            is_outer=True
+        )
 
         df_news = pd.DataFrame(
             self.db._select(
                 table="news_information",
                 columns=[
-                    "id",
-                    "ticker",
-                    "ko_name",
-                    "en_name",
-                    "ctry",
-                    "date",
-                    "title",
-                    "summary",
-                    "emotion",
-                    "that_time_price",
+                    "id", "ticker", "ko_name", "en_name", "ctry",
+                    "date", "title", "summary", "emotion", "that_time_price",
+                    "current_price", "change_rt"
                 ],
                 order="date",
                 ascending=False,
                 limit=100,
-                **condition,
+                join_info=news_join_info,
+                **condition
             )
         )
-        df_news = self._process_dataframe_news(df_news)
-        unique_ticker = df_news["ticker"].unique().tolist()
 
-        df_price = pd.DataFrame(
-            self.db._select(
-                table="stock_trend",
-                columns=["ticker", "current_price", "change_rt"],
-                **dict(ticker__in=unique_ticker),
-            )
+        disclosure_join_info = JoinInfo(
+            primary_table="disclosure_information",
+            secondary_table="stock_trend",
+            primary_column="ticker",
+            secondary_column="ticker",
+            columns=["current_price", "change_rt"],
+            is_outer=True
         )
-        df_news["price_impact"] = 0.0
-        df_news["change_rate"] = 0.0
-        if not df_price.empty:
-            df_news = pd.merge(df_news, df_price, on="ticker", how="left")
-
-            df_news["that_time_price"] = df_news["that_time_price"].fillna(0)
-            df_news["current_price"] = df_news["current_price"].fillna(0)
-            df_news["change_rt"] = df_news["change_rt"].fillna(0)
-
-            mask = (df_news["current_price"] == 0) & (df_news["that_time_price"] != 0)
-            df_news.loc[mask, "that_time_price"] = 0
-
-            df_news["price_impact"] = round(
-                (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100,
-                2,
-            )
-            df_news["change_rate"] = round(df_news["change_rt"], 2)
-
-        df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
-        data = []
-        for _, row in df_news.iterrows():
-            id = row["id"]
-            date = row["date"]
-            ctry = row["ctry"]
-            title = row["title"]
-            summary = row["summary"]
-            emotion = row["emotion"]
-            name = row["ko_name"]
-            change_rate = row["change_rate"] if row.get("change_rate") else 0.00
-            price_impact = row["price_impact"] if row.get("price_impact") else 0.00
-            ticker = row["ticker"]
-            data.append(
-                NewsRenewalItem(
-                    id=id,
-                    date=date,
-                    ctry=ctry,
-                    title=title,
-                    summary=summary,
-                    emotion=emotion,
-                    name=name,
-                    change_rate=change_rate,
-                    price_impact=price_impact,
-                    ticker=ticker,
-                )
-            )
-
-        return data
-
-    def disclosure_main(self, ctry: str = None) -> List[DisclosureRenewalItem]:
-        condition = {"is_exist": True}
-        if ctry:
-            if ctry == "kr":
-                condition["ctry"] = "KR"
-            elif ctry == "us":
-                condition["ctry"] = "US"
 
         df_disclosure = pd.DataFrame(
             self.db._select(
                 table="disclosure_information",
                 columns=[
-                    "id",
-                    "ticker",
-                    "ko_name",
-                    "en_name",
-                    "ctry",
-                    "date",
-                    "url",
-                    "summary",
-                    "impact_reason",
-                    "key_points",
-                    "emotion",
-                    "form_type",
-                    "that_time_price",
+                    "id", "ticker", "ko_name", "en_name", "ctry",
+                    "date", "url", "summary", "impact_reason",
+                    "key_points", "emotion", "form_type", "that_time_price",
+                    "current_price", "change_rt"
                 ],
                 order="date",
                 ascending=False,
                 limit=100,
-                **condition,
+                join_info=disclosure_join_info,
+                **condition
             )
         )
 
-        df_disclosure = self._process_dataframe_disclosure(df_disclosure)
-        unique_ticker = df_disclosure["ticker"].unique().tolist()
+        news_data = []
+        if not df_news.empty:
+            df_news = self._process_dataframe_news(df_news)
+            news_data = self._process_price_data(df_news)
 
-        df_price = pd.DataFrame(
-            self.db._select(
-                table="stock_trend",
-                columns=["ticker", "current_price", "change_rt"],
-                order="last_updated",
-                ascending=False,
-                **dict(ticker__in=unique_ticker),
-            )
+        disclosure_data = []
+        if not df_disclosure.empty:
+            df_disclosure = self._process_dataframe_disclosure(df_disclosure)
+            disclosure_data = self._process_price_data(df_disclosure, is_disclosure=True)
+
+        return news_data, disclosure_data
+
+    def _process_price_data(self, df: pd.DataFrame, is_disclosure: bool = False) -> List[Union[NewsRenewalItem, DisclosureRenewalItem]]:
+        if df.empty:
+            return []
+
+        df[['that_time_price', 'current_price', 'change_rt']] = df[['that_time_price', 'current_price', 'change_rt']].fillna(0)
+        
+        mask = (df['current_price'] == 0) & (df['that_time_price'] != 0)
+        df.loc[mask, 'that_time_price'] = 0
+        
+        df['price_impact'] = np.where(
+            df['that_time_price'] != 0,
+            (df['current_price'] - df['that_time_price']) / df['that_time_price'] * 100,
+            0
         )
-        df_disclosure["price_impact"] = 0.0
-        df_disclosure["change_rate"] = 0.0
-        if not df_price.empty:
-            df_disclosure = pd.merge(df_disclosure, df_price, on="ticker", how="left")
+        
+        df['price_impact'] = df['price_impact'].round(2).clip(-np.inf, np.inf).fillna(0)
+        df['change_rate'] = df['change_rt'].round(2)
 
-            df_disclosure["that_time_price"] = df_disclosure["that_time_price"].fillna(0)
-            df_disclosure["current_price"] = df_disclosure["current_price"].fillna(0)
-            df_disclosure["change_rt"] = df_disclosure["change_rt"].fillna(0)
-
-            mask = (df_disclosure["current_price"] == 0) & (df_disclosure["that_time_price"] != 0)
-            df_disclosure.loc[mask, "that_time_price"] = 0
-
-            df_disclosure["price_impact"] = round(
-                (df_disclosure["current_price"] - df_disclosure["that_time_price"])
-                / df_disclosure["that_time_price"]
-                * 100,
-                2,
-            )
-            df_disclosure["change_rate"] = round(df_disclosure["change_rt"], 2)
-
-        df_disclosure["price_impact"] = round(df_disclosure["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
-        df_disclosure["ko_name"] = df_disclosure["ko_name"].apply(self.remove_parentheses)
-        data = []
-        for _, row in df_disclosure.iterrows():
-            id = row["id"]
-            date = row["date"]
-            ctry = row["ctry"]
-            ticker = row["ticker"]
-            title = row["ko_name"] + " " + document_type_mapping.get(row.form_type, row.form_type)
-            summary = row["summary"]
-            impact_reason = row["impact_reason"]
-            key_points = row["key_points"]
-            emotion = row["emotion"]
-            name = row["ko_name"]
-            change_rate = row["change_rate"] if row.get("change_rate") else 0.00
-            price_impact = row["price_impact"] if row.get("price_impact") else 0.00
-            document_url = row["url"]
-            data.append(
+        if is_disclosure:
+            df['ko_name'] = df['ko_name'].apply(self.remove_parentheses)
+            return [
                 DisclosureRenewalItem(
-                    id=id,
-                    date=date,
-                    ctry=ctry,
-                    title=title,
-                    summary=summary,
-                    impact_reason=impact_reason,
-                    key_points=key_points,
-                    emotion=emotion,
-                    name=name,
-                    change_rate=change_rate,
-                    price_impact=price_impact,
-                    document_url=document_url,
-                    ticker=ticker,
+                    id=row['id'],
+                    date=row['date'],
+                    ctry=row['ctry'],
+                    ticker=row['ticker'],
+                    title=f"{row['ko_name']} {document_type_mapping.get(row['form_type'], row['form_type'])}",
+                    summary=row['summary'],
+                    impact_reason=row['impact_reason'],
+                    key_points=row['key_points'],
+                    emotion=row['emotion'],
+                    name=row['ko_name'],
+                    change_rate=row['change_rate'],
+                    price_impact=row['price_impact'],
+                    document_url=row['url']
                 )
+                for _, row in df.iterrows()
+            ]
+        
+        return [
+            NewsRenewalItem(
+                id=row['id'],
+                date=row['date'],
+                ctry=row['ctry'],
+                title=row['title'],
+                summary=row['summary'],
+                emotion=row['emotion'],
+                name=row['ko_name'],
+                change_rate=row['change_rate'],
+                price_impact=row['price_impact'],
+                ticker=row['ticker']
             )
-
-        return data
+            for _, row in df.iterrows()
+        ]
 
     def top_stories(self, request: Request):
         viewed_stories = []
