@@ -173,7 +173,8 @@ class NewsService:
         if df.empty:
             return []
 
-        df[['that_time_price', 'current_price', 'change_rt']] = df[['that_time_price', 'current_price', 'change_rt']].fillna(0)
+        numeric_columns = ['that_time_price', 'current_price', 'change_rt']
+        df[numeric_columns] = df[numeric_columns].astype('float64').fillna(0)
         
         mask = (df['current_price'] == 0) & (df['that_time_price'] != 0)
         df.loc[mask, 'that_time_price'] = 0
