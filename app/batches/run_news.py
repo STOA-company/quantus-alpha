@@ -1,4 +1,3 @@
-import argparse  # noqa
 from datetime import timedelta
 from io import BytesIO
 import pandas as pd
@@ -733,19 +732,19 @@ def us_run_news_is_top_story(date: str = None):
 # for date in range(20241201, 20241211):
 #     us_run_news_batch(date=str(date))
 ########################################
-parser = argparse.ArgumentParser(description="뉴스 데이터 수집 배치")
-parser.add_argument("--country", type=str, choices=["us", "kr"], required=True, help="수집할 국가 선택 (us 또는 kr)")
-parser.add_argument("--date", type=str, help="수집할 날짜 (YYYYMMDD 형식)")
+# parser = argparse.ArgumentParser(description="뉴스 데이터 수집 배치")
+# parser.add_argument("--country", type=str, choices=["us", "kr"], required=True, help="수집할 국가 선택 (us 또는 kr)")
+# parser.add_argument("--date", type=str, help="수집할 날짜 (YYYYMMDD 형식)")
 
-args = parser.parse_args()
+# args = parser.parse_args()
 
-if args.country == "us":
-    if args.date:
-        us_run_news_batch(date=args.date)
-    else:
-        us_run_news_batch()
-elif args.country == "kr":
-    if args.date:
-        kr_run_news_batch(date=args.date)
-    else:
-        kr_run_news_batch()
+# if args.country == "us":
+#     if args.date:
+#         us_run_news_batch(date=args.date)
+#     else:
+#         us_run_news_batch()
+# elif args.country == "kr":
+#     if args.date:
+#         kr_run_news_batch(date=args.date)
+#     else:
+#         kr_run_news_batch()
