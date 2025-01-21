@@ -185,7 +185,7 @@ class NewsService:
             0
         )
         
-        df['price_impact'] = df['price_impact'].round(2).clip(-np.inf, np.inf).fillna(0)
+        df['price_impact'] = df['price_impact'].round(2).fillna(0)
         df['change_rate'] = df['change_rt'].round(2)
 
         if is_disclosure:
