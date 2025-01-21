@@ -76,6 +76,37 @@ def check_ticker_country_len_3(ticker: str):
     # 미국 주식은 위의 패턴에 해당하지 않는 모든 경우
     return "usa"
 
+async def async_check_ticker_country_len_3(ticker: str):
+    # 한국 주식 패턴 체크 (A + 6자리 숫자)
+    try:
+        if re.match(r"^A\d{6}$", ticker):
+            return "kor"
+        raise ValueError("한국 주식 티커 형식이 아닙니다")
+    except ValueError:
+        # 다음 패턴 확인으로 진행
+        pass
+
+    # 홍콩 주식 패턴 체크 (HK + 숫자)
+    try:
+        if re.match(r"^HK\d+$", ticker):
+            return "hkg"
+        raise ValueError("홍콩 주식 티커 형식이 아닙니다")
+    except ValueError:
+        # 다음 패턴 확인으로 진행
+        pass
+
+    # 일본 주식 패턴 체크 (J + 숫자)
+    try:
+        if re.match(r"^J\d+$", ticker):
+            return "jpn"
+        raise ValueError("일본 주식 티커 형식이 아닙니다")
+    except ValueError:
+        # 다음 패턴 확인으로 진행
+        pass
+
+    # 미국 주식은 위의 패턴에 해당하지 않는 모든 경우
+    return "usa"
+
 
 contry_mapping = {
     "KOR": "kr",
