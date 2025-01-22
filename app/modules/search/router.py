@@ -19,7 +19,7 @@ def search(
     db: Session = Depends(db.get_db),
 ) -> SearchResponse:
     # limit + 1개를 요청하여 더 있는지 확인
-    search_result = service.search(query, ctry, offset, limit + 1, db)
+    search_result = service.search(query, ctry, offset, limit + 1)
     has_more = len(search_result) > limit
     if has_more:
         search_result = search_result[:-1]  # 마지막 항목 제거
