@@ -31,8 +31,6 @@ class SearchService:
         search_result = self.db._select(
             table="stock_information",
             columns=["ticker", "kr_name", "en_name", "ctry"],
-            limit=limit,
-            offset=offset,
             or__=[
                 {"ticker": query},
                 {"ticker__like": search_term},
@@ -44,6 +42,12 @@ class SearchService:
 
         if not search_result:
             return []
+        
+        sorted_result = sorted(search_result, 
+            key=lambda x: 1 if x._mapping["ticker"] == query else 2
+        )
+
+        search_result = sorted_result[offset:offset + limit]
 
         country_groups = {}
         search_map = {}
