@@ -7,6 +7,10 @@ from app.batches.run_news import (
     temp_kr_run_news_is_top_story,
     temp_us_run_news_is_top_story,
     us_run_news_batch,
+    renewal_kr_run_news_batch,
+    renewal_us_run_news_batch,
+    renewal_kr_run_news_is_top_story,
+    renewal_us_run_news_is_top_story,
 )
 from app.common.celery_config import CELERY_APP
 from app.core.config import settings
@@ -237,6 +241,46 @@ def us_disclosure_is_top_story():
         # notifier.notify_success("US_disclosure_is_top_story process completed") # TODO :: 추후 활성화
     except Exception:
         # notifier.notify_error(f"US_disclosure_is_top_story process failed: {str(e)}") # TODO :: 추후 활성화
+        raise
+
+
+@CELERY_APP.task(name='kr_news_renewal', ignore_result=True)
+def kr_news_renewal():
+    """한국 뉴스 업데이트"""
+    try:
+        renewal_kr_run_news_batch()
+    except Exception as e:
+        # notifier.notify_error(f"KR_news_renewal process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name='us_news_renewal', ignore_result=True)
+def us_news_renewal():
+    """미국 뉴스 업데이트"""
+    try:
+        renewal_us_run_news_batch()
+    except Exception as e:
+        # notifier.notify_error(f"US_news_renewal process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="kr_news_is_top_story_renewal", ignore_result=True)
+def kr_news_is_top_story_renewal():
+    """한국 뉴스 상위 스토리 업데이트"""
+    try:
+        renewal_kr_run_news_is_top_story()
+    except Exception as e:
+        # notifier.notify_error(f"KR_news_is_top_story_renewal process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="us_news_is_top_story_renewal", ignore_result=True)
+def us_news_is_top_story_renewal():
+    """미국 뉴스 상위 스토리 업데이트"""
+    try:
+        renewal_us_run_news_is_top_story()
+    except Exception as e:
+        # notifier.notify_error(f"US_news_is_top_story_renewal process failed: {str(e)}")
         raise
 
 
