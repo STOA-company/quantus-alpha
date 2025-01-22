@@ -129,8 +129,7 @@ class NewsService:
                     "emotion",
                     "that_time_price",
                 ],
-                order="date",
-                ascending=False,
+                order_by="date DESC",
                 limit=100,
                 **condition,
             )
@@ -296,13 +295,13 @@ class NewsService:
         return data
 
     def top_stories(self, request: Request):
-        viewed_stories = []
+        viewed_stories = set()
         if request.cookies.get("viewed_stories"):
             cookie_data = request.cookies.get("viewed_stories", "[]")
             try:
-                viewed_stories = json.loads(cookie_data)
+                viewed_stories = set(json.loads(cookie_data))
             except json.JSONDecodeError:
-                viewed_stories = []
+                viewed_stories = set()
 
         condition = {"is_top_story": 1, "is_exist": True}
         # 뉴스 데이터 수집
@@ -361,10 +360,12 @@ class NewsService:
             df_disclosure["title"] = (
                 df_disclosure["ko_name"]
                 + " "
-                + df_disclosure.apply(lambda x: document_type_mapping.get(x.form_type, x.form_type), axis=1)
+                + df_disclosure["form_type"].map(document_type_mapping).fillna(df_disclosure["form_type"])
             )
-            df_disclosure["summary"] = df_disclosure.apply(
-                lambda x: f"{x.summary} {x.key_points}" if x.key_points else x.summary, axis=1
+            df_disclosure["summary"] = np.where(
+                df_disclosure["key_points"].notna(),
+                df_disclosure["summary"] + " " + df_disclosure["key_points"],
+                df_disclosure["summary"]
             )
             df_disclosure["type"] = "disclosure"
 
@@ -391,20 +392,16 @@ class NewsService:
 
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")
-
             total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
             total_df["change_1m"] = total_df["change_1m"].fillna(0.0)
             total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
 
-            def calculate_price_impact(row):
-                if row["current_price"] == 0 or row["that_time_price"] == 0:
-                    return 0
-                return round((row["current_price"] - row["that_time_price"]) / row["that_time_price"] * 100, 2)
-
-            total_df["price_impact"] = total_df.apply(calculate_price_impact, axis=1)
-
-            # 무한값과 NaN을 0으로 대체
-            total_df["price_impact"] = total_df["price_impact"].replace([np.inf, -np.inf, np.nan], 0)
+            mask = (total_df["current_price"] != 0) & (total_df["that_time_price"] != 0)
+            total_df["price_impact"] = 0.0
+            total_df.loc[mask, "price_impact"] = (
+                (total_df.loc[mask, "current_price"] - total_df.loc[mask, "that_time_price"]) / 
+                total_df.loc[mask, "that_time_price"] * 100
+            ).round(2)
 
         # 결과 생성
         result = []
@@ -416,12 +413,6 @@ class NewsService:
             news_items = []
             ticker_has_unviewed = False
             for _, row in ticker_news.iterrows():
-                news_key = f'{ticker}_{row["type"]}_{row["id"]}'
-                is_viewed = news_key in viewed_stories
-
-                if not is_viewed:
-                    ticker_has_unviewed = True
-
                 news_key = f'{ticker}_{row["type"]}_{row["id"]}'
                 is_viewed = news_key in viewed_stories
 
@@ -561,66 +552,6 @@ class NewsService:
         # $ : 문자열의 끝
         cleaned_text = re.sub(r"\(.*?\)$", "", text).strip()
         return cleaned_text
-
-    def _split_parsing_summary(self, summaries):
-        """
-        DataFrame의 summary 컬럼을 summary1과 summary2로 나누는 함수
-
-        Args:
-            summaries (pd.Series): 뉴스 요약 텍스트가 담긴 Series
-
-        Returns:
-            tuple[pd.Series, pd.Series]: (summary1_series, summary2_series) 형태로 반환
-        """
-
-        def split_single_summary(summary):
-            if not summary:
-                return None, None
-
-            # 기본 구분자로 나누기
-            parts = summary.split("**기사 요약**")
-            if len(parts) < 2:
-                return summary, ""
-
-            # summary1 추출 (기사 요약 부분)
-            summary1_part = parts[1].split("**주가에")[0].strip(" :\n-")
-            summary1_lines = [line.strip(" -") for line in summary1_part.split("\n") if line.strip()]
-            summary1 = "\n".join(f"- {line}" for line in summary1_lines if line)
-
-            # summary2 추출 (주가 영향 및 감성분석 부분)
-            remaining_text = "**주가에" + "".join(parts[1:])
-            impact_part = remaining_text.split("**뉴스 감성분석**")[0]
-            sentiment_part = remaining_text.split("**뉴스 감성분석**")[1]
-
-            # # 감성 값 추출
-            # sentiment = sentiment_part.split(":")[1].split("\n")[0].strip()
-
-            # 주가 영향 부분 처리
-            impact_lines = [line.strip(" -") for line in impact_part.split("\n") if line.strip()]
-            impact_lines = [line for line in impact_lines if not line.startswith("**")]
-            impact_text = "\n".join(f"- {line}" for line in impact_lines if line)
-
-            # 감성분석 부분 처리
-            sentiment_lines = [line.strip(" -") for line in sentiment_part.split("\n") if line.strip()]
-            sentiment_lines = [line for line in sentiment_lines if not line.startswith("**") and ":" not in line]
-            sentiment_text = "\n".join(f"- {line}" for line in sentiment_lines if line)
-            # sentiment_text = sentiment_text.replace("있음.", "있어요.").replace("보임.", "보여요.").replace("없음", "없어요.").replace("존재함", "존재해요.")
-
-            # summary2 조합
-            summary2 = f"주가에 영향을 줄 수 있어요\n{impact_text}\n\n세네카 AI는 해당 뉴스가 {{emotion}} 이라고 판단했어요\n{sentiment_text}"
-
-            return summary1, summary2
-
-        # Series의 각 요소에 대해 split_single_summary 함수 적용
-        summary1_list = []
-        summary2_list = []
-
-        for summary in summaries:
-            s1, s2 = split_single_summary(summary)
-            summary1_list.append(s1)
-            summary2_list.append(s2)
-
-        return pd.Series(summary1_list, index=summaries.index), pd.Series(summary2_list, index=summaries.index)
 
     def _split_parsing_summary(self, summaries):
         """
