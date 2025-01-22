@@ -562,7 +562,7 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
 
     df_disclosure = pd.DataFrame(
         database._select(
-            table="news_information",
+            table="news_analysis",
             columns=["ticker"],
             **dict(
                 date__gte=start_date,
@@ -573,7 +573,7 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
     )
     if df_disclosure.empty:
         error_msg = f"""
-        `한국 공시 데이터 누락: news_information 테이블 데이터 체크 필요합니다.`
+        `한국 데이터 누락: news_analysis 테이블 데이터 체크 필요합니다.`
         * business_day: {check_date}
         """
         raise ValueError(error_msg)
@@ -656,7 +656,7 @@ def temp_us_run_disclosure_is_top_story(date: str = None):
 
     df_disclosure = pd.DataFrame(
         database._select(
-            table="news_information",
+            table="news_analysis",
             columns=["ticker"],
             **dict(
                 date__gte=start_date,
@@ -667,7 +667,7 @@ def temp_us_run_disclosure_is_top_story(date: str = None):
     )
     if df_disclosure.empty:
         error_msg = f"""
-        `미국 공시 데이터 누락: news_information 테이블 데이터 체크 필요합니다.`
+        `미국 데이터 누락: news_analysis 테이블 데이터 체크 필요합니다.`
         * business_day: {check_date}
         """
         raise ValueError(error_msg)
