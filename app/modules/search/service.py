@@ -46,7 +46,7 @@ class SearchService:
             return []
 
         country_groups = {}
-        search_map = {}  # 검색 결과 미리 매핑
+        search_map = {}
         for row in search_result:
             mapping = row._mapping
             ticker = mapping["ticker"]
@@ -61,17 +61,15 @@ class SearchService:
         for country, tickers in country_groups.items():
             table_name = f"stock_{country}_1d"
             try:
-                # IN 절 -> 한 번의 쿼리로 여러 종목 조회
                 price_results = self.db._select(
                     table=table_name,
                     columns=["Ticker", "Close", "Open", "Date"],
                     Ticker__in=tickers,
                     order="Date",
                     ascending=False,
-                    limit=len(tickers)  # 각 티커 별 최신 데이터
+                    limit=len(tickers)
                 )
                 
-                # 티커별 최신 데이터만 저장
                 for row in price_results:
                     mapping = row._mapping
                     ticker = mapping["Ticker"]
