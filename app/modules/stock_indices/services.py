@@ -59,7 +59,7 @@ class StockIndicesService:
                 ratio_tasks = [self.get_market_ratios(name) for name in self.symbols.keys()]
                 await asyncio.gather(*ratio_tasks)
 
-                await asyncio.sleep(10)
+                await asyncio.sleep(120)
         finally:
             self._background_task_running = False
 
