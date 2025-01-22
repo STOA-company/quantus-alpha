@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, String, Text
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, String, Text, UniqueConstraint
 from app.models.models_base import Base
 from sqlalchemy.schema import Index
 
@@ -35,6 +35,8 @@ class NewsAnalysis(Base):
     __tablename__ = "news_analysis"
     
     __table_args__ = (
+        # collect_id와 ctry를 복합 unique 제약조건으로 설정
+        UniqueConstraint('collect_id', 'ctry', name='uix_collect_id_ctry'),
         # 종목 각 나라별 최신 뉴스 조회
         Index("idx_ticker_ctry", "ticker", "ctry", unique=False),
         # 나라별 최신순 조회
@@ -46,7 +48,7 @@ class NewsAnalysis(Base):
     )
 
     id = Column(BigInteger, nullable=False, primary_key=True, unique=True, autoincrement=True, comment="뉴스 아이디")
-    collect_id = Column(BigInteger, nullable=True, unique=True, comment="수집 아이디")
+    collect_id = Column(BigInteger, nullable=True, comment="수집 아이디")
     ticker = Column(String(20), nullable=True, comment="종목 티커")
     kr_name = Column(String(100), nullable=True, comment="종목 한글명")
     en_name = Column(String(100), nullable=True, comment="종목 영문명")
