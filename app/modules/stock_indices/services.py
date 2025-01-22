@@ -151,26 +151,34 @@ class StockIndicesService:
             if now - timestamp < timedelta(seconds=timeout):
                 return data
 
-        ticker_functions = {
-            "KOSPI200": self.get_kospi200_ticker,
-            "KOSDAQ150": self.get_kosdaq150_ticker,
-            "NASDAQ100": self.get_nasdaq100_ticker,
-            "S&P500": self.get_sp500_ticker,
-        }
+        async with self._lock:  # 동일한 시간에 중복 쿼리 방지
+            # 다시 한번 캐시 확인 (lock 획득하는 동안 다른 스레드가 캐시를 업데이트했을 수 있음)
+            if cache_key in self._ticker_cache:
+                data, timestamp = self._ticker_cache[cache_key]
+                timeout = self._get_ticker_cache_timeout(market)
+                if now - timestamp < timedelta(seconds=timeout):
+                    return data
 
-        ticker_func = ticker_functions.get(market)
-        if not ticker_func:
-            logging.error(f"No ticker function found for market: {market}")
-            return pd.DataFrame()
+            ticker_functions = {
+                "KOSPI200": self.get_kospi200_ticker,
+                "KOSDAQ150": self.get_kosdaq150_ticker,
+                "NASDAQ100": self.get_nasdaq100_ticker,
+                "S&P500": self.get_sp500_ticker,
+            }
 
-        try:
-            df = ticker_func()
-            if not df.empty:
-                self._ticker_cache[cache_key] = (df, now)
-            return df
-        except Exception as e:
-            logging.error(f"Error fetching tickers for {market}: {e}")
-            return pd.DataFrame()
+            ticker_func = ticker_functions.get(market)
+            if not ticker_func:
+                logging.error(f"No ticker function found for market: {market}")
+                return pd.DataFrame()
+
+            try:
+                df = ticker_func()
+                if not df.empty:
+                    self._ticker_cache[cache_key] = (df, now)
+                return df
+            except Exception as e:
+                logging.error(f"Error fetching tickers for {market}: {e}")
+                return pd.DataFrame()
 
     # 코스피200 ticker 조회
     def get_kospi200_ticker(self):
@@ -216,23 +224,24 @@ class StockIndicesService:
                 if now - timestamp < timedelta(seconds=self._cache_timeout):
                     return data
 
-            async with self._lock:
-                market_mapping = {"kospi": "KOSPI200", "kosdaq": "KOSDAQ150", "nasdaq": "NASDAQ100", "sp500": "S&P500"}
-                market_filter = market_mapping.get(market.lower())
+            market_mapping = {"kospi": "KOSPI200", "kosdaq": "KOSDAQ150", "nasdaq": "NASDAQ100", "sp500": "S&P500"}
+            market_filter = market_mapping.get(market.lower())
 
-                df = await self._get_cached_tickers(market_filter)
-                if df.empty:
-                    return 0.0, 0.0, 0.0
+            # 티커 정보 조회
+            df = await self._get_cached_tickers(market_filter)
+            if df.empty:
+                return 0.0, 0.0, 0.0
 
-                tickers = tuple(df["ticker"].tolist())
-                table = "stock_kr_1d" if market_filter in ["KOSPI200", "KOSDAQ150"] else "stock_us_1d"
+            tickers = tuple(df["ticker"].tolist())
+            table = "stock_kr_1d" if market_filter in ["KOSPI200", "KOSDAQ150"] else "stock_us_1d"
 
+            async with self._lock:  # 하나의 락으로 통합
                 query = f"""
                     WITH latest_date AS (
-                    SELECT MAX(Date) as max_date
-                    FROM {table}
-                    WHERE ticker IN :tickers
-                    AND Open != 0
+                        SELECT MAX(Date) as max_date
+                        FROM {table}
+                        WHERE ticker IN :tickers
+                        AND Open != 0
                     )
                     SELECT
                         COUNT(CASE WHEN (Close - Open) / Open * 100 > 0.1 THEN 1 END) AS advance,
@@ -245,20 +254,21 @@ class StockIndicesService:
                     AND Open != 0
                 """
 
+                # DB 쿼리 실행을 thread pool에서 수행
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(
                     self._executor, lambda: self.db._execute(text(query), {"tickers": tickers})
                 )
-
                 row = result.fetchone()
+
                 if not row or row[3] == 0:
                     return 0.0, 0.0, 0.0
 
-                rise, fall, unchanged, total = row
+                advance, decline, unchanged, total = row
                 ratios = (
-                    round(float(rise) / total * 100, 2),
-                    round(float(fall) / total * 100, 2),
-                    round(float(unchanged) / total * 100, 2),
+                    round(advance / total * 100, 2),
+                    round(decline / total * 100, 2),
+                    round(unchanged / total * 100, 2),
                 )
 
                 self._cache[cache_key] = (ratios, now)
