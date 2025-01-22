@@ -93,4 +93,22 @@ CELERY_APP.conf.beat_schedule = {
         "task": "us_disclosure_is_top_story",
         "schedule": crontab(minute="7,17,27,37,47,57"),  # 매 10분마다 실행
     },
+    # 뉴스 업데이트 renewal
+    "kr-news-renewal": {
+        "task": "kr_news_renewal",
+        "schedule": crontab(minute="10,40"),
+    },
+    "us-news-renewal": {
+        "task": "us_news_renewal",
+        "schedule": crontab(minute="10,40"),
+    },
+    # 뉴스 상위 스토리 업데이트 renewal
+    "kr-news-is-top-story-renewal": {
+        "task": "kr_news_is_top_story_renewal",
+        "schedule": crontab(minute="11,41"),
+    },
+    "us-news-is-top-story-renewal": {
+        "task": "us_news_is_top_story_renewal",
+        "schedule": crontab(minute="11,41"),
+    },
 }
