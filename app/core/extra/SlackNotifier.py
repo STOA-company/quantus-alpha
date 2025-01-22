@@ -9,7 +9,7 @@ class SlackNotifier:
 
     def __init__(self, webhook_url=None, mention_ids: Union[list[str], None] = None):
         if not webhook_url:  # DEFAULT WEBHOOK URL SETTING
-            webhook_url = "https://hooks.slack.com/services/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"
+            webhook_url = "https://hooks.slack.com/services/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"
         self.webhook_url = webhook_url
         self.mention_ids = mention_ids if mention_ids is not None else []
         self.server_info = self.__get_server_info()
