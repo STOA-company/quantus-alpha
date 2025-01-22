@@ -14,6 +14,7 @@ import pandas as pd
 from app.modules.news.schemas import (
     DisclosureRenewalItem,
     NewsDetailItem,
+    NewsDetailItemV2,
     NewsRenewalItem,
     TopStoriesItem,
     TopStoriesResponse,
@@ -33,11 +34,7 @@ class NewsService:
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
         df = df[df["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
 
-        df["emotion"] = np.where(
-            df["emotion"] == "긍정",
-            "positive",
-            np.where(df["emotion"] == "부정", "negative", np.where(df["emotion"] == "중립", "neutral", df["emotion"])),
-        )
+        df["emotion"] = df["emotion"].str.lower()
         df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
 
         # summary 필드 전처리
@@ -93,13 +90,7 @@ class NewsService:
         """DataFrame 전처리 및 필터링"""
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
 
-        df["emotion"] = np.where(
-            df["emotion"] == "POSITIVE",
-            "positive",
-            np.where(
-                df["emotion"] == "NEGATIVE", "negative", np.where(df["emotion"] == "NEUTRAL", "neutral", df["emotion"])
-            ),
-        )
+        df["emotion"] = df["emotion"].str.lower()
         df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
 
         df["key_points"] = df["key_points"].str.replace(r'[\[\]"]', "", regex=True)
@@ -138,11 +129,11 @@ class NewsService:
         with ThreadPoolExecutor(max_workers=2) as executor:
             news_future = executor.submit(
                 fetch_data,
-                "news_information",
+                "news_analysis",
                 [
                     "id",
                     "ticker",
-                    "ko_name",
+                    "kr_name",
                     "en_name",
                     "ctry",
                     "date",
@@ -238,7 +229,7 @@ class NewsService:
                 title=row["title"],
                 summary=row["summary"],
                 emotion=row["emotion"],
-                name=row["ko_name"],
+                name=row["kr_name"],
                 change_rate=row["change_rate"],
                 price_impact=row["price_impact"],
                 ticker=row["ticker"],
@@ -259,16 +250,18 @@ class NewsService:
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
             self.db._select(
-                table="news_information",
+                table="news_analysis",
                 columns=[
                     "id",
                     "ticker",
-                    "ko_name",
+                    "kr_name",
                     "en_name",
                     "ctry",
                     "date",
                     "title",
                     "summary",
+                    "impact_reason",
+                    "key_points",
                     "emotion",
                     "that_time_price",
                 ],
@@ -281,6 +274,7 @@ class NewsService:
         if not df_news.empty:
             df_news = self._process_dataframe_news(df_news)
             df_news["type"] = "news"
+            df_news = df_news.rename(columns={"kr_name": "ko_name"})
 
         # 공시 데이터 수집
         df_disclosure = pd.DataFrame(
@@ -313,11 +307,6 @@ class NewsService:
                 df_disclosure["ko_name"]
                 + " "
                 + df_disclosure["form_type"].map(document_type_mapping).fillna(df_disclosure["form_type"])
-            )
-            df_disclosure["summary"] = np.where(
-                df_disclosure["key_points"].notna(),
-                df_disclosure["summary"] + " " + df_disclosure["key_points"],
-                df_disclosure["summary"],
             )
             df_disclosure["type"] = "disclosure"
 
@@ -380,6 +369,8 @@ class NewsService:
                         date=row["date"],
                         title=self.remove_parentheses(row["title"]),
                         summary=row["summary"],
+                        impact_reason=row["impact_reason"],
+                        key_points=row["key_points"],
                         emotion=row["emotion"],
                         type=row["type"],
                         is_viewed=is_viewed,
@@ -491,6 +482,84 @@ class NewsService:
                     title=row["title"],
                     summary1=row["summary1"],
                     summary2=row["summary2"],
+                    emotion=row["emotion"],
+                    price_impact=row["price_impact"],
+                )
+            )
+        return data, total_count, total_page, offset, emotion_count, ctry
+
+    def news_detail_v2(self, ticker: str, date: str = None, page: int = 1, size: int = 6):
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
+        else:
+            date = datetime.strptime(date, "%Y%m%d").strftime("%Y-%m-%d")
+
+        ctry = check_ticker_country_len_2(ticker)
+
+        condition = {
+            "ticker": ticker,
+            "date__gte": f"{date} 00:00:00",
+            "date__lt": f"{date} 23:59:59",
+            "is_exist": True,
+        }
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_analysis",
+                columns=[
+                    "id",
+                    "ticker",
+                    "ctry",
+                    "date",
+                    "title",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "that_time_price",
+                ],
+                **condition,
+            )
+        )
+        if df_news.empty:
+            raise DataNotFoundException(ticker=ticker, data_type="news")
+
+        offset = (page - 1) * size
+        df_news["emotion"] = df_news["emotion"].str.lower()
+        total_count = df_news.shape[0]
+        total_page = math.ceil(total_count / size)
+        emotion_count = self._count_emotion(df_news)
+        df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
+
+        df_price = pd.DataFrame(
+            self.db._select(
+                table="stock_trend",
+                columns=["ticker", "current_price"],
+                **{"ticker": ticker},
+            )
+        )
+
+        df_news["price_impact"] = 0.0
+        if not df_price.empty:
+            df_price["current_price"] = df_price["current_price"].fillna(0.0)
+
+            df_news = pd.merge(df_news, df_price, on="ticker", how="left")
+
+            df_news["price_impact"] = (
+                (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100
+            )
+            df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
+
+        data = []
+        for _, row in df_news.iterrows():
+            data.append(
+                NewsDetailItemV2(
+                    id=row["id"],
+                    ctry=row["ctry"],
+                    date=row["date"],
+                    title=row["title"],
+                    summary=row["summary"],
+                    impact_reason=row["impact_reason"],
+                    key_points=row["key_points"],
                     emotion=row["emotion"],
                     price_impact=row["price_impact"],
                 )
