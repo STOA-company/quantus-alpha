@@ -150,8 +150,31 @@ class StockIndicesService:
         """
         시장별 지수 데이터 캐시 타임아웃 설정
         """
-        is_open = get_time_checker("KR") if market.lower() in ["kospi", "kosdaq"] else get_time_checker("US")
-        return 60 if is_open else 3600  # 장중 1분, 장마감 1시간
+        if market.lower() in ["kospi", "kosdaq"]:
+            now = datetime.now(korea_tz)
+            current_time = now.hour * 60 + now.minute
+
+            # 장 시작 직전 30분은 짧은 캐시 타임아웃 적용
+            if 510 <= current_time < 540:  # 8:30 ~ 9:00
+                return 10
+            # 장 중
+            elif 540 <= current_time <= 930:  # 9:00 ~ 15:30
+                return 10
+            # 그 외 시간
+            return 3600
+
+        else:  # nasdaq, sp500
+            now = datetime.now(utc_tz)
+            current_time = now.hour * 60 + now.minute
+
+            # 장 시작 직전 30분은 짧은 캐시 타임아웃 적용
+            if 780 <= current_time < 810:  # 13:00 ~ 13:30 UTC
+                return 10
+            # 장 중
+            elif 810 <= current_time <= 1200:  # 13:30 ~ 20:00 UTC
+                return 10
+
+            return 3600
 
     def _get_ticker_cache_timeout(self, market: str) -> int:
         """시장별 티커 캐시 타임아웃 설정"""
