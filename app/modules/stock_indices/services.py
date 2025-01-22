@@ -30,7 +30,6 @@ class StockIndicesService:
         self.db = database
         self.symbols = {"kospi": "^KS11", "kosdaq": "^KQ11", "nasdaq": "^IXIC", "sp500": "^GSPC"}
         self._cache = {}
-        self._cache_timeout = 10
         self._ticker_cache = {}
         self._executor = ThreadPoolExecutor(max_workers=4)
         self._lock = asyncio.Lock()
@@ -152,7 +151,7 @@ class StockIndicesService:
         시장별 지수 데이터 캐시 타임아웃 설정
         """
         is_open = get_time_checker("KR") if market.lower() in ["kospi", "kosdaq"] else get_time_checker("US")
-        return 10 if is_open else 3600  # 장중 10초, 장마감 1시간
+        return 60 if is_open else 3600  # 장중 1분, 장마감 1시간
 
     def _get_ticker_cache_timeout(self, market: str) -> int:
         """시장별 티커 캐시 타임아웃 설정"""
