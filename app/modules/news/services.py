@@ -2,7 +2,7 @@ from datetime import datetime
 import json
 import math
 import re
-from typing import List
+from typing import List, Tuple, Union
 
 from fastapi import Request, Response
 
@@ -14,11 +14,12 @@ import pandas as pd
 from app.modules.news.schemas import (
     DisclosureRenewalItem,
     NewsDetailItem,
+    NewsDetailItemV2,
     NewsRenewalItem,
     TopStoriesItem,
     TopStoriesResponse,
 )
-from app.database.crud import database
+from app.database.crud import database, JoinInfo
 from app.utils.ctry_utils import check_ticker_country_len_2
 
 
@@ -33,11 +34,7 @@ class NewsService:
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
         df = df[df["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
 
-        df["emotion"] = np.where(
-            df["emotion"] == "긍정",
-            "positive",
-            np.where(df["emotion"] == "부정", "negative", np.where(df["emotion"] == "중립", "neutral", df["emotion"])),
-        )
+        df["emotion"] = df["emotion"].str.lower()
         df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
 
         # summary 필드 전처리
@@ -93,34 +90,50 @@ class NewsService:
         """DataFrame 전처리 및 필터링"""
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
 
-        df["emotion"] = np.where(
-            df["emotion"] == "POSITIVE",
-            "positive",
-            np.where(
-                df["emotion"] == "NEGATIVE", "negative", np.where(df["emotion"] == "NEUTRAL", "neutral", df["emotion"])
-            ),
-        )
+        df["emotion"] = df["emotion"].str.lower()
         df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
 
         df["key_points"] = df["key_points"].str.replace(r'[\[\]"]', "", regex=True)
 
         return df
 
-    def news_main(self, ctry: str = None) -> List[NewsRenewalItem]:
+    def get_renewal_data(self, ctry: str = None) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
         condition = {"is_exist": True}
         if ctry:
-            if ctry == "kr":
-                condition["ctry"] = "KR"
-            elif ctry == "us":
-                condition["ctry"] = "US"
+            condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
 
-        df_news = pd.DataFrame(
-            self.db._select(
-                table="news_information",
-                columns=[
+        join_info = lambda table: JoinInfo(  # noqa: E731
+            primary_table=table,
+            secondary_table="stock_trend",
+            primary_column="ticker",
+            secondary_column="ticker",
+            columns=["current_price", "change_rt"],
+            is_outer=True,
+        )
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        def fetch_data(table, columns):
+            return pd.DataFrame(
+                self.db._select(
+                    table=table,
+                    columns=columns,
+                    order="date",
+                    ascending=False,
+                    limit=100,
+                    join_info=join_info(table),
+                    **condition,
+                )
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            news_future = executor.submit(
+                fetch_data,
+                "news_analysis",
+                [
                     "id",
                     "ticker",
-                    "ko_name",
+                    "kr_name",
                     "en_name",
                     "ctry",
                     "date",
@@ -128,82 +141,15 @@ class NewsService:
                     "summary",
                     "emotion",
                     "that_time_price",
+                    "current_price",
+                    "change_rt",
                 ],
-                order_by="date DESC",
-                limit=100,
-                **condition,
-            )
-        )
-        df_news = self._process_dataframe_news(df_news)
-        unique_ticker = df_news["ticker"].unique().tolist()
-
-        df_price = pd.DataFrame(
-            self.db._select(
-                table="stock_trend",
-                columns=["ticker", "current_price", "change_rt"],
-                **dict(ticker__in=unique_ticker),
-            )
-        )
-        df_news["price_impact"] = 0.0
-        df_news["change_rate"] = 0.0
-        if not df_price.empty:
-            df_news = pd.merge(df_news, df_price, on="ticker", how="left")
-
-            df_news["that_time_price"] = df_news["that_time_price"].fillna(0)
-            df_news["current_price"] = df_news["current_price"].fillna(0)
-            df_news["change_rt"] = df_news["change_rt"].fillna(0)
-
-            mask = (df_news["current_price"] == 0) & (df_news["that_time_price"] != 0)
-            df_news.loc[mask, "that_time_price"] = 0
-
-            df_news["price_impact"] = round(
-                (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100,
-                2,
-            )
-            df_news["change_rate"] = round(df_news["change_rt"], 2)
-
-        df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
-        data = []
-        for _, row in df_news.iterrows():
-            id = row["id"]
-            date = row["date"]
-            ctry = row["ctry"]
-            title = row["title"]
-            summary = row["summary"]
-            emotion = row["emotion"]
-            name = row["ko_name"]
-            change_rate = row["change_rate"] if row.get("change_rate") else 0.00
-            price_impact = row["price_impact"] if row.get("price_impact") else 0.00
-            ticker = row["ticker"]
-            data.append(
-                NewsRenewalItem(
-                    id=id,
-                    date=date,
-                    ctry=ctry,
-                    title=title,
-                    summary=summary,
-                    emotion=emotion,
-                    name=name,
-                    change_rate=change_rate,
-                    price_impact=price_impact,
-                    ticker=ticker,
-                )
             )
 
-        return data
-
-    def disclosure_main(self, ctry: str = None) -> List[DisclosureRenewalItem]:
-        condition = {"is_exist": True}
-        if ctry:
-            if ctry == "kr":
-                condition["ctry"] = "KR"
-            elif ctry == "us":
-                condition["ctry"] = "US"
-
-        df_disclosure = pd.DataFrame(
-            self.db._select(
-                table="disclosure_information",
-                columns=[
+            disclosure_future = executor.submit(
+                fetch_data,
+                "disclosure_information",
+                [
                     "id",
                     "ticker",
                     "ko_name",
@@ -217,82 +163,79 @@ class NewsService:
                     "emotion",
                     "form_type",
                     "that_time_price",
+                    "current_price",
+                    "change_rt",
                 ],
-                order="date",
-                ascending=False,
-                limit=100,
-                **condition,
             )
+
+            df_news = news_future.result()
+            df_disclosure = disclosure_future.result()
+
+        news_data = [] if df_news.empty else self._process_price_data(self._process_dataframe_news(df_news))
+
+        disclosure_data = (
+            []
+            if df_disclosure.empty
+            else self._process_price_data(self._process_dataframe_disclosure(df_disclosure), is_disclosure=True)
         )
 
-        df_disclosure = self._process_dataframe_disclosure(df_disclosure)
-        unique_ticker = df_disclosure["ticker"].unique().tolist()
+        return news_data, disclosure_data
 
-        df_price = pd.DataFrame(
-            self.db._select(
-                table="stock_trend",
-                columns=["ticker", "current_price", "change_rt"],
-                order="last_updated",
-                ascending=False,
-                **dict(ticker__in=unique_ticker),
-            )
+    def _process_price_data(
+        self, df: pd.DataFrame, is_disclosure: bool = False
+    ) -> List[Union[NewsRenewalItem, DisclosureRenewalItem]]:
+        if df.empty:
+            return []
+
+        numeric_columns = ["that_time_price", "current_price", "change_rt"]
+        df[numeric_columns] = df[numeric_columns].astype("float64").fillna(0)
+
+        mask = (df["current_price"] == 0) & (df["that_time_price"] != 0)
+        df.loc[mask, "that_time_price"] = 0
+
+        df["price_impact"] = np.where(
+            df["that_time_price"] != 0, (df["current_price"] - df["that_time_price"]) / df["that_time_price"] * 100, 0
         )
-        df_disclosure["price_impact"] = 0.0
-        df_disclosure["change_rate"] = 0.0
-        if not df_price.empty:
-            df_disclosure = pd.merge(df_disclosure, df_price, on="ticker", how="left")
 
-            df_disclosure["that_time_price"] = df_disclosure["that_time_price"].fillna(0)
-            df_disclosure["current_price"] = df_disclosure["current_price"].fillna(0)
-            df_disclosure["change_rt"] = df_disclosure["change_rt"].fillna(0)
+        df["price_impact"] = df["price_impact"].round(2).fillna(0)
+        df["change_rate"] = df["change_rt"].round(2)
 
-            mask = (df_disclosure["current_price"] == 0) & (df_disclosure["that_time_price"] != 0)
-            df_disclosure.loc[mask, "that_time_price"] = 0
-
-            df_disclosure["price_impact"] = round(
-                (df_disclosure["current_price"] - df_disclosure["that_time_price"])
-                / df_disclosure["that_time_price"]
-                * 100,
-                2,
-            )
-            df_disclosure["change_rate"] = round(df_disclosure["change_rt"], 2)
-
-        df_disclosure["price_impact"] = round(df_disclosure["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
-        df_disclosure["ko_name"] = df_disclosure["ko_name"].apply(self.remove_parentheses)
-        data = []
-        for _, row in df_disclosure.iterrows():
-            id = row["id"]
-            date = row["date"]
-            ctry = row["ctry"]
-            ticker = row["ticker"]
-            title = row["ko_name"] + " " + document_type_mapping.get(row.form_type, row.form_type)
-            summary = row["summary"]
-            impact_reason = row["impact_reason"]
-            key_points = row["key_points"]
-            emotion = row["emotion"]
-            name = row["ko_name"]
-            change_rate = row["change_rate"] if row.get("change_rate") else 0.00
-            price_impact = row["price_impact"] if row.get("price_impact") else 0.00
-            document_url = row["url"]
-            data.append(
+        if is_disclosure:
+            df["ko_name"] = df["ko_name"].apply(self.remove_parentheses)
+            return [
                 DisclosureRenewalItem(
-                    id=id,
-                    date=date,
-                    ctry=ctry,
-                    title=title,
-                    summary=summary,
-                    impact_reason=impact_reason,
-                    key_points=key_points,
-                    emotion=emotion,
-                    name=name,
-                    change_rate=change_rate,
-                    price_impact=price_impact,
-                    document_url=document_url,
-                    ticker=ticker,
+                    id=row["id"],
+                    date=row["date"],
+                    ctry=row["ctry"],
+                    ticker=row["ticker"],
+                    title=f"{row['ko_name']} {document_type_mapping.get(row['form_type'], row['form_type'])}",
+                    summary=row["summary"],
+                    impact_reason=row["impact_reason"],
+                    key_points=row["key_points"],
+                    emotion=row["emotion"],
+                    name=row["ko_name"],
+                    change_rate=row["change_rate"],
+                    price_impact=row["price_impact"],
+                    document_url=row["url"],
                 )
-            )
+                for _, row in df.iterrows()
+            ]
 
-        return data
+        return [
+            NewsRenewalItem(
+                id=row["id"],
+                date=row["date"],
+                ctry=row["ctry"],
+                title=row["title"],
+                summary=row["summary"],
+                emotion=row["emotion"],
+                name=row["kr_name"],
+                change_rate=row["change_rate"],
+                price_impact=row["price_impact"],
+                ticker=row["ticker"],
+            )
+            for _, row in df.iterrows()
+        ]
 
     def top_stories(self, request: Request):
         viewed_stories = set()
@@ -307,16 +250,18 @@ class NewsService:
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
             self.db._select(
-                table="news_information",
+                table="news_analysis",
                 columns=[
                     "id",
                     "ticker",
-                    "ko_name",
+                    "kr_name",
                     "en_name",
                     "ctry",
                     "date",
                     "title",
                     "summary",
+                    "impact_reason",
+                    "key_points",
                     "emotion",
                     "that_time_price",
                 ],
@@ -329,6 +274,7 @@ class NewsService:
         if not df_news.empty:
             df_news = self._process_dataframe_news(df_news)
             df_news["type"] = "news"
+            df_news = df_news.rename(columns={"kr_name": "ko_name"})
 
         # 공시 데이터 수집
         df_disclosure = pd.DataFrame(
@@ -362,11 +308,6 @@ class NewsService:
                 + " "
                 + df_disclosure["form_type"].map(document_type_mapping).fillna(df_disclosure["form_type"])
             )
-            df_disclosure["summary"] = np.where(
-                df_disclosure["key_points"].notna(),
-                df_disclosure["summary"] + " " + df_disclosure["key_points"],
-                df_disclosure["summary"]
-            )
             df_disclosure["type"] = "disclosure"
 
         # 데이터 통합 및 정렬
@@ -399,8 +340,9 @@ class NewsService:
             mask = (total_df["current_price"] != 0) & (total_df["that_time_price"] != 0)
             total_df["price_impact"] = 0.0
             total_df.loc[mask, "price_impact"] = (
-                (total_df.loc[mask, "current_price"] - total_df.loc[mask, "that_time_price"]) / 
-                total_df.loc[mask, "that_time_price"] * 100
+                (total_df.loc[mask, "current_price"] - total_df.loc[mask, "that_time_price"])
+                / total_df.loc[mask, "that_time_price"]
+                * 100
             ).round(2)
 
         # 결과 생성
@@ -427,6 +369,8 @@ class NewsService:
                         date=row["date"],
                         title=self.remove_parentheses(row["title"]),
                         summary=row["summary"],
+                        impact_reason=row["impact_reason"],
+                        key_points=row["key_points"],
                         emotion=row["emotion"],
                         type=row["type"],
                         is_viewed=is_viewed,
@@ -538,6 +482,84 @@ class NewsService:
                     title=row["title"],
                     summary1=row["summary1"],
                     summary2=row["summary2"],
+                    emotion=row["emotion"],
+                    price_impact=row["price_impact"],
+                )
+            )
+        return data, total_count, total_page, offset, emotion_count, ctry
+
+    def news_detail_v2(self, ticker: str, date: str = None, page: int = 1, size: int = 6):
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
+        else:
+            date = datetime.strptime(date, "%Y%m%d").strftime("%Y-%m-%d")
+
+        ctry = check_ticker_country_len_2(ticker)
+
+        condition = {
+            "ticker": ticker,
+            "date__gte": f"{date} 00:00:00",
+            "date__lt": f"{date} 23:59:59",
+            "is_exist": True,
+        }
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_analysis",
+                columns=[
+                    "id",
+                    "ticker",
+                    "ctry",
+                    "date",
+                    "title",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "that_time_price",
+                ],
+                **condition,
+            )
+        )
+        if df_news.empty:
+            raise DataNotFoundException(ticker=ticker, data_type="news")
+
+        offset = (page - 1) * size
+        df_news["emotion"] = df_news["emotion"].str.lower()
+        total_count = df_news.shape[0]
+        total_page = math.ceil(total_count / size)
+        emotion_count = self._count_emotion(df_news)
+        df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
+
+        df_price = pd.DataFrame(
+            self.db._select(
+                table="stock_trend",
+                columns=["ticker", "current_price"],
+                **{"ticker": ticker},
+            )
+        )
+
+        df_news["price_impact"] = 0.0
+        if not df_price.empty:
+            df_price["current_price"] = df_price["current_price"].fillna(0.0)
+
+            df_news = pd.merge(df_news, df_price, on="ticker", how="left")
+
+            df_news["price_impact"] = (
+                (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100
+            )
+            df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
+
+        data = []
+        for _, row in df_news.iterrows():
+            data.append(
+                NewsDetailItemV2(
+                    id=row["id"],
+                    ctry=row["ctry"],
+                    date=row["date"],
+                    title=row["title"],
+                    summary=row["summary"],
+                    impact_reason=row["impact_reason"],
+                    key_points=row["key_points"],
                     emotion=row["emotion"],
                     price_impact=row["price_impact"],
                 )
