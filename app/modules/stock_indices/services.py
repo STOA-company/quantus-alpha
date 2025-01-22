@@ -10,7 +10,7 @@ import pandas as pd
 from app.database.crud import database
 from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
 from app.utils.date_utils import get_time_checker
-from zoneinfo import ZoneInfo
+from app.core.config import korea_tz, utc_tz
 
 
 class StockIndicesService:
@@ -42,7 +42,7 @@ class StockIndicesService:
         self._initialized = True
 
     async def initialize(self):
-        """비동기 초기화를 위한 메서드"""
+        """비동기 초기화"""
         if not self._background_task:
             self._background_task = asyncio.create_task(self._update_cache_background())
 
@@ -69,17 +69,30 @@ class StockIndicesService:
         try:
             cache_key_daily = f"{name}_daily"
             cache_key_min5 = f"{name}_min5"
-            now = datetime.now()
+            now = datetime.now(utc_tz).astimezone(korea_tz)
+
+            # 시장별 캐시 체크
+            is_market_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
 
             # 캐시가 있고 유효한 경우 그대로 반환
             if cache_key_daily in self._cache and cache_key_min5 in self._cache:
                 cached_daily, timestamp_daily = self._cache[cache_key_daily]
                 cached_min5, timestamp_min5 = self._cache[cache_key_min5]
-                if now - timestamp_daily < timedelta(seconds=self._cache_timeout) and now - timestamp_min5 < timedelta(
-                    seconds=self._cache_timeout
-                ):
+
+                # 시장이 열려있을 때만 timeout 체크
+                if is_market_open:
+                    timeout = self._get_cache_timeout(name)
+                    if now - timestamp_daily < timedelta(seconds=timeout) and now - timestamp_min5 < timedelta(
+                        seconds=timeout
+                    ):
+                        logging.debug(f"Using cached data for {name}")
+                        return
+                else:
+                    # 장 마감 시에는 캐시 유지
+                    logging.debug(f"Market closed, using cached data for {name}")
                     return
 
+            # 캐시 미스 또는 캐시 만료 시에만 데이터 조회
             async def fetch_history(period, interval=None):
                 try:
                     loop = asyncio.get_event_loop()
@@ -102,7 +115,7 @@ class StockIndicesService:
 
             daily_df, min5_df = await asyncio.gather(fetch_history("1d"), fetch_history("1d", "5m"))
 
-            # 일별 데이터 처리
+            # 데이터 처리 및 캐시 저장
             if not daily_df.empty:
                 valid_data = daily_df[daily_df["Open"] != 0]
                 if not valid_data.empty:
@@ -112,7 +125,7 @@ class StockIndicesService:
                         "close": round(float(latest_data["Close"]), 2),
                     }
                     self._cache[cache_key_daily] = (daily_data, now)
-                    logging.info(f"Cached daily data for {name}: {cache_key_daily}")
+                    logging.info(f"Updated daily cache for {name}")
 
             # 5분 데이터 처리
             if not min5_df.empty:
@@ -134,6 +147,13 @@ class StockIndicesService:
         except Exception as e:
             logging.error(f"Error fetching data for {name}: {e}")
 
+    def _get_cache_timeout(self, market: str) -> int:
+        """
+        시장별 지수 데이터 캐시 타임아웃 설정
+        """
+        is_open = get_time_checker("KR") if market.lower() in ["kospi", "kosdaq"] else get_time_checker("US")
+        return 10 if is_open else 3600  # 장중 10초, 장마감 1시간
+
     def _get_ticker_cache_timeout(self, market: str) -> int:
         """시장별 티커 캐시 타임아웃 설정"""
         is_open = get_time_checker("KR") if market in ["KOSPI200", "KOSDAQ150"] else get_time_checker("US")
@@ -143,8 +163,9 @@ class StockIndicesService:
         """캐시된 티커 정보 조회"""
         try:
             cache_key = f"tickers_{market}"
-            now = datetime.now()
+            now = datetime.now(utc_tz).astimezone(korea_tz)
 
+            # Cache hit
             if cache_key in self._ticker_cache:
                 data, timestamp = self._ticker_cache[cache_key]
                 timeout = self._get_ticker_cache_timeout(market)
@@ -152,7 +173,7 @@ class StockIndicesService:
                     logging.debug(f"Cache hit for {market} tickers")
                     return data
 
-            # if cache miss
+            # Cache miss
             async with self._lock:
                 # 락 획득 후 캐시 재확인
                 if cache_key in self._ticker_cache:
@@ -218,26 +239,25 @@ class StockIndicesService:
     def get_sp500_ticker(self):
         try:
             df = self.db._select(table="stock_information", columns=["ticker"], is_snp_500=True)
-            return pd.DataFrame(df, columns=["ticker"])  # 결과를 DataFrame으로 변환
+            return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
             logging.error(f"Error fetching S&P500 ticker: {e}")
             return pd.DataFrame()
 
     async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
-        """최적화된 시장 등락비율 조회"""
+        """시장 등락비율 조회"""
         try:
             cache_key = f"{market}_ratio"
-            now = datetime.now()
+            now = datetime.now(utc_tz).astimezone(korea_tz)
 
             if cache_key in self._cache:
                 data, timestamp = self._cache[cache_key]
-                if now - timestamp < timedelta(seconds=self._cache_timeout):
+                if now - timestamp < timedelta(seconds=self._get_cache_timeout(market)):
                     return data
 
             market_mapping = {"kospi": "KOSPI200", "kosdaq": "KOSDAQ150", "nasdaq": "NASDAQ100", "sp500": "S&P500"}
             market_filter = market_mapping.get(market.lower())
 
-            # 티커 정보 조회
             df = await self._get_cached_tickers(market_filter)
             if df.empty:
                 return 0.0, 0.0, 0.0
@@ -245,7 +265,7 @@ class StockIndicesService:
             tickers = tuple(df["ticker"].tolist())
             table = "stock_kr_1d" if market_filter in ["KOSPI200", "KOSDAQ150"] else "stock_us_1d"
 
-            async with self._lock:  # 하나의 락으로 통합
+            async with self._lock:
                 query = f"""
                     WITH latest_date AS (
                         SELECT MAX(Date) as max_date
@@ -264,7 +284,6 @@ class StockIndicesService:
                     AND Open != 0
                 """
 
-                # DB 쿼리 실행을 thread pool에서 수행
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(
                     self._executor, lambda: self.db._execute(text(query), {"tickers": tickers})
@@ -370,8 +389,8 @@ class StockIndicesService:
         )
 
     def _determine_response_time(self, kr_last_time: Optional[str], us_last_time: Optional[str]) -> str:
-        """응답 시간 결정 로직"""
-        current_kr_time = datetime.now(ZoneInfo("UTC")).astimezone(ZoneInfo("Asia/Seoul"))
+        """응답 시간 결정"""
+        current_kr_time = datetime.now(utc_tz).astimezone(korea_tz)
         current_minutes = current_kr_time.hour * 60 + current_kr_time.minute
 
         kr_is_open = get_time_checker("KR")
@@ -387,7 +406,7 @@ class StockIndicesService:
     async def get_indices_data(self) -> IndicesData:
         """지수 데이터 조회"""
         try:
-            now = datetime.now()
+            now = datetime.now(utc_tz).astimezone(korea_tz)
             need_update = False
 
             # 캐시 유효성 검사
@@ -398,7 +417,7 @@ class StockIndicesService:
                         need_update = True
                         break
                     _, timestamp = self._cache[key]
-                    if now - timestamp >= timedelta(seconds=self._cache_timeout):
+                    if now - timestamp >= timedelta(seconds=self._get_cache_timeout(name)):
                         need_update = True
                         break
 
@@ -420,7 +439,7 @@ class StockIndicesService:
             return IndicesData(
                 status_code=404,
                 message=f"데이터 조회 중 오류가 발생했습니다: {e}",
-                time=datetime.now(ZoneInfo("Asia/Seoul")).strftime("%H:%M"),
+                time=datetime.now(korea_tz).strftime("%H:%M"),
                 kospi=empty_summary,
                 kosdaq=empty_summary,
                 nasdaq=empty_summary,
