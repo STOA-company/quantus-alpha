@@ -30,9 +30,8 @@ class StockIndicesService:
         self.db = database
         self.symbols = {"kospi": "^KS11", "kosdaq": "^KQ11", "nasdaq": "^IXIC", "sp500": "^GSPC"}
         self._cache = {}
-        self._cache_timeout = 10  # 지수 데이터는 10초
-        self._ticker_cache = {}  # 티커 정보 캐시 추가
-        self._ticker_cache_timeout = 3600  # 티커 정보는 1시간 유지
+        self._cache_timeout = 10
+        self._ticker_cache = {}
         self._executor = ThreadPoolExecutor(max_workers=4)
         self._lock = asyncio.Lock()
         self._background_task_running = False
@@ -142,43 +141,54 @@ class StockIndicesService:
 
     async def _get_cached_tickers(self, market: str) -> pd.DataFrame:
         """캐시된 티커 정보 조회"""
-        now = datetime.now()
-        cache_key = f"tickers_{market}"
+        try:
+            cache_key = f"tickers_{market}"
+            now = datetime.now()
 
-        if cache_key in self._ticker_cache:
-            data, timestamp = self._ticker_cache[cache_key]
-            timeout = self._get_ticker_cache_timeout(market)
-            if now - timestamp < timedelta(seconds=timeout):
-                return data
-
-        async with self._lock:  # 동일한 시간에 중복 쿼리 방지
-            # 다시 한번 캐시 확인 (lock 획득하는 동안 다른 스레드가 캐시를 업데이트했을 수 있음)
             if cache_key in self._ticker_cache:
                 data, timestamp = self._ticker_cache[cache_key]
                 timeout = self._get_ticker_cache_timeout(market)
                 if now - timestamp < timedelta(seconds=timeout):
+                    logging.debug(f"Cache hit for {market} tickers")
                     return data
 
-            ticker_functions = {
-                "KOSPI200": self.get_kospi200_ticker,
-                "KOSDAQ150": self.get_kosdaq150_ticker,
-                "NASDAQ100": self.get_nasdaq100_ticker,
-                "S&P500": self.get_sp500_ticker,
-            }
+            # if cache miss
+            async with self._lock:
+                # 락 획득 후 캐시 재확인
+                if cache_key in self._ticker_cache:
+                    data, timestamp = self._ticker_cache[cache_key]
+                    timeout = self._get_ticker_cache_timeout(market)
+                    if now - timestamp < timedelta(seconds=timeout):
+                        logging.debug(f"Cache hit after lock for {market} tickers")
+                        return data
 
-            ticker_func = ticker_functions.get(market)
-            if not ticker_func:
-                logging.error(f"No ticker function found for market: {market}")
-                return pd.DataFrame()
+                # 티커 조회
+                query_map = {
+                    "KOSPI200": ("is_kospi_200", True),
+                    "KOSDAQ150": ("is_kosdaq_150", True),
+                    "NASDAQ100": ("is_nasdaq_100", True),
+                    "S&P500": ("is_snp_500", True),
+                }
 
-            try:
-                df = ticker_func()
+                if market not in query_map:
+                    logging.error(f"Invalid market: {market}")
+                    return pd.DataFrame()
+
+                column, value = query_map[market]
+                result = self.db._select(table="stock_information", columns=["ticker"], **{column: value})
+
+                df = pd.DataFrame(result, columns=["ticker"])
                 if not df.empty:
                     self._ticker_cache[cache_key] = (df, now)
+                    logging.info(f"Updated ticker cache for {market} with {len(df)} entries")
+                else:
+                    logging.warning(f"No tickers found for {market}")
+
                 return df
-            except Exception as e:
-                logging.error(f"Error fetching tickers for {market}: {e}")
-                return pd.DataFrame()
+
+        except Exception as e:
+            logging.error(f"Error in _get_cached_tickers for {market}: {e}")
+            return pd.DataFrame()
 
     # 코스피200 ticker 조회
     def get_kospi200_ticker(self):
