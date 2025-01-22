@@ -308,6 +308,7 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):
     )
     ticker_list = df_disclosure["ticker"].unique().tolist()
     ticker_list = ["A" + ticker for ticker in ticker_list]
+    df_disclosure['filing_date'] = df_disclosure['filing_date'] + timedelta(hours=9)
     filing_dates = df_disclosure["filing_date"].dt.date.unique()
 
     if len(filing_dates) == 0:
@@ -322,30 +323,27 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):
     # business_days의 모든 요소를 date 타입으로 변환
     business_days = [bd.date() if isinstance(bd, pd.Timestamp) else bd for bd in business_days]
     business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in KR_EXCLUDE_DATES]
-
     # 각 날짜의 가격 데이터 매핑 생성
     price_dates = {}
     current_time = now_kr(is_date=False)
-    today_str = current_time.strftime("%Y-%m-%d")
+    today_str = current_time.date()
 
     for filing_date in filing_dates:
-        filing_date_str = filing_date.strftime("%Y-%m-%d")
-
-        if filing_date_str == today_str:
-            if filing_date_str not in business_days:
-                price_dates[filing_date] = business_days[-1].strftime("%Y-%m-%d")
+        if filing_date == today_str:
+            if filing_date not in business_days:
+                price_dates[filing_date] = business_days[-1]
             else:
-                price_dates[filing_date] = business_days[-2].strftime("%Y-%m-%d")
+                price_dates[filing_date] = business_days[-2]
         else:
             # 해당 날짜가 영업일인지 확인
             if filing_date in business_days:
-                price_dates[filing_date] = filing_date_str
+                price_dates[filing_date] = filing_date
             else:
                 # 해당 날짜 이전의 가장 최근 영업일 찾기
                 found_previous_day = False  # noqa
                 for bd in reversed(business_days):
                     if bd < filing_date:
-                        price_dates[filing_date] = bd.strftime("%Y-%m-%d")
+                        price_dates[filing_date] = bd
                         found_previous_day = True  # noqa
                         break
 
@@ -564,7 +562,7 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
 
     df_disclosure = pd.DataFrame(
         database._select(
-            table="news_information",
+            table="news_analysis",
             columns=["ticker"],
             **dict(
                 date__gte=start_date,
@@ -575,7 +573,7 @@ def temp_kr_run_disclosure_is_top_story(date: str = None):
     )
     if df_disclosure.empty:
         error_msg = f"""
-        `한국 공시 데이터 누락: news_information 테이블 데이터 체크 필요합니다.`
+        `한국 데이터 누락: news_analysis 테이블 데이터 체크 필요합니다.`
         * business_day: {check_date}
         """
         raise ValueError(error_msg)
@@ -658,7 +656,7 @@ def temp_us_run_disclosure_is_top_story(date: str = None):
 
     df_disclosure = pd.DataFrame(
         database._select(
-            table="news_information",
+            table="news_analysis",
             columns=["ticker"],
             **dict(
                 date__gte=start_date,
@@ -669,7 +667,7 @@ def temp_us_run_disclosure_is_top_story(date: str = None):
     )
     if df_disclosure.empty:
         error_msg = f"""
-        `미국 공시 데이터 누락: news_information 테이블 데이터 체크 필요합니다.`
+        `미국 데이터 누락: news_analysis 테이블 데이터 체크 필요합니다.`
         * business_day: {check_date}
         """
         raise ValueError(error_msg)
@@ -808,7 +806,7 @@ def us_run_disclosure_is_top_story(date: str = None):
 # us_run_disclosure_batch(20241223)
 # kr_run_disclosure_batch(20241230)
 # temp_us_run_disclosure_is_top_story()
-# renewal_us_run_disclosure_batch(batch_min=15, date="20241218080000")
+    # renewal_kr_run_disclosure_batch(batch_min=15, date="20250121080000")
 # renewal_kr_run_disclosure_batch(batch_min=15, date="20250102080000")
 # renewal_kr_run_disclosure_batch(date="20250103080000")
 # temp_kr_run_disclosure_is_top_story()

@@ -6,7 +6,7 @@ from app.modules.common.enum import FinancialCountry
 from app.modules.common.schemas import BaseResponse
 from fastapi import APIRouter, Depends, Query
 from app.database.conn import db
-from app.modules.common.utils import check_ticker_country_len_3
+from app.modules.common.utils import async_check_ticker_country_len_3, check_ticker_country_len_3
 from app.modules.financial.services import FinancialService, get_financial_service
 from .schemas import (
     CashFlowResponse,
@@ -27,7 +27,7 @@ router = APIRouter()
     response_model=BaseResponse[IncomePerformanceResponse],
     summary="실적 부분 조회 api",
 )
-def get_income_performance_data(
+async def get_income_performance_data(
     request: Request,
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
@@ -36,8 +36,9 @@ def get_income_performance_data(
     db: Session = Depends(db.get_db),
 ) -> BaseResponse[IncomePerformanceResponse]:
     try:
-        ctry = check_ticker_country_len_3(ticker).upper()
-        return financial_service.get_income_performance_data(
+        ctry = await async_check_ticker_country_len_3(ticker)
+        ctry = ctry.upper()
+        return await financial_service.get_income_performance_data(
             ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, db=db
         )
     except HTTPException as http_error:

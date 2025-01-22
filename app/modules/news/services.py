@@ -111,13 +111,13 @@ class NewsService:
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
 
-        join_info = lambda table: JoinInfo(
+        join_info = lambda table: JoinInfo(  # noqa: E731
             primary_table=table,
             secondary_table="stock_trend",
             primary_column="ticker",
             secondary_column="ticker",
             columns=["current_price", "change_rt"],
-            is_outer=True
+            is_outer=True,
         )
 
         from concurrent.futures import ThreadPoolExecutor
@@ -131,7 +131,7 @@ class NewsService:
                     ascending=False,
                     limit=100,
                     join_info=join_info(table),
-                    **condition
+                    **condition,
                 )
             )
 
@@ -140,99 +140,120 @@ class NewsService:
                 fetch_data,
                 "news_information",
                 [
-                    "id", "ticker", "ko_name", "en_name", "ctry",
-                    "date", "title", "summary", "emotion", "that_time_price",
-                    "current_price", "change_rt"
-                ]
+                    "id",
+                    "ticker",
+                    "ko_name",
+                    "en_name",
+                    "ctry",
+                    "date",
+                    "title",
+                    "summary",
+                    "emotion",
+                    "that_time_price",
+                    "current_price",
+                    "change_rt",
+                ],
             )
-            
+
             disclosure_future = executor.submit(
                 fetch_data,
                 "disclosure_information",
                 [
-                    "id", "ticker", "ko_name", "en_name", "ctry",
-                    "date", "url", "summary", "impact_reason",
-                    "key_points", "emotion", "form_type", "that_time_price",
-                    "current_price", "change_rt"
-                ]
+                    "id",
+                    "ticker",
+                    "ko_name",
+                    "en_name",
+                    "ctry",
+                    "date",
+                    "url",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "form_type",
+                    "that_time_price",
+                    "current_price",
+                    "change_rt",
+                ],
             )
 
             df_news = news_future.result()
             df_disclosure = disclosure_future.result()
 
-        news_data = ([] if df_news.empty else 
-                     self._process_price_data(self._process_dataframe_news(df_news)))
-        
-        disclosure_data = ([] if df_disclosure.empty else 
-                          self._process_price_data(self._process_dataframe_disclosure(df_disclosure), 
-                                                is_disclosure=True))
+        news_data = [] if df_news.empty else self._process_price_data(self._process_dataframe_news(df_news))
+
+        disclosure_data = (
+            []
+            if df_disclosure.empty
+            else self._process_price_data(self._process_dataframe_disclosure(df_disclosure), is_disclosure=True)
+        )
 
         return news_data, disclosure_data
 
-    def _process_price_data(self, df: pd.DataFrame, is_disclosure: bool = False) -> List[Union[NewsRenewalItem, DisclosureRenewalItem]]:
+    def _process_price_data(
+        self, df: pd.DataFrame, is_disclosure: bool = False
+    ) -> List[Union[NewsRenewalItem, DisclosureRenewalItem]]:
         if df.empty:
             return []
 
-        numeric_columns = ['that_time_price', 'current_price', 'change_rt']
-        df[numeric_columns] = df[numeric_columns].astype('float64').fillna(0)
-        
-        mask = (df['current_price'] == 0) & (df['that_time_price'] != 0)
-        df.loc[mask, 'that_time_price'] = 0
-        
-        df['price_impact'] = np.where(
-            df['that_time_price'] != 0,
-            (df['current_price'] - df['that_time_price']) / df['that_time_price'] * 100,
-            0
+        numeric_columns = ["that_time_price", "current_price", "change_rt"]
+        df[numeric_columns] = df[numeric_columns].astype("float64").fillna(0)
+
+        mask = (df["current_price"] == 0) & (df["that_time_price"] != 0)
+        df.loc[mask, "that_time_price"] = 0
+
+        df["price_impact"] = np.where(
+            df["that_time_price"] != 0, (df["current_price"] - df["that_time_price"]) / df["that_time_price"] * 100, 0
         )
-        
-        df['price_impact'] = df['price_impact'].round(2).fillna(0)
-        df['change_rate'] = df['change_rt'].round(2)
+
+        df["price_impact"] = df["price_impact"].round(2).fillna(0)
+        df["change_rate"] = df["change_rt"].round(2)
 
         if is_disclosure:
-            df['ko_name'] = df['ko_name'].apply(self.remove_parentheses)
+            df["ko_name"] = df["ko_name"].apply(self.remove_parentheses)
             return [
                 DisclosureRenewalItem(
-                    id=row['id'],
-                    date=row['date'],
-                    ctry=row['ctry'],
-                    ticker=row['ticker'],
+                    id=row["id"],
+                    date=row["date"],
+                    ctry=row["ctry"],
+                    ticker=row["ticker"],
                     title=f"{row['ko_name']} {document_type_mapping.get(row['form_type'], row['form_type'])}",
-                    summary=row['summary'],
-                    impact_reason=row['impact_reason'],
-                    key_points=row['key_points'],
-                    emotion=row['emotion'],
-                    name=row['ko_name'],
-                    change_rate=row['change_rate'],
-                    price_impact=row['price_impact'],
-                    document_url=row['url']
+                    summary=row["summary"],
+                    impact_reason=row["impact_reason"],
+                    key_points=row["key_points"],
+                    emotion=row["emotion"],
+                    name=row["ko_name"],
+                    change_rate=row["change_rate"],
+                    price_impact=row["price_impact"],
+                    document_url=row["url"],
                 )
                 for _, row in df.iterrows()
             ]
-        
+
         return [
             NewsRenewalItem(
-                id=row['id'],
-                date=row['date'],
-                ctry=row['ctry'],
-                title=row['title'],
-                summary=row['summary'],
-                emotion=row['emotion'],
-                name=row['ko_name'],
-                change_rate=row['change_rate'],
-                price_impact=row['price_impact'],
-                ticker=row['ticker']
+                id=row["id"],
+                date=row["date"],
+                ctry=row["ctry"],
+                title=row["title"],
+                summary=row["summary"],
+                emotion=row["emotion"],
+                name=row["ko_name"],
+                change_rate=row["change_rate"],
+                price_impact=row["price_impact"],
+                ticker=row["ticker"],
             )
             for _, row in df.iterrows()
         ]
 
     def top_stories(self, request: Request):
-        viewed_stories = []
+        viewed_stories = set()
         if request.cookies.get("viewed_stories"):
             cookie_data = request.cookies.get("viewed_stories", "[]")
             try:
-                viewed_stories = json.loads(cookie_data)
+                viewed_stories = set(json.loads(cookie_data))
             except json.JSONDecodeError:
-                viewed_stories = []
+                viewed_stories = set()
 
         condition = {"is_top_story": 1, "is_exist": True}
         # 뉴스 데이터 수집
@@ -291,10 +312,12 @@ class NewsService:
             df_disclosure["title"] = (
                 df_disclosure["ko_name"]
                 + " "
-                + df_disclosure.apply(lambda x: document_type_mapping.get(x.form_type, x.form_type), axis=1)
+                + df_disclosure["form_type"].map(document_type_mapping).fillna(df_disclosure["form_type"])
             )
-            df_disclosure["summary"] = df_disclosure.apply(
-                lambda x: f"{x.summary} {x.key_points}" if x.key_points else x.summary, axis=1
+            df_disclosure["summary"] = np.where(
+                df_disclosure["key_points"].notna(),
+                df_disclosure["summary"] + " " + df_disclosure["key_points"],
+                df_disclosure["summary"],
             )
             df_disclosure["type"] = "disclosure"
 
@@ -321,20 +344,17 @@ class NewsService:
 
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")
-
             total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
             total_df["change_1m"] = total_df["change_1m"].fillna(0.0)
             total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
 
-            def calculate_price_impact(row):
-                if row["current_price"] == 0 or row["that_time_price"] == 0:
-                    return 0
-                return round((row["current_price"] - row["that_time_price"]) / row["that_time_price"] * 100, 2)
-
-            total_df["price_impact"] = total_df.apply(calculate_price_impact, axis=1)
-
-            # 무한값과 NaN을 0으로 대체
-            total_df["price_impact"] = total_df["price_impact"].replace([np.inf, -np.inf, np.nan], 0)
+            mask = (total_df["current_price"] != 0) & (total_df["that_time_price"] != 0)
+            total_df["price_impact"] = 0.0
+            total_df.loc[mask, "price_impact"] = (
+                (total_df.loc[mask, "current_price"] - total_df.loc[mask, "that_time_price"])
+                / total_df.loc[mask, "that_time_price"]
+                * 100
+            ).round(2)
 
         # 결과 생성
         result = []
@@ -346,12 +366,6 @@ class NewsService:
             news_items = []
             ticker_has_unviewed = False
             for _, row in ticker_news.iterrows():
-                news_key = f'{ticker}_{row["type"]}_{row["id"]}'
-                is_viewed = news_key in viewed_stories
-
-                if not is_viewed:
-                    ticker_has_unviewed = True
-
                 news_key = f'{ticker}_{row["type"]}_{row["id"]}'
                 is_viewed = news_key in viewed_stories
 
