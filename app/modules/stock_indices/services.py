@@ -92,16 +92,17 @@ class StockIndicesService:
                     return
 
             # 캐시 미스 또는 캐시 만료 시에만 데이터 조회
-            async def fetch_history(period, interval=None):
+            async def fetch_history(is_open, interval=None):
                 try:
                     loop = asyncio.get_event_loop()
                     ticker = yf.Ticker(symbol, session=self.session)
 
                     def fetch():
                         if interval:
-                            return ticker.history(period=period, interval=interval)
+                            return ticker.history("1d", interval=interval)
                         # 데이터가 있을 때까지 기간을 늘려가며 조회
-                        for days in [1, 2, 3, 4, 5]:  # 최대 5일까지 확인
+                        start_date = 1 if is_open else 2
+                        for days in range(start_date, 6):  # 최대 5일까지 확인
                             df = ticker.history(period=f"{days}d")
                             if not df.empty:
                                 return df
@@ -112,16 +113,19 @@ class StockIndicesService:
                 except Exception:
                     return pd.DataFrame()
 
-            daily_df, min5_df = await asyncio.gather(fetch_history("1d"), fetch_history("1d", "5m"))
+            is_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
+            daily_df, min5_df = await asyncio.gather(fetch_history(is_open), fetch_history(is_open, "5m"))
 
             # 데이터 처리 및 캐시 저장
             if not daily_df.empty:
                 valid_data = daily_df[daily_df["Open"] != 0]
                 if not valid_data.empty:
                     latest_data = valid_data.iloc[-1]
+                    prev_data = valid_data.iloc[-2] if len(valid_data) > 1 else latest_data
                     daily_data = {
                         "open": round(float(latest_data["Open"]), 2),
                         "close": round(float(latest_data["Close"]), 2),
+                        "prev_close": round(float(prev_data["Close"]), 2),
                     }
                     self._cache[cache_key_daily] = (daily_data, now)
                     logging.info(f"Updated daily cache for {name}")
@@ -363,12 +367,18 @@ class StockIndicesService:
                             kr_last_time = last_time.strftime("%H:%M")
                         else:
                             us_last_time = last_time.strftime("%H:%M")
+                is_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
 
-                change = daily_data["close"] - daily_data["open"]
-                change_percent = round((change / daily_data["open"]) * 100, 2) if daily_data["open"] != 0 else 0.00
+                if is_open:
+                    change = daily_data["close"] - daily_data["open"]
+                    change_percent = round((change / daily_data["open"]) * 100, 2) if daily_data["open"] != 0 else 0.00
+                else:
+                    change = daily_data["close"] - daily_data["prev_close"]
+                    change_percent = (
+                        round((change / daily_data["prev_close"]) * 100, 2) if daily_data["prev_close"] != 0 else 0.00
+                    )
 
                 rise_ratio, fall_ratio, unchanged_ratio = ratios
-                is_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
 
                 indices_summary[name] = IndexSummary(
                     prev_close=daily_data["close"],
