@@ -258,17 +258,19 @@ def renewal_kr_run_news_batch(date: str = None):
     SELECT
         n.id, n.ticker, n.title, n.related_tickers, n.url, n.news_date,
         a.ai_summary as en_summary, a.market_impact as emotion, a.impact_reason as en_impact_reason, a.key_points as en_key_points,
-        t.ai_summary as kr_summary, t.impact_reason as kr_impact_reason, t.key_points as kr_key_points
+        t.ai_title, t.ai_summary as kr_summary, t.impact_reason as kr_impact_reason, t.key_points as kr_key_points
     FROM kor_news_analysis_translation as t
     LEFT JOIN kor_news as n ON t.collect_id = n.id
     LEFT JOIN kor_news_analysis as a ON t.collect_id = a.collect_id
     WHERE DATE(n.news_date) = :check_date
     AND t.lang = 'ko-KR'
     """)
-    
+
     df_news = pd.DataFrame(database._execute(query, {"check_date": check_date.strftime("%Y-%m-%d")}))
-    df_news['ticker'] = 'A' + df_news['ticker']
-    df_news['related_tickers'] = df_news['related_tickers'].apply(lambda x: ','.join(['A' + ticker.strip() for ticker in x.split(',')]) if pd.notna(x) else '')
+    df_news["ticker"] = "A" + df_news["ticker"]
+    df_news["related_tickers"] = df_news["related_tickers"].apply(
+        lambda x: ",".join(["A" + ticker.strip() for ticker in x.split(",")]) if pd.notna(x) else ""
+    )
     news_tickers = df_news["ticker"].unique().tolist()
 
     # 뉴스 데이터의 고유한 날짜 추출
@@ -367,7 +369,7 @@ def renewal_kr_run_news_batch(date: str = None):
                     "en_name": row["en_name"],
                     "ctry": "KR",
                     "date": row["news_date"],
-                    "title": row["title"],
+                    "title": row["ai_title"],
                     "emotion": row["emotion"],
                     "summary": row["kr_summary"],
                     "impact_reason": row["kr_impact_reason"],
@@ -388,6 +390,7 @@ def renewal_kr_run_news_batch(date: str = None):
         레코드를 배치 크기로 나누어 삽입하는 함수
         중복된 collect_id는 skip
         """
+
         def replace_nan(records_batch):
             return [{k: (None if pd.isna(v) else v) for k, v in record.items()} for record in records_batch]
 
@@ -434,6 +437,7 @@ def renewal_kr_run_news_batch(date: str = None):
 
             skipped += len(batch_records) - len(unique_batch)
             print(f"진행률: {i+len(batch_records)}/{total} (처리: {processed}, 스킵: {skipped})")
+
     # DB에 데이터 입력
     if news_records:
         print(f"총 입력할 레코드 수: {len(news_records)}")
@@ -658,6 +662,7 @@ def us_run_news_batch(date: str = None):
 
     return len(news_records)
 
+
 def renewal_us_run_news_batch(date: str = None):
     """
     미국 뉴스 배치 함수
@@ -677,14 +682,14 @@ def renewal_us_run_news_batch(date: str = None):
     SELECT
         n.id, n.ticker, n.title, n.related_tickers, n.url, n.news_date,
         a.ai_summary as en_summary, a.market_impact as emotion, a.impact_reason as en_impact_reason, a.key_points as en_key_points,
-        t.ai_summary as kr_summary, t.impact_reason as kr_impact_reason, t.key_points as kr_key_points
+        t.ai_title, t.ai_summary as kr_summary, t.impact_reason as kr_impact_reason, t.key_points as kr_key_points
     FROM usa_news_analysis_translation as t
     LEFT JOIN usa_news as n ON t.collect_id = n.id
     LEFT JOIN usa_news_analysis as a ON t.collect_id = a.collect_id
     WHERE DATE(n.news_date) = :check_date
     AND t.lang = 'ko-KR'
     """)
-    
+
     df_news = pd.DataFrame(database._execute(query, {"check_date": check_date.strftime("%Y-%m-%d")}))
     news_tickers = df_news["ticker"].unique().tolist()
 
@@ -784,7 +789,7 @@ def renewal_us_run_news_batch(date: str = None):
                     "en_name": row["en_name"],
                     "ctry": "US",
                     "date": row["news_date"],
-                    "title": row["title"],
+                    "title": row["ai_title"],
                     "emotion": row["emotion"],
                     "summary": row["kr_summary"],
                     "impact_reason": row["kr_impact_reason"],
@@ -805,6 +810,7 @@ def renewal_us_run_news_batch(date: str = None):
         레코드를 배치 크기로 나누어 삽입하는 함수
         중복된 collect_id는 skip
         """
+
         def replace_nan(records_batch):
             return [{k: (None if pd.isna(v) else v) for k, v in record.items()} for record in records_batch]
 
@@ -970,6 +976,7 @@ def temp_kr_run_news_is_top_story(date: str = None):
         * 처리 날짜: {check_date}
         """
         raise ValueError(error_msg)
+
 
 def renewal_kr_run_news_is_top_story(date: str = None):
     """
@@ -1170,6 +1177,7 @@ def temp_us_run_news_is_top_story(date: str = None):
         """
         raise ValueError(error_msg)
 
+
 def renewal_us_run_news_is_top_story(date: str = None):
     """
     미국 뉴스 주요 소식 선정 배치 함수
@@ -1359,8 +1367,8 @@ def us_run_news_is_top_story(date: str = None):
 #     renewal_us_run_news_batch(20250121)
 #     renewal_kr_run_news_batch()
 #     temp_us_run_news_is_top_story()
-    # temp_kr_run_news_is_top_story()
-    # renewal_kr_run_news_batch(20250114)
+# temp_kr_run_news_is_top_story()
+# renewal_kr_run_news_batch(20250114)
 # for date in range(20241201, 20241211):
 #     us_run_news_batch(date=str(date))
 ########################################
