@@ -255,6 +255,12 @@ class DisclosureService:
         total_pages = (total_count + size - 1) // size
         offset = (page - 1) * size
         emotion_counts = self._count_emotions(df_disclosure)
+        df_disclosure = df_disclosure[offset : offset + size]
+
+        if offset >= total_count:
+            page = total_pages
+            offset = (page - 1) * size
+            df_disclosure = df_disclosure[offset : offset + size]
 
         # key_points 파싱
         df_disclosure["key_points"] = df_disclosure["key_points"].apply(
