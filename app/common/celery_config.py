@@ -47,6 +47,10 @@ CELERY_APP.conf.beat_schedule = {
         "task": "us_stock_indices_batch",
         "schedule": crontab(minute="*/15"),  # 15분마다 실행
     },
+    "kr-stock-indices": {
+        "task": "kr_stock_indices_batch",
+        "schedule": crontab(minute="*/15"),  # 15분마다 실행
+    },
     # 공통 스케줄
     "ticker-update": {
         "task": "stock_trend_tickers",
