@@ -528,6 +528,12 @@ class NewsService:
         total_count = df_news.shape[0]
         total_page = math.ceil(total_count / size)
         emotion_count = self._count_emotion(df_news)
+
+        if offset >= total_count:
+            page = total_page
+            offset = (page - 1) * size
+
+        df_news = df_news[offset : offset + size]
         df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
 
         df_price = pd.DataFrame(
