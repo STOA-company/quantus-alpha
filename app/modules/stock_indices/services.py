@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from app.database.crud import database
 from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
-from app.utils.date_utils import get_time_checker
+from app.utils.date_utils import check_market_status
 from app.core.config import korea_tz, utc_tz
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -43,36 +43,71 @@ class StockIndicesService:
 
         self._initialized = True
 
-    async def initialize(self):
+    async def _initialize_background_task(self):
         """비동기 초기화"""
         logger.info("[STARTUP] StockIndicesService initialize() called")
-        if not self._background_task:
-            self._background_task = asyncio.create_task(self._update_cache_background())
-            logger.info("[STARTUP] Background task created")
+
+        while True:
+            now = datetime.now(korea_tz)
+            kr_minutes = now.hour * 60 + now.minute
+            us_minutes = datetime.now(utc_tz).hour * 60 + datetime.now(utc_tz).minute
+
+            # 한국 시장 시작 시간 정각 (9:00)
+            kr_market_open = kr_minutes == 540 and check_market_status("KR")  # 9:00
+            # 미국 시장 시작 시간 정각 (13:30 UTC)
+            us_market_open = us_minutes == 810 and check_market_status("US")  # 13:30
+
+            if kr_market_open or us_market_open:
+                if not self._background_task or self._background_task.done():
+                    self._background_task_running = False
+
+            # 30분마다 체크
+            await asyncio.sleep(1800)
 
     async def _update_cache_background(self):
         """백그라운드에서 캐시 업데이트"""
-        if self._background_task_running:
-            logger.info("[BACKGROUND] Task already running, skipping...")
-            return
-
         try:
             self._background_task_running = True
             logger.info("[BACKGROUND] Cache update task started")
 
             while True:
-                logger.info("[BACKGROUND] Starting cache update cycle")
+                now = datetime.now(utc_tz).astimezone(korea_tz)
 
-                # 각 심볼에 대한 데이터 fetch
-                tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in self.symbols.items()]
-                await asyncio.gather(*tasks)
+                # 한국 시장 상태 체크 (휴장일 + 거래시간)
+                kr_minutes = now.astimezone(korea_tz).hour * 60 + now.astimezone(korea_tz).minute
+                kr_pre_market = 510 <= kr_minutes < 540  # 8:30 ~ 9:00
+                kr_need_update = check_market_status("KR") or kr_pre_market
 
-                # 등락비율 업데이트
-                ratio_tasks = [self.get_market_ratios(name) for name in self.symbols.keys()]
-                await asyncio.gather(*ratio_tasks)
+                # 미국 시장 상태 체크 (휴장일 + 거래시간)
+                us_minutes = now.astimezone(utc_tz).hour * 60 + now.astimezone(utc_tz).minute
+                us_pre_market = 780 <= us_minutes < 810  # 13:00 ~ 13:30 UTC
+                us_need_update = check_market_status("US") or us_pre_market
 
-                logger.info("[BACKGROUND] Cache update cycle completed, sleeping for 45s")
-                await asyncio.sleep(45)
+                kr_symbols = {"kospi": self.symbols["kospi"], "kosdaq": self.symbols["kosdaq"]}
+                us_symbols = {"nasdaq": self.symbols["nasdaq"], "sp500": self.symbols["sp500"]}
+
+                if kr_need_update:
+                    logger.info("[BACKGROUND] Updating KR market data")
+                    kr_tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in kr_symbols.items()]
+                    await asyncio.gather(*kr_tasks)
+
+                    kr_ratio_tasks = [self.get_market_ratios(name) for name in kr_symbols.keys()]
+                    await asyncio.gather(*kr_ratio_tasks)
+
+                if us_need_update:
+                    logger.info("[BACKGROUND] Updating US market data")
+                    us_tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in us_symbols.items()]
+                    await asyncio.gather(*us_tasks)
+
+                    us_ratio_tasks = [self.get_market_ratios(name) for name in us_symbols.keys()]
+                    await asyncio.gather(*us_ratio_tasks)
+
+                if kr_need_update or us_need_update:
+                    logger.info(f"[BACKGROUND] Cache update cycle completed, sleeping for {45}s")
+                    await asyncio.sleep(45)
+                else:
+                    logger.info("[BACKGROUND] No markets need update, sleeping for 1h")
+                    await asyncio.sleep(3600)
 
         except Exception as e:
             logger.error(f"[BACKGROUND] Error in background task: {e}")
@@ -88,7 +123,7 @@ class StockIndicesService:
             now = datetime.now(utc_tz).astimezone(korea_tz)
 
             # 시장별 캐시 체크
-            is_market_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
+            is_market_open = check_market_status("KR") if name in ["kospi", "kosdaq"] else check_market_status("US")
 
             # 캐시가 있고 유효한 경우 그대로 반환
             if cache_key_daily in self._cache and cache_key_min5 in self._cache:
@@ -136,7 +171,7 @@ class StockIndicesService:
 
             logger.info(f"[YF] Fetching data for {name} ({symbol})")
 
-            is_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
+            is_open = check_market_status("KR") if name in ["kospi", "kosdaq"] else check_market_status("US")
             daily_df, min5_df = await asyncio.gather(fetch_history(is_open), fetch_history(is_open, "5m"))
 
             # 데이터 처리 및 캐시 저장
@@ -207,7 +242,7 @@ class StockIndicesService:
 
     def _get_ticker_cache_timeout(self, market: str) -> int:
         """시장별 티커 캐시 타임아웃 설정"""
-        is_open = get_time_checker("KR") if market in ["KOSPI200", "KOSDAQ150"] else get_time_checker("US")
+        is_open = check_market_status("KR") if market in ["KOSPI200", "KOSDAQ150"] else check_market_status("US")
         return 300 if is_open else 3600  # 장중 5분, 장마감 1시간
 
     async def _get_cached_tickers(self, market: str) -> pd.DataFrame:
@@ -384,7 +419,7 @@ class StockIndicesService:
                             kr_last_time = last_time.strftime("%H:%M")
                         else:
                             us_last_time = last_time.strftime("%H:%M")
-                is_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
+                is_open = check_market_status("KR") if name in ["kospi", "kosdaq"] else check_market_status("US")
 
                 if is_open:
                     change = daily_data["close"] - daily_data["open"]
@@ -442,8 +477,8 @@ class StockIndicesService:
         current_kr_time = datetime.now(utc_tz).astimezone(korea_tz)
         current_minutes = current_kr_time.hour * 60 + current_kr_time.minute
 
-        kr_is_open = get_time_checker("KR")
-        us_is_open = get_time_checker("US")
+        kr_is_open = check_market_status("KR")
+        us_is_open = check_market_status("US")
 
         if kr_is_open and kr_last_time:
             return kr_last_time
@@ -455,6 +490,9 @@ class StockIndicesService:
     async def get_indices_data(self) -> IndicesData:
         """지수 데이터 조회"""
         try:
+            if not self._background_task_running:
+                asyncio.create_task(self._update_cache_background())
+
             now = datetime.now(utc_tz).astimezone(korea_tz)
             need_update = False
 
