@@ -7,16 +7,16 @@ import pandas as pd
 def run_stock_trend_tickers_batch():
     """티커 정보 배치 처리"""
     try:
-        us_im_tickers = database._select(table="stock_us_1m", columns=["ticker"], distinct=True)
-        us_1d_tickers = database._select(table="stock_us_1d", columns=["ticker"], distinct=True)
-        kr_1d_tickers = database._select(table="stock_kr_1d", columns=["ticker"], distinct=True)
+        us_1m_tickers = database._select(table="stock_us_1m", columns=["Ticker"], distinct=True)
+        us_1d_tickers = database._select(table="stock_us_1d", columns=["Ticker"], distinct=True)
+        kr_1d_tickers = database._select(table="stock_kr_1d", columns=["Ticker"], distinct=True)
         info_tickers = database._select(
             table="stock_information", columns=["ticker", "kr_name", "en_name", "market", "ctry"], distinct=True
         )
         existing_tickers = database._select(table="stock_trend", columns=["ticker"], distinct=True)
 
         # Convert query results to sets for intersection
-        us_1m_set = {row[0] for row in us_im_tickers}
+        us_1m_set = {row[0] for row in us_1m_tickers}
         us_1d_set = {row[0] for row in us_1d_tickers}
         kr_1d_set = {row[0] for row in kr_1d_tickers}
         info_set = {row[0] for row in info_tickers}
@@ -63,9 +63,9 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
 
         latest_date_tickers = database._select(
             table=f"stock_{ctry.value}_1d",
-            columns=["ticker"],
-            group_by=["ticker"],
-            aggregates={"max_date": ("date", "max")},
+            columns=["Ticker"],
+            group_by=["Ticker"],
+            aggregates={"max_date": ("Date", "max")},
         )
 
         latest_tickers = [row for row in latest_date_tickers if row[0] in stock_trend_set]
@@ -79,50 +79,52 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
 
                 ticker_data = database._select(
                     table=f"stock_{ctry.value}_1d",
-                    columns=["ticker", "date", "close", "volume"],
-                    ticker=ticker,
-                    date__gte=one_year_ago,
-                    order="date",
+                    columns=["Ticker", "Date", "Close", "Volume"],
+                    Ticker=ticker,
+                    Date__gte=one_year_ago,
+                    order="Date",
                     ascending=False,
                 )
                 daily_data.extend(ticker_data)
 
-            df = pd.DataFrame(daily_data, columns=["ticker", "date", "close", "volume"])
-            current_data = df.groupby("ticker").first().reset_index()
-            prev_data = df.groupby("ticker").nth(1).reset_index()
+            df = pd.DataFrame(daily_data, columns=["Ticker", "Date", "Close", "Volume"])
+            current_data = df.groupby("Ticker").first().reset_index()
+            prev_data = df.groupby("Ticker").nth(1).reset_index()
 
             results = pd.DataFrame()
-            results["ticker"] = current_data["ticker"]
-            results["last_updated"] = current_data["date"]
-            results["current_price"] = current_data["close"]
-            results["prev_close"] = prev_data["close"]
-            results["change_1d"] = (current_data["close"] - prev_data["close"]) / prev_data["close"] * 100
-            results["volume_1d"] = current_data["volume"]
-            results["volume_change_1d"] = current_data["volume"] * current_data["close"]
+            results["ticker"] = current_data["Ticker"]
+            results["last_updated"] = current_data["Date"]
+            results["current_price"] = current_data["Close"]
+            results["prev_close"] = prev_data["Close"]
+            results["change_1d"] = (current_data["Close"] - prev_data["Close"]) / prev_data["Close"] * 100
+            results["volume_1d"] = current_data["Volume"]
+            results["volume_change_1d"] = current_data["Volume"] * current_data["Close"]
 
             periods = {"1w": 7, "1m": 30, "6m": 180, "1y": 365}
 
             for period, days in periods.items():
-                cutoff_dates = current_data.set_index("ticker").apply(
-                    lambda x: x["date"] - pd.Timedelta(days=days), axis=1
+                cutoff_dates = current_data.set_index("Ticker").apply(
+                    lambda x: x["Date"] - pd.Timedelta(days=days), axis=1
                 )
 
                 df_period = df.copy()
-                df_period["cutoff_date"] = df_period["ticker"].map(cutoff_dates)
-                period_data = df_period[df_period["date"] >= df_period["cutoff_date"]]
+                df_period["cutoff_date"] = df_period["Ticker"].map(cutoff_dates)
+                period_data = df_period[df_period["Date"] >= df_period["cutoff_date"]]
 
-                period_start_prices = period_data.groupby("ticker").last()[["close"]].reset_index()
+                period_start_prices = period_data.groupby("Ticker").last()[["Close"]].reset_index()
 
-                period_volumes = period_data.groupby("ticker").agg({"volume": "sum"}).reset_index()
+                period_volumes = period_data.groupby("Ticker").agg({"Volume": "sum"}).reset_index()
 
-                results = results.merge(period_start_prices, on="ticker", suffixes=("", f"_start_{period}"))
-                results[f"change_{period}"] = (results["current_price"] - results["close"]) / results["close"] * 100
-                results = results.drop(columns=["close"])
+                results = results.merge(
+                    period_start_prices, left_on="ticker", right_on="Ticker", suffixes=("", f"_start_{period}")
+                )
+                results[f"change_{period}"] = (results["current_price"] - results["Close"]) / results["Close"] * 100
+                results = results.drop(columns=["Close"])
 
-                results = results.merge(period_volumes, on="ticker", suffixes=("", f"_{period}"))
-                results[f"volume_{period}"] = results["volume"]
-                results[f"volume_change_{period}"] = results["volume"] * results["current_price"]
-                results = results.drop(columns=["volume"])
+                results = results.merge(period_volumes, left_on="ticker", right_on="Ticker", suffixes=("", f"_{period}"))
+                results[f"volume_{period}"] = results["Volume"]
+                results[f"volume_change_{period}"] = results["Volume"] * results["current_price"]
+                results = results.drop(columns=["Volume"])
 
         update_data = []
         for _, row in results.iterrows():
@@ -171,16 +173,23 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
         )
         stock_trend_dict = {row[0]: row[1] for row in stock_trends}
 
+        if ctry.value == "us":
+            table_name = "stock_us_1m"
+        elif ctry.value == "kr":
+            table_name = "stock_kr_1d"
+        else:
+            raise ValueError(f"Invalid country: {ctry.value}")
+
         latest_date_tickers = database._select(
-            table=f"stock_{ctry.value}_1m",
-            columns=["ticker", "close", "volume"],
-            group_by=["ticker"],
-            aggregates={"max_date": ("date", "max")},
+            table=table_name,
+            columns=["Ticker", "Close", "Volume"],
+            group_by=["Ticker"],
+            aggregates={"max_date": ("Date", "max")},
         )
 
         latest_tickers = [row for row in latest_date_tickers if row[0] in stock_trend_dict]
         update_data = []
-        for ticker, max_date, close, volume in latest_tickers:
+        for ticker, close, volume, max_date in latest_tickers:
             prev_data = stock_trend_dict[ticker]
 
             last_updated = max_date
@@ -217,3 +226,7 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
     except Exception as e:
         logging.error(f"Error in run_stock_trend_by_realtime_batch: {str(e)}")
         raise e
+
+
+if __name__ == "__main__":
+    run_stock_trend_by_1d_batch(ctry=TrendingCountry.KR)

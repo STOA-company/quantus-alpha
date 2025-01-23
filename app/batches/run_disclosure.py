@@ -1,7 +1,7 @@
 from datetime import timedelta
 import pandas as pd
 from app.database.crud import database
-from app.utils.date_utils import get_business_days, now_kr
+from app.utils.date_utils import get_business_days, now_kr, now_utc
 from sqlalchemy import text
 from app.common.constants import US_EXCLUDE_DATES, KR_EXCLUDE_DATES
 
@@ -12,7 +12,7 @@ def renewal_us_run_disclosure_batch(batch_min: int = 15, date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d%H%M%S").date()
     else:
-        check_date = now_kr(is_date=True)
+        check_date = now_utc(is_date=True)
 
     check_date_str = check_date.strftime("%Y-%m-%d")
     start_datetime = check_date - timedelta(days=run_batch_min)  # noqa
@@ -257,7 +257,7 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d%H%M%S")
     else:
-        check_date = now_kr(is_date=False)
+        check_date = now_utc(is_date=False)
 
     check_date_str = check_date.strftime("%Y-%m-%d")
     start_datetime = check_date - timedelta(minutes=run_batch_min)  # noqa
@@ -308,7 +308,7 @@ def renewal_kr_run_disclosure_batch(batch_min: int = 15, date: str = None):
     )
     ticker_list = df_disclosure["ticker"].unique().tolist()
     ticker_list = ["A" + ticker for ticker in ticker_list]
-    df_disclosure['filing_date'] = df_disclosure['filing_date'] + timedelta(hours=9)
+    df_disclosure["filing_date"] = df_disclosure["filing_date"] + timedelta(hours=9)
     filing_dates = df_disclosure["filing_date"].dt.date.unique()
 
     if len(filing_dates) == 0:
@@ -806,7 +806,7 @@ def us_run_disclosure_is_top_story(date: str = None):
 # us_run_disclosure_batch(20241223)
 # kr_run_disclosure_batch(20241230)
 # temp_us_run_disclosure_is_top_story()
-    # renewal_kr_run_disclosure_batch(batch_min=15, date="20250121080000")
+# renewal_kr_run_disclosure_batch(batch_min=15, date="20250121080000")
 # renewal_kr_run_disclosure_batch(batch_min=15, date="20250102080000")
 # renewal_kr_run_disclosure_batch(date="20250103080000")
 # temp_kr_run_disclosure_is_top_story()
