@@ -3,8 +3,7 @@ import logging
 import pandas as pd
 from app.database.crud import database
 from sqlalchemy.sql import text
-from app.utils.date_utils import now_utc
-from app.utils.ctry_utils import get_current_market_country
+from app.utils.date_utils import now_utc, check_market_status
 
 
 def kr_run_stock_indices_batch():
@@ -147,20 +146,6 @@ def _calculate_market_ratios(daily_prices, ticker: str) -> dict:
     }
 
 
-def _create_empty_result(ticker: str) -> dict:
-    """
-    빈 결과 생성
-    """
-    return {
-        "ticker": ticker,
-        "rise_ratio": 0.0,
-        "rise_soft_ratio": 0.0,
-        "fall_ratio": 0.0,
-        "fall_soft_ratio": 0.0,
-        "unchanged_ratio": 0.0,
-    }
-
-
 def _update_market_data(ticker: str, result: dict):
     """
     시장 데이터 DB 업데이트
@@ -187,14 +172,7 @@ def _update_market_data(ticker: str, result: dict):
 
 def _is_market_open(ticker: str) -> bool:
     """현재 시간 기준으로 해당 시장이 열렸는지 확인"""
-    current_market = get_current_market_country()
-
     if ticker in ["nasdaq", "sp500"]:
-        return current_market == "us"
-
-    return False
-
-
-if __name__ == "__main__":
-    kr_run_stock_indices_batch()
-    us_run_stock_indices_batch()
+        return check_market_status("US")
+    else:
+        return check_market_status("KR")
