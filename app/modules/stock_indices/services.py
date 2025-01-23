@@ -12,6 +12,10 @@ from app.modules.stock_indices.schemas import IndexSummary, IndicesData, Indices
 from app.utils.date_utils import get_time_checker
 from app.core.config import korea_tz, utc_tz
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+logger = logging.getLogger(__name__)
+
 
 class StockIndicesService:
     _instance = None
@@ -78,18 +82,23 @@ class StockIndicesService:
                 cached_daily, timestamp_daily = self._cache[cache_key_daily]
                 cached_min5, timestamp_min5 = self._cache[cache_key_min5]
 
+                cache_age = (now - timestamp_daily).total_seconds()
+                logger.info(f"[CACHE] {name}: age={cache_age:.1f}s, market_open={is_market_open}")
+
                 # 시장이 열려있을 때만 timeout 체크
                 if is_market_open:
                     timeout = self._get_cache_timeout(name)
                     if now - timestamp_daily < timedelta(seconds=timeout) and now - timestamp_min5 < timedelta(
                         seconds=timeout
                     ):
-                        logging.debug(f"Using cached data for {name}")
+                        logger.info(f"[CACHE] Using valid cache for {name} (timeout={timeout}s)")
                         return
                 else:
                     # 장 마감 시에는 캐시 유지
-                    logging.debug(f"Market closed, using cached data for {name}")
+                    logger.info(f"[CACHE] Market closed, using cached data for {name}")
                     return
+
+            logger.info(f"[CACHE] Cache miss for {name}, fetching new data")
 
             # 캐시 미스 또는 캐시 만료 시에만 데이터 조회
             async def fetch_history(is_open, interval=None):
@@ -101,17 +110,18 @@ class StockIndicesService:
                         if interval:
                             return ticker.history("1d", interval=interval)
                         # 데이터가 있을 때까지 기간을 늘려가며 조회
-                        start_date = 1 if is_open else 2
-                        for days in range(start_date, 6):  # 최대 5일까지 확인
-                            df = ticker.history(period=f"{days}d")
-                            if not df.empty:
-                                return df
+                        df = ticker.history(period="5d")
+                        if not df.empty:
+                            # 장이 열려있으면 오늘 데이터만, 닫혀있으면 2일치 데이터 사용
+                            return df.tail(1 if is_open else 2)
                         return pd.DataFrame()
 
                     df = await loop.run_in_executor(self._executor, fetch)
                     return df
                 except Exception:
                     return pd.DataFrame()
+
+            logger.info(f"[YF] Fetching data for {name} ({symbol})")
 
             is_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
             daily_df, min5_df = await asyncio.gather(fetch_history(is_open), fetch_history(is_open, "5m"))
@@ -128,7 +138,7 @@ class StockIndicesService:
                         "prev_close": round(float(prev_data["Close"]), 2),
                     }
                     self._cache[cache_key_daily] = (daily_data, now)
-                    logging.info(f"Updated daily cache for {name}")
+                    logger.info(f"[YF] Cached daily data for {name}: {daily_data}")
 
             # 5분 데이터 처리
             if not min5_df.empty:
@@ -145,10 +155,12 @@ class StockIndicesService:
                         for index, row in valid_data.iterrows()
                     }
                     self._cache[cache_key_min5] = (min5_data, now)
-                    logging.info(f"Cached 5-minute data for {name}: {cache_key_min5}")
+                    logger.info(f"[YF] Cached {len(min5_data)} 5-minute entries for {name}")
+                else:
+                    logger.warning(f"[YF] No valid 5-minute data for {name}")
 
         except Exception as e:
-            logging.error(f"Error fetching data for {name}: {e}")
+            logger.error(f"[YF] Error fetching data for {name}: {e}")
 
     def _get_cache_timeout(self, market: str) -> int:
         """
@@ -196,7 +208,7 @@ class StockIndicesService:
                 data, timestamp = self._ticker_cache[cache_key]
                 timeout = self._get_ticker_cache_timeout(market)
                 if now - timestamp < timedelta(seconds=timeout):
-                    logging.debug(f"Cache hit for {market} tickers")
+                    logger.debug(f"Cache hit for {market} tickers")
                     return data
 
             # Cache miss
@@ -206,7 +218,7 @@ class StockIndicesService:
                     data, timestamp = self._ticker_cache[cache_key]
                     timeout = self._get_ticker_cache_timeout(market)
                     if now - timestamp < timedelta(seconds=timeout):
-                        logging.debug(f"Cache hit after lock for {market} tickers")
+                        logger.debug(f"Cache hit after lock for {market} tickers")
                         return data
 
                 # 티커 조회
@@ -218,7 +230,7 @@ class StockIndicesService:
                 }
 
                 if market not in query_map:
-                    logging.error(f"Invalid market: {market}")
+                    logger.error(f"Invalid market: {market}")
                     return pd.DataFrame()
 
                 column, value = query_map[market]
@@ -227,14 +239,14 @@ class StockIndicesService:
                 df = pd.DataFrame(result, columns=["ticker"])
                 if not df.empty:
                     self._ticker_cache[cache_key] = (df, now)
-                    logging.info(f"Updated ticker cache for {market} with {len(df)} entries")
+                    logger.info(f"Updated ticker cache for {market} with {len(df)} entries")
                 else:
-                    logging.warning(f"No tickers found for {market}")
+                    logger.warning(f"No tickers found for {market}")
 
                 return df
 
         except Exception as e:
-            logging.error(f"Error in _get_cached_tickers for {market}: {e}")
+            logger.error(f"Error in _get_cached_tickers for {market}: {e}")
             return pd.DataFrame()
 
     # 코스피200 ticker 조회
@@ -243,7 +255,7 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_kospi_200=True)
             return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
-            logging.error(f"Error fetching kospi200 ticker: {e}")
+            logger.error(f"Error fetching kospi200 ticker: {e}")
 
     # 코스닥150 ticker 조회
     def get_kosdaq150_ticker(self):
@@ -251,7 +263,7 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_kosdaq_150=True)
             return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
-            logging.error(f"Error fetching kosdaq150 ticker: {e}")
+            logger.error(f"Error fetching kosdaq150 ticker: {e}")
 
     # 나스닥100 ticker 조회
     def get_nasdaq100_ticker(self):
@@ -259,7 +271,7 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_nasdaq_100=True)
             return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
-            logging.error(f"Error fetching nasdaq100 ticker: {e}")
+            logger.error(f"Error fetching nasdaq100 ticker: {e}")
 
     # S&P500 ticker 조회
     def get_sp500_ticker(self):
@@ -267,7 +279,7 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_snp_500=True)
             return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
-            logging.error(f"Error fetching S&P500 ticker: {e}")
+            logger.error(f"Error fetching S&P500 ticker: {e}")
             return pd.DataFrame()
 
     async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
@@ -330,7 +342,7 @@ class StockIndicesService:
                 return ratios
 
         except Exception as e:
-            logging.error(f"Error in get_market_ratios for {market}: {str(e)}")
+            logger.error(f"Error in get_market_ratios for {market}: {str(e)}")
             return 0.0, 0.0, 0.0
 
     async def _fetch_all_data(self):
@@ -511,7 +523,7 @@ class StockIndicesService:
             }
 
         except Exception as e:
-            logging.error(f"Error in get_nasdaq_ticker: {str(e)}")
+            logger.error(f"Error in get_nasdaq_ticker: {str(e)}")
             return {"ticker": "nasdaq", "상승": 0.0, "하락": 0.0, "보합": 0.0}
 
     def get_snp500_ticker(self):
@@ -546,5 +558,5 @@ class StockIndicesService:
             }
 
         except Exception as e:
-            logging.error(f"Error in get_snp500_ticker: {str(e)}")
+            logger.error(f"Error in get_snp500_ticker: {str(e)}")
             return {"ticker": "sp500", "상승": 0.0, "하락": 0.0, "보합": 0.0}
