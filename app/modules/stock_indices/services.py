@@ -72,8 +72,8 @@ class StockIndicesService:
                 ratio_tasks = [self.get_market_ratios(name) for name in self.symbols.keys()]
                 await asyncio.gather(*ratio_tasks)
 
-                logger.info("[BACKGROUND] Cache update cycle completed, sleeping for 240s")
-                await asyncio.sleep(240)  # 4분 대기
+                logger.info("[BACKGROUND] Cache update cycle completed, sleeping for 45s")
+                await asyncio.sleep(45)
 
         except Exception as e:
             logger.error(f"[BACKGROUND] Error in background task: {e}")
@@ -186,10 +186,10 @@ class StockIndicesService:
 
             # 장 시작 직전 30분은 짧은 캐시 타임아웃 적용
             if 510 <= current_time < 540:  # 8:30 ~ 9:00
-                return 10
+                return 60
             # 장 중
             elif 540 <= current_time <= 930:  # 9:00 ~ 15:30
-                return 10
+                return 60
             # 그 외 시간
             return 3600
 
@@ -199,10 +199,10 @@ class StockIndicesService:
 
             # 장 시작 직전 30분은 짧은 캐시 타임아웃 적용
             if 780 <= current_time < 810:  # 13:00 ~ 13:30 UTC
-                return 10
+                return 60
             # 장 중
             elif 810 <= current_time <= 1200:  # 13:30 ~ 20:00 UTC
-                return 10
+                return 60
 
             return 3600
 
