@@ -1,48 +1,36 @@
 import logging
-from celery.schedules import crontab
 from functools import wraps
-from typing import Literal
 
+from app.batches.run_news import (
+    kr_run_news_batch,
+    temp_kr_run_news_is_top_story,
+    temp_us_run_news_is_top_story,
+    us_run_news_batch,
+    renewal_kr_run_news_batch,
+    renewal_us_run_news_batch,
+    renewal_kr_run_news_is_top_story,
+    renewal_us_run_news_is_top_story,
+)
 from app.common.celery_config import CELERY_APP
 from app.core.config import settings
+from app.core.extra.SlackNotifier import SlackNotifier
 from app.modules.common.enum import TrendingCountry
 from app.batches.run_stock_trend import (
     run_stock_trend_by_1d_batch,
     run_stock_trend_tickers_batch,
     run_stock_trend_by_realtime_batch,
 )
-from app.batches.run_stock_indices import us_run_stock_indices_batch
-from app.utils.date_utils import get_session_checker, now_kr
+from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_stock_indices_batch
+from app.utils.date_utils import now_kr
+from app.batches.run_disclosure import (
+    renewal_kr_run_disclosure_batch,
+    temp_kr_run_disclosure_is_top_story,
+    renewal_us_run_disclosure_batch,
+    temp_us_run_disclosure_is_top_story,
+)
+from app.utils.date_utils import check_market_status
 
-
-def check_market_status(country: Literal["US", "KR"], require_open: bool = True, skip_on_failure: bool = True):
-    """시장 상태를 체크하는 데코레이터
-
-    Args:
-        country: 확인할 국가 (US 또는 KR)
-        require_open: True면 장 운영 중일 때만 실행, False면 장 종료 후에만 실행
-        skip_on_failure: True면 조건 불만족시 건너뛰기, False면 에러 발생
-    """
-
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            current_time = now_kr()
-            session_checker = get_session_checker(country, current_time)
-            is_market_open = session_checker.is_session(current_time)
-
-            if is_market_open == require_open:
-                return func(*args, **kwargs)
-
-            msg = f"Market is {'not ' if require_open else ''}open for {country}"
-            if skip_on_failure:
-                logging.info(f"{msg}. Skipping task.")
-                return None
-            raise RuntimeError(msg)
-
-        return wrapper
-
-    return decorator
+notifier = SlackNotifier()
 
 
 def log_task_execution(func):
@@ -63,54 +51,106 @@ def log_task_execution(func):
     return wrapper
 
 
-# Test task
-@CELERY_APP.task(name="hello_task", ignore_result=True)
-def hello_task():
-    """Test task that prints Hello World"""
-    print("Hello, World!")
-
-
 # US Stock Indices task
 @CELERY_APP.task(name="us_stock_indices_batch", ignore_result=True)
 def us_stock_indices_batch():
     """미국 주가지수 데이터 업데이트"""
+    notifier.notify_info("US_stock_indices_batch process started")
     try:
-        us_run_stock_indices_batch()
+        if check_market_status("US"):
+            us_run_stock_indices_batch()
+        else:
+            notifier.notify_info("US market is not open. Skipping task.")
+            logging.info("US market is not open. Skipping task.")
+            return
+
+        notifier.notify_success("US_stock_indices_batch process completed")
     except Exception as e:
+        notifier.notify_error(f"US_stock_indices_batch process failed: {str(e)}")
         logging.error(f"Error in us_run_stock_indices_batch: {str(e)}")
+
+
+# KR Stock Indices task
+@CELERY_APP.task(name="kr_stock_indices_batch", ignore_result=True)
+def kr_stock_indices_batch():
+    """한국 주가지수 데이터 업데이트"""
+    notifier.notify_info("KR_stock_indices_batch process started")
+    try:
+        if check_market_status("KR"):
+            kr_run_stock_indices_batch()
+        else:
+            notifier.notify_info("KR market is not open. Skipping task.")
+            logging.info("KR market is not open. Skipping task.")
+            return
+
+        notifier.notify_success("KR_stock_indices_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_stock_indices_batch process failed: {str(e)}")
+        logging.error(f"Error in kr_run_stock_indices_batch: {str(e)}")
 
 
 # Stock trend tasks
 @CELERY_APP.task(name="stock_trend_1d_us")
 @log_task_execution
-@check_market_status("US", require_open=False)
 def stock_trend_1d_us_task():
     """미국 주식 일별 트렌드 업데이트 (장 마감 후)"""
-    run_stock_trend_by_1d_batch(ctry=TrendingCountry.US)
+    if check_market_status("US"):
+        logging.info("US market is open. Skipping task.")
+        return
+    notifier.notify_info("US_stock_trend_1d_batch process started")
+    try:
+        run_stock_trend_by_1d_batch(ctry=TrendingCountry.US)
+        notifier.notify_success("US_stock_trend_1d_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_stock_trend_1d_batch process failed: {str(e)}")
+        logging.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
 
 
 @CELERY_APP.task(name="stock_trend_1d_kr")
 @log_task_execution
-@check_market_status("KR", require_open=False)
 def stock_trend_1d_kr_task():
     """한국 주식 일별 트렌드 업데이트 (장 마감 후)"""
-    run_stock_trend_by_1d_batch(ctry=TrendingCountry.KR)
+    if check_market_status("KR"):
+        logging.info("KR market is open. Skipping task.")
+        return
+    notifier.notify_info("KR_stock_trend_1d_batch process started")
+    try:
+        run_stock_trend_by_1d_batch(ctry=TrendingCountry.KR)
+        notifier.notify_success("KR_stock_trend_1d_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_stock_trend_1d_batch process failed: {str(e)}")
+        logging.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
 
 
 @CELERY_APP.task(name="stock_trend_realtime_us")
 @log_task_execution
-@check_market_status("US", require_open=True)
 def stock_trend_realtime_us_task():
     """미국 주식 실시간 트렌드 업데이트 (장 운영 중)"""
-    run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
+    if not check_market_status("US"):
+        logging.info("US market is not open. Skipping task.")
+        return
+    notifier.notify_info("US_stock_trend_realtime_batch process started")
+    try:
+        run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
+        notifier.notify_success("US_stock_trend_realtime_batch process completed")
+    except Exception as e:
+        logging.error(f"Error in run_stock_trend_by_realtime_batch: {str(e)}")
 
 
-# @CELERY_APP.task(name="stock_trend_realtime_kr")
-# @log_task_execution
-# @check_market_status("KR", require_open=True)
-# def stock_trend_realtime_kr_task():
-#     """한국 주식 실시간 트렌드 업데이트 (장 운영 중)"""
-#     run_stock_trend_by_realtime_batch(ctry=TrendingCountry.KR)
+@CELERY_APP.task(name="stock_trend_realtime_kr")
+@log_task_execution
+def stock_trend_realtime_kr_task():
+    """한국 주식 실시간 트렌드 업데이트 (장 운영 중)"""
+    if not check_market_status("KR"):
+        logging.info("KR market is not open. Skipping task.")
+        return
+    notifier.notify_info("KR_stock_trend_realtime_batch process started")
+    try:
+        run_stock_trend_by_realtime_batch(ctry=TrendingCountry.KR)
+        notifier.notify_success("KR_stock_trend_realtime_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_stock_trend_realtime_batch process failed: {str(e)}")
+        logging.error(f"Error in run_stock_trend_by_realtime_batch: {str(e)}")
 
 
 @CELERY_APP.task(name="stock_trend_tickers")
@@ -120,41 +160,98 @@ def stock_trend_tickers_task():
     run_stock_trend_tickers_batch()
 
 
-# Celery Beat Schedule
-CELERY_APP.conf.beat_schedule = {
-    # 미국 주식 스케줄
-    "us-daily-stock-trend": {
-        "task": "stock_trend_1d_us",
-        "schedule": crontab(hour="6", minute="0"),  # KST 06:00 (EST 16:00) - 미국장 마감 후
-    },
-    "us-realtime-stock-trend": {
-        "task": "stock_trend_realtime_us",
-        "schedule": crontab(minute="*/10"),  # 10분마다 실행 (장중)
-    },
-    # 한국 주식 스케줄
-    "kr-daily-stock-trend": {
-        "task": "stock_trend_1d_kr",
-        "schedule": crontab(hour="16", minute="0"),  # KST 16:00 - 한국장 마감 후
-    },
-    # "kr-realtime-stock-trend": {
-    #     "task": "stock_trend_realtime_kr",
-    #     "schedule": crontab(minute="*/10"),  # 10분마다 실행 (장중)
-    # },
-    # 공통 스케줄
-    "ticker-update": {
-        "task": "stock_trend_tickers",
-        "schedule": crontab(hour="5", minute="30"),  # KST 05:30 - 일일 티커 정보 업데이트
-    },
-}
+@CELERY_APP.task(name="hello_task", ignore_result=True)
+def hello_task():
+    """Test task that prints Hello World"""
+    current_time = now_kr().strftime("%Y-%m-%d %H:%M:%S")
+    message = f"Hello, World! Current time: {current_time}"
+    print(message)
+    logging.info(message)
 
-# Celery 설정
-CELERY_APP.conf.timezone = "Asia/Seoul"
-CELERY_APP.conf.task_serializer = "json"
-CELERY_APP.conf.result_serializer = "json"
-CELERY_APP.conf.accept_content = ["json"]
-CELERY_APP.conf.task_track_started = True
-CELERY_APP.conf.task_time_limit = 1800  # 30분
-CELERY_APP.conf.worker_prefetch_multiplier = 1  # 작업 분배 최적화
+
+@CELERY_APP.task(name="kr_news_batch", ignore_result=True)
+def kr_news_batch():
+    """한국 뉴스 배치"""
+    notifier.notify_info("KR_news_batch process started")
+    try:
+        records_count = kr_run_news_batch()
+        notifier.notify_success(f"KR_news_batch process completed processed: {records_count}")
+        temp_kr_run_news_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        notifier.notify_success("KR_news_is_top_story process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_news_batch process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="us_news_batch", ignore_result=True)
+def us_news_batch():
+    """미국 뉴스 배치"""
+    notifier.notify_info("US_news_batch process started")
+    try:
+        us_run_news_batch()
+        notifier.notify_success("US_news_batch process completed")
+        temp_us_run_news_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        notifier.notify_success("US_news_is_top_story process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_news_batch process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="kr_disclosure_batch", ignore_result=True)
+def kr_disclosure_batch():
+    """한국 공시 배치"""
+    notifier.notify_info("KR_disclosure_batch process started")
+    try:
+        renewal_kr_run_disclosure_batch()
+        notifier.notify_success("KR_disclosure_batch process completed")
+        temp_kr_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        notifier.notify_success("KR_disclosure_is_top_story process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_disclosure_batch process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="us_disclosure_batch", ignore_result=True)
+def us_disclosure_batch():
+    """미국 공시 배치"""
+    notifier.notify_info("US_disclosure_batch process started")
+    try:
+        renewal_us_run_disclosure_batch()
+        notifier.notify_success("US_disclosure_batch process completed")
+        temp_us_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        notifier.notify_success("US_disclosure_is_top_story process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_disclosure_batch process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="kr_news_renewal", ignore_result=True)
+def kr_news_renewal():
+    """한국 뉴스 업데이트"""
+    notifier.notify_info("KR_news_renewal process started")
+    try:
+        renewal_kr_run_news_batch()
+        notifier.notify_success("KR_news_renewal process completed")
+        renewal_kr_run_news_is_top_story()
+        notifier.notify_success("KR_news_is_top_story_renewal process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_news_renewal process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="us_news_renewal", ignore_result=True)
+def us_news_renewal():
+    """미국 뉴스 업데이트"""
+    notifier.notify_info("US_news_renewal process started")
+    try:
+        renewal_us_run_news_batch()
+        notifier.notify_success("US_news_renewal process completed")
+        renewal_us_run_news_is_top_story()
+        notifier.notify_success("US_news_is_top_story_renewal process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_news_renewal process failed: {str(e)}")
+        raise
+
 
 # Worker 시작점
 if __name__ == "__main__":
@@ -162,11 +259,11 @@ if __name__ == "__main__":
     CELERY_APP.worker_main(
         argv=[
             "worker",
-            "--beat",  # beat 서버 통합 실행
+            "--beat",
             f"--loglevel={settings.CELERY_LOGLEVEL}",
             "-n",
             "worker@%h",
             f"--concurrency={CONCURRENCY}",
-            "--max-tasks-per-child=1000",  # 메모리 누수 방지
+            "--max-tasks-per-child=1000",
         ]
     )

@@ -70,6 +70,7 @@ def get_time_checker(country: Literal["KR", "US"]) -> bool:
         if country == "KR":
             date = datetime.now(korea_tz)
             current_time = date.hour * 60 + date.minute
+            logging.info(f"Current time: {current_time}")
             market_open = 9 * 60  # 09:00 KST
             market_close = 15 * 60 + 30  # 15:30 KST
 
@@ -78,6 +79,7 @@ def get_time_checker(country: Literal["KR", "US"]) -> bool:
         elif country == "US":
             date = datetime.now(utc_tz)
             current_time = date.hour * 60 + date.minute
+            logging.info(f"Current time: {current_time}")
             market_open = 13 * 60 + 30  # 13:30 UTC = 09:30 ET
             market_close = 20 * 60  # 20:00 UTC = 16:00 ET
 
@@ -85,4 +87,37 @@ def get_time_checker(country: Literal["KR", "US"]) -> bool:
 
     except Exception as e:
         logging.error(f"Error in get_time_checker: {str(e)}")
+        return False
+
+
+def is_business_day(country: Literal["KR", "US"]) -> bool:
+    calendar_map = {
+        "KR": "XKRX",  # 한국 거래소
+        "US": "XNYS",  # 뉴욕 증권거래소
+    }
+    calendar = ecals.get_calendar(calendar_map[country])
+    return calendar.is_session(now_utc(is_date=True))
+
+
+def check_market_status(country: Literal["KR", "US"]) -> bool:
+    """
+    시장 상태 확인
+    1. 거래일 여부 확인
+    2. 거래 시간 확인
+    """
+    try:
+        # 휴장 여부 확인
+        if not is_business_day(country):
+            logging.info(f"{country} market is not a business day")
+            return False
+
+        # 개장 여부 확인
+        if not get_time_checker(country):
+            logging.info(f"{country} market is not open")
+            return False
+
+        return True
+
+    except Exception as e:
+        logging.error(f"Error checking market status: {str(e)}")
         return False

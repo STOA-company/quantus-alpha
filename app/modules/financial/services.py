@@ -90,7 +90,7 @@ class FinancialService:
 
         return conditions
 
-    def _get_date_conditions_ten(self, start_date: Optional[str], end_date: Optional[str]) -> Dict:
+    async def _get_date_conditions_ten(self, start_date: Optional[str], end_date: Optional[str]) -> Dict:
         """
         날짜 조건 생성
         start_date (Optional[str]): YYYYMM 형식의 시작일
@@ -151,7 +151,7 @@ class FinancialService:
 
     ########################################## Router에서 호출하는 메서드 #########################################
     # 실적 데이터 조회
-    def get_income_performance_data(
+    async def get_income_performance_data(
         self,
         ctry: str,
         ticker: str,
@@ -175,15 +175,15 @@ class FinancialService:
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
                 raise InvalidCountryException()
+            
+            #정보 조회
+            company_name, sector, tickers = await self.get_stock_info_by_ticker(ticker)
 
-            # 섹터 정보 조회
-            sector = self.get_sector_by_ticker(ticker)
             if not sector:
                 logger.warning(f"No sector information found for ticker {ticker}")
                 # 섹터 정보가 없는 경우 해당 기업의 데이터만 조회
                 tickers_with_suffix = [ticker]
             else:
-                tickers = self.get_ticker_by_sector(sector)
                 if ctry == "USA":
                     tickers_with_suffix = [f"{t}-US" for t in tickers]
                 else:
@@ -191,9 +191,10 @@ class FinancialService:
 
             logger.info(f"Querying {table_name} with ticker: {ticker}, sector tickers count: {len(tickers_with_suffix)}")
 
+            date_conditions = await self._get_date_conditions_ten(start_date, end_date)
             conditions = {
                 "Code__in": tickers_with_suffix,
-                **self._get_date_conditions_ten(start_date, end_date),
+                **date_conditions,
             }
 
             result = self.db._select(table=table_name, order="period_q", ascending=False, **conditions)
@@ -201,12 +202,11 @@ class FinancialService:
             if not result:
                 logger.warning(f"No income performance data found for ticker: {ticker}")
                 raise DataNotFoundException(ticker=ticker, data_type="실적")
+            
+            all_shares = await self.get_all_shares_by_tickers(tickers, ctry)
 
-            quarterly_statements = self._process_income_performance_quarterly_result(result, sector, ticker, ctry)
-            yearly_statements = self._process_income_performance_yearly_result(result, sector, ticker, ctry)
-
-            # DB 결과에서 직접 이름 추출
-            company_name = self.get_kr_name_by_ticker(db=db, ticker=ticker)
+            quarterly_statements = await self._process_income_performance_quarterly_result(result, ticker, ctry, tickers, all_shares)
+            yearly_statements = await self._process_income_performance_yearly_result(result, ticker, ctry, tickers, all_shares)
 
             ctry = contry_mapping.get(ctry)
 
@@ -627,6 +627,44 @@ class FinancialService:
         result = self.db._select(table="stock_information", columns=["ticker"], sector_2=sector)
 
         return [row.ticker for row in result] if result else []
+    
+    async def get_stock_info_by_ticker(self, ticker: str):
+        """한 번의 쿼리로 stock 관련 정보 조회"""
+        try:
+            clean_ticker = ticker[:-3] if ticker.endswith("-US") else ticker
+            
+            # 1. 기본 회사 정보 조회
+            base_result = self.db._select(
+                table="stock_information",
+                columns=["kr_name", "sector_2", "ticker"],
+                ticker=clean_ticker,
+                limit=1
+            )
+            if not base_result:
+                return clean_ticker, None, [ticker]
+            
+            company_name, sector, _ = base_result[0]
+            
+            # 2. 동일 섹터의 다른 티커 조회
+            if sector:
+                sector_result = self.db._select(
+                    table="stock_information",
+                    columns=["ticker"],
+                    sector_2=sector,
+                )
+                sector_tickers = [row.ticker for row in sector_result]
+            else:
+                sector_tickers = [ticker]
+            
+            # None 체크 및 기본값 설정
+            company_name = company_name if company_name else clean_ticker
+                
+            return company_name, sector, sector_tickers
+            
+        except Exception as e:
+            logger.error(f"Error in get_stock_info_by_ticker: {e}")
+            return clean_ticker, None, [ticker]
+        
 
     def get_shares_by_ticker(self, ticker: str, country: str) -> float:
         try:
@@ -1076,12 +1114,11 @@ class FinancialService:
 
     ########################################## 결과 처리 메서드 #########################################
     # 분기 실적
-    def _process_income_performance_quarterly_result(self, result, sector, ticker, ctry) -> List[QuarterlyIncome]:
+    async def _process_income_performance_quarterly_result(self, result, ticker, ctry, sector_tickers, all_shares) -> List[QuarterlyIncome]:
         if not result:
             return []
 
-        tickers = self.get_ticker_by_sector(sector)
-        all_shares = self.get_all_shares_by_tickers(tickers, ctry)
+        tickers = sector_tickers
         company_shares = all_shares.get(ticker, 0)
 
         # 회사 데이터와 섹터 데이터 분리
@@ -1171,7 +1208,7 @@ class FinancialService:
         return quarterly_results[:10]
 
     # 연간 실적
-    def _process_income_performance_yearly_result(self, result, sector, ticker, ctry) -> List[QuarterlyIncome]:
+    async def _process_income_performance_yearly_result(self, result, ticker, ctry, sector_tickers, all_shares) -> List[QuarterlyIncome]:
         if not result:
             return []
 
@@ -1193,10 +1230,8 @@ class FinancialService:
                 company_data[year]["net_income_total"] += float(row[18]) if row[18] is not None else 0.0
                 company_data[year]["count"] += 1
 
-        tickers = self.get_ticker_by_sector(sector)
-
         # shares 조회 결과 확인
-        all_shares = self.get_all_shares_by_tickers(tickers, ctry)
+        tickers = sector_tickers
         company_shares = all_shares.get(ticker, 0)
 
         # 회사 데이터와 섹터 데이터 분리
@@ -1282,7 +1317,7 @@ class FinancialService:
 
         return yearly_results[:10]
 
-    def get_all_shares_by_tickers(self, tickers: List[str], country: str) -> Dict[str, float]:
+    async def get_all_shares_by_tickers(self, tickers: List[str], country: str) -> Dict[str, float]:
         """한 번에 모든 티커의 shares 조회"""
         try:
             if country == "USA":

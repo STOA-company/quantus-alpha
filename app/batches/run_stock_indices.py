@@ -3,12 +3,30 @@ import logging
 import pandas as pd
 from app.database.crud import database
 from sqlalchemy.sql import text
-from app.utils.date_utils import now_utc
-from app.utils.ctry_utils import get_current_market_country
+from app.utils.date_utils import now_utc, check_market_status
 
 
 def kr_run_stock_indices_batch():
-    pass
+    """
+    코스피, 코스닥 지수 데이터 배치 로직
+    """
+    try:
+        current_time = datetime.datetime.now()
+
+        results = [
+            _process_market_data("kospi", "KOSPI", "stock_kr_1d"),
+            _process_market_data("kosdaq", "KOSDAQ", "stock_kr_1d"),
+        ]
+
+        # stock_indices 테이블 업데이트
+        for result in results:
+            if result:  # None이 아닌 경우에만 처리
+                _update_market_data(result["ticker"], result)
+
+        logging.info(f"KR market status batch completed at {current_time}")
+
+    except Exception as e:
+        logging.error(f"Error in kr_run_stock_indices_batch: {str(e)}")
 
 
 def us_run_stock_indices_batch():
@@ -18,23 +36,15 @@ def us_run_stock_indices_batch():
     try:
         current_time = datetime.datetime.now()
 
-        nasdaq_result = _process_nasdaq_data()
-        sp500_result = _process_sp500_data()
+        results = [
+            _process_market_data("nasdaq", "NAS", "stock_us_1m"),
+            _process_market_data("sp500", None, "stock_us_1m", is_snp_500=True),
+        ]
 
         # stock_indices 테이블 업데이트
-        for result in [nasdaq_result, sp500_result]:
-            database._update(
-                table="stock_indices",
-                sets={
-                    "rise_ratio": result["rise_ratio"],
-                    "rise_soft_ratio": result["rise_soft_ratio"],
-                    "fall_ratio": result["fall_ratio"],
-                    "fall_soft_ratio": result["fall_soft_ratio"],
-                    "unchanged_ratio": result["unchanged_ratio"],
-                    "date": current_time,
-                },
-                ticker=result["ticker"],
-            )
+        for result in results:
+            if result:  # None이 아닌 경우에만 처리
+                _update_market_data(result["ticker"], result)
 
         logging.info(f"US market status batch completed at {current_time}")
 
@@ -42,46 +52,27 @@ def us_run_stock_indices_batch():
         logging.error(f"Error in us_run_stock_indices_batch: {str(e)}")
 
 
-def _is_market_open(ticker: str) -> bool:
-    """현재 시간 기준으로 해당 시장이 열렸는지 확인"""
-    current_market = get_current_market_country()
+def _process_market_data(ticker: str, market: str = None, price_table: str = None, is_snp_500: bool = False):
+    """
+    개별 시장 데이터 처리를 위한 공통 함수
 
-    if ticker in ["nasdaq", "sp500"]:
-        return current_market == "us"
-
-    return False
-
-
-def _process_nasdaq_data():
+    Args:
+        ticker (str): 시장 식별자 (kospi, kosdaq, nasdaq, sp500)
+        market (str): 시장 구분 (KOSPI, KOSDAQ, NAS)
+        price_table (str): 가격 데이터 테이블명
+        is_snp_500 (bool): S&P 500 여부
+    """
     try:
-        # 나스닥 100 종목 조회
-        logging.info("Fetching NASDAQ 100 tickers...")
-        result = database._select(table="stock_information", columns=["ticker"], is_nasdaq_100=1)
+        logging.info(f"Fetching {ticker.upper()} tickers...")
+        if is_snp_500:
+            result = database._select(table="stock_information", columns=["ticker"], is_snp_500=1)
+        else:
+            result = database._select(table="stock_information", columns=["ticker"], market=market)
 
         if not result:
-            logging.warning("No NASDAQ 100 tickers found")
-            return {"ticker": "nasdaq", "rise_ratio": 0.0, "fall_ratio": 0.0, "unchanged_ratio": 0.0}
-
-        tickers = [row[0] for row in result]
-        logging.info(f"Found {len(tickers)} NASDAQ tickers: {tickers[:5]}")
-
-        # 최신 날짜 조회 - database._execute 사용
-        latest_date_query = text("""
-           SELECT DATE(MAX(Date)) as latest_date
-           FROM stock_us_1m
-           WHERE Ticker IN :tickers
-       """)
-        latest_date = database._execute(latest_date_query, {"tickers": tickers}).scalar()
-        logging.info(f"Latest date for NASDAQ: {latest_date}")
-
-        # 당일 시가/종가 데이터 조회
-        daily_prices = database._select(
-            table="stock_us_1m", columns=["Ticker", "Open", "Close"], Ticker__in=tickers, Date__date=latest_date
-        )
-
-        if not daily_prices:
+            logging.warning(f"No {ticker.upper()} tickers found")
             return {
-                "ticker": "nasdaq",
+                "ticker": ticker,
                 "rise_ratio": 0.0,
                 "rise_soft_ratio": 0.0,
                 "fall_ratio": 0.0,
@@ -89,195 +80,99 @@ def _process_nasdaq_data():
                 "unchanged_ratio": 0.0,
             }
 
-        # DataFrame 생성 시 컬럼명 대문자로 지정
-        df = pd.DataFrame(daily_prices, columns=["Ticker", "Open", "Close"])
+        tickers = [row[0] for row in result]
+        logging.info(f"Found {len(tickers)} {ticker.upper()} tickers: {tickers[:5]}")
 
-        # 종목별 데이터 집계
-        df = df.groupby("Ticker").agg({"Open": "first", "Close": "last"}).reset_index()
+        # 최신 날짜 조회
+        latest_date_query = text(f"""
+            SELECT DATE(MAX(Date)) as latest_date
+            FROM {price_table}
+            WHERE Ticker IN :tickers
+        """)
+        latest_date = database._execute(latest_date_query, {"tickers": tickers}).scalar()
+        logging.info(f"Latest date for {ticker.upper()}: {latest_date}")
 
-        # 변동률 계산
-        df["변동률"] = ((df["Close"] - df["Open"]) / df["Open"]) * 100
-        total = len(df)
+        # 당일 시가/종가 데이터 조회
+        daily_prices = database._select(
+            table=price_table, columns=["Ticker", "Open", "Close"], Ticker__in=tickers, Date__date=latest_date
+        )
 
-        # 변동률에 따른 구분
-        # 급상승: 3% 초과
-        # 약상승: 0.5% ~ 3%
-        # 보합: -0.5% ~ 0.5%
-        # 약하락: -3% ~ -0.5%
-        # 급하락: -3% 미만
-        strong_rise = len(df[df["변동률"] > 3.0])  # 3% 초과
-        weak_rise = len(df[(df["변동률"] <= 3.0) & (df["변동률"] > 0.5)])  # 0.5% ~ 3%
-        unchanged = len(df[(df["변동률"] <= 0.5) & (df["변동률"] >= -0.5)])  # -0.5% ~ 0.5%
-        weak_fall = len(df[(df["변동률"] < -0.5) & (df["변동률"] >= -3.0)])  # -3% ~ -0.5%
-        strong_fall = len(df[df["변동률"] < -3.0])  # -3% 미만
+        if not daily_prices:
+            return {
+                "ticker": ticker,
+                "rise_ratio": 0.0,
+                "rise_soft_ratio": 0.0,
+                "fall_ratio": 0.0,
+                "fall_soft_ratio": 0.0,
+                "unchanged_ratio": 0.0,
+            }
 
-        result = {
-            "ticker": "nasdaq",
-            "rise_ratio": round(strong_rise / total * 100, 2),
-            "rise_soft_ratio": round(weak_rise / total * 100, 2),
-            "unchanged_ratio": round(unchanged / total * 100, 2),
-            "fall_soft_ratio": round(weak_fall / total * 100, 2),
-            "fall_ratio": round(strong_fall / total * 100, 2),
-        }
+        # DataFrame 처리 및 변동률 계산
+        result = _calculate_market_ratios(daily_prices, ticker)
 
-        # 기존 데이터 확인
-        existing_data = database._select(table="stock_indices", columns=["ticker"], ticker="nasdaq")
-        is_open = _is_market_open("nasdaq")
-
-        if not existing_data:
-            database._insert(
-                table="stock_indices",
-                sets={
-                    "ticker": "nasdaq",
-                    "rise_ratio": result["rise_ratio"],
-                    "rise_soft_ratio": result["rise_soft_ratio"],
-                    "unchanged_ratio": result["unchanged_ratio"],
-                    "fall_soft_ratio": result["fall_soft_ratio"],
-                    "fall_ratio": result["fall_ratio"],
-                    "date": now_utc(),
-                    "included_indices": is_open,
-                },
-            )
-        else:
-            database._update(
-                table="stock_indices",
-                sets={
-                    "rise_ratio": result["rise_ratio"],
-                    "rise_soft_ratio": result["rise_soft_ratio"],
-                    "unchanged_ratio": result["unchanged_ratio"],
-                    "fall_soft_ratio": result["fall_soft_ratio"],
-                    "fall_ratio": result["fall_ratio"],
-                    "date": now_utc(),
-                    "included_indices": is_open,
-                },
-                ticker="nasdaq",
-            )
+        # DB 업데이트
+        _update_market_data(ticker, result)
 
         return result
 
     except Exception as e:
-        logging.error(f"Error in _process_nasdaq_data: {str(e)}")
+        logging.error(f"Error in _process_market_data for {ticker}: {str(e)}")
         raise
 
 
-def _process_sp500_data():
-    try:
-        # S&P 500 종목 조회
-        logging.info("Fetching S&P 500 tickers...")
-        result = database._select(table="stock_information", columns=["ticker"], is_snp_500=1)
-
-        if not result:
-            logging.warning("No S&P 500 tickers found")
-            return {
-                "ticker": "sp500",
-                "rise_ratio": 0.0,
-                "rise_soft_ratio": 0.0,
-                "fall_ratio": 0.0,
-                "fall_soft_ratio": 0.0,
-                "unchanged_ratio": 0.0,
-            }
-
-        tickers = [row[0] for row in result]
-        logging.info(f"Found {len(tickers)} S&P 500 tickers: {tickers[:5]}")
-
-        # 최신 날짜 조회 - database._execute 사용
-        latest_date_query = text("""
-           SELECT DATE(MAX(Date)) as latest_date
-           FROM stock_us_1m
-           WHERE Ticker IN :tickers
-       """)
-        latest_date = database._execute(latest_date_query, {"tickers": tickers}).scalar()
-        logging.info(f"Latest date for S&P 500: {latest_date}")
-
-        # 당일 시가/종가 데이터 조회
-        daily_prices = database._select(
-            table="stock_us_1m", columns=["Ticker", "Open", "Close"], Ticker__in=tickers, Date__date=latest_date
-        )
-
-        if not daily_prices:
-            return {
-                "ticker": "sp500",
-                "rise_ratio": 0.0,
-                "rise_soft_ratio": 0.0,
-                "fall_ratio": 0.0,
-                "fall_soft_ratio": 0.0,
-                "unchanged_ratio": 0.0,
-            }
-
-        # DataFrame 생성 시 컬럼명 대문자로 지정
-        df = pd.DataFrame(daily_prices, columns=["Ticker", "Open", "Close"])
-
-        # 종목별 데이터 집계
-        df = df.groupby("Ticker").agg({"Open": "first", "Close": "last"}).reset_index()
-
-        # 변동률 계산
-        df["변동률"] = ((df["Close"] - df["Open"]) / df["Open"]) * 100
-        total = len(df)
-
-        # 변동률에 따른 구분
-        # 급상승: 3% 초과
-        # 약상승: 0.5% ~ 3%
-        # 보합: -0.5% ~ 0.5%
-        # 약하락: -3% ~ -0.5%
-        # 급하락: -3% 미만
-        strong_rise = len(df[df["변동률"] > 3.0])  # 3% 초과
-        weak_rise = len(df[(df["변동률"] <= 3.0) & (df["변동률"] > 0.5)])  # 0.5% ~ 3%
-        unchanged = len(df[(df["변동률"] <= 0.5) & (df["변동률"] >= -0.5)])  # -0.5% ~ 0.5%
-        weak_fall = len(df[(df["변동률"] < -0.5) & (df["변동률"] >= -3.0)])  # -3% ~ -0.5%
-        strong_fall = len(df[df["변동률"] < -3.0])  # -3% 미만
-
-        result = {
-            "ticker": "sp500",
-            "rise_ratio": round(strong_rise / total * 100, 2),  # 급상승
-            "rise_soft_ratio": round(weak_rise / total * 100, 2),  # 약상승
-            "unchanged_ratio": round(unchanged / total * 100, 2),  # 보합
-            "fall_soft_ratio": round(weak_fall / total * 100, 2),  # 약하락
-            "fall_ratio": round(strong_fall / total * 100, 2),  # 급하락
-        }
-
-        # 기존 데이터 확인
-        existing_data = database._select(table="stock_indices", columns=["ticker"], ticker="sp500")
-        is_open = _is_market_open("sp500")
-
-        sets_data = {
-            "ticker": "sp500",
-            "rise_ratio": result["rise_ratio"],  # 급상승
-            "rise_soft_ratio": result["rise_soft_ratio"],  # 약상승
-            "unchanged_ratio": result["unchanged_ratio"],  # 보합
-            "fall_soft_ratio": result["fall_soft_ratio"],  # 약하락
-            "fall_ratio": result["fall_ratio"],  # 급하락
-            "date": now_utc(),
-            "included_indices": is_open,
-        }
-
-        if not existing_data:
-            database._insert(table="stock_indices", sets=sets_data)
-        else:
-            database._update(table="stock_indices", sets=sets_data, ticker="sp500")
-
-        return result
-
-    except Exception as e:
-        logging.error(f"Error in _process_sp500_data: {str(e)}")
-        return {
-            "ticker": "sp500",
-            "rise_ratio": 0.0,  # 급상승
-            "rise_soft_ratio": 0.0,  # 약상승
-            "unchanged_ratio": 0.0,  # 보합
-            "fall_soft_ratio": 0.0,  # 약하락
-            "fall_ratio": 0.0,  # 급하락
-        }
-
-
-def run_immediately():
+def _calculate_market_ratios(daily_prices, ticker: str) -> dict:
     """
-    주가지수 배치 작업을 즉시 실행하는 함수
+    시장 데이터로부터 각종 비율 계산
     """
-    logging.info("Starting immediate execution of stock indices batch")
-    us_run_stock_indices_batch()
-    kr_run_stock_indices_batch()
-    logging.info("Completed immediate execution of stock indices batch")
+    df = pd.DataFrame(daily_prices, columns=["Ticker", "Open", "Close"])
+    df = df.groupby("Ticker").agg({"Open": "first", "Close": "last"}).reset_index()
+
+    df["변동률"] = ((df["Close"] - df["Open"]) / df["Open"]) * 100
+    total = len(df)
+
+    strong_rise = len(df[df["변동률"] > 3.0])  # 3% 초과
+    weak_rise = len(df[(df["변동률"] <= 3.0) & (df["변동률"] > 0.5)])  # 0.5% ~ 3%
+    unchanged = len(df[(df["변동률"] <= 0.5) & (df["변동률"] >= -0.5)])  # -0.5% ~ 0.5%
+    weak_fall = len(df[(df["변동률"] < -0.5) & (df["변동률"] >= -3.0)])  # -3% ~ -0.5%
+    strong_fall = len(df[df["변동률"] < -3.0])  # -3% 미만
+
+    return {
+        "ticker": ticker,
+        "rise_ratio": round(strong_rise / total * 100, 2),
+        "rise_soft_ratio": round(weak_rise / total * 100, 2),
+        "unchanged_ratio": round(unchanged / total * 100, 2),
+        "fall_soft_ratio": round(weak_fall / total * 100, 2),
+        "fall_ratio": round(strong_fall / total * 100, 2),
+    }
 
 
-if __name__ == "__main__":
-    run_immediately()
+def _update_market_data(ticker: str, result: dict):
+    """
+    시장 데이터 DB 업데이트
+    """
+    existing_data = database._select(table="stock_indices", columns=["ticker"], ticker=ticker)
+    is_open = _is_market_open(ticker)
+
+    sets_data = {
+        "ticker": ticker,
+        "rise_ratio": result["rise_ratio"],
+        "rise_soft_ratio": result["rise_soft_ratio"],
+        "unchanged_ratio": result["unchanged_ratio"],
+        "fall_soft_ratio": result["fall_soft_ratio"],
+        "fall_ratio": result["fall_ratio"],
+        "date": now_utc(),
+        "included_indices": is_open,
+    }
+
+    if not existing_data:
+        database._insert(table="stock_indices", sets=sets_data)
+    else:
+        database._update(table="stock_indices", sets=sets_data, ticker=ticker)
+
+
+def _is_market_open(ticker: str) -> bool:
+    """현재 시간 기준으로 해당 시장이 열렸는지 확인"""
+    if ticker in ["nasdaq", "sp500"]:
+        return check_market_status("US")
+    else:
+        return check_market_status("KR")
