@@ -46,26 +46,40 @@ class StockIndicesService:
 
     async def initialize(self):
         """비동기 초기화"""
+        logger.info("[STARTUP] StockIndicesService initialize() called")
         if not self._background_task:
             self._background_task = asyncio.create_task(self._update_cache_background())
+            logger.info("[STARTUP] Background task created")
 
     async def _update_cache_background(self):
         """백그라운드에서 캐시 업데이트"""
         if self._background_task_running:
+            logger.info("[BACKGROUND] Task already running, skipping...")
             return
 
         try:
             self._background_task_running = True
+            logger.info("[BACKGROUND] Cache update task started")
+
             while True:
+                logger.info("[BACKGROUND] Starting cache update cycle")
+
+                # 각 심볼에 대한 데이터 fetch
                 tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in self.symbols.items()]
                 await asyncio.gather(*tasks)
 
+                # 등락비율 업데이트
                 ratio_tasks = [self.get_market_ratios(name) for name in self.symbols.keys()]
                 await asyncio.gather(*ratio_tasks)
 
-                await asyncio.sleep(120)
+                logger.info("[BACKGROUND] Cache update cycle completed, sleeping for 240s")
+                await asyncio.sleep(240)  # 4분 대기
+
+        except Exception as e:
+            logger.error(f"[BACKGROUND] Error in background task: {e}")
         finally:
             self._background_task_running = False
+            logger.info("[BACKGROUND] Cache update task stopped")
 
     async def _fetch_yf_data_concurrent(self, symbol: str, name: str):
         """비동기로 yfinance 데이터 조회"""
@@ -450,6 +464,10 @@ class StockIndicesService:
     async def get_indices_data(self) -> IndicesData:
         """지수 데이터 조회"""
         try:
+            if not self._background_task:
+                logger.info("[STARTUP] Starting background task")
+                self._background_task = asyncio.create_task(self._update_cache_background())
+
             now = datetime.now(utc_tz).astimezone(korea_tz)
             need_update = False
 
