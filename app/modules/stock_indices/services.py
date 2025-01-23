@@ -1,5 +1,4 @@
 import logging
-from sqlalchemy import text
 import yfinance as yf
 import requests
 from typing import Tuple, Optional
@@ -314,42 +313,34 @@ class StockIndicesService:
             if df.empty:
                 return 0.0, 0.0, 0.0
 
-            tickers = tuple(df["ticker"].tolist())
-            table = "stock_kr_1d" if market_filter in ["KOSPI200", "KOSDAQ150"] else "stock_us_1d"
-
             async with self._lock:
-                query = f"""
-                    WITH latest_date AS (
-                        SELECT MAX(Date) as max_date
-                        FROM {table}
-                        WHERE ticker IN :tickers
-                        AND Open != 0
-                    )
-                    SELECT
-                        COUNT(CASE WHEN (Close - Open) / Open * 100 > 0.1 THEN 1 END) AS advance,
-                        COUNT(CASE WHEN (Close - Open) / Open * 100 < -0.1 THEN 1 END) AS decline,
-                        COUNT(CASE WHEN ABS((Close - Open) / Open * 100) <= 0.1 THEN 1 END) AS unchanged,
-                        COUNT(*) AS total
-                    FROM {table}, latest_date
-                    WHERE ticker IN :tickers
-                    AND Date = latest_date.max_date
-                    AND Open != 0
-                """
-
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(
-                    self._executor, lambda: self.db._execute(text(query), {"tickers": tickers})
+                    self._executor,
+                    lambda: self.db._select(
+                        table="stock_indices",
+                        columns=[
+                            "ticker",
+                            "rise_ratio",
+                            "rise_soft_ratio",
+                            "fall_ratio",
+                            "fall_soft_ratio",
+                            "unchanged_ratio",
+                        ],
+                        ticker=market,
+                    ),
                 )
-                row = result.fetchone()
+                row = result[0] if result else None
 
-                if not row or row[3] == 0:
+                if not row:
                     return 0.0, 0.0, 0.0
 
-                advance, decline, unchanged, total = row
+                _, rise_ratio, rise_soft_ratio, fall_ratio, fall_soft_ratio, unchanged_ratio = row
+
                 ratios = (
-                    round(advance / total * 100, 2),
-                    round(decline / total * 100, 2),
-                    round(unchanged / total * 100, 2),
+                    round(float(rise_ratio + rise_soft_ratio), 2),
+                    round(float(fall_ratio + fall_soft_ratio), 2),
+                    round(float(unchanged_ratio), 2),
                 )
 
                 self._cache[cache_key] = (ratios, now)
@@ -464,10 +455,6 @@ class StockIndicesService:
     async def get_indices_data(self) -> IndicesData:
         """지수 데이터 조회"""
         try:
-            if not self._background_task:
-                logger.info("[STARTUP] Starting background task")
-                self._background_task = asyncio.create_task(self._update_cache_background())
-
             now = datetime.now(utc_tz).astimezone(korea_tz)
             need_update = False
 
@@ -578,3 +565,24 @@ class StockIndicesService:
         except Exception as e:
             logger.error(f"Error in get_snp500_ticker: {str(e)}")
             return {"ticker": "sp500", "상승": 0.0, "하락": 0.0, "보합": 0.0}
+
+    async def get_market_data(self, market_filter: str):
+        async with self._lock:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                lambda: self.db._select(
+                    table="stock_indices",
+                    columns=[
+                        "ticker",
+                        "rise_ratio",
+                        "rise_soft_ratio",
+                        "fall_ratio",
+                        "fall_soft_ratio",
+                        "unchanged_ratio",
+                    ],
+                    ticker=market_filter,
+                ),
+            )
+            # result가 이미 리스트이므로 첫 번째 항목을 가져옵니다
+            return result[0] if result else None
