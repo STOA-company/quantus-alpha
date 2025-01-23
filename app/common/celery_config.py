@@ -62,36 +62,20 @@ CELERY_APP.conf.beat_schedule = {
         "task": "kr_news_batch",
         "schedule": crontab(hour="11", minute="50"),  # 매일 오전 11시 50분
     },
-    "kr-news-is-top-story": {
-        "task": "kr_news_is_top_story",
-        "schedule": crontab(hour="11", minute="55"),  # 매일 오전 11시 55분 # TODO :: 수정 필요
-    },
     # 뉴스 미국 배치
     "us-news-batch": {
         "task": "us_news_batch",
         "schedule": crontab(hour="11", minute="50"),  # 매일 오전 11시 50분
-    },
-    "us-news-is-top-story": {
-        "task": "us_news_is_top_story",
-        "schedule": crontab(hour="11", minute="55"),  # 매일 오전 11시 55분 # TODO :: 수정 필요
     },
     # 공시 한국 배치
     "kr-disclosure-batch": {
         "task": "kr_disclosure_batch",
         "schedule": crontab(minute="6,16,26,36,46,56"),  # 매 10분마다 실행
     },
-    "kr-disclosure-is-top-story": {
-        "task": "kr_disclosure_is_top_story",
-        "schedule": crontab(minute="7,17,27,37,47,57"),  # 매 10분마다 실행
-    },
     # 공시 미국 배치
     "us-disclosure-batch": {
         "task": "us_disclosure_batch",
         "schedule": crontab(minute="6,16,26,36,46,56"),  # 매 10분마다 실행
-    },
-    "us-disclosure-is-top-story": {
-        "task": "us_disclosure_is_top_story",
-        "schedule": crontab(minute="7,17,27,37,47,57"),  # 매 10분마다 실행
     },
     # 뉴스 업데이트 renewal
     "kr-news-renewal": {
@@ -101,14 +85,5 @@ CELERY_APP.conf.beat_schedule = {
     "us-news-renewal": {
         "task": "us_news_renewal",
         "schedule": crontab(minute="10,40"),
-    },
-    # 뉴스 상위 스토리 업데이트 renewal
-    "kr-news-is-top-story-renewal": {
-        "task": "kr_news_is_top_story_renewal",
-        "schedule": crontab(minute="11,41"),
-    },
-    "us-news-is-top-story-renewal": {
-        "task": "us_news_is_top_story_renewal",
-        "schedule": crontab(minute="11,41"),
     },
 }
