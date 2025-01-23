@@ -14,7 +14,7 @@ case $ENVIRONMENT in
     stage|staging)
         ENV_FILE=.env.stage
         ENV=stage
-        BRANCH=stage
+        BRANCH=staging
         RUN_CELERY=false
         ;;
     dev|development)
