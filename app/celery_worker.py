@@ -21,7 +21,7 @@ from app.batches.run_stock_trend import (
     run_stock_trend_tickers_batch,
     run_stock_trend_by_realtime_batch,
 )
-from app.batches.run_stock_indices import us_run_stock_indices_batch
+from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_stock_indices_batch
 from app.utils.date_utils import get_session_checker, get_time_checker, now_kr
 from app.batches.run_disclosure import (
     renewal_kr_run_disclosure_batch,
@@ -93,10 +93,26 @@ def log_task_execution(func):
 @CELERY_APP.task(name="us_stock_indices_batch", ignore_result=True)
 def us_stock_indices_batch():
     """미국 주가지수 데이터 업데이트"""
+    notifier.notify_info("US_stock_indices_batch process started")
     try:
         us_run_stock_indices_batch()
+        notifier.notify_success("US_stock_indices_batch process completed")
     except Exception as e:
+        notifier.notify_error(f"US_stock_indices_batch process failed: {str(e)}")
         logging.error(f"Error in us_run_stock_indices_batch: {str(e)}")
+
+
+# KR Stock Indices task
+@CELERY_APP.task(name="kr_stock_indices_batch", ignore_result=True)
+def kr_stock_indices_batch():
+    """한국 주가지수 데이터 업데이트"""
+    notifier.notify_info("KR_stock_indices_batch process started")
+    try:
+        kr_run_stock_indices_batch()
+        notifier.notify_success("KR_stock_indices_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_stock_indices_batch process failed: {str(e)}")
+        logging.error(f"Error in kr_run_stock_indices_batch: {str(e)}")
 
 
 # Stock trend tasks
