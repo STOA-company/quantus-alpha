@@ -1,8 +1,5 @@
-from typing import List, Optional, Tuple, Dict
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from typing import List
 from app.database.crud import database
-from app.models.models_stock import StockInformation
 from app.modules.common.enum import TranslateCountry
 from app.modules.search.schemas import SearchItem
 
@@ -27,7 +24,7 @@ class SearchService:
         """
 
         search_term = f"%{query}%"
-        
+
         search_result = self.db._select(
             table="stock_information",
             columns=["ticker", "kr_name", "en_name", "ctry"],
@@ -35,19 +32,17 @@ class SearchService:
                 {"ticker": query},
                 {"ticker__like": search_term},
                 {"kr_name__like": search_term},
-                {"en_name__like": search_term}
+                {"en_name__like": search_term},
             ],
-            can_use=1
+            can_use=1,
         )
 
         if not search_result:
             return []
-        
-        sorted_result = sorted(search_result, 
-            key=lambda x: 1 if x._mapping["ticker"] == query else 2
-        )
 
-        search_result = sorted_result[offset:offset + limit]
+        sorted_result = sorted(search_result, key=lambda x: 1 if x._mapping["ticker"] == query else 2)
+
+        search_result = sorted_result[offset : offset + limit]
 
         country_groups = {}
         search_map = {}
@@ -58,35 +53,34 @@ class SearchService:
             country_groups.setdefault(country.lower(), []).append(ticker)
             search_map[ticker] = {
                 "name": mapping["kr_name"] if ctry == TranslateCountry.KO else mapping["en_name"],
-                "language": ctry
+                "language": ctry,
             }
 
         prices = {}
         for country, tickers in country_groups.items():
-            table_name = f"stock_{country}_1d"
+            change_rate_column = "change_rt" if country == "us" else "change_1d"
             try:
                 price_results = self.db._select(
-                    table=table_name,
-                    columns=["Ticker", "Close", "Open", "Date"],
-                    Ticker__in=tickers,
-                    order="Date",
+                    table="stock_trend",
+                    columns=["ticker", "current_price", "prev_close", change_rate_column],
+                    ticker__in=tickers,
+                    order="last_updated",
                     ascending=False,
-                    limit=len(tickers)
+                    limit=len(tickers),
                 )
-                
+
                 for row in price_results:
                     mapping = row._mapping
-                    ticker = mapping["Ticker"]
+                    ticker = mapping["ticker"]
                     if ticker not in prices:
                         try:
-                            close = float(mapping["Close"])
-                            open_price = float(mapping["Open"])
-                            rate = 0 if open_price == 0 else round(((close - open_price) / open_price) * 100, 2)
-                            prices[ticker] = (close, rate)
+                            current_price = float(mapping["current_price"])
+                            rate = float(mapping[change_rate_column])
+                            prices[ticker] = (current_price, rate)
                         except (ValueError, TypeError):
                             prices[ticker] = (None, None)
-                            
-            except Exception as e:
+
+            except Exception:
                 prices.update({ticker: (None, None) for ticker in tickers})
 
         search_items = []
@@ -94,18 +88,19 @@ class SearchService:
             ticker = row._mapping["ticker"]
             item_info = search_map[ticker]
             current_price, rate = prices.get(ticker, (None, None))
-            
+
             search_items.append(
                 SearchItem(
                     ticker=ticker,
                     name=item_info["name"],
                     language=item_info["language"],
                     current_price=current_price,
-                    current_price_rate=rate
+                    current_price_rate=rate,
                 )
             )
 
         return search_items
-    
+
+
 def get_search_service() -> SearchService:
     return SearchService()
