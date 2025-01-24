@@ -163,9 +163,6 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
 
 
 def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
-    """
-    TODO : CTE 추가 후 성능 개선
-    """
     try:
         stock_trends = database._select(
             table="stock_trend",
@@ -182,14 +179,19 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
         else:
             raise ValueError(f"Invalid country: {ctry.value}")
 
-        latest_date_tickers = database._select(
-            table=table_name,
-            columns=["Ticker", "Close", "Volume"],
-            group_by=["Ticker"],
-            aggregates={"max_date": ("Date", "max")},
+        data = database._select(
+            table=table_name, columns=["Ticker", "Close", "Volume", "Date"], order="Date", ascending=False
         )
 
-        latest_tickers = [row for row in latest_date_tickers if row[0] in stock_trend_dict]
+        latest_data = []
+        seen_tickers = set()
+        for row in data:
+            ticker = row[0]
+            if ticker not in seen_tickers and ticker in stock_trend_dict:
+                latest_data.append(row)
+                seen_tickers.add(ticker)
+
+        latest_tickers = [row for row in latest_data if row[0] in stock_trend_dict]
         update_data = []
         for ticker, close, volume, max_date in latest_tickers:
             prev_data = stock_trend_dict[ticker]
