@@ -102,12 +102,14 @@ class NewsService:
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
 
+        change_rate_column = "change_rt" if ctry == "us" else "change_1d"
+
         join_info = lambda table: JoinInfo(  # noqa: E731
             primary_table=table,
             secondary_table="stock_trend",
             primary_column="ticker",
             secondary_column="ticker",
-            columns=["current_price", "change_rt"],
+            columns=["current_price", change_rate_column],
             is_outer=True,
         )
 
@@ -142,7 +144,7 @@ class NewsService:
                     "emotion",
                     "that_time_price",
                     "current_price",
-                    "change_rt",
+                    change_rate_column,
                 ],
             )
 
@@ -164,7 +166,7 @@ class NewsService:
                     "form_type",
                     "that_time_price",
                     "current_price",
-                    "change_rt",
+                    change_rate_column,
                 ],
             )
 
@@ -187,7 +189,9 @@ class NewsService:
         if df.empty:
             return []
 
-        numeric_columns = ["that_time_price", "current_price", "change_rt"]
+        change_rate_column = "change_rt" if "change_rt" in df.columns else "change_1d"
+
+        numeric_columns = ["that_time_price", "current_price", change_rate_column]
         df[numeric_columns] = df[numeric_columns].astype("float64").fillna(0)
 
         mask = (df["current_price"] == 0) & (df["that_time_price"] != 0)
@@ -198,7 +202,7 @@ class NewsService:
         )
 
         df["price_impact"] = df["price_impact"].round(2).fillna(0)
-        df["change_rate"] = df["change_rt"].round(2)
+        df["change_rate"] = df[change_rate_column].round(2)
 
         if is_disclosure:
             df["ko_name"] = df["ko_name"].apply(self.remove_parentheses)
