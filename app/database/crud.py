@@ -353,13 +353,30 @@ class Database:
             raise
 
     def _bulk_update(self, table: str, data: list[dict], key_column: str, chunk_size: int = 1000):
-        """벌크 업데이트 실행
+        """벌크 업데이트를 수행하는 메서드입니다.
 
         Args:
-            table (str): 테이블 이름
-            data (list[dict]): 업데이트할 데이터 리스트
-            key_column (str): 기준이 되는 키 컬럼명
-            chunk_size (int): 한 번에 처리할 레코드 수
+            table (str): 업데이트할 테이블 이름
+            data (list[dict]): 업데이트할 데이터 리스트. 각 딕셔너리는 컬럼명을 키로 가지며, 업데이트할 값을 값으로 가집니다.
+            key_column (str): 업데이트 대상을 식별하기 위한 키 컬럼명
+            chunk_size (int, optional): 한 번에 처리할 레코드 수. 기본값은 1000입니다.
+
+        Raises:
+            ValueError: 다음의 경우에 발생합니다:
+                - key_column이 테이블에 존재하지 않는 경우
+                - data에 테이블에 존재하지 않는 컬럼이 포함된 경우
+            Exception: 데이터베이스 작업 중 오류가 발생한 경우
+
+        Example:
+            >>> data = [
+            ...     {"ticker": "AAPL", "price": 150.0, "volume": 1000000},
+            ...     {"ticker": "GOOGL", "price": 2800.0, "volume": 500000}
+            ... ]
+            >>> database._bulk_update(
+            ...     table="stock_prices",
+            ...     data=data,
+            ...     key_column="ticker"
+            ... )
         """
         try:
             if not data:
@@ -367,11 +384,9 @@ class Database:
 
             obj = self.meta_data.tables[table]
 
-            # 키 컬럼 존재 여부 확인
             if key_column not in obj.columns:
                 raise ValueError(f"Key column '{key_column}' does not exist in table '{table}'")
 
-            # 데이터의 모든 컬럼이 테이블에 존재하는지 확인
             sample_data = data[0]
             invalid_columns = [col for col in sample_data if col not in obj.columns]
             if invalid_columns:
@@ -379,19 +394,16 @@ class Database:
 
             key_col = getattr(obj.columns, key_column)
 
-            # 청크 단위로 처리
             for i in range(0, len(data), chunk_size):
                 chunk = data[i : i + chunk_size]
-
-                values_list = [self.get_sets(obj, item) for item in chunk]
 
                 stmt = (
                     update(obj)
                     .where(key_col == bindparam("_old_" + key_column))
-                    .values({col: bindparam(col.name) for col in obj.columns if col.name in values_list[0]})
+                    .values({col_name: bindparam(col_name) for col_name in chunk[0].keys() if col_name in obj.columns})
                 )
 
-                update_params = [{"_old_" + key_column: item[key_col], **item} for item in values_list]
+                update_params = [{"_old_" + key_column: item[key_column], **item} for item in chunk]
 
                 with self.get_connection() as connection:
                     connection.execute(stmt, update_params)
