@@ -1,5 +1,4 @@
 import logging
-from sqlalchemy import text
 import yfinance as yf
 import requests
 from typing import Tuple, Optional
@@ -9,8 +8,12 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from app.database.crud import database
 from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
-from app.utils.date_utils import get_time_checker
+from app.utils.date_utils import check_market_status
 from app.core.config import korea_tz, utc_tz
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+logger = logging.getLogger(__name__)
 
 
 class StockIndicesService:
@@ -40,28 +43,77 @@ class StockIndicesService:
 
         self._initialized = True
 
-    async def initialize(self):
+    async def _initialize_background_task(self):
         """비동기 초기화"""
-        if not self._background_task:
-            self._background_task = asyncio.create_task(self._update_cache_background())
+        logger.info("[STARTUP] StockIndicesService initialize() called")
+
+        while True:
+            now = datetime.now(korea_tz)
+            kr_minutes = now.hour * 60 + now.minute
+            us_minutes = datetime.now(utc_tz).hour * 60 + datetime.now(utc_tz).minute
+
+            # 한국 시장 시작 시간 정각 (9:00)
+            kr_market_open = kr_minutes == 540 and check_market_status("KR")  # 9:00
+            # 미국 시장 시작 시간 정각 (13:30 UTC)
+            us_market_open = us_minutes == 810 and check_market_status("US")  # 13:30
+
+            if kr_market_open or us_market_open:
+                if not self._background_task or self._background_task.done():
+                    self._background_task_running = False
+
+            # 30분마다 체크
+            await asyncio.sleep(1800)
 
     async def _update_cache_background(self):
         """백그라운드에서 캐시 업데이트"""
-        if self._background_task_running:
-            return
-
         try:
             self._background_task_running = True
+            logger.info("[BACKGROUND] Cache update task started")
+
             while True:
-                tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in self.symbols.items()]
-                await asyncio.gather(*tasks)
+                now = datetime.now(utc_tz).astimezone(korea_tz)
 
-                ratio_tasks = [self.get_market_ratios(name) for name in self.symbols.keys()]
-                await asyncio.gather(*ratio_tasks)
+                # 한국 시장 상태 체크 (휴장일 + 거래시간)
+                kr_minutes = now.astimezone(korea_tz).hour * 60 + now.astimezone(korea_tz).minute
+                kr_pre_market = 510 <= kr_minutes < 540  # 8:30 ~ 9:00
+                kr_need_update = check_market_status("KR") or kr_pre_market
 
-                await asyncio.sleep(120)
+                # 미국 시장 상태 체크 (휴장일 + 거래시간)
+                us_minutes = now.astimezone(utc_tz).hour * 60 + now.astimezone(utc_tz).minute
+                us_pre_market = 780 <= us_minutes < 810  # 13:00 ~ 13:30 UTC
+                us_need_update = check_market_status("US") or us_pre_market
+
+                kr_symbols = {"kospi": self.symbols["kospi"], "kosdaq": self.symbols["kosdaq"]}
+                us_symbols = {"nasdaq": self.symbols["nasdaq"], "sp500": self.symbols["sp500"]}
+
+                if kr_need_update:
+                    logger.info("[BACKGROUND] Updating KR market data")
+                    kr_tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in kr_symbols.items()]
+                    await asyncio.gather(*kr_tasks)
+
+                    kr_ratio_tasks = [self.get_market_ratios(name) for name in kr_symbols.keys()]
+                    await asyncio.gather(*kr_ratio_tasks)
+
+                if us_need_update:
+                    logger.info("[BACKGROUND] Updating US market data")
+                    us_tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in us_symbols.items()]
+                    await asyncio.gather(*us_tasks)
+
+                    us_ratio_tasks = [self.get_market_ratios(name) for name in us_symbols.keys()]
+                    await asyncio.gather(*us_ratio_tasks)
+
+                if kr_need_update or us_need_update:
+                    logger.info(f"[BACKGROUND] Cache update cycle completed, sleeping for {45}s")
+                    await asyncio.sleep(45)
+                else:
+                    logger.info("[BACKGROUND] No markets need update, sleeping for 1h")
+                    await asyncio.sleep(3600)
+
+        except Exception as e:
+            logger.error(f"[BACKGROUND] Error in background task: {e}")
         finally:
             self._background_task_running = False
+            logger.info("[BACKGROUND] Cache update task stopped")
 
     async def _fetch_yf_data_concurrent(self, symbol: str, name: str):
         """비동기로 yfinance 데이터 조회"""
@@ -71,12 +123,15 @@ class StockIndicesService:
             now = datetime.now(utc_tz).astimezone(korea_tz)
 
             # 시장별 캐시 체크
-            is_market_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
+            is_market_open = check_market_status("KR") if name in ["kospi", "kosdaq"] else check_market_status("US")
 
             # 캐시가 있고 유효한 경우 그대로 반환
             if cache_key_daily in self._cache and cache_key_min5 in self._cache:
                 cached_daily, timestamp_daily = self._cache[cache_key_daily]
                 cached_min5, timestamp_min5 = self._cache[cache_key_min5]
+
+                cache_age = (now - timestamp_daily).total_seconds()
+                logger.info(f"[CACHE] {name}: age={cache_age:.1f}s, market_open={is_market_open}")
 
                 # 시장이 열려있을 때만 timeout 체크
                 if is_market_open:
@@ -84,12 +139,14 @@ class StockIndicesService:
                     if now - timestamp_daily < timedelta(seconds=timeout) and now - timestamp_min5 < timedelta(
                         seconds=timeout
                     ):
-                        logging.debug(f"Using cached data for {name}")
+                        logger.info(f"[CACHE] Using valid cache for {name} (timeout={timeout}s)")
                         return
                 else:
                     # 장 마감 시에는 캐시 유지
-                    logging.debug(f"Market closed, using cached data for {name}")
+                    logger.info(f"[CACHE] Market closed, using cached data for {name}")
                     return
+
+            logger.info(f"[CACHE] Cache miss for {name}, fetching new data")
 
             # 캐시 미스 또는 캐시 만료 시에만 데이터 조회
             async def fetch_history(is_open, interval=None):
@@ -101,11 +158,10 @@ class StockIndicesService:
                         if interval:
                             return ticker.history("1d", interval=interval)
                         # 데이터가 있을 때까지 기간을 늘려가며 조회
-                        start_date = 1 if is_open else 2
-                        for days in range(start_date, 6):  # 최대 5일까지 확인
-                            df = ticker.history(period=f"{days}d")
-                            if not df.empty:
-                                return df
+                        df = ticker.history(period="5d")
+                        if not df.empty:
+                            # 장이 열려있으면 오늘 데이터만, 닫혀있으면 2일치 데이터 사용
+                            return df.tail(1 if is_open else 2)
                         return pd.DataFrame()
 
                     df = await loop.run_in_executor(self._executor, fetch)
@@ -113,7 +169,9 @@ class StockIndicesService:
                 except Exception:
                     return pd.DataFrame()
 
-            is_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
+            logger.info(f"[YF] Fetching data for {name} ({symbol})")
+
+            is_open = check_market_status("KR") if name in ["kospi", "kosdaq"] else check_market_status("US")
             daily_df, min5_df = await asyncio.gather(fetch_history(is_open), fetch_history(is_open, "5m"))
 
             # 데이터 처리 및 캐시 저장
@@ -128,7 +186,7 @@ class StockIndicesService:
                         "prev_close": round(float(prev_data["Close"]), 2),
                     }
                     self._cache[cache_key_daily] = (daily_data, now)
-                    logging.info(f"Updated daily cache for {name}")
+                    logger.info(f"[YF] Cached daily data for {name}: {daily_data}")
 
             # 5분 데이터 처리
             if not min5_df.empty:
@@ -145,10 +203,12 @@ class StockIndicesService:
                         for index, row in valid_data.iterrows()
                     }
                     self._cache[cache_key_min5] = (min5_data, now)
-                    logging.info(f"Cached 5-minute data for {name}: {cache_key_min5}")
+                    logger.info(f"[YF] Cached {len(min5_data)} 5-minute entries for {name}")
+                else:
+                    logger.warning(f"[YF] No valid 5-minute data for {name}")
 
         except Exception as e:
-            logging.error(f"Error fetching data for {name}: {e}")
+            logger.error(f"[YF] Error fetching data for {name}: {e}")
 
     def _get_cache_timeout(self, market: str) -> int:
         """
@@ -160,10 +220,10 @@ class StockIndicesService:
 
             # 장 시작 직전 30분은 짧은 캐시 타임아웃 적용
             if 510 <= current_time < 540:  # 8:30 ~ 9:00
-                return 10
+                return 60
             # 장 중
             elif 540 <= current_time <= 930:  # 9:00 ~ 15:30
-                return 10
+                return 60
             # 그 외 시간
             return 3600
 
@@ -173,16 +233,16 @@ class StockIndicesService:
 
             # 장 시작 직전 30분은 짧은 캐시 타임아웃 적용
             if 780 <= current_time < 810:  # 13:00 ~ 13:30 UTC
-                return 10
+                return 60
             # 장 중
             elif 810 <= current_time <= 1200:  # 13:30 ~ 20:00 UTC
-                return 10
+                return 60
 
             return 3600
 
     def _get_ticker_cache_timeout(self, market: str) -> int:
         """시장별 티커 캐시 타임아웃 설정"""
-        is_open = get_time_checker("KR") if market in ["KOSPI200", "KOSDAQ150"] else get_time_checker("US")
+        is_open = check_market_status("KR") if market in ["KOSPI200", "KOSDAQ150"] else check_market_status("US")
         return 300 if is_open else 3600  # 장중 5분, 장마감 1시간
 
     async def _get_cached_tickers(self, market: str) -> pd.DataFrame:
@@ -196,7 +256,7 @@ class StockIndicesService:
                 data, timestamp = self._ticker_cache[cache_key]
                 timeout = self._get_ticker_cache_timeout(market)
                 if now - timestamp < timedelta(seconds=timeout):
-                    logging.debug(f"Cache hit for {market} tickers")
+                    logger.debug(f"Cache hit for {market} tickers")
                     return data
 
             # Cache miss
@@ -206,7 +266,7 @@ class StockIndicesService:
                     data, timestamp = self._ticker_cache[cache_key]
                     timeout = self._get_ticker_cache_timeout(market)
                     if now - timestamp < timedelta(seconds=timeout):
-                        logging.debug(f"Cache hit after lock for {market} tickers")
+                        logger.debug(f"Cache hit after lock for {market} tickers")
                         return data
 
                 # 티커 조회
@@ -218,7 +278,7 @@ class StockIndicesService:
                 }
 
                 if market not in query_map:
-                    logging.error(f"Invalid market: {market}")
+                    logger.error(f"Invalid market: {market}")
                     return pd.DataFrame()
 
                 column, value = query_map[market]
@@ -227,14 +287,14 @@ class StockIndicesService:
                 df = pd.DataFrame(result, columns=["ticker"])
                 if not df.empty:
                     self._ticker_cache[cache_key] = (df, now)
-                    logging.info(f"Updated ticker cache for {market} with {len(df)} entries")
+                    logger.info(f"Updated ticker cache for {market} with {len(df)} entries")
                 else:
-                    logging.warning(f"No tickers found for {market}")
+                    logger.warning(f"No tickers found for {market}")
 
                 return df
 
         except Exception as e:
-            logging.error(f"Error in _get_cached_tickers for {market}: {e}")
+            logger.error(f"Error in _get_cached_tickers for {market}: {e}")
             return pd.DataFrame()
 
     # 코스피200 ticker 조회
@@ -243,7 +303,7 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_kospi_200=True)
             return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
-            logging.error(f"Error fetching kospi200 ticker: {e}")
+            logger.error(f"Error fetching kospi200 ticker: {e}")
 
     # 코스닥150 ticker 조회
     def get_kosdaq150_ticker(self):
@@ -251,7 +311,7 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_kosdaq_150=True)
             return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
-            logging.error(f"Error fetching kosdaq150 ticker: {e}")
+            logger.error(f"Error fetching kosdaq150 ticker: {e}")
 
     # 나스닥100 ticker 조회
     def get_nasdaq100_ticker(self):
@@ -259,7 +319,7 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_nasdaq_100=True)
             return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
-            logging.error(f"Error fetching nasdaq100 ticker: {e}")
+            logger.error(f"Error fetching nasdaq100 ticker: {e}")
 
     # S&P500 ticker 조회
     def get_sp500_ticker(self):
@@ -267,7 +327,7 @@ class StockIndicesService:
             df = self.db._select(table="stock_information", columns=["ticker"], is_snp_500=True)
             return pd.DataFrame(df, columns=["ticker"])
         except Exception as e:
-            logging.error(f"Error fetching S&P500 ticker: {e}")
+            logger.error(f"Error fetching S&P500 ticker: {e}")
             return pd.DataFrame()
 
     async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
@@ -288,49 +348,41 @@ class StockIndicesService:
             if df.empty:
                 return 0.0, 0.0, 0.0
 
-            tickers = tuple(df["ticker"].tolist())
-            table = "stock_kr_1d" if market_filter in ["KOSPI200", "KOSDAQ150"] else "stock_us_1d"
-
             async with self._lock:
-                query = f"""
-                    WITH latest_date AS (
-                        SELECT MAX(Date) as max_date
-                        FROM {table}
-                        WHERE ticker IN :tickers
-                        AND Open != 0
-                    )
-                    SELECT
-                        COUNT(CASE WHEN (Close - Open) / Open * 100 > 0.1 THEN 1 END) AS advance,
-                        COUNT(CASE WHEN (Close - Open) / Open * 100 < -0.1 THEN 1 END) AS decline,
-                        COUNT(CASE WHEN ABS((Close - Open) / Open * 100) <= 0.1 THEN 1 END) AS unchanged,
-                        COUNT(*) AS total
-                    FROM {table}, latest_date
-                    WHERE ticker IN :tickers
-                    AND Date = latest_date.max_date
-                    AND Open != 0
-                """
-
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(
-                    self._executor, lambda: self.db._execute(text(query), {"tickers": tickers})
+                    self._executor,
+                    lambda: self.db._select(
+                        table="stock_indices",
+                        columns=[
+                            "ticker",
+                            "rise_ratio",
+                            "rise_soft_ratio",
+                            "fall_ratio",
+                            "fall_soft_ratio",
+                            "unchanged_ratio",
+                        ],
+                        ticker=market,
+                    ),
                 )
-                row = result.fetchone()
+                row = result[0] if result else None
 
-                if not row or row[3] == 0:
+                if not row:
                     return 0.0, 0.0, 0.0
 
-                advance, decline, unchanged, total = row
+                _, rise_ratio, rise_soft_ratio, fall_ratio, fall_soft_ratio, unchanged_ratio = row
+
                 ratios = (
-                    round(advance / total * 100, 2),
-                    round(decline / total * 100, 2),
-                    round(unchanged / total * 100, 2),
+                    round(float(rise_ratio + rise_soft_ratio), 2),
+                    round(float(fall_ratio + fall_soft_ratio), 2),
+                    round(float(unchanged_ratio), 2),
                 )
 
                 self._cache[cache_key] = (ratios, now)
                 return ratios
 
         except Exception as e:
-            logging.error(f"Error in get_market_ratios for {market}: {str(e)}")
+            logger.error(f"Error in get_market_ratios for {market}: {str(e)}")
             return 0.0, 0.0, 0.0
 
     async def _fetch_all_data(self):
@@ -367,7 +419,7 @@ class StockIndicesService:
                             kr_last_time = last_time.strftime("%H:%M")
                         else:
                             us_last_time = last_time.strftime("%H:%M")
-                is_open = get_time_checker("KR") if name in ["kospi", "kosdaq"] else get_time_checker("US")
+                is_open = check_market_status("KR") if name in ["kospi", "kosdaq"] else check_market_status("US")
 
                 if is_open:
                     change = daily_data["close"] - daily_data["open"]
@@ -425,8 +477,8 @@ class StockIndicesService:
         current_kr_time = datetime.now(utc_tz).astimezone(korea_tz)
         current_minutes = current_kr_time.hour * 60 + current_kr_time.minute
 
-        kr_is_open = get_time_checker("KR")
-        us_is_open = get_time_checker("US")
+        kr_is_open = check_market_status("KR")
+        us_is_open = check_market_status("US")
 
         if kr_is_open and kr_last_time:
             return kr_last_time
@@ -438,6 +490,9 @@ class StockIndicesService:
     async def get_indices_data(self) -> IndicesData:
         """지수 데이터 조회"""
         try:
+            if not self._background_task_running:
+                asyncio.create_task(self._update_cache_background())
+
             now = datetime.now(utc_tz).astimezone(korea_tz)
             need_update = False
 
@@ -511,7 +566,7 @@ class StockIndicesService:
             }
 
         except Exception as e:
-            logging.error(f"Error in get_nasdaq_ticker: {str(e)}")
+            logger.error(f"Error in get_nasdaq_ticker: {str(e)}")
             return {"ticker": "nasdaq", "상승": 0.0, "하락": 0.0, "보합": 0.0}
 
     def get_snp500_ticker(self):
@@ -546,5 +601,26 @@ class StockIndicesService:
             }
 
         except Exception as e:
-            logging.error(f"Error in get_snp500_ticker: {str(e)}")
+            logger.error(f"Error in get_snp500_ticker: {str(e)}")
             return {"ticker": "sp500", "상승": 0.0, "하락": 0.0, "보합": 0.0}
+
+    async def get_market_data(self, market_filter: str):
+        async with self._lock:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                lambda: self.db._select(
+                    table="stock_indices",
+                    columns=[
+                        "ticker",
+                        "rise_ratio",
+                        "rise_soft_ratio",
+                        "fall_ratio",
+                        "fall_soft_ratio",
+                        "unchanged_ratio",
+                    ],
+                    ticker=market_filter,
+                ),
+            )
+            # result가 이미 리스트이므로 첫 번째 항목을 가져옵니다
+            return result[0] if result else None

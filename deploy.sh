@@ -14,7 +14,7 @@ case $ENVIRONMENT in
     stage|staging)
         ENV_FILE=.env.stage
         ENV=stage
-        BRANCH=stage
+        BRANCH=staging
         RUN_CELERY=false
         ;;
     dev|development)
@@ -53,7 +53,7 @@ poetry install || { echo "Poetry installation failed!"; exit 1; }
 
 # Docker Compose down
 echo "Stopping containers with docker-compose down..."
-docker-compose down || true
+ENV=$ENV docker-compose --env-file $ENV_FILE down || true
 
 # Docker 컨테이너 정리
 echo "Cleaning up Docker containers..."

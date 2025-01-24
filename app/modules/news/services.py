@@ -102,12 +102,14 @@ class NewsService:
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
 
+        change_rate_column = "change_rt" if ctry == "us" else "change_1d"
+
         join_info = lambda table: JoinInfo(  # noqa: E731
             primary_table=table,
             secondary_table="stock_trend",
             primary_column="ticker",
             secondary_column="ticker",
-            columns=["current_price", "change_rt"],
+            columns=["current_price", change_rate_column],
             is_outer=True,
         )
 
@@ -142,7 +144,7 @@ class NewsService:
                     "emotion",
                     "that_time_price",
                     "current_price",
-                    "change_rt",
+                    change_rate_column,
                 ],
             )
 
@@ -164,7 +166,7 @@ class NewsService:
                     "form_type",
                     "that_time_price",
                     "current_price",
-                    "change_rt",
+                    change_rate_column,
                 ],
             )
 
@@ -187,7 +189,9 @@ class NewsService:
         if df.empty:
             return []
 
-        numeric_columns = ["that_time_price", "current_price", "change_rt"]
+        change_rate_column = "change_rt" if "change_rt" in df.columns else "change_1d"
+
+        numeric_columns = ["that_time_price", "current_price", change_rate_column]
         df[numeric_columns] = df[numeric_columns].astype("float64").fillna(0)
 
         mask = (df["current_price"] == 0) & (df["that_time_price"] != 0)
@@ -198,7 +202,7 @@ class NewsService:
         )
 
         df["price_impact"] = df["price_impact"].round(2).fillna(0)
-        df["change_rate"] = df["change_rt"].round(2)
+        df["change_rate"] = df[change_rate_column].round(2)
 
         if is_disclosure:
             df["ko_name"] = df["ko_name"].apply(self.remove_parentheses)
@@ -325,7 +329,7 @@ class NewsService:
         df_price = pd.DataFrame(
             self.db._select(
                 table="stock_trend",
-                columns=["ticker", "current_price", "change_1m"],
+                columns=["ticker", "current_price", "change_1m", "change_1d"],
                 **{"ticker__in": unique_tickers},
             )
         )
@@ -377,6 +381,8 @@ class NewsService:
                     )
                 )
             ko_name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
+            ctry = ticker_news.iloc[0]["ctry"]
+            change_rate_column = "change_1m" if ctry == "us" else "change_1d"
             result.append(
                 TopStoriesResponse(
                     name=ko_name,
@@ -386,7 +392,7 @@ class NewsService:
                     current_price=ticker_news.iloc[0]["current_price"]
                     if ticker_news.iloc[0].get("current_price")
                     else 0.0,
-                    change_rate=ticker_news.iloc[0]["change_1m"] if ticker_news.iloc[0].get("change_1m") else 0.0,
+                    change_rate=ticker_news.iloc[0][change_rate_column],
                     items_count=len(news_items),
                     news=news_items,
                     is_viewed=not ticker_has_unviewed,

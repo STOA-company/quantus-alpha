@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    description="Alphafinder API Documentation",
+    description=f"Alphafinder API Documentation - {settings.ENV}",
     version="1.0.0",
 )
 handler.initialize(app)
