@@ -362,6 +362,8 @@ class NewsService:
             news_items = []
             ticker_has_unviewed = False
             for _, row in ticker_news.iterrows():
+                if len(news_items) >= 30:
+                    break
                 news_key = f'{ticker}_{row["type"]}_{row["id"]}'
                 is_viewed = news_key in viewed_stories
 
