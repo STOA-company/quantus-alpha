@@ -616,7 +616,7 @@ class PriceService:
         market = self._get_market(ticker) or ""
         market_cap = await self._get_market_cap(ctry, ticker) or 0.0
         name = remove_parentheses(name)
-        is_market_close = not check_market_status(ctry.upper())
+        is_market_close = check_market_status(ctry.upper())
 
         response_data = {
             "name": name,
