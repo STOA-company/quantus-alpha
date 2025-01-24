@@ -83,13 +83,37 @@ class StockInfoService:
         # 현재 종목의 지표 조회
         table_name = f"{ctry_3}_stock_factors"
         columns = ["per", "pbr", "roe"]
+        stock_colums = columns + ["financial_stability_score", "price_stability_score", "market_stability_score"]
 
         current_stock = self.db._select(
             table=table_name,
-            columns=columns,
+            columns=stock_colums if ctry == "kr" else columns,
             **{"ticker": ticker},
         )
         status_options = ["좋음", "보통", "나쁨"]
+
+        GOOD_THRESHOLD = 0.7
+        BAD_THRESHOLD = 0.3
+
+        def get_status(score: float) -> str:
+            if score >= GOOD_THRESHOLD:
+                return "좋음"
+            elif score >= BAD_THRESHOLD:
+                return "보통"
+            else:
+                return "나쁨"
+
+        # TODO :: {ctry}_stock_factors 완성시 수정해야 함.
+        financial_data = (
+            get_status(current_stock[0].financial_stability_score) if ctry == "kr" else random.choice(status_options)
+        )
+        price_trend = (
+            get_status(current_stock[0].price_stability_score) if ctry == "kr" else random.choice(status_options)
+        )
+        market_situation = (
+            get_status(current_stock[0].market_stability_score) if ctry == "kr" else random.choice(status_options)
+        )
+        industry_situation = random.choice(status_options)
 
         if not current_stock:
             return Indicators(
@@ -140,10 +164,10 @@ class StockInfoService:
             industry_pbr=sector_pbr,
             roe=self.round_and_clean(current_stock[0].roe),
             industry_roe=sector_roe,
-            financial_data=random.choice(status_options),
-            price_trend=random.choice(status_options),
-            market_situation=random.choice(status_options),
-            industry_situation=random.choice(status_options),
+            financial_data=financial_data,
+            price_trend=price_trend,
+            market_situation=market_situation,
+            industry_situation=industry_situation,
         )
 
     # 관련 섹터 조회
@@ -153,14 +177,10 @@ class StockInfoService:
         result = self.db._execute(query)
         sector = result.scalars().first()
 
-        print(f"ewtasrtyadsrhdfh: {sector}")
-
         # 관련 섹터의 ticker 조회
         query = select(StockInformation).where(StockInformation.sector_2 == sector)
         result = self.db._execute(query)
         related_sectors = result.scalars().all()
-
-        print(f"ewtasrtyadsrhdfh: {related_sectors}")
 
         return related_sectors
 
