@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import math
 import re
@@ -21,6 +21,7 @@ from app.modules.news.schemas import (
 )
 from app.database.crud import database, JoinInfo
 from app.utils.ctry_utils import check_ticker_country_len_2
+from app.utils.date_utils import now_utc
 
 
 class NewsService:
@@ -250,7 +251,9 @@ class NewsService:
             except json.JSONDecodeError:
                 viewed_stories = set()
 
-        condition = {"is_top_story": 1, "is_exist": True}
+        current_datetime = now_utc()
+        start_datetime = current_datetime - timedelta(days=1)
+        condition = {"is_top_story": 1, "is_exist": True, "date__lt": current_datetime, "date__gte": start_datetime}
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
             self.db._select(
@@ -329,7 +332,7 @@ class NewsService:
         df_price = pd.DataFrame(
             self.db._select(
                 table="stock_trend",
-                columns=["ticker", "current_price", "change_1m"],
+                columns=["ticker", "current_price", "change_1m", "change_1d"],
                 **{"ticker__in": unique_tickers},
             )
         )
@@ -381,6 +384,8 @@ class NewsService:
                     )
                 )
             ko_name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
+            ctry = ticker_news.iloc[0]["ctry"]
+            change_rate_column = "change_1m" if ctry == "us" else "change_1d"
             result.append(
                 TopStoriesResponse(
                     name=ko_name,
@@ -390,7 +395,7 @@ class NewsService:
                     current_price=ticker_news.iloc[0]["current_price"]
                     if ticker_news.iloc[0].get("current_price")
                     else 0.0,
-                    change_rate=ticker_news.iloc[0]["change_1m"] if ticker_news.iloc[0].get("change_1m") else 0.0,
+                    change_rate=ticker_news.iloc[0][change_rate_column],
                     items_count=len(news_items),
                     news=news_items,
                     is_viewed=not ticker_has_unviewed,
@@ -492,20 +497,31 @@ class NewsService:
             )
         return data, total_count, total_page, offset, emotion_count, ctry
 
-    def news_detail_v2(self, ticker: str, date: str = None, page: int = 1, size: int = 6):
+    def news_detail_v2(self, ticker: str, date: str = None, end_date: str = None, page: int = 1, size: int = 6):
         if not date:
             date = datetime.now().strftime("%Y-%m-%d")
         else:
             date = datetime.strptime(date, "%Y%m%d").strftime("%Y-%m-%d")
 
-        ctry = check_ticker_country_len_2(ticker)
+        if end_date:
+            end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
 
-        condition = {
-            "ticker": ticker,
-            "date__gte": f"{date} 00:00:00",
-            "date__lt": f"{date} 23:59:59",
-            "is_exist": True,
-        }
+        ctry = check_ticker_country_len_2(ticker)
+        if not end_date:
+            condition = {
+                "ticker": ticker,
+                "date__gte": f"{date} 00:00:00",
+                "date__lt": f"{date} 23:59:59",
+                "is_exist": True,
+            }
+        else:
+            condition = {
+                "ticker": ticker,
+                "date__gte": f"{date} 00:00:00",
+                "date__lt": f"{end_date} 23:59:59",
+                "is_exist": True,
+            }
+
         df_news = pd.DataFrame(
             self.db._select(
                 table="news_analysis",
