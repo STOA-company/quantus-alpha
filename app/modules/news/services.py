@@ -329,7 +329,7 @@ class NewsService:
         df_price = pd.DataFrame(
             self.db._select(
                 table="stock_trend",
-                columns=["ticker", "current_price", "change_1m"],
+                columns=["ticker", "current_price", "change_1m", "change_1d"],
                 **{"ticker__in": unique_tickers},
             )
         )
@@ -381,6 +381,8 @@ class NewsService:
                     )
                 )
             ko_name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
+            ctry = ticker_news.iloc[0]["ctry"]
+            change_rate_column = "change_1m" if ctry == "us" else "change_1d"
             result.append(
                 TopStoriesResponse(
                     name=ko_name,
@@ -390,7 +392,7 @@ class NewsService:
                     current_price=ticker_news.iloc[0]["current_price"]
                     if ticker_news.iloc[0].get("current_price")
                     else 0.0,
-                    change_rate=ticker_news.iloc[0]["change_1m"] if ticker_news.iloc[0].get("change_1m") else 0.0,
+                    change_rate=ticker_news.iloc[0][change_rate_column],
                     items_count=len(news_items),
                     news=news_items,
                     is_viewed=not ticker_has_unviewed,
