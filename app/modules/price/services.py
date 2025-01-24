@@ -501,9 +501,10 @@ class PriceService:
 
             conditions = {"ticker": ticker}
 
+            change_rate_column = "change_rt" if ctry == "us" else "change_1d"
             query_result = self.database._select(
                 table="stock_trend",
-                columns=["ticker", "current_price", "prev_close", "change_rt"],
+                columns=["ticker", "current_price", "prev_close", change_rate_column],
                 ascending=False,
                 limit=1,
                 **conditions,  # conditions를 언패킹하여 전달
@@ -514,7 +515,7 @@ class PriceService:
 
             record = query_result[0]
             price_change = record.current_price - record.prev_close
-            price_change_rate = record.change_rt
+            price_change_rate = record.change_rt if change_rate_column == "change_rt" else record.change_1d
 
             logger.info(f"[LOG] price_change: {price_change}, price_change_rate: {price_change_rate}")
 
