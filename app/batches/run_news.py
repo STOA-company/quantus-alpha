@@ -1071,14 +1071,17 @@ def renewal_kr_run_news_is_top_story(date: str = None):
             },
         )
 
+        update_end_datetime = now_kr()
+        update_start_datetime = update_end_datetime - timedelta(days=1)
+
         # 거래대금 상위 5개 종목의 is_top_story를 True로 업데이트
         database._update(
             table="news_analysis",
             sets={"is_top_story": True},
             **{
                 "ctry": "KR",
-                "date__gte": start_date,
-                "date__lt": end_date,
+                "date__gte": update_start_datetime,
+                "date__lt": update_end_datetime,
                 "ticker__in": top_5_tickers,
             },
         )
@@ -1271,14 +1274,17 @@ def renewal_us_run_news_is_top_story(date: str = None):
             },
         )
 
+        update_end_datetime = now_kr()
+        update_start_datetime = update_end_datetime - timedelta(days=1)
+
         # 거래대금 상위 5개 종목의 is_top_story를 True로 업데이트
         database._update(
             table="news_analysis",
             sets={"is_top_story": True},
             **{
                 "ctry": "US",
-                "date__gte": f"{start_date}",
-                "date__lt": f"{end_date}",
+                "date__gte": update_start_datetime,
+                "date__lt": update_end_datetime,
                 "ticker__in": top_6_tickers,
             },
         )
@@ -1377,8 +1383,10 @@ def us_run_news_is_top_story(date: str = None):
     return True
 
 
-if __name__ == "__main__":
-    renewal_us_run_news_is_top_story()
+# if __name__ == "__main__":
+#     renewal_kr_run_news_batch()
+# renewal_us_run_news_batch()
+# renewal_us_run_news_is_top_story()
 #     renewal_us_run_news_batch(20250121)
 #     renewal_kr_run_news_batch()
 #     temp_us_run_news_is_top_story()
