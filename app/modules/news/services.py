@@ -329,16 +329,18 @@ class NewsService:
         df_price = pd.DataFrame(
             self.db._select(
                 table="stock_trend",
-                columns=["ticker", "current_price", "change_1m", "change_1d"],
+                columns=["ticker", "current_price", "change_rt", "change_1d"],
                 **{"ticker__in": unique_tickers},
             )
         )
         total_df["price_impact"] = 0.0
+        ctry = total_df.iloc[0]["ctry"]
+        change_rate_column = "change_rt" if ctry == "us" else "change_1d"
 
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")
             total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
-            total_df["change_1m"] = total_df["change_1m"].fillna(0.0)
+            total_df[change_rate_column] = total_df[change_rate_column].fillna(0.0)
             total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
 
             mask = (total_df["current_price"] != 0) & (total_df["that_time_price"] != 0)
@@ -383,8 +385,6 @@ class NewsService:
                     )
                 )
             ko_name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
-            ctry = ticker_news.iloc[0]["ctry"]
-            change_rate_column = "change_1m" if ctry == "us" else "change_1d"
             result.append(
                 TopStoriesResponse(
                     name=ko_name,
