@@ -84,7 +84,6 @@ class StockInfoService:
         table_name = f"{ctry_3}_stock_factors"
         columns = ["per", "pbr", "roe"]
         stock_colums = columns + ["financial_stability_score", "price_stability_score", "market_stability_score"]
-        print(1111)
 
         current_stock = self.db._select(
             table=table_name,

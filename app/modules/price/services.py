@@ -662,7 +662,6 @@ class PriceService:
         ctry_3 = contry_mapping[ctry]
         if ctry_3 == "USA":
             ticker = f"{ticker}-US"
-        print(f"####end {ctry_3} {ticker}")
         result = self.database._select(
             table=f"{ctry_3}_stock_factors", columns=["week_52_high", "week_52_low", "last_close"], ticker=ticker
         )
@@ -723,7 +722,6 @@ class PriceService:
 
         result = self.database._select(table=table_name, columns=["market_cap"], limit=1, ticker=ticker)
 
-        print(f"결과: {result}")
         # 단일 값만 반환
         return float(result[0].market_cap) if result else 0.0
 
