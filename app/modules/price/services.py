@@ -1,3 +1,4 @@
+import logging
 import asyncio
 from datetime import date, datetime, timedelta
 from functools import lru_cache
@@ -19,14 +20,13 @@ from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.price.schemas import PriceDataItem, PriceSummaryItem, RealTimePriceDataItem, ResponsePriceDataItem
 from app.database.crud import database
 from app.database.conn import db
-from app.core.logging.config import get_logger
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import contry_mapping
 from app.utils.data_utils import remove_parentheses
 from app.utils.date_utils import get_time_checker
 
-
-logger = get_logger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -498,15 +498,12 @@ class PriceService:
         """일회성 실시간 가격 데이터 조회"""
         try:
             ctry = check_ticker_country_len_2(ticker)
-            table_name = f"stock_{ctry}_1d"
 
-            # where 조건을 올바르게 전달
-            conditions = {"Ticker": ticker}
+            conditions = {"ticker": ticker}
 
             query_result = self.database._select(
-                table=table_name,
-                columns=["Date", "Open", "Close"],
-                order="Date",
+                table="stock_trend",
+                columns=["ticker", "current_price", "prev_close", "change_rt"],
                 ascending=False,
                 limit=1,
                 **conditions,  # conditions를 언패킹하여 전달
@@ -516,12 +513,14 @@ class PriceService:
                 return BaseResponse(status_code=404, message="No data found", data=None)
 
             record = query_result[0]
-            price_change = round(record.Close - record.Open, 2)
-            price_change_rate = round(price_change / record.Open, 2)
+            price_change = record.current_price - record.prev_close
+            price_change_rate = record.change_rt
+
+            logger.info(f"[LOG] price_change: {price_change}, price_change_rate: {price_change_rate}")
 
             result = RealTimePriceDataItem(
                 ctry=ctry,
-                price=float(record.Close),
+                price=float(record.current_price),
                 price_change=float(price_change),
                 price_change_rate=float(price_change_rate),
             )
