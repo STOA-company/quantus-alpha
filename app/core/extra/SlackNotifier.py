@@ -1,4 +1,5 @@
-from typing import Union
+from typing import Dict, Union
+import psutil
 import requests
 import traceback
 import socket
@@ -53,3 +54,43 @@ class SlackNotifier:
 
     def notify_program_status(self, status):
         return self.send_message(f"🔄 STATUS: {status}", color="#f39c12")
+
+    def _get_memory_usage(self) -> Dict[str, float]:
+        """시스템 메모리 사용량을 가져옵니다."""
+        memory = psutil.virtual_memory()
+        return {
+            "total": round(memory.total / (1024**3), 2),  # GB
+            "available": round(memory.available / (1024**3), 2),  # GB
+            "used": round(memory.used / (1024**3), 2),  # GB
+            "percent": memory.percent,
+        }
+
+    def _get_memory_alert_message(self, percent: float) -> str:
+        """메모리 사용률에 따른 경고 메시지를 반환합니다."""
+        if percent >= 90:
+            return "⛔ *위험*: 메모리 사용률이 매우 높습니다!"
+        elif percent >= 80:
+            return "⚠️ *주의*: 메모리 사용률이 높아지고 있습니다."
+        return "✅ 메모리 사용률이 정상입니다."
+
+    def notify_memory_status(self, mention_on_high_usage=True):
+        """메모리 상태를 슬랙으로 전송합니다."""
+        memory_info = self._get_memory_usage()
+        alert_message = self._get_memory_alert_message(memory_info["percent"])
+
+        # 높은 메모리 사용률일 때 멘션 추가
+        mentions = ""
+        if mention_on_high_usage and memory_info["percent"] >= 80:
+            mentions = self.__get_mention_tags() + "\n"
+
+        message = (
+            f"{mentions}📊 *메모리 모니터링 보고*\n"
+            f"총 메모리: {memory_info['total']} GB\n"
+            f"사용 중: {memory_info['used']} GB\n"
+            f"사용 가능: {memory_info['available']} GB\n"
+            f"사용률: {memory_info['percent']}%\n"
+            f"{alert_message}"
+        )
+
+        color = "#ff0000" if memory_info["percent"] >= 90 else "#f39c12" if memory_info["percent"] >= 80 else "#36a64f"
+        return self.send_message(message, color=color)
