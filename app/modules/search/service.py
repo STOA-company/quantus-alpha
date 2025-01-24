@@ -95,7 +95,7 @@ class SearchService:
                     name=item_info["name"],
                     language=item_info["language"],
                     current_price=current_price,
-                    current_price_rate=rate,
+                    current_price_rate=round(rate, 2),
                 )
             )
 
