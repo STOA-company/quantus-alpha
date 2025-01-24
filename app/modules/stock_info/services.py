@@ -103,9 +103,16 @@ class StockInfoService:
             else:
                 return "나쁨"
 
-        financial_data = get_status(current_stock[0].financial_stability_score)
-        price_trend = get_status(current_stock[0].price_stability_score)
-        market_situation = get_status(current_stock[0].market_stability_score)
+        # TODO :: {ctry}_stock_factors 완성시 수정해야 함.
+        financial_data = (
+            get_status(current_stock[0].financial_stability_score) if ctry == "kr" else random.choice(status_options)
+        )
+        price_trend = (
+            get_status(current_stock[0].price_stability_score) if ctry == "kr" else random.choice(status_options)
+        )
+        market_situation = (
+            get_status(current_stock[0].market_stability_score) if ctry == "kr" else random.choice(status_options)
+        )
         industry_situation = random.choice(status_options)
 
         if not current_stock:
