@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 import math
 import re
@@ -21,7 +21,6 @@ from app.modules.news.schemas import (
 )
 from app.database.crud import database, JoinInfo
 from app.utils.ctry_utils import check_ticker_country_len_2
-from app.utils.date_utils import now_utc
 
 
 class NewsService:
@@ -251,9 +250,7 @@ class NewsService:
             except json.JSONDecodeError:
                 viewed_stories = set()
 
-        current_datetime = now_utc()
-        start_datetime = current_datetime - timedelta(days=1)
-        condition = {"is_top_story": 1, "is_exist": True, "date__lt": current_datetime, "date__gte": start_datetime}
+        condition = {"is_top_story": 1, "is_exist": True}
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
             self.db._select(
