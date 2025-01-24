@@ -19,7 +19,7 @@ class StockInfoService:
         self.file_path = "static"
         self.file_name = "stock_{}_info.csv"
 
-    async def get_stock_info(self, ctry: str, ticker: str, db: AsyncSession) -> StockInfo:
+    async def get_stock_info(self, ctry: str, ticker: str) -> StockInfo:
         """
         주식 정보 조회
         """
