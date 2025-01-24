@@ -1,4 +1,6 @@
 import logging
+
+from sqlalchemy import text
 from app.database.crud import database
 from app.modules.common.enum import TrendingCountry
 import pandas as pd
@@ -166,7 +168,7 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
     try:
         stock_trends = database._select(
             table="stock_trend",
-            columns=["ticker", "current_price"],
+            columns=["ticker", "prev_close"],
             distinct=True,
             ctry=ctry.value,
         )
@@ -179,19 +181,21 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
         else:
             raise ValueError(f"Invalid country: {ctry.value}")
 
-        data = database._select(
-            table=table_name, columns=["Ticker", "Close", "Volume", "Date"], order="Date", ascending=False
-        )
+        query = text(f"""
+            SELECT t1.Ticker, t1.Close, t1.Volume, t1.Date
+            FROM {table_name} t1
+            INNER JOIN (
+            SELECT Ticker, MAX(Date) as max_date
+            FROM {table_name}
+            GROUP BY Ticker
+            ) t2
+            ON t1.Ticker = t2.Ticker AND t1.Date = t2.max_date
+            ORDER BY t1.Ticker;
+        """)
 
-        latest_data = []
-        seen_tickers = set()
-        for row in data:
-            ticker = row[0]
-            if ticker not in seen_tickers and ticker in stock_trend_dict:
-                latest_data.append(row)
-                seen_tickers.add(ticker)
+        latest_date_tickers = database._execute(query)
 
-        latest_tickers = [row for row in latest_data if row[0] in stock_trend_dict]
+        latest_tickers = [row for row in latest_date_tickers if row[0] in stock_trend_dict]
         update_data = []
         for ticker, close, volume, max_date in latest_tickers:
             prev_data = stock_trend_dict[ticker]
@@ -210,7 +214,7 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
             else:
                 change_sign = 0
 
-            volume_change_rt = current_price * volume_rt
+            volume_change_rt = round(current_price * volume_rt, 4)
 
             update_data.append(
                 {
@@ -224,6 +228,10 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
                 }
             )
 
+        # df_u = pd.DataFrame(update_data)
+        # df_u.to_csv(f"stock_trend_{ctry.value}.csv", index=False)
+        # return 0
+
         database._bulk_update(table="stock_trend", data=update_data, key_column="ticker")
         logging.info(f"Successfully updated {len(update_data)} records in stock_trend table")
 
@@ -232,5 +240,5 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
         raise e
 
 
-if __name__ == "__main__":
-    run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
+# if __name__ == "__main__":
+#     run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)

@@ -4,7 +4,7 @@ from io import BytesIO
 import pandas as pd
 from sqlalchemy import text
 from quantus_aws.common.configs import s3_client
-from app.utils.date_utils import get_business_days, now_kr
+from app.utils.date_utils import get_business_days, now_kr, now_utc
 from app.database.crud import database
 from app.common.constants import US_EXCLUDE_DATES, KR_EXCLUDE_DATES
 
@@ -251,7 +251,7 @@ def renewal_kr_run_news_batch(date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d").date()
     else:
-        check_date = now_kr(is_date=True)
+        check_date = now_utc(is_date=True)
 
     # 뉴스 데이터 조회 및 전처리
     query = text("""
@@ -262,11 +262,18 @@ def renewal_kr_run_news_batch(date: str = None):
     FROM kor_news_analysis_translation as t
     LEFT JOIN kor_news as n ON t.collect_id = n.id
     LEFT JOIN kor_news_analysis as a ON t.collect_id = a.collect_id
-    WHERE DATE(n.news_date) = :check_date
+    WHERE DATE(CONVERT_TZ(n.news_date, 'Asia/Seoul', 'UTC')) = :check_date
     AND t.lang = 'ko-KR'
     """)
 
     df_news = pd.DataFrame(database._execute(query, {"check_date": check_date.strftime("%Y-%m-%d")}))
+    if df_news.empty:
+        error_msg = f"""
+        `뉴스 데이터 누락: kor_news_analysis_translation 테이블 데이터 체크 필요합니다.`
+        * check_date: {check_date}
+        """
+        raise ValueError(error_msg)
+
     df_news["ticker"] = "A" + df_news["ticker"]
     df_news["related_tickers"] = df_news["related_tickers"].apply(
         lambda x: ",".join(["A" + ticker.strip() for ticker in x.split(",")]) if pd.notna(x) else ""
@@ -343,18 +350,18 @@ def renewal_kr_run_news_batch(date: str = None):
     for date_str in unique_dates:
         # 해당 날짜의 뉴스 데이터 필터링
         df_date = df_news[df_news["news_date"].dt.strftime("%Y-%m-%d") == date_str].copy()
-        check_news_tickers = df_date["ticker"].unique().tolist()
+        # check_news_tickers = df_date["ticker"].unique().tolist()
 
         if date_str in price_date_mapping:
-            price_df = get_price_data(price_date_mapping[date_str], check_news_tickers)
-            if price_df.empty:
-                error_msg = f"""
-                `주가 데이터 누락: stock_kr_1d 테이블 데이터 체크 필요합니다.`
-                * business_day: {date_str}
-                """
-                raise ValueError(error_msg)
+            #     price_df = get_price_data(price_date_mapping[date_str], check_news_tickers)
+            #     if price_df.empty:
+            #         error_msg = f"""
+            #         `주가 데이터 누락: stock_kr_1d 테이블 데이터 체크 필요합니다.`
+            #         * business_day: {date_str}
+            #         """
+            #         raise ValueError(error_msg)
 
-            df_date = pd.merge(df_date, price_df[["Ticker", "Close"]], left_on="ticker", right_on="Ticker", how="left")
+            # df_date = pd.merge(df_date, price_df[["Ticker", "Close"]], left_on="ticker", right_on="Ticker", how="left")
             df_date = pd.merge(df_date, df_stock_data, left_on="ticker", right_on="ticker", how="left")
 
             # 레코드 생성
@@ -379,7 +386,7 @@ def renewal_kr_run_news_batch(date: str = None):
                     "en_key_points": row["en_key_points"],
                     "related_tickers": row["related_tickers"],
                     "url": row["url"],
-                    "that_time_price": row["Close"],
+                    "that_time_price": 0,
                     "is_top_story": False,
                     "is_exist": row["ticker"] in existing_tickers,
                 }
@@ -675,7 +682,7 @@ def renewal_us_run_news_batch(date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d").date()
     else:
-        check_date = now_kr(is_date=True)
+        check_date = now_utc(is_date=True)
 
     # 뉴스 데이터 조회 및 전처리
     query = text("""
@@ -691,6 +698,13 @@ def renewal_us_run_news_batch(date: str = None):
     """)
 
     df_news = pd.DataFrame(database._execute(query, {"check_date": check_date.strftime("%Y-%m-%d")}))
+    if df_news.empty:
+        error_msg = f"""
+        `뉴스 데이터 누락: kor_news_analysis_translation 테이블 데이터 체크 필요합니다.`
+        * check_date: {check_date}
+        """
+        raise ValueError(error_msg)
+
     news_tickers = df_news["ticker"].unique().tolist()
 
     # 뉴스 데이터의 고유한 날짜 추출
@@ -763,18 +777,18 @@ def renewal_us_run_news_batch(date: str = None):
     for date_str in unique_dates:
         # 해당 날짜의 뉴스 데이터 필터링
         df_date = df_news[df_news["news_date"].dt.strftime("%Y-%m-%d") == date_str].copy()
-        check_news_tickers = df_date["ticker"].unique().tolist()
+        # check_news_tickers = df_date["ticker"].unique().tolist()
 
         if date_str in price_date_mapping:
-            price_df = get_price_data(price_date_mapping[date_str], check_news_tickers)
-            if price_df.empty:
-                error_msg = f"""
-                `주가 데이터 누락: stock_us_1d 테이블 데이터 체크 필요합니다.`
-                * business_day: {date_str}
-                """
-                raise ValueError(error_msg)
+            #     price_df = get_price_data(price_date_mapping[date_str], check_news_tickers)
+            #     if price_df.empty:
+            #         error_msg = f"""
+            #         `주가 데이터 누락: stock_us_1d 테이블 데이터 체크 필요합니다.`
+            #         * business_day: {date_str}
+            #         """
+            #         raise ValueError(error_msg)
 
-            df_date = pd.merge(df_date, price_df[["Ticker", "Close"]], left_on="ticker", right_on="Ticker", how="left")
+            #     df_date = pd.merge(df_date, price_df[["Ticker", "Close"]], left_on="ticker", right_on="Ticker", how="left")
             df_date = pd.merge(df_date, df_stock_data, left_on="ticker", right_on="ticker", how="left")
 
             # 레코드 생성
@@ -799,7 +813,7 @@ def renewal_us_run_news_batch(date: str = None):
                     "en_key_points": row["en_key_points"],
                     "related_tickers": row["related_tickers"],
                     "url": row["url"],
-                    "that_time_price": row["Close"],
+                    "that_time_price": 0,
                     "is_top_story": False,
                     "is_exist": row["ticker"] in existing_tickers,
                 }
@@ -1190,7 +1204,7 @@ def renewal_us_run_news_is_top_story(date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d").date()
     else:
-        check_date = now_kr(is_date=True)
+        check_date = now_utc(is_date=True)
 
     business_days = get_business_days(country="US", start_date=check_date - timedelta(days=14), end_date=check_date)
     business_days = [bd for bd in business_days if bd.strftime("%Y-%m-%d") not in US_EXCLUDE_DATES]
@@ -1332,7 +1346,7 @@ def us_run_news_is_top_story(date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d").date()
     else:
-        check_date = now_kr(is_date=True)
+        check_date = now_utc(is_date=True)
 
     # 오늘 가격 데이터 조회
     df_price = pd.DataFrame(
@@ -1363,7 +1377,8 @@ def us_run_news_is_top_story(date: str = None):
     return True
 
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
+    renewal_us_run_news_is_top_story()
 #     renewal_us_run_news_batch(20250121)
 #     renewal_kr_run_news_batch()
 #     temp_us_run_news_is_top_story()
