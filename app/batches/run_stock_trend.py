@@ -88,6 +88,8 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
                 daily_data.extend(ticker_data)
 
             df = pd.DataFrame(daily_data, columns=["Ticker", "Date", "Close", "Volume"])
+            df = df.sort_values(by=["Ticker", "Date"], ascending=[True, False])
+
             current_data = df.groupby("Ticker").first().reset_index()
             prev_data = df.groupby("Ticker").nth(1).reset_index()
 
