@@ -74,7 +74,7 @@ class DevConfig(DatabaseConfig):
         super().__init__(
             DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
             DB_POOL_RECYCLE=3600,
-            DB_ECHO=False,
+            DB_ECHO=True,
         )
 
 
@@ -83,7 +83,7 @@ class StageConfig(DatabaseConfig):
         super().__init__(
             DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
             DB_POOL_RECYCLE=3600,
-            DB_ECHO=False,
+            DB_ECHO=True,
         )
 
 
