@@ -253,6 +253,12 @@ def us_news_renewal():
         raise
 
 
+@CELERY_APP.task(name="memory-status", ignore_result=True)
+def memory_status():
+    """메모리 상태 확인"""
+    notifier.notify_memory_status()
+
+
 # Worker 시작점
 if __name__ == "__main__":
     CONCURRENCY = getattr(settings, "CELERY_CONCURRENCY", 1)

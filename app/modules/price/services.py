@@ -1,3 +1,4 @@
+import logging
 import asyncio
 from datetime import date, datetime, timedelta
 from functools import lru_cache
@@ -8,7 +9,6 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from sse_starlette import EventSourceResponse
 from app.models.models_stock import StockInformation
@@ -19,14 +19,13 @@ from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.price.schemas import PriceDataItem, PriceSummaryItem, RealTimePriceDataItem, ResponsePriceDataItem
 from app.database.crud import database
 from app.database.conn import db
-from app.core.logging.config import get_logger
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import contry_mapping
 from app.utils.data_utils import remove_parentheses
-from app.utils.date_utils import get_time_checker
+from app.utils.date_utils import check_market_status
 
-
-logger = get_logger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -498,15 +497,13 @@ class PriceService:
         """일회성 실시간 가격 데이터 조회"""
         try:
             ctry = check_ticker_country_len_2(ticker)
-            table_name = f"stock_{ctry}_1d"
 
-            # where 조건을 올바르게 전달
-            conditions = {"Ticker": ticker}
+            conditions = {"ticker": ticker}
 
+            change_rate_column = "change_rt" if ctry == "us" else "change_1d"
             query_result = self.database._select(
-                table=table_name,
-                columns=["Date", "Open", "Close"],
-                order="Date",
+                table="stock_trend",
+                columns=["ticker", "current_price", "prev_close", change_rate_column],
                 ascending=False,
                 limit=1,
                 **conditions,  # conditions를 언패킹하여 전달
@@ -516,12 +513,14 @@ class PriceService:
                 return BaseResponse(status_code=404, message="No data found", data=None)
 
             record = query_result[0]
-            price_change = round(record.Close - record.Open, 2)
-            price_change_rate = round(price_change / record.Open, 2)
+            price_change = record.current_price - record.prev_close
+            price_change_rate = record.change_rt if change_rate_column == "change_rt" else record.change_1d
+
+            logger.info(f"[LOG] price_change: {price_change}, price_change_rate: {price_change_rate}")
 
             result = RealTimePriceDataItem(
                 ctry=ctry,
-                price=float(record.Close),
+                price=float(record.current_price),
                 price_change=float(price_change),
                 price_change_rate=float(price_change_rate),
             )
@@ -590,7 +589,7 @@ class PriceService:
             },
         )
 
-    async def get_price_data_summary(self, ctry: str, ticker: str, db: AsyncSession) -> PriceSummaryItem:
+    async def get_price_data_summary(self, ctry: str, ticker: str, lang: Country) -> PriceSummaryItem:
         """
         종목 요약 데이터 조회
         """
@@ -611,12 +610,12 @@ class PriceService:
             week_52_low = 0.0
             last_day_close = 0.0
 
-        sector = await self._get_sector_by_ticker(ticker) or ""
+        sector = await self._get_sector_by_ticker(ticker, lang) or ""
         name = self._get_us_ticker_name(ticker) or ""
-        market = self._get_market(ticker) or ""
+        market = self._get_market(ticker, lang) or ""
         market_cap = await self._get_market_cap(ctry, ticker) or 0.0
         name = remove_parentheses(name)
-        is_market_open = get_time_checker(ctry.upper())
+        is_market_close = check_market_status(ctry.upper())
 
         response_data = {
             "name": name,
@@ -629,7 +628,7 @@ class PriceService:
             "last_day_close": last_day_close,
             "week_52_low": week_52_low,
             "week_52_high": week_52_high,
-            "is_market_close": is_market_open,
+            "is_market_close": is_market_close,
         }
 
         try:
@@ -663,7 +662,6 @@ class PriceService:
         ctry_3 = contry_mapping[ctry]
         if ctry_3 == "USA":
             ticker = f"{ticker}-US"
-        print(f"####end {ctry_3} {ticker}")
         result = self.database._select(
             table=f"{ctry_3}_stock_factors", columns=["week_52_high", "week_52_low", "last_close"], ticker=ticker
         )
@@ -690,19 +688,34 @@ class PriceService:
         # 가장 최근 날짜를 제외한 첫 번째 데이터의 종가를 반환
         return float(sorted_df.iloc[1]["Close"])
 
-    def _get_market(self, ticker: str) -> str:
+    def _get_market(self, ticker: str, lang: Country) -> str:
         """
         종목 시장 조회
         """
-        result = self.database._select(table="stock_information", columns=["market"], ticker=ticker)
-        return result[0].market if result else None
+        if lang == Country.KR:
+            market_map = {
+                "KOSPI": "코스피",
+                "KOSDAQ": "코스닥",
+                "NAS": "나스닥",
+                "NYS": "뉴욕 증권 거래소",
+                "KONEX": "코넥스",
+                "AMS": "아멕스",
+            }
+            result = self.database._select(table="stock_information", columns=["market"], ticker=ticker)
+            return market_map[result[0].market] if result else None
+        else:
+            result = self.database._select(table="stock_information", columns=["market"], ticker=ticker)
+            return result[0].market if result else None
 
-    async def _get_sector_by_ticker(self, ticker: str) -> str:
+    async def _get_sector_by_ticker(self, ticker: str, lang: Country) -> str:
         """
         종목 섹터 조회
         """
         db = self._async_db
-        query = select(StockInformation.sector_2).where(StockInformation.ticker == ticker, StockInformation.can_use)
+        if lang == Country.KR:
+            query = select(StockInformation.sector_ko).where(StockInformation.ticker == ticker, StockInformation.can_use)
+        else:
+            query = select(StockInformation.sector_2).where(StockInformation.ticker == ticker, StockInformation.can_use)
         result = await db.execute_async_query(query)
         return result.scalar() or None
 
@@ -724,7 +737,6 @@ class PriceService:
 
         result = self.database._select(table=table_name, columns=["market_cap"], limit=1, ticker=ticker)
 
-        print(f"결과: {result}")
         # 단일 값만 반환
         return float(result[0].market_cap) if result else 0.0
 
