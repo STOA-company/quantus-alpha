@@ -62,16 +62,6 @@ CELERY_APP.conf.beat_schedule = {
     #     "task": "hello_task",
     #     "schedule": crontab(minute="*"),  # 1분마다 실행
     # }
-    # 뉴스 한국 배치
-    "kr-news-batch": {
-        "task": "kr_news_batch",
-        "schedule": crontab(hour="11", minute="50"),  # 매일 오전 11시 50분
-    },
-    # 뉴스 미국 배치
-    "us-news-batch": {
-        "task": "us_news_batch",
-        "schedule": crontab(hour="11", minute="50"),  # 매일 오전 11시 50분
-    },
     # 공시 한국 배치
     "kr-disclosure-batch": {
         "task": "kr_disclosure_batch",
@@ -91,6 +81,7 @@ CELERY_APP.conf.beat_schedule = {
         "task": "us_news_renewal",
         "schedule": crontab(minute="10,40"),
     },
+    # 메모리 상태 체크
     "memory-status": {
         "task": "memory-status",
         "schedule": crontab(minute="1,11,21,31,41,51"),

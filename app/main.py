@@ -6,6 +6,9 @@ from app.database.conn import db
 from app.database.crud import database
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.logging.config import configure_logging
+
+configure_logging()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
