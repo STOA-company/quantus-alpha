@@ -56,8 +56,8 @@ def us_stock_indices_batch():
         if check_market_status("US"):
             us_run_stock_indices_batch()
         else:
-            notifier.notify_info("US market is not open. Skipping task.")
-            logging.info("US market is not open. Skipping task.")
+            notifier.notify_info("US market is not open. US_stock_indices_batch process skipped.")
+            logging.info("US market is not open. US_stock_indices_batch process skipped.")
             return
 
         notifier.notify_success("US_stock_indices_batch process completed")
@@ -75,8 +75,8 @@ def kr_stock_indices_batch():
         if check_market_status("KR"):
             kr_run_stock_indices_batch()
         else:
-            notifier.notify_info("KR market is not open. Skipping task.")
-            logging.info("KR market is not open. Skipping task.")
+            notifier.notify_info("KR market is not open. KR_stock_indices_batch process skipped.")
+            logging.info("KR market is not open. KR_stock_indices_batch process skipped.")
             return
 
         notifier.notify_success("KR_stock_indices_batch process completed")
@@ -91,7 +91,7 @@ def kr_stock_indices_batch():
 def stock_trend_1d_us_task():
     """미국 주식 일별 트렌드 업데이트 (장 마감 후)"""
     if check_market_status("US"):
-        logging.info("US market is open. Skipping task.")
+        logging.info("US market is open. US_stock_trend_1d_batch process skipped.")
         return
     notifier.notify_info("US_stock_trend_1d_batch process started")
     try:
@@ -107,7 +107,7 @@ def stock_trend_1d_us_task():
 def stock_trend_1d_kr_task():
     """한국 주식 일별 트렌드 업데이트 (장 마감 후)"""
     if check_market_status("KR"):
-        logging.info("KR market is open. Skipping task.")
+        logging.info("KR market is open. KR_stock_trend_1d_batch process skipped.")
         return
     notifier.notify_info("KR_stock_trend_1d_batch process started")
     try:
@@ -123,7 +123,7 @@ def stock_trend_1d_kr_task():
 def stock_trend_realtime_us_task():
     """미국 주식 실시간 트렌드 업데이트 (장 운영 중)"""
     if not check_market_status("US"):
-        logging.info("US market is not open. Skipping task.")
+        logging.info("US market is not open. US_stock_trend_realtime_batch process skipped.")
         return
     notifier.notify_info("US_stock_trend_realtime_batch process started")
     try:
@@ -138,7 +138,7 @@ def stock_trend_realtime_us_task():
 def stock_trend_realtime_kr_task():
     """한국 주식 실시간 트렌드 업데이트 (장 운영 중)"""
     if not check_market_status("KR"):
-        logging.info("KR market is not open. Skipping task.")
+        logging.info("KR market is not open. KR_stock_trend_realtime_batch process skipped.")
         return
     notifier.notify_info("KR_stock_trend_realtime_batch process started")
     try:
