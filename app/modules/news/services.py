@@ -22,6 +22,7 @@ from app.modules.news.schemas import (
 )
 from app.database.crud import database, JoinInfo
 from app.utils.ctry_utils import check_ticker_country_len_2
+from app.common.constants import KST, UTC
 
 
 class NewsService:
@@ -29,11 +30,17 @@ class NewsService:
         self.db = database
 
     @staticmethod
+    def _convert_to_kst(df: pd.DataFrame) -> pd.DataFrame:
+        df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(UTC).dt.tz_convert(KST)
+        return df
+
+    @staticmethod
     def _process_dataframe_news(df: pd.DataFrame) -> pd.DataFrame:
         """DataFrame 전처리 및 필터링"""
 
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
         df = df[df["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
+        df = NewsService._convert_to_kst(df)
 
         df["emotion"] = df["emotion"].str.lower()
         df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
@@ -90,6 +97,7 @@ class NewsService:
     def _process_dataframe_disclosure(df: pd.DataFrame) -> pd.DataFrame:
         """DataFrame 전처리 및 필터링"""
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+        df = NewsService._convert_to_kst(df)
 
         df["emotion"] = df["emotion"].str.lower()
         df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
@@ -351,6 +359,7 @@ class NewsService:
                 / total_df.loc[mask, "that_time_price"]
                 * 100
             ).round(2)
+            total_df = NewsService._convert_to_kst(total_df)
 
         # 결과 생성
         result = []
