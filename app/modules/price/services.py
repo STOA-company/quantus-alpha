@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from sse_starlette import EventSourceResponse
 from app.models.models_stock import StockInformation
@@ -590,7 +589,7 @@ class PriceService:
             },
         )
 
-    async def get_price_data_summary(self, ctry: str, ticker: str, db: AsyncSession) -> PriceSummaryItem:
+    async def get_price_data_summary(self, ctry: str, ticker: str, lang: Country) -> PriceSummaryItem:
         """
         종목 요약 데이터 조회
         """
@@ -611,9 +610,9 @@ class PriceService:
             week_52_low = 0.0
             last_day_close = 0.0
 
-        sector = await self._get_sector_by_ticker(ticker) or ""
+        sector = await self._get_sector_by_ticker(ticker, lang) or ""
         name = self._get_us_ticker_name(ticker) or ""
-        market = self._get_market(ticker) or ""
+        market = self._get_market(ticker, lang) or ""
         market_cap = await self._get_market_cap(ctry, ticker) or 0.0
         name = remove_parentheses(name)
         is_market_close = check_market_status(ctry.upper())
@@ -689,19 +688,34 @@ class PriceService:
         # 가장 최근 날짜를 제외한 첫 번째 데이터의 종가를 반환
         return float(sorted_df.iloc[1]["Close"])
 
-    def _get_market(self, ticker: str) -> str:
+    def _get_market(self, ticker: str, lang: Country) -> str:
         """
         종목 시장 조회
         """
-        result = self.database._select(table="stock_information", columns=["market"], ticker=ticker)
-        return result[0].market if result else None
+        if lang == Country.KR:
+            market_map = {
+                "KOSPI": "코스피",
+                "KOSDAQ": "코스닥",
+                "NAS": "나스닥",
+                "NYS": "뉴욕 증권 거래소",
+                "KONEX": "코넥스",
+                "AMS": "아멕스",
+            }
+            result = self.database._select(table="stock_information", columns=["market"], ticker=ticker)
+            return market_map[result[0].market] if result else None
+        else:
+            result = self.database._select(table="stock_information", columns=["market"], ticker=ticker)
+            return result[0].market if result else None
 
-    async def _get_sector_by_ticker(self, ticker: str) -> str:
+    async def _get_sector_by_ticker(self, ticker: str, lang: Country) -> str:
         """
         종목 섹터 조회
         """
         db = self._async_db
-        query = select(StockInformation.sector_2).where(StockInformation.ticker == ticker, StockInformation.can_use)
+        if lang == Country.KR:
+            query = select(StockInformation.sector_ko).where(StockInformation.ticker == ticker, StockInformation.can_use)
+        else:
+            query = select(StockInformation.sector_2).where(StockInformation.ticker == ticker, StockInformation.can_use)
         result = await db.execute_async_query(query)
         return result.scalar() or None
 

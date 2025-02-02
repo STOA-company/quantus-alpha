@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
     REDIS_PORT: int = os.getenv("REDIS_PORT", 6379)
 
-    CELERY_CONCURRENCY: int = os.getenv("CELERY_CONCURRENCY", 6)
+    CELERY_CONCURRENCY: int = os.getenv("CELERY_CONCURRENCY", 7)
 
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
