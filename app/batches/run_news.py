@@ -620,3 +620,9 @@ def renewal_us_run_news_is_top_story(date: str = None):
 
 
 # if __name__ == "__main__":
+#     from app.core.logging.config import configure_logging
+
+#     configure_logging()
+
+#     renewal_kr_run_news_batch()
+#     renewal_us_run_news_batch()
