@@ -23,6 +23,11 @@ case $ENVIRONMENT in
         BRANCH=dev
         RUN_CELERY=true
         ;;
+    batch)
+        ENV_FILE=.env.batch
+        ENV=batch
+        BRANCH=dev  # 배치 서버도 dev 브랜치 사용
+        ;;
     *)
         echo "Unknown environment: $ENVIRONMENT"
         exit 1
@@ -51,14 +56,16 @@ git pull origin $BRANCH || exit 1
 echo "Installing dependencies with Poetry..."
 poetry install || { echo "Poetry installation failed!"; exit 1; }
 
+# Docker Compose 파일 선택
+if [ "$ENV" = "batch" ]; then
+    COMPOSE_FILE="docker-compose.batch.yml"
+else
+    COMPOSE_FILE="docker-compose.yml"
+fi
+
 # Docker Compose down
 echo "Stopping containers with docker-compose down..."
-ENV=$ENV docker-compose --env-file $ENV_FILE down || true
-
-# Docker 컨테이너 정리
-echo "Cleaning up Docker containers..."
-docker stop nginx web celery_worker rabbitmq redis || true
-docker rm nginx web celery_worker rabbitmq redis || true
+ENV=$ENV docker-compose -f $COMPOSE_FILE --env-file $ENV_FILE down || true
 
 # Docker 이미지 정리
 echo "Cleaning up Docker images..."
@@ -78,37 +85,28 @@ docker builder prune -f || true
 
 # 새 컨테이너 빌드 및 실행
 echo "Building and starting new containers..."
-if [ "$ENV" = "dev" ]; then
-    # dev 환경: 모든 서비스 실행 (celery 포함)
-    ENV=$ENV docker-compose --env-file $ENV_FILE up --build -d
-else
-    # stage, prod 환경: celery 제외하고 실행
-    ENV=$ENV docker-compose --env-file $ENV_FILE up --build -d nginx web
-fi
+ENV=$ENV docker-compose -f $COMPOSE_FILE --env-file $ENV_FILE up --build -d
 
 # 컨테이너 시작 대기
 echo "Waiting for containers to start..."
 sleep 10
 
-# Health check도 환경에 따라 수정
+# Health check
 echo "Starting health checks..."
 max_attempts=12
 attempt=1
-while [ $attempt -le $max_attempts ]; do
-    echo "Health check attempt $attempt of $max_attempts..."
 
-    # API health check
-    api_status=$(curl -s -o /dev/null -w "%{http_code}" localhost:80/docs || echo "000")
+if [ "$ENV" = "batch" ]; then
+    # 배치 서버 health check
+    while [ $attempt -le $max_attempts ]; do
+        echo "Health check attempt $attempt of $max_attempts..."
 
-    if [ "$ENV" = "dev" ]; then
-        # dev 환경에서만 celery 관련 health check 실행
-        celery_status=$(docker-compose exec -T celery_worker celery -A app.celery_worker status 2>/dev/null | grep "OK" || echo "")
-        rabbitmq_status=$(docker-compose exec -T rabbitmq rabbitmq-diagnostics -q ping 2>/dev/null || echo "")
-        redis_status=$(docker-compose exec -T redis redis-cli ping 2>/dev/null || echo "")
+        celery_status=$(docker-compose -f $COMPOSE_FILE exec -T celery_worker celery -A app.celery_worker status 2>/dev/null | grep "OK" || echo "")
+        rabbitmq_status=$(docker-compose -f $COMPOSE_FILE exec -T rabbitmq rabbitmq-diagnostics -q ping 2>/dev/null || echo "")
+        redis_status=$(docker-compose -f $COMPOSE_FILE exec -T redis redis-cli ping 2>/dev/null || echo "")
 
-        if [ "$api_status" = "200" ] && [ ! -z "$celery_status" ] && [ ! -z "$rabbitmq_status" ] && [ "$redis_status" = "PONG" ]; then
-            echo "Deployment successful! All services are running."
-            echo "API Status: $api_status"
+        if [ ! -z "$celery_status" ] && [ ! -z "$rabbitmq_status" ] && [ "$redis_status" = "PONG" ]; then
+            echo "Deployment successful! All batch services are running."
             echo "Celery Status: OK"
             echo "RabbitMQ Status: OK"
             echo "Redis Status: OK"
@@ -116,12 +114,21 @@ while [ $attempt -le $max_attempts ]; do
         fi
 
         echo "Services not ready yet:"
-        echo "- API status: $api_status"
         echo "- Celery: ${celery_status:-Not Ready}"
         echo "- RabbitMQ: ${rabbitmq_status:-Not Ready}"
         echo "- Redis: ${redis_status:-Not Ready}"
-    else
-        # stage, prod 환경에서는 API health check만 실행
+
+        echo "Waiting 5 seconds..."
+        sleep 5
+        attempt=$((attempt + 1))
+    done
+else
+    # 웹 서버 health check
+    while [ $attempt -le $max_attempts ]; do
+        echo "Health check attempt $attempt of $max_attempts..."
+
+        api_status=$(curl -s -o /dev/null -w "%{http_code}" localhost:80/docs || echo "000")
+
         if [ "$api_status" = "200" ]; then
             echo "Deployment successful! API is running."
             echo "API Status: $api_status"
@@ -130,13 +137,12 @@ while [ $attempt -le $max_attempts ]; do
 
         echo "Services not ready yet:"
         echo "- API status: $api_status"
-    fi
 
-    echo "Waiting 5 seconds..."
-    sleep 5
-    attempt=$((attempt + 1))
-done
+        echo "Waiting 5 seconds..."
+        sleep 5
+        attempt=$((attempt + 1))
+    done
+fi
 
-echo "Deployment failed: API did not respond with 200 status code after $max_attempts attempts"
-echo "성공 >< : $status_code"
+echo "Deployment failed after $max_attempts attempts"
 exit 1
