@@ -167,4 +167,4 @@ def _is_market_open(ticker: str) -> bool:
 
 if __name__ == "__main__":
     logging.info("Starting US market batch job from command line")
-    us_run_stock_indices_batch()
+    kr_run_stock_indices_batch()
