@@ -1,8 +1,8 @@
 import datetime
 import logging
 import pandas as pd
-from app.database.crud import database
 from sqlalchemy.sql import text
+from app.database.crud import database
 from app.utils.date_utils import now_utc, check_market_status
 
 
@@ -21,6 +21,7 @@ def kr_run_stock_indices_batch():
         # stock_indices 테이블 업데이트
         for result in results:
             if result:  # None이 아닌 경우에만 처리
+                logging.info(f"Updating data for {result['ticker']}")
                 _update_market_data(result["ticker"], result)
 
         logging.info(f"KR market status batch completed at {current_time}")
@@ -44,6 +45,7 @@ def us_run_stock_indices_batch():
         # stock_indices 테이블 업데이트
         for result in results:
             if result:  # None이 아닌 경우에만 처리
+                logging.info(f"Updating data for {result['ticker']}")
                 _update_market_data(result["ticker"], result)
 
         logging.info(f"US market status batch completed at {current_time}")
@@ -63,39 +65,24 @@ def _process_market_data(ticker: str, market: str = None, price_table: str = Non
         is_snp_500 (bool): S&P 500 여부
     """
     try:
-        logging.info(f"Fetching {ticker.upper()} tickers...")
-        if is_snp_500:
-            result = database._select(table="stock_information", columns=["ticker"], is_snp_500=1)
-        else:
-            result = database._select(table="stock_information", columns=["ticker"], market=market)
-
-        if not result:
-            logging.warning(f"No {ticker.upper()} tickers found")
-            return {
-                "ticker": ticker,
-                "rise_ratio": 0.0,
-                "rise_soft_ratio": 0.0,
-                "fall_ratio": 0.0,
-                "fall_soft_ratio": 0.0,
-                "unchanged_ratio": 0.0,
-            }
-
-        tickers = [row[0] for row in result]
-        logging.info(f"Found {len(tickers)} {ticker.upper()} tickers: {tickers[:5]}")
-
-        # 최신 날짜 조회
-        latest_date_query = text(f"""
-            SELECT DATE(MAX(Date)) as latest_date
-            FROM {price_table}
-            WHERE Ticker IN :tickers
+        query = text(f"""
+            WITH filtered_tickers AS (
+                SELECT ticker
+                FROM stock_information
+                WHERE {('is_snp_500 = 1' if is_snp_500 else f"market = '{market}'")}
+            ),
+            latest_date AS (
+                SELECT DATE(MAX(Date)) as max_date
+                FROM {price_table} p
+                JOIN filtered_tickers ft ON p.Ticker = ft.ticker
+            )
+            SELECT p.Ticker, p.Open, p.Close
+            FROM {price_table} p
+            JOIN filtered_tickers ft ON p.Ticker = ft.ticker
+            JOIN latest_date ld ON DATE(p.Date) = ld.max_date
         """)
-        latest_date = database._execute(latest_date_query, {"tickers": tickers}).scalar()
-        logging.info(f"Latest date for {ticker.upper()}: {latest_date}")
 
-        # 당일 시가/종가 데이터 조회
-        daily_prices = database._select(
-            table=price_table, columns=["Ticker", "Open", "Close"], Ticker__in=tickers, Date__date=latest_date
-        )
+        daily_prices = database._execute(query).fetchall()
 
         if not daily_prices:
             return {
@@ -176,3 +163,8 @@ def _is_market_open(ticker: str) -> bool:
         return check_market_status("US")
     else:
         return check_market_status("KR")
+
+
+if __name__ == "__main__":
+    logging.info("Starting US market batch job from command line")
+    us_run_stock_indices_batch()
