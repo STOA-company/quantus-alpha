@@ -31,7 +31,11 @@ class NewsService:
 
     @staticmethod
     def _convert_to_kst(df: pd.DataFrame) -> pd.DataFrame:
-        df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(UTC).dt.tz_convert(KST)
+        dates = pd.to_datetime(df["date"])
+        if dates.dt.tz is None:
+            df["date"] = dates.dt.tz_localize(UTC).dt.tz_convert(KST)
+        else:
+            df["date"] = dates.dt.tz_convert(KST)
         return df
 
     @staticmethod
