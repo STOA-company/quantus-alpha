@@ -660,12 +660,22 @@ class PriceService:
 
         # return pd.DataFrame(result, columns=columns) if result else pd.DataFrame(columns=columns)
         ctry_3 = contry_mapping[ctry]
+        ticker_with_suffix = ""
         if ctry_3 == "USA":
-            ticker = f"{ticker}-US"
+            ticker_with_suffix = f"{ticker}-US"
+
         result = self.database._select(
-            table=f"{ctry_3}_stock_factors", columns=["week_52_high", "week_52_low", "last_close"], ticker=ticker
+            table=f"{ctry_3}_stock_factors", columns=["week_52_high", "week_52_low"], ticker=ticker_with_suffix
         )
-        return pd.DataFrame(result, columns=["week_52_high", "week_52_low", "last_close"])
+        last_close = self.database._select(table="stock_trend", columns=["prev_close"], ticker=ticker)
+
+        combined_data = {
+            "week_52_high": result[0][0] if result else None,
+            "week_52_low": result[0][1] if result else None,
+            "last_close": last_close[0][0] if last_close else None,
+        }
+
+        return pd.DataFrame([combined_data])
 
     def _process_price_data(self, df: pd.DataFrame) -> Tuple[float, float, float]:
         """
