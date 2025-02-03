@@ -317,7 +317,7 @@ def renewal_kr_run_disclosure_batch(date: str = None):
     )
     ticker_list = df_disclosure["ticker"].unique().tolist()
     ticker_list = ["A" + ticker for ticker in ticker_list]
-    df_disclosure["filing_date"] = df_disclosure["filing_date"] + timedelta(hours=9)
+
     filing_dates = df_disclosure["filing_date"].dt.date.unique()
 
     if len(filing_dates) == 0:
