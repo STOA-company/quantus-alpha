@@ -20,9 +20,9 @@ from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_sto
 from app.utils.date_utils import now_kr
 from app.batches.run_disclosure import (
     renewal_kr_run_disclosure_batch,
-    temp_kr_run_disclosure_is_top_story,
+    kr_run_disclosure_is_top_story,
     renewal_us_run_disclosure_batch,
-    temp_us_run_disclosure_is_top_story,
+    us_run_disclosure_is_top_story,
 )
 from app.utils.date_utils import check_market_status
 
@@ -172,7 +172,7 @@ def kr_disclosure_batch():
     try:
         renewal_kr_run_disclosure_batch()
         notifier.notify_success("KR_disclosure_batch process completed")
-        temp_kr_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        kr_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
         notifier.notify_success("KR_disclosure_is_top_story process completed")
     except Exception as e:
         notifier.notify_error(f"KR_disclosure_batch process failed: {str(e)}")
@@ -186,7 +186,7 @@ def us_disclosure_batch():
     try:
         renewal_us_run_disclosure_batch()
         notifier.notify_success("US_disclosure_batch process completed")
-        temp_us_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        us_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
         notifier.notify_success("US_disclosure_is_top_story process completed")
     except Exception as e:
         notifier.notify_error(f"US_disclosure_batch process failed: {str(e)}")
