@@ -238,4 +238,4 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
 
 
 if __name__ == "__main__":
-    run_stock_trend_by_1d_batch(ctry=TrendingCountry.US)
+    run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
