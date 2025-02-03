@@ -543,6 +543,14 @@ class NewsService:
             "is_exist": True,
         }
 
+        stock_info_columns = ["ticker"]
+        stock_info_columns.append("is_kospi_200" if ctry == "kr" else "is_snp_500")
+        stock_info = self.db._select(
+            table="stock_information",
+            columns=stock_info_columns,
+            **{"ticker": ticker},
+        )
+
         df_news = pd.DataFrame(
             self.db._select(
                 table="news_analysis",
@@ -564,7 +572,11 @@ class NewsService:
             )
         )
         if df_news.empty:
-            raise DataNotFoundException(ticker=ticker, data_type="news")
+            if stock_info[0][1]:
+                emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
+                return [], 0, 0, 0, emotion_count, ctry
+            else:
+                raise DataNotFoundException(ticker=ticker, data_type="news")
 
         offset = (page - 1) * size
         df_news["emotion"] = df_news["emotion"].str.lower()
