@@ -603,8 +603,8 @@ class PriceService:
         df = self._fetch_52week_data(ctry, ticker)
         if not df.empty:
             week_52_high = df["week_52_high"].iloc[0] or 0.0
-            week_52_low = df["week_52_low"].iloc[0]
-            last_day_close = df["last_close"].iloc[0]
+            week_52_low = df["week_52_low"].iloc[0] or 0.0
+            last_day_close = df["last_close"].iloc[0] or 0.0
         else:
             week_52_high = 0.0
             week_52_low = 0.0
@@ -614,7 +614,7 @@ class PriceService:
         name = self._get_us_ticker_name(ticker) or ""
         market = self._get_market(ticker, lang) or ""
         market_cap = await self._get_market_cap(ctry, ticker) or 0.0
-        name = remove_parentheses(name)
+        name = remove_parentheses(name) or ""
         is_market_close = check_market_status(ctry.upper())
 
         response_data = {
