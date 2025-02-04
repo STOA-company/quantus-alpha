@@ -15,15 +15,16 @@ RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 RUN pip install "poetry==$POETRY_VERSION"
 
-# 전체 소스 코드를 먼저 복사 (Git 히스토리 포함)
-COPY . .
-
-# 서브모듈 초기화 및 업데이트
-RUN git submodule update --init --recursive
-
+# pyproject.toml과 poetry.lock 파일을 먼저 복사
 COPY pyproject.toml poetry.lock ./
-# poetry export 명령어 수정 - 모든 의존성 포함
-RUN poetry export -f requirements.txt --output requirements.txt --without-hashes
+
+# Poetry 가상환경에 의존성 설치
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi
+
+# 전체 소스 코드를 복사하고 서브모듈 초기화
+COPY . .
+RUN git submodule update --init --recursive
 
 # Runtime stage
 FROM python:3.12-slim-bookworm
@@ -33,11 +34,9 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-COPY --from=builder /app/requirements.txt .
-RUN pip install --no-cache-dir --upgrade -r requirements.txt
-
-# 빌드 스테이지에서 서브모듈이 포함된 전체 소스 코드 복사
+# 빌더 스테이지에서 설치된 패키지들과 소스 코드를 복사
 COPY --from=builder /app /app
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 
 # Uvicorn command for FastAPI
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
