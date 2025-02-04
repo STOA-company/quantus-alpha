@@ -140,15 +140,13 @@ def renewal_kr_run_news_batch(date: str = None):
                 if pd.isna(row["ticker"]) or row["ticker"] == "":
                     continue
 
-                utc_date = pd.to_datetime(row["news_date"]).tz_localize("Asia/Seoul").tz_convert("UTC").tz_localize(None)
-
                 news_record = {
                     "collect_id": row["id"],
                     "ticker": row["ticker"],
                     "kr_name": row["kr_name"],
                     "en_name": row["en_name"],
                     "ctry": "KR",
-                    "date": utc_date,
+                    "date": row["news_date"],
                     "title": row["ai_title"],
                     "emotion": row["emotion"],
                     "summary": row["kr_summary"],

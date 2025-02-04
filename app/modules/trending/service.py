@@ -26,8 +26,7 @@ class TrendingService:
             table="stock_information",
             columns=["ticker"],
             ctry=request.ctry.value,
-            is_active=1,
-            is_delisted=0,
+            is_activate=1,
         )
 
         activate_tickers = [row[0] for row in activate_tickers_data]
@@ -48,6 +47,7 @@ class TrendingService:
             ctry=request.ctry.value,
             limit=100,
             ticker__in=activate_tickers,
+            is_delisted=0,
         )
 
         return [
