@@ -22,16 +22,16 @@ class TrendingService:
         order = self._get_trending_type(request)
         ascending = True if request.type == TrendingType.DOWN else False
 
-        latest_date_query = self.database._select(
-            table="stock_trend",
-            columns=["last_updated"],
-            order="last_updated",
-            ascending=False,
+        activate_tickers_data = self.database._select(
+            table="stock_information",
+            columns=["ticker"],
             ctry=request.ctry.value,
-            limit=1,
+            can_use=1,  # TODO::db 변경 후 제거 및 아래 주석 해제
+            # is_active=1,
+            # is_delisted=0,
         )
 
-        latest_date = latest_date_query[0]._mapping["last_updated"] if latest_date_query else None
+        activate_tickers = [row[0] for row in activate_tickers_data]
 
         trending_stocks = self.database._select(
             table="stock_trend",
@@ -47,8 +47,8 @@ class TrendingService:
             order=order,
             ascending=ascending,
             ctry=request.ctry.value,
-            last_updated=latest_date,
             limit=100,
+            ticker__in=activate_tickers,
         )
 
         return [
@@ -57,7 +57,7 @@ class TrendingService:
                 ticker=stock._mapping["ticker"],
                 name="Temp_name"
                 if stock._mapping["kr_name"] is None
-                else f"{stock._mapping['kr_name'].replace('(ADR)', '')} ({stock._mapping['ticker']})",
+                else f"{stock._mapping['kr_name']} ({stock._mapping['ticker']})",
                 current_price=0.0 if stock._mapping["current_price"] is None else stock._mapping["current_price"],
                 current_price_rate=0.0
                 if stock._mapping[f"change_{request.period.value}"] is None
