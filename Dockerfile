@@ -22,7 +22,8 @@ COPY . .
 RUN git submodule update --init --recursive
 
 COPY pyproject.toml poetry.lock ./
-RUN poetry export -f requirements.txt --output requirements.txt --without-hashes
+# poetry export 명령어 수정 - 모든 의존성 포함
+RUN poetry export -f requirements.txt --output requirements.txt --without-hashes --with dev
 
 # Runtime stage
 FROM python:3.11-slim-buster
@@ -39,4 +40,8 @@ RUN pip install --no-cache-dir --upgrade -r requirements.txt
 COPY --from=builder /app /app
 
 # Uvicorn command for FastAPI
+<<<<<<< Updated upstream
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+=======
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+>>>>>>> Stashed changes
