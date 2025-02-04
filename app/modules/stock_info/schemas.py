@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Optional
 from pydantic import BaseModel, Field
 
@@ -42,3 +43,17 @@ class FearGreedIndexItem(BaseModel):
 class FearGreedIndexResponse(BaseModel):
     kor_stock: FearGreedIndexItem
     us_stock: FearGreedIndexItem
+
+
+@dataclass
+class StabilityThreshold:
+    GOOD: float
+    BAD: float
+
+
+@dataclass
+class StabilityTypeInfo:
+    db_column: str  # 데이터베이스 컬럼명
+    api_field: str  # API 응답 필드명
+    description: str  # 지표 설명
+    threshold: StabilityThreshold  # 임계값
