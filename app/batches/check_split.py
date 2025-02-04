@@ -4,8 +4,11 @@ import yfinance as yf
 import pandas as pd
 import pytz
 from sqlalchemy import text
-from app.utils.kispy_utils import auth
-from kispy import KisClientV2
+from app.kispy.auth import auth
+from kispy import KisClientV2, KisClient
+
+client = KisClient(auth)
+
 
 from app.database.crud import database
 
@@ -77,7 +80,7 @@ def check_and_update_splits():
                     splits = ticker_obj.splits
                     if not splits.empty:
                         splits.index = splits.index.tz_convert("UTC")
-                        check_date = datetime.now(pytz.UTC) - timedelta(days=365)
+                        check_date = datetime.now(pytz.UTC) - timedelta(days=1)
                         recent_splits = splits[splits.index > check_date]
 
                         if not recent_splits.empty and any(recent_splits != 0):
