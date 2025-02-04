@@ -1,6 +1,7 @@
 from datetime import timedelta
 import pandas as pd
 from sqlalchemy import text
+
 from app.utils.date_utils import get_business_days, now_kr, now_utc
 from app.database.crud import database
 from app.common.constants import US_EXCLUDE_DATES, KR_EXCLUDE_DATES
@@ -520,6 +521,7 @@ def renewal_kr_run_news_is_top_story(date: str = None):
             },
         )
 
+
         database._update(
             table="news_analysis",
             sets={"is_top_story": True},
@@ -551,7 +553,7 @@ def renewal_us_run_news_is_top_story(date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d").date()
     else:
-        check_date = now_kr(is_date=True)
+        check_date = now_utc(is_date=True)
 
     kr_start_date = check_date - timedelta(days=1)
     kr_end_date = check_date
@@ -599,6 +601,7 @@ def renewal_us_run_news_is_top_story(date: str = None):
                 "is_top_story": True,
             },
         )
+
 
         database._update(
             table="news_analysis",

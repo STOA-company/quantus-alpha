@@ -534,7 +534,24 @@ class NewsService:
         utc_start_datetime = kst_start_datetime.astimezone(utc)
         utc_end_datetime = kst_end_datetime.astimezone(utc)
 
+        if end_date:
+            end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
+
         ctry = check_ticker_country_len_2(ticker)
+        if not end_date:
+            condition = {
+                "ticker": ticker,
+                "date__gte": f"{date} 00:00:00",
+                "date__lt": f"{date} 23:59:59",
+                "is_exist": True,
+            }
+        else:
+            condition = {
+                "ticker": ticker,
+                "date__gte": f"{date} 00:00:00",
+                "date__lt": f"{end_date} 23:59:59",
+                "is_exist": True,
+            }
 
         condition = {
             "ticker": ticker,
@@ -550,7 +567,6 @@ class NewsService:
             columns=stock_info_columns,
             **{"ticker": ticker},
         )
-
         df_news = pd.DataFrame(
             self.db._select(
                 table="news_analysis",
