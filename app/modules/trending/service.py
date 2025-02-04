@@ -26,9 +26,8 @@ class TrendingService:
             table="stock_information",
             columns=["ticker"],
             ctry=request.ctry.value,
-            can_use=1,  # TODO::db 변경 후 제거 및 아래 주석 해제
-            # is_active=1,
-            # is_delisted=0,
+            is_active=1,
+            is_delisted=0,
         )
 
         activate_tickers = [row[0] for row in activate_tickers_data]
