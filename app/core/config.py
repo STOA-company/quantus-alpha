@@ -38,6 +38,10 @@ class Settings(BaseSettings):
 
     CELERY_CONCURRENCY: int = os.getenv("CELERY_CONCURRENCY", 7)
 
+    KIS_APP_KEY: str = os.getenv("KIS_APP_KEY", "")
+    KIS_SECRET: str = os.getenv("KIS_SECRET", "")
+    KIS_ACCOUNT_NO: str = os.getenv("KIS_ACCOUNT_NO", "")
+
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
     else:
