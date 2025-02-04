@@ -277,6 +277,7 @@ class DisclosureService:
             category_type = "[" + row.get("category_type", "") + "]" if row.get("category_type", "") else ""
             data.append(
                 {
+                    "id": row["id"],
                     "title": f"{ko_name} {form_type} {category_type}".strip(),
                     "date": row["date"],
                     "emotion": row["emotion"],
