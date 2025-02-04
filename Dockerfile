@@ -23,7 +23,7 @@ RUN git submodule update --init --recursive
 
 COPY pyproject.toml poetry.lock ./
 # poetry export 명령어 수정 - 모든 의존성 포함
-RUN poetry export -f requirements.txt --output requirements.txt --without-hashes --with dev
+RUN poetry export -f requirements.txt --output requirements.txt --without-hashes
 
 # Runtime stage
 FROM python:3.11-slim-buster
