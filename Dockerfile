@@ -1,5 +1,5 @@
 # Build stage
-FROM python:3.11-slim-buster AS builder
+FROM python:3.12-slim-buster AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -26,7 +26,7 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry export -f requirements.txt --output requirements.txt --without-hashes
 
 # Runtime stage
-FROM python:3.11-slim-buster
+FROM python:3.12-slim-buster
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
