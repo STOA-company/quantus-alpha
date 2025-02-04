@@ -40,8 +40,4 @@ RUN pip install --no-cache-dir --upgrade -r requirements.txt
 COPY --from=builder /app /app
 
 # Uvicorn command for FastAPI
-<<<<<<< Updated upstream
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
-=======
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
->>>>>>> Stashed changes
