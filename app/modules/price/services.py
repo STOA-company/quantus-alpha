@@ -503,7 +503,7 @@ class PriceService:
             change_rate_column = "change_rt" if ctry == "us" else "change_1d"
             query_result = self.database._select(
                 table="stock_trend",
-                columns=["ticker", "current_price", "prev_close", change_rate_column],
+                columns=["ticker", "current_price", "prev_close", change_rate_column, "is_trading_stopped"],
                 ascending=False,
                 limit=1,
                 **conditions,  # conditions를 언패킹하여 전달
@@ -523,6 +523,7 @@ class PriceService:
                 price=float(record.current_price),
                 price_change=float(price_change),
                 price_change_rate=float(price_change_rate),
+                is_trading_stopped=record.is_trading_stopped,
             )
 
             return BaseResponse(status_code=200, message="Data retrieved successfully", data=result)
@@ -723,9 +724,13 @@ class PriceService:
         """
         db = self._async_db
         if lang == Country.KR:
-            query = select(StockInformation.sector_ko).where(StockInformation.ticker == ticker, StockInformation.can_use)
+            query = select(StockInformation.sector_ko).where(
+                StockInformation.ticker == ticker, StockInformation.is_activate
+            )
         else:
-            query = select(StockInformation.sector_2).where(StockInformation.ticker == ticker, StockInformation.can_use)
+            query = select(StockInformation.sector_2).where(
+                StockInformation.ticker == ticker, StockInformation.is_activate
+            )
         result = await db.execute_async_query(query)
         return result.scalar() or None
 
@@ -733,7 +738,7 @@ class PriceService:
         """
         US 종목 이름 조회
         """
-        result = self.database._select(table="stock_information", columns=["kr_name"], ticker=ticker, can_use=True)
+        result = self.database._select(table="stock_information", columns=["kr_name"], ticker=ticker, is_activate=True)
         return result[0].kr_name if result else None
 
     async def _get_market_cap(self, ctry: str, ticker: str) -> float:

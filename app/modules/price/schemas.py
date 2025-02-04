@@ -91,3 +91,4 @@ class RealTimePriceDataItem(BaseModel):
     price: float
     price_change: float
     price_change_rate: float
+    is_trading_stopped: bool
