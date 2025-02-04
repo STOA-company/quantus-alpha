@@ -61,7 +61,11 @@ def _collect_overseas_stock_status():
         # 각 해외 주식의 상태 업데이트
         for stock_row in stocks:
             ticker, market = stock_row[0], stock_row[1]
-            market_type_code = market.replace("NYS", 513).replace("NAS", 512).replace("AMEX", 529)
+            market_code_map = {"NYS": 513, "NAS": 512, "AMEX": 529}
+            market_type_code = market_code_map.get(market, 0)
+
+            if market_type_code == 0:
+                continue
 
             try:
                 # 해외 주식 상태 확인
