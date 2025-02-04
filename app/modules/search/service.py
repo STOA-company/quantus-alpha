@@ -34,7 +34,7 @@ class SearchService:
                 {"kr_name__like": search_term},
                 {"en_name__like": search_term},
             ],
-            can_use=1,
+            is_activate=1,
         )
 
         if not search_result:

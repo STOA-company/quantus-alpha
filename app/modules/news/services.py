@@ -106,8 +106,6 @@ class NewsService:
         df["emotion"] = df["emotion"].str.lower()
         df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
 
-        df["key_points"] = df["key_points"].str.replace(r'[\[\]"]', "", regex=True)
-
         return df
 
     def get_renewal_data(self, ctry: str = None) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
@@ -154,6 +152,8 @@ class NewsService:
                     "date",
                     "title",
                     "summary",
+                    "impact_reason",
+                    "key_points",
                     "emotion",
                     "that_time_price",
                     "current_price",
@@ -245,6 +245,8 @@ class NewsService:
                 ctry=row["ctry"],
                 title=row["title"],
                 summary=row["summary"],
+                impact_reason=row["impact_reason"],
+                key_points=row["key_points"],
                 emotion=row["emotion"],
                 name=row["kr_name"],
                 change_rate=row["change_rate"],
