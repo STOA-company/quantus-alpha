@@ -69,7 +69,7 @@ def renewal_kr_run_news_batch(date: str = None):
         database._select(
             table="stock_information",
             columns=["ticker", "kr_name", "en_name"],
-            **dict(ticker__in=news_tickers, can_use=True),
+            **dict(ticker__in=news_tickers, is_activate=True),
         )
     )
     if df_stock_data.empty:
@@ -293,7 +293,7 @@ def renewal_us_run_news_batch(date: str = None):
         database._select(
             table="stock_information",
             columns=["ticker", "kr_name", "en_name"],
-            **dict(ticker__in=news_tickers, can_use=True),
+            **dict(ticker__in=news_tickers, is_activate=True),
         )
     )
     if df_stock_data.empty:
@@ -521,7 +521,6 @@ def renewal_kr_run_news_is_top_story(date: str = None):
             },
         )
 
-
         database._update(
             table="news_analysis",
             sets={"is_top_story": True},
@@ -601,7 +600,6 @@ def renewal_us_run_news_is_top_story(date: str = None):
                 "is_top_story": True,
             },
         )
-
 
         database._update(
             table="news_analysis",
