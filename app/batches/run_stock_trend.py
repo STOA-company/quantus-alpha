@@ -104,16 +104,13 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
             results["volume_1d"] = current_data["Volume"]
             results["volume_change_1d"] = current_data["Volume"] * current_data["Close"]
 
-            periods = {"1w": 7, "1m": 30, "6m": 180, "1y": 365}
+            periods = {"1w": 5, "1m": 20, "6m": 120, "1y": None}
 
-            for period, days in periods.items():
-                cutoff_dates = current_data.set_index("Ticker").apply(
-                    lambda x: x["Date"] - pd.Timedelta(days=days), axis=1
-                )
-
-                df_period = df.copy()
-                df_period["cutoff_date"] = df_period["Ticker"].map(cutoff_dates)
-                period_data = df_period[df_period["Date"] >= df_period["cutoff_date"]]
+            for period, n_records in periods.items():
+                if n_records is None:
+                    period_data = df.copy()
+                else:
+                    period_data = df.groupby("Ticker").head(n_records)
 
                 period_start_prices = period_data.groupby("Ticker").last()[["Close"]].reset_index()
 
@@ -240,5 +237,5 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
         raise e
 
 
-# if __name__ == "__main__":
-#     run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
+if __name__ == "__main__":
+    run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)

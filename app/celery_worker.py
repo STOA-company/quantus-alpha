@@ -2,10 +2,6 @@ import logging
 from functools import wraps
 
 from app.batches.run_news import (
-    kr_run_news_batch,
-    temp_kr_run_news_is_top_story,
-    temp_us_run_news_is_top_story,
-    us_run_news_batch,
     renewal_kr_run_news_batch,
     renewal_us_run_news_batch,
     renewal_kr_run_news_is_top_story,
@@ -24,9 +20,9 @@ from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_sto
 from app.utils.date_utils import now_kr
 from app.batches.run_disclosure import (
     renewal_kr_run_disclosure_batch,
-    temp_kr_run_disclosure_is_top_story,
+    kr_run_disclosure_is_top_story,
     renewal_us_run_disclosure_batch,
-    temp_us_run_disclosure_is_top_story,
+    us_run_disclosure_is_top_story,
 )
 from app.utils.date_utils import check_market_status
 
@@ -60,8 +56,8 @@ def us_stock_indices_batch():
         if check_market_status("US"):
             us_run_stock_indices_batch()
         else:
-            notifier.notify_info("US market is not open. Skipping task.")
-            logging.info("US market is not open. Skipping task.")
+            notifier.notify_info("US market is not open. US_stock_indices_batch process skipped.")
+            logging.info("US market is not open. US_stock_indices_batch process skipped.")
             return
 
         notifier.notify_success("US_stock_indices_batch process completed")
@@ -79,8 +75,8 @@ def kr_stock_indices_batch():
         if check_market_status("KR"):
             kr_run_stock_indices_batch()
         else:
-            notifier.notify_info("KR market is not open. Skipping task.")
-            logging.info("KR market is not open. Skipping task.")
+            notifier.notify_info("KR market is not open. KR_stock_indices_batch process skipped.")
+            logging.info("KR market is not open. KR_stock_indices_batch process skipped.")
             return
 
         notifier.notify_success("KR_stock_indices_batch process completed")
@@ -95,7 +91,7 @@ def kr_stock_indices_batch():
 def stock_trend_1d_us_task():
     """미국 주식 일별 트렌드 업데이트 (장 마감 후)"""
     if check_market_status("US"):
-        logging.info("US market is open. Skipping task.")
+        logging.info("US market is open. US_stock_trend_1d_batch process skipped.")
         return
     notifier.notify_info("US_stock_trend_1d_batch process started")
     try:
@@ -111,7 +107,7 @@ def stock_trend_1d_us_task():
 def stock_trend_1d_kr_task():
     """한국 주식 일별 트렌드 업데이트 (장 마감 후)"""
     if check_market_status("KR"):
-        logging.info("KR market is open. Skipping task.")
+        logging.info("KR market is open. KR_stock_trend_1d_batch process skipped.")
         return
     notifier.notify_info("KR_stock_trend_1d_batch process started")
     try:
@@ -127,7 +123,7 @@ def stock_trend_1d_kr_task():
 def stock_trend_realtime_us_task():
     """미국 주식 실시간 트렌드 업데이트 (장 운영 중)"""
     if not check_market_status("US"):
-        logging.info("US market is not open. Skipping task.")
+        logging.info("US market is not open. US_stock_trend_realtime_batch process skipped.")
         return
     notifier.notify_info("US_stock_trend_realtime_batch process started")
     try:
@@ -142,7 +138,7 @@ def stock_trend_realtime_us_task():
 def stock_trend_realtime_kr_task():
     """한국 주식 실시간 트렌드 업데이트 (장 운영 중)"""
     if not check_market_status("KR"):
-        logging.info("KR market is not open. Skipping task.")
+        logging.info("KR market is not open. KR_stock_trend_realtime_batch process skipped.")
         return
     notifier.notify_info("KR_stock_trend_realtime_batch process started")
     try:
@@ -169,34 +165,6 @@ def hello_task():
     logging.info(message)
 
 
-@CELERY_APP.task(name="kr_news_batch", ignore_result=True)
-def kr_news_batch():
-    """한국 뉴스 배치"""
-    notifier.notify_info("KR_news_batch process started")
-    try:
-        records_count = kr_run_news_batch()
-        notifier.notify_success(f"KR_news_batch process completed processed: {records_count}")
-        temp_kr_run_news_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
-        notifier.notify_success("KR_news_is_top_story process completed")
-    except Exception as e:
-        notifier.notify_error(f"KR_news_batch process failed: {str(e)}")
-        raise
-
-
-@CELERY_APP.task(name="us_news_batch", ignore_result=True)
-def us_news_batch():
-    """미국 뉴스 배치"""
-    notifier.notify_info("US_news_batch process started")
-    try:
-        us_run_news_batch()
-        notifier.notify_success("US_news_batch process completed")
-        temp_us_run_news_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
-        notifier.notify_success("US_news_is_top_story process completed")
-    except Exception as e:
-        notifier.notify_error(f"US_news_batch process failed: {str(e)}")
-        raise
-
-
 @CELERY_APP.task(name="kr_disclosure_batch", ignore_result=True)
 def kr_disclosure_batch():
     """한국 공시 배치"""
@@ -204,7 +172,7 @@ def kr_disclosure_batch():
     try:
         renewal_kr_run_disclosure_batch()
         notifier.notify_success("KR_disclosure_batch process completed")
-        temp_kr_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        kr_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
         notifier.notify_success("KR_disclosure_is_top_story process completed")
     except Exception as e:
         notifier.notify_error(f"KR_disclosure_batch process failed: {str(e)}")
@@ -218,7 +186,7 @@ def us_disclosure_batch():
     try:
         renewal_us_run_disclosure_batch()
         notifier.notify_success("US_disclosure_batch process completed")
-        temp_us_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
+        us_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
         notifier.notify_success("US_disclosure_is_top_story process completed")
     except Exception as e:
         notifier.notify_error(f"US_disclosure_batch process failed: {str(e)}")
@@ -261,7 +229,7 @@ def memory_status():
 
 # Worker 시작점
 if __name__ == "__main__":
-    CONCURRENCY = getattr(settings, "CELERY_CONCURRENCY", 1)
+    CONCURRENCY = getattr(settings, "CELERY_CONCURRENCY", 7)
     CELERY_APP.worker_main(
         argv=[
             "worker",

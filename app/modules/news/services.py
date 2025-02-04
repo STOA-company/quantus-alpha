@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import datetime, time
 import json
 import math
 import re
 from typing import List, Tuple, Union
 
 from fastapi import Request, Response
+import pytz
 
 from app.core.exception.custom import DataNotFoundException
 from app.modules.disclosure.mapping import document_type_mapping
@@ -21,6 +22,7 @@ from app.modules.news.schemas import (
 )
 from app.database.crud import database, JoinInfo
 from app.utils.ctry_utils import check_ticker_country_len_2
+from app.common.constants import KST, UTC
 
 
 class NewsService:
@@ -28,11 +30,21 @@ class NewsService:
         self.db = database
 
     @staticmethod
+    def _convert_to_kst(df: pd.DataFrame) -> pd.DataFrame:
+        dates = pd.to_datetime(df["date"])
+        if dates.dt.tz is None:
+            df["date"] = dates.dt.tz_localize(UTC).dt.tz_convert(KST)
+        else:
+            df["date"] = dates.dt.tz_convert(KST)
+        return df
+
+    @staticmethod
     def _process_dataframe_news(df: pd.DataFrame) -> pd.DataFrame:
         """DataFrame 전처리 및 필터링"""
 
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
         df = df[df["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
+        df = NewsService._convert_to_kst(df)
 
         df["emotion"] = df["emotion"].str.lower()
         df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
@@ -89,6 +101,7 @@ class NewsService:
     def _process_dataframe_disclosure(df: pd.DataFrame) -> pd.DataFrame:
         """DataFrame 전처리 및 필터링"""
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+        df = NewsService._convert_to_kst(df)
 
         df["emotion"] = df["emotion"].str.lower()
         df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
@@ -350,6 +363,7 @@ class NewsService:
                 / total_df.loc[mask, "that_time_price"]
                 * 100
             ).round(2)
+            total_df = NewsService._convert_to_kst(total_df)
 
         # 결과 생성
         result = []
@@ -497,10 +511,28 @@ class NewsService:
         return data, total_count, total_page, offset, emotion_count, ctry
 
     def news_detail_v2(self, ticker: str, date: str = None, end_date: str = None, page: int = 1, size: int = 6):
+        kst = pytz.timezone("Asia/Seoul")
+        utc = pytz.timezone("UTC")
+
+        # 시작 날짜 설정
         if not date:
-            date = datetime.now().strftime("%Y-%m-%d")
+            kst_date = datetime.now(kst).replace(tzinfo=None)
         else:
-            date = datetime.strptime(date, "%Y%m%d").strftime("%Y-%m-%d")
+            kst_date = datetime.strptime(date, "%Y%m%d")
+
+        # 종료 날짜 설정
+        if end_date:
+            kst_end_date = datetime.strptime(end_date, "%Y%m%d")
+        else:
+            kst_end_date = kst_date
+
+        # 시작 / 종료 시간 localize
+        kst_start_datetime = kst.localize(datetime.combine(kst_date, datetime.min.time()))
+        kst_end_datetime = kst.localize(datetime.combine(kst_end_date, time(23, 59, 59)))
+
+        # 시작 / 종료 시간 UTC로 변환
+        utc_start_datetime = kst_start_datetime.astimezone(utc)
+        utc_end_datetime = kst_end_datetime.astimezone(utc)
 
         if end_date:
             end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
@@ -521,6 +553,20 @@ class NewsService:
                 "is_exist": True,
             }
 
+        condition = {
+            "ticker": ticker,
+            "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "is_exist": True,
+        }
+
+        stock_info_columns = ["ticker"]
+        stock_info_columns.append("is_kospi_200" if ctry == "kr" else "is_snp_500")
+        stock_info = self.db._select(
+            table="stock_information",
+            columns=stock_info_columns,
+            **{"ticker": ticker},
+        )
         df_news = pd.DataFrame(
             self.db._select(
                 table="news_analysis",
@@ -536,11 +582,17 @@ class NewsService:
                     "emotion",
                     "that_time_price",
                 ],
+                order="date",
+                ascending=False,
                 **condition,
             )
         )
         if df_news.empty:
-            raise DataNotFoundException(ticker=ticker, data_type="news")
+            if stock_info[0][1]:
+                emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
+                return [], 0, 0, 0, emotion_count, ctry
+            else:
+                raise DataNotFoundException(ticker=ticker, data_type="news")
 
         offset = (page - 1) * size
         df_news["emotion"] = df_news["emotion"].str.lower()
@@ -553,6 +605,7 @@ class NewsService:
             offset = (page - 1) * size
 
         df_news = df_news[offset : offset + size]
+        df_news["date"] = pd.to_datetime(df_news["date"]).dt.tz_localize(utc).dt.tz_convert(kst)
         df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
 
         df_price = pd.DataFrame(

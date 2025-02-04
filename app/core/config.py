@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
     REDIS_PORT: int = os.getenv("REDIS_PORT", 6379)
 
-    CELERY_CONCURRENCY: int = os.getenv("CELERY_CONCURRENCY", 6)
+    CELERY_CONCURRENCY: int = os.getenv("CELERY_CONCURRENCY", 7)
 
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
@@ -105,8 +105,17 @@ class TestConfig(DatabaseConfig):
         )
 
 
+class BatchConfig(DatabaseConfig):
+    def __init__(self):
+        super().__init__(
+            DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
+            DB_POOL_RECYCLE=3600,
+            DB_ECHO=True,  # 배치 작업의 쿼리 로그를 확인하기 위해 True로 설정
+        )
+
+
 def get_database_config():
     """Get database configuration based on environment"""
 
-    config = dict(prod=ProdConfig, dev=DevConfig, test=TestConfig, stage=StageConfig)
+    config = dict(prod=ProdConfig, dev=DevConfig, test=TestConfig, stage=StageConfig, batch=BatchConfig)
     return config[settings.ENV]()

@@ -603,8 +603,8 @@ class PriceService:
         df = self._fetch_52week_data(ctry, ticker)
         if not df.empty:
             week_52_high = df["week_52_high"].iloc[0] or 0.0
-            week_52_low = df["week_52_low"].iloc[0]
-            last_day_close = df["last_close"].iloc[0]
+            week_52_low = df["week_52_low"].iloc[0] or 0.0
+            last_day_close = df["last_close"].iloc[0] or 0.0
         else:
             week_52_high = 0.0
             week_52_low = 0.0
@@ -614,7 +614,7 @@ class PriceService:
         name = self._get_us_ticker_name(ticker) or ""
         market = self._get_market(ticker, lang) or ""
         market_cap = await self._get_market_cap(ctry, ticker) or 0.0
-        name = remove_parentheses(name)
+        name = remove_parentheses(name) or ""
         is_market_close = check_market_status(ctry.upper())
 
         response_data = {
@@ -660,12 +660,22 @@ class PriceService:
 
         # return pd.DataFrame(result, columns=columns) if result else pd.DataFrame(columns=columns)
         ctry_3 = contry_mapping[ctry]
+        ticker_with_suffix = ""
         if ctry_3 == "USA":
-            ticker = f"{ticker}-US"
+            ticker_with_suffix = f"{ticker}-US"
+
         result = self.database._select(
-            table=f"{ctry_3}_stock_factors", columns=["week_52_high", "week_52_low", "last_close"], ticker=ticker
+            table=f"{ctry_3}_stock_factors", columns=["week_52_high", "week_52_low"], ticker=ticker_with_suffix
         )
-        return pd.DataFrame(result, columns=["week_52_high", "week_52_low", "last_close"])
+        last_close = self.database._select(table="stock_trend", columns=["prev_close"], ticker=ticker)
+
+        combined_data = {
+            "week_52_high": result[0][0] if result else None,
+            "week_52_low": result[0][1] if result else None,
+            "last_close": last_close[0][0] if last_close else None,
+        }
+
+        return pd.DataFrame([combined_data])
 
     def _process_price_data(self, df: pd.DataFrame) -> Tuple[float, float, float]:
         """
