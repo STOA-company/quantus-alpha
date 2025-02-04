@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+    celery_worker:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        command: python -m app.celery_worker
+        env_file:
+            - .env.${ENV:-dev}
+        environment:
+            - IN_DOCKER=true
+            - ENV=${ENV:-dev}
+        depends_on:
+            - rabbitmq
+            - redis
+        volumes:
+            - .:/app
+
+    rabbitmq:
+        image: rabbitmq:3.11.1-management
+        expose:
+            - 5672
+            - 15672
+        environment:
+            - RABBITMQ_DEFAULT_USER=admin
+            - RABBITMQ_DEFAULT_PASS=admin
+
+    redis:
+        image: redis:6.0.6
+        expose:
+            - 6379
