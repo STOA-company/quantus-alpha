@@ -230,7 +230,6 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
                 Ticker__in=unique_tickers,
             )
         )
-        df.to_csv("df.csv", index=False)
 
         if df.empty:
             error_msg = f"""
@@ -249,7 +248,6 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
             .agg({"Close": "first", "Date": "first", "Volume": "sum", "volume_change": "sum"})
             .reset_index()
         )
-        grouped.to_csv("grouped.csv", index=False)
 
         # 결과 데이터 생성
         update_data = []
@@ -293,4 +291,4 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
 
 if __name__ == "__main__":
     run_stock_trend_by_1d_batch(ctry=TrendingCountry.US)
-    run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
+    # run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
