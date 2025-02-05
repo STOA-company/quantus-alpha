@@ -32,7 +32,7 @@ CELERY_APP.conf.beat_schedule = {
     },
     "us-realtime-stock-trend": {
         "task": "stock_trend_realtime_us",
-        "schedule": crontab(minute="2,17,32,47"),  # 15분마다 실행 (장중)
+        "schedule": crontab(minute="12,27,42,57"),  # 15분마다 실행 (장중)
     },
     # # 한국 주식 스케줄
     "kr-daily-stock-trend": {
@@ -41,7 +41,7 @@ CELERY_APP.conf.beat_schedule = {
     },
     "kr-realtime-stock-trend": {
         "task": "stock_trend_realtime_kr",
-        "schedule": crontab(minute="2,17,32,47"),  # 15분마다 실행 (장중)
+        "schedule": crontab(minute="12,27,42,57"),  # 15분마다 실행 (장중)
     },
     # 주가 지수 스케줄
     "us-stock-indices": {
@@ -81,7 +81,6 @@ CELERY_APP.conf.beat_schedule = {
         "task": "us_news_renewal",
         "schedule": crontab(minute="10,40"),
     },
-
     # 메모리 상태 체크
     "memory-status": {
         "task": "memory-status",
