@@ -1,4 +1,6 @@
 from dataclasses import asdict, dataclass, field
+import time
+
 from sqlalchemy import MetaData, bindparam
 from sqlalchemy import select, insert, update, delete, desc, asc, or_, and_
 from sqlalchemy.exc import IntegrityError
@@ -411,6 +413,7 @@ class Database:
                 logging.info(
                     f"Bulk update completed for chunk {i//chunk_size + 1}, " f"processed {len(chunk)} records in {table}"
                 )
+                time.sleep(1)
 
         except Exception as e:
             logging.error(f"Error in bulk update operation: {str(e)}")
