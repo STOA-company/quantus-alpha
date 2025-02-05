@@ -25,6 +25,7 @@ from app.batches.run_disclosure import (
     us_run_disclosure_is_top_story,
 )
 from app.utils.date_utils import check_market_status
+from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
 
 notifier = SlackNotifier()
 
@@ -225,6 +226,18 @@ def us_news_renewal():
 def memory_status():
     """메모리 상태 확인"""
     notifier.notify_memory_status()
+
+
+@CELERY_APP.task(name="kr_stock_minute_batch", ignore_result=True)
+def kr_stock_minute_batch():
+    """한국 주식 분봉 데이터 업데이트"""
+    notifier.notify_info("KR_stock_minute_batch process started")
+    if check_market_status("KR"):
+        collect_kr_stock_minute_data()
+        notifier.notify_success("KR_stock_minute_batch process completed")
+    else:
+        notifier.notify_info("KR market is not open. KR_stock_minute_batch process skipped.")
+        return
 
 
 # Worker 시작점

@@ -81,6 +81,10 @@ CELERY_APP.conf.beat_schedule = {
         "task": "us_news_renewal",
         "schedule": crontab(minute="10,40"),
     },
+    "kr-stock-minute-batch": {
+        "task": "kr_stock_minute_batch",
+        "schedule": crontab(minute="1,16,31,46"),  # 15분마다 실행 (장중)
+    },
     # 메모리 상태 체크
     "memory-status": {
         "task": "memory-status",
