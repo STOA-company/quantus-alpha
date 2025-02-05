@@ -37,7 +37,7 @@ origins = [
     "https://develop.alphafinder.dev",
     "https://alphafinder-stage.vercel.app",
     "https://stage.alphafinder.dev",
-    "https://live2.alphafinder.dev",
+    "https://live.alphafinder.dev",
 ]
 
 app.add_middleware(
