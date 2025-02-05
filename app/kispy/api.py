@@ -1,8 +1,11 @@
+import logging
 import requests
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 
-class StockAPI:
+
+class KISAPI:
     def __init__(self):
         """Initialize the Korean Stock API client"""
         self.app_key = settings.KIS_APP_KEY

@@ -1,4 +1,5 @@
-from app.kispy.api import StockAPI
+from app.kispy.api import KISAPI
+import pandas as pd
 from app.database.crud import database
 import logging
 
@@ -10,7 +11,7 @@ def _collect_domestic_stock_status():
     모든 주식의 상장 및 거래 상태 수집
     """
     # API 클라이언트 초기화
-    api = StockAPI()
+    api = KISAPI()
 
     try:
         # stock_trend 테이블에서 모든 국내 티커 조회
@@ -54,7 +55,7 @@ def _collect_overseas_stock_status():
     모든 해외 주식의 상장 및 거래 상태 수집
     """
     # API 클라이언트 초기화
-    api = StockAPI()
+    api = KISAPI()
 
     try:
         # stock_trend 테이블에서 모든 해외 주식 티커와 마켓 유형 코드 조회
@@ -100,20 +101,94 @@ def _collect_overseas_stock_status():
         logging.error(f"해외 주식 상태 수집 중 오류: {e}")
 
 
+def deactivate_zero_volume():
+    """
+    거래량이 0이고 거래정지가 아닌 종목들을 비활성화
+    """
+    try:
+        # 활성화된 종목들 중 거래량 데이터 조회
+        df = database._select(
+            table="stock_trend",
+            columns=[
+                "ticker",
+                "market",
+                "volume_rt",
+                "volume_1d",
+                "volume_1w",
+                "volume_1m",
+                "volume_6m",
+                "volume_1y",
+                "is_trading_stopped",
+            ],
+            is_activate=1,
+        )
+
+        if not df:
+            logger.warning("No active stocks found in stock_trend table")
+            return []
+
+        df = pd.DataFrame(
+            df,
+            columns=[
+                "ticker",
+                "market",
+                "volume_rt",
+                "volume_1d",
+                "volume_1w",
+                "volume_1m",
+                "volume_6m",
+                "volume_1y",
+                "is_trading_stopped",
+            ],
+        )
+
+        # 모든 거래량 필드가 0이고 거래정지가 아닌 종목 필터링
+        volume_columns = ["volume_rt", "volume_1d", "volume_1w", "volume_1m", "volume_6m", "volume_1y"]
+
+        zero_volume_mask = df[volume_columns].fillna(0).eq(0).all(axis=1)
+        not_stopped_mask = df["is_trading_stopped"] != 1
+
+        deactivate_df = df[zero_volume_mask & not_stopped_mask]
+
+        deactivate_tickers = list(zip(deactivate_df["ticker"], deactivate_df["market"]))
+
+        # 비활성화 처리
+        for ticker, market in deactivate_tickers:
+            try:
+                database._update(table="stock_trend", sets={"is_activate": 0}, ticker=ticker)
+
+                database._update(table="stock_information", sets={"is_activate": 0}, ticker=ticker)
+
+                logger.info(f"Deactivated zero volume ticker: {ticker}")
+
+            except Exception as e:
+                logger.error(f"Failed to deactivate ticker {ticker}: {e}")
+
+        logger.info(f"Total {len(deactivate_tickers)} zero volume tickers deactivated")
+
+        return deactivate_tickers
+
+    except Exception as e:
+        logger.error(f"Error in detect_and_deactivate_zero_volume: {e}")
+        return []
+
+
 def main():
-    database._update(
-        table="stock_trend",
-        sets={"is_trading_stopped": False, "is_delisted": False},
-        ticker__in=database._select(table="stock_trend", columns=["ticker"]),
-    )
-    # 로깅 설정
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    # database._update(
+    #     table="stock_trend",
+    #     sets={"is_trading_stopped": False, "is_delisted": False},
+    #     ticker__in=database._select(table="stock_trend", columns=["ticker"]),
+    # )
+    # # 로깅 설정
+    # logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-    # 국내 주식 상태 수집 및 업데이트
-    _collect_domestic_stock_status()
+    # # 국내 주식 상태 수집 및 업데이트
+    # _collect_domestic_stock_status()
 
-    # 해외 주식 상태 수집 및 업데이트
-    _collect_overseas_stock_status()
+    # # 해외 주식 상태 수집 및 업데이트
+    # _collect_overseas_stock_status()
+
+    deactivate_zero_volume()
 
 
 if __name__ == "__main__":
