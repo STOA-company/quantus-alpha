@@ -75,11 +75,11 @@ CELERY_APP.conf.beat_schedule = {
     # 뉴스 업데이트 renewal
     "kr-news-renewal": {
         "task": "kr_news_renewal",
-        "schedule": crontab(minute="10,40"),
+        "schedule": crontab(minute="10,25,40,55"),
     },
     "us-news-renewal": {
         "task": "us_news_renewal",
-        "schedule": crontab(minute="10,40"),
+        "schedule": crontab(minute="10,25,40,55"),
     },
     # 메모리 상태 체크
     "memory-status": {
