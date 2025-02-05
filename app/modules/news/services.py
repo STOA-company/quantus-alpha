@@ -286,7 +286,6 @@ class NewsService:
                 ],
                 order="date",
                 ascending=False,
-                limit=100,
                 **condition,
             )
         )
@@ -306,7 +305,6 @@ class NewsService:
                     "en_name",
                     "ctry",
                     "date",
-                    "url",
                     "summary",
                     "impact_reason",
                     "key_points",
@@ -316,7 +314,6 @@ class NewsService:
                 ],
                 order="date",
                 ascending=False,
-                limit=100,
                 **condition,
             )
         )
@@ -327,6 +324,7 @@ class NewsService:
                 + " "
                 + df_disclosure["form_type"].map(document_type_mapping).fillna(df_disclosure["form_type"])
             )
+            df_disclosure.drop(columns=["form_type"], inplace=True)
             df_disclosure["type"] = "disclosure"
 
         # 데이터 통합 및 정렬

@@ -2,7 +2,7 @@ import requests
 from app.core.config import settings
 
 
-class KoreanStockAPI:
+class StockAPI:
     def __init__(self):
         """Initialize the Korean Stock API client"""
         self.app_key = settings.KIS_APP_KEY
@@ -76,13 +76,13 @@ class KoreanStockAPI:
             print(f"Error fetching status for {stock_code}: {str(e)}")
             return {"ticker": stock_code, "error": str(e), "is_trading_stopped": False, "is_delisted": False}
 
-    def get_overseas_stock_status(self, ticker: str, market_type_code: str) -> dict:
+    def get_overseas_stock_status(self, ticker: str, market_type_code: int) -> dict:
         """
         해외 주식의 거래중지/상장폐지 여부 조회
 
         Args:
             ticker (str): 종목 티커 (예: AAPL)
-            market_type_code (str): 시장 유형 코드 (예: 512 - 미국 나스닥)
+            market_type_code (int): 시장 유형 코드 (예: 512 - 미국 나스닥)
 
         Returns:
             dict: 종목 상태 정보 {
@@ -108,7 +108,7 @@ class KoreanStockAPI:
             response = requests.get(url, headers=headers, params=params)
 
             if response.status_code != 200:
-                raise Exception(f"API request failed with status {response.status_code}")
+                raise Exception(f"API request failed with status {response}")
 
             data = response.json()
 
