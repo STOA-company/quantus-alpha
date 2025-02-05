@@ -113,7 +113,7 @@ class NewsService:
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
 
-        change_rate_column = "change_rt" if ctry == "us" else "change_1d"
+        change_rate_column = "change_rt"
 
         join_info = lambda table: JoinInfo(  # noqa: E731
             primary_table=table,
@@ -202,7 +202,7 @@ class NewsService:
         if df.empty:
             return []
 
-        change_rate_column = "change_rt" if "change_rt" in df.columns else "change_1d"
+        change_rate_column = "change_rt"
 
         numeric_columns = ["that_time_price", "current_price", change_rate_column]
         df[numeric_columns] = df[numeric_columns].astype("float64").fillna(0)
@@ -347,8 +347,7 @@ class NewsService:
             )
         )
         total_df["price_impact"] = 0.0
-        ctry = total_df.iloc[0]["ctry"]
-        change_rate_column = "change_rt" if ctry == "us" else "change_1d"
+        change_rate_column = "change_rt"
 
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")

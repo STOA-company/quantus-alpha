@@ -58,7 +58,7 @@ class SearchService:
 
         prices = {}
         for country, tickers in country_groups.items():
-            change_rate_column = "change_rt" if country == "us" else "change_1d"
+            change_rate_column = "change_rt"
             try:
                 price_results = self.db._select(
                     table="stock_trend",
