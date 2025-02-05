@@ -2,7 +2,7 @@ import random
 from typing import List, Tuple
 from fastapi import HTTPException
 import pandas as pd
-from sqlalchemy import and_, func, select
+from sqlalchemy import select
 from app.database.crud import database
 from app.models.models_stock import StockInformation
 from app.modules.common.enum import StabilityStatus
@@ -158,43 +158,33 @@ class StockInfoService:
         Returns:
             List[SimilarStock]: 연관 종목 리스트
         """
-        # ticker의 섹터 조회
-        query = select(StockInformation).where(StockInformation.ticker == ticker)
-        result = await db.execute(query)
-        stock_info = result.scalars().first()
-
-        if not stock_info:
+        ticker_sector = self.db._select(table="stock_information", columns=["sector_2"], **{"ticker": ticker})
+        if not ticker_sector:
             raise HTTPException(status_code=404, detail=f"Stock not found: {ticker}")
 
-        sector = stock_info.sector_2
+        similar_tickers = self.db._select(
+            table="stock_information",
+            columns=["ticker"],
+            limit=6,
+            **{"sector_2": ticker_sector[0].sector_2, "ticker__not": ticker, "is_activate": True},
+        )
+        similar_tickers = [ticker.ticker for ticker in similar_tickers]
 
-        # 같은 섹터의 다른 종목들을 랜덤하게 6개 조회
-        query = (
-            select(StockInformation)
-            .where(and_(StockInformation.sector_2 == sector, StockInformation.ticker != ticker))
-            .order_by(func.rand())
-            .limit(6)
+        similar_stocks_data = self.db._select(
+            table="stock_trend",
+            columns=["ticker", "kr_name", "ctry", "current_price", "change_rt"],
+            **{"ticker__in": similar_tickers, "is_delisted": 0, "is_trading_stopped": 0},
         )
 
-        result = await db.execute(query)
-        stocks = result.scalars().all()
-
-        # 종목 SimilarStock 리스트 생성
         similar_stocks = []
-        for stock in stocks:
-            # 각 종목별로 현재가와 변동률 조회
-            current_price, current_price_rate = await self.get_current_price(
-                ticker=stock.ticker,  # 각 종목의 ticker 사용
-                table_name=f"stock_{stock.ctry}_1d",  # 각 종목의 국가에 맞는 테이블 사용
-            )
-
+        for stock in similar_stocks_data:
             similar_stocks.append(
                 SimilarStock(
                     ticker=stock.ticker,
                     name=stock.kr_name,
                     ctry=stock.ctry,
-                    current_price=current_price,
-                    current_price_rate=current_price_rate,
+                    current_price=stock.current_price,
+                    current_price_rate=stock.change_rt,
                 )
             )
 
