@@ -303,8 +303,8 @@ class NewsService:
     def _get_news_data(self, ticker: str) -> Optional[Dict]:
         """뉴스 데이터 조회"""
         news_data = self.db._select(
-            table="news_information",
-            columns=["date", "summary"],
+            table="news_analysis",
+            columns=["date", "summary", "impact_reason"],
             order="date",
             ascending=False,
             limit=1,
@@ -312,7 +312,7 @@ class NewsService:
         )
         if news_data:
             date = news_data[0][0].strftime("%Y-%m-%d %H:%M:%S")
-            content = self._parse_news_content(news_data[0][1])
+            content = f"{news_data[0][1]} / {news_data[0][2]}"
 
             return {"date": date, "content": content, "type": "news"}
         else:

@@ -498,7 +498,10 @@ class PriceService:
         try:
             ctry = check_ticker_country_len_2(ticker)
 
-            conditions = {"ticker": ticker}
+            conditions = {
+                "ticker": ticker,
+                # "is_delisted": 0, # 상폐 종목 데이터를 보여주면 안될시 해제
+            }
 
             change_rate_column = "change_rt" if ctry == "us" else "change_1d"
             query_result = self.database._select(
