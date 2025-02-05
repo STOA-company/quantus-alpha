@@ -174,10 +174,6 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
             }
             update_data.append(update_dict)
 
-        df_update_data = pd.DataFrame(update_data)
-        df_update_data.to_csv("df_update_data_1d.csv", index=False)
-        return 0
-
         # 벌크 업데이트 실행
         database._bulk_update(table="stock_trend", data=update_data, key_column="ticker")
         logging.info(f"Successfully updated {len(update_data)} records in stock_trend table")
@@ -234,7 +230,6 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
                 Ticker__in=unique_tickers,
             )
         )
-        df.to_csv("df.csv", index=False)
 
         if df.empty:
             error_msg = f"""
@@ -253,7 +248,6 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
             .agg({"Close": "first", "Date": "first", "Volume": "sum", "volume_change": "sum"})
             .reset_index()
         )
-        grouped.to_csv("grouped.csv", index=False)
 
         # 결과 데이터 생성
         update_data = []
@@ -297,3 +291,4 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
 
 if __name__ == "__main__":
     run_stock_trend_by_1d_batch(ctry=TrendingCountry.US)
+    # run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
