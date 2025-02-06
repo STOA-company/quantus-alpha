@@ -646,25 +646,8 @@ class PriceService:
         """
         52주 데이터 조회
         """
-        # end_date = date.today()
-        # start_date = end_date - timedelta(days=365)
-
-        # table_name = f"stock_{ctry}_1d"
-        # columns = self.country_specific_columns.get(ctry, self.base_columns)
-
-        # result = self.database._select(
-        #     table=table_name,
-        #     columns=columns,
-        #     Ticker=ticker,
-        #     Date__gte=datetime.combine(start_date, datetime.min.time()),
-        #     Date__lte=datetime.combine(end_date, datetime.max.time()),
-        #     order="Date",
-        #     ascending=True,
-        # )
-
-        # return pd.DataFrame(result, columns=columns) if result else pd.DataFrame(columns=columns)
         ctry_3 = contry_mapping[ctry]
-        ticker_with_suffix = ""
+        ticker_with_suffix = ticker
         if ctry_3 == "USA":
             ticker_with_suffix = f"{ticker}-US"
 
@@ -672,7 +655,6 @@ class PriceService:
             table=f"{ctry_3}_stock_factors", columns=["week_52_high", "week_52_low"], ticker=ticker_with_suffix
         )
         last_close = self.database._select(table="stock_trend", columns=["prev_close"], ticker=ticker)
-
         combined_data = {
             "week_52_high": result[0][0] if result else None,
             "week_52_low": result[0][1] if result else None,
