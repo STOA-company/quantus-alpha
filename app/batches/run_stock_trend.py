@@ -214,7 +214,7 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
         if ctry == TrendingCountry.US:
             table_name = "stock_us_1m"
         elif ctry == TrendingCountry.KR:
-            table_name = "stock_kr_1d"
+            table_name = "stock_kr_1m"
         else:
             raise ValueError(f"Invalid country: {ctry.value}")
 
