@@ -180,7 +180,6 @@ class StockIndicesService:
                         fall_ratio=fall_ratio,
                         unchanged_ratio=unchanged_ratio,
                         is_open=is_open,
-                        timestamp=daily_data["timestamp"],
                     )
                     indices_data[name] = min5_data
 
