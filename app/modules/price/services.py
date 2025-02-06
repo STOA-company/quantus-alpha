@@ -503,7 +503,7 @@ class PriceService:
                 # "is_delisted": 0, # 상폐 종목 데이터를 보여주면 안될시 해제
             }
 
-            change_rate_column = "change_rt" if ctry == "us" else "change_1d"
+            change_rate_column = "change_rt"
             query_result = self.database._select(
                 table="stock_trend",
                 columns=["ticker", "current_price", "prev_close", change_rate_column, "is_trading_stopped"],
