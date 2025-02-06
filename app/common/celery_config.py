@@ -86,6 +86,14 @@ CELERY_APP.conf.beat_schedule = {
         "task": "us_news_renewal",
         "schedule": crontab(minute="10,25,40,55"),
     },
+    "process_outliers_us": {
+        "task": "process_outliers_us",
+        "schedule": crontab(hour="23", minute="35"),
+    },
+    "process_outliers_kr": {
+        "task": "process_outliers_kr",
+        "schedule": crontab(hour="09", minute="05"),
+    },
     # 메모리 상태 체크
     "memory-status": {
         "task": "memory-status",
