@@ -1,11 +1,10 @@
-import random
 from typing import List, Tuple
 from fastapi import HTTPException
 import pandas as pd
 from sqlalchemy import select
 from app.database.crud import database
 from app.models.models_stock import StockInformation
-from app.modules.common.enum import StabilityStatus
+from app.modules.common.enum import StabilityStatus, StabilityType
 from app.modules.stock_info.mapping import STABILITY_INFO
 from app.modules.stock_info.schemas import Indicators, SimilarStock, StockInfo
 from app.core.logging.config import get_logger
@@ -76,8 +75,28 @@ class StockInfoService:
         rounded = round(value, 1)
         return int(rounded) if rounded.is_integer() else rounded
 
+    def get_stability_status(self, score: float, stability_type: StabilityType) -> StabilityStatus:
+        """
+        점수에 따른 안정성 상태를 반환합니다.
+
+        Args:
+            score (float): 안정성 점수
+            threshold (StabilityThreshold): 임계값 설정
+
+        Returns:
+            StabilityStatus: 안정성 상태 (좋음, 보통, 나쁨)
+        """
+        threshold = STABILITY_INFO[stability_type].threshold
+
+        if score >= threshold.GOOD:
+            return StabilityStatus.GOOD
+        elif score >= threshold.BAD:
+            return StabilityStatus.NORMAL
+        return StabilityStatus.BAD
+
     async def get_indicators(self, ctry: str, ticker: str) -> Indicators:
         """지표 조회"""
+
         if ctry == "us":
             ticker = f"{ticker}-US"
 
@@ -116,11 +135,8 @@ class StockInfoService:
         # 안정성 지표 상태 계산
         stability_statuses = {}
         for stability_type, info in STABILITY_INFO.items():
-            if ctry == "kr":
-                score = getattr(current_stock[0], info.db_column)
-                status = self.get_stability_status(score, stability_type)
-            else:
-                status = random.choice(list(StabilityStatus))
+            score = getattr(current_stock[0], info.db_column)
+            status = self.get_stability_status(score, stability_type)
             stability_statuses[info.api_field] = status.value
 
         return Indicators(
