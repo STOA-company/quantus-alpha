@@ -24,7 +24,12 @@ from app.batches.run_disclosure import (
     renewal_us_run_disclosure_batch,
     us_run_disclosure_is_top_story,
 )
+from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
+from app.batches.check_split import check_kr_stock_splits, check_us_stock_splits
+from app.batches.check_outliers import check_and_recollect_outliers_kr, check_and_recollect_outliers_us
+
 from app.utils.date_utils import check_market_status
+
 
 notifier = SlackNotifier()
 
@@ -225,6 +230,46 @@ def us_news_renewal():
 def memory_status():
     """메모리 상태 확인"""
     notifier.notify_memory_status()
+
+
+@CELERY_APP.task(name="kr_stock_minute_batch", ignore_result=True)
+def kr_stock_minute_batch():
+    """한국 주식 분봉 데이터 업데이트"""
+    notifier.notify_info("KR_stock_minute_batch process started")
+    if check_market_status("KR"):
+        collect_kr_stock_minute_data()
+        notifier.notify_success("KR_stock_minute_batch process completed")
+    else:
+        notifier.notify_info("KR market is not open. KR_stock_minute_batch process skipped.")
+        return
+
+
+@CELERY_APP.task(name="process_outliers_kr", ignore_result=True)
+def process_outliers_kr():
+    """한국 주식 이상치 처리"""
+    notifier.notify_info("KR_process_outliers process started")
+    try:
+        check_kr_stock_splits()
+        check_and_recollect_outliers_kr()
+        stock_trend_1d_kr_task()
+        notifier.notify_success("KR_process_outliers process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_process_outliers process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="process_outliers_us", ignore_result=True)
+def process_outliers_us():
+    """미국 주식 이상치 처리"""
+    notifier.notify_info("US_process_outliers process started")
+    try:
+        check_us_stock_splits()
+        check_and_recollect_outliers_us()
+        stock_trend_1d_us_task()
+        notifier.notify_success("US_process_outliers process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_process_outliers process failed: {str(e)}")
+        raise
 
 
 # Worker 시작점

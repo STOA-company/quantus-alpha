@@ -25,6 +25,11 @@ CELERY_APP.conf.worker_prefetch_multiplier = 1  # 작업 분배 최적화
 
 # Celery Beat Schedule
 CELERY_APP.conf.beat_schedule = {
+    # 한국 주식 분봉 스케줄
+    "kr-stock-minute-batch": {
+        "task": "kr_stock_minute_batch",
+        "schedule": crontab(minute="1,16,31,46"),  # 15분마다 실행 (장중)
+    },
     # 미국 주식 스케줄
     "us-daily-stock-trend": {
         "task": "stock_trend_1d_us",
@@ -80,6 +85,14 @@ CELERY_APP.conf.beat_schedule = {
     "us-news-renewal": {
         "task": "us_news_renewal",
         "schedule": crontab(minute="10,25,40,55"),
+    },
+    "process_outliers_us": {
+        "task": "process_outliers_us",
+        "schedule": crontab(hour="23", minute="35"),
+    },
+    "process_outliers_kr": {
+        "task": "process_outliers_kr",
+        "schedule": crontab(hour="09", minute="05"),
     },
     # 메모리 상태 체크
     "memory-status": {
