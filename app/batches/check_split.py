@@ -136,6 +136,8 @@ def check_us_stock_splits():
             logger.warning("No active US tickers found")
             return
 
+        logger.warning(f"Tickers: {tickers}")
+
         tickers_obj = yf.Tickers(" ".join(tickers))
 
         for ticker in tickers:
@@ -149,13 +151,13 @@ def check_us_stock_splits():
                 recent_splits = history.iloc[-1]["Stock Splits"]
 
                 if recent_splits != 0:
-                    logger.info(f"Split detected for {ticker}")
+                    logger.warning(f"Split detected for {ticker}")
                     split_detected.append(ticker)
 
                     df = fetch_stock_data(ticker, "US")
                     if df is not None and _update_price_data(ticker, df, "US"):
                         updated_count += 1
-                        logger.info(f"Updated {ticker}")
+                        logger.warning(f"Updated {ticker}")
 
             except Exception as e:
                 logger.error(f"Failed to process US ticker {ticker}: {str(e)}")
