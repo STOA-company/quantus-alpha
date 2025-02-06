@@ -91,3 +91,16 @@ class TrendingPeriod(Enum):
 class TrendingCountry(Enum):
     KR = "kr"
     US = "us"
+
+
+class StabilityStatus(str, Enum):
+    GOOD = "좋음"
+    NORMAL = "보통"
+    BAD = "나쁨"
+
+
+class StabilityType(str, Enum):
+    FINANCIAL = "financial_stability_score"
+    PRICE = "price_stability_score"
+    MARKET = "market_stability_score"
+    SECTOR = "sector_stability_score"

@@ -2,13 +2,17 @@ import random
 from typing import List, Tuple
 from fastapi import HTTPException
 import pandas as pd
-from sqlalchemy import and_, func, select
+from sqlalchemy import select
 from app.database.crud import database
 from app.models.models_stock import StockInformation
+from app.modules.common.enum import StabilityStatus
+from app.modules.stock_info.mapping import STABILITY_INFO
 from app.modules.stock_info.schemas import Indicators, SimilarStock, StockInfo
 from app.core.logging.config import get_logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.common.utils import contry_mapping
+from typing import Dict
+
 
 logger = get_logger(__name__)
 
@@ -82,38 +86,15 @@ class StockInfoService:
 
         # 현재 종목의 지표 조회
         table_name = f"{ctry_3}_stock_factors"
-        columns = ["per", "pbr", "roe"]
-        stock_colums = columns + ["financial_stability_score", "price_stability_score", "market_stability_score"]
+        basic_columns = ["per", "pbr", "roe"]
+        stability_columns = [info.db_column for info in STABILITY_INFO.values()]
+        columns = basic_columns + stability_columns
 
         current_stock = self.db._select(
             table=table_name,
-            columns=stock_colums if ctry == "kr" else columns,
+            columns=columns,
             **{"ticker": ticker},
         )
-        status_options = ["좋음", "보통", "나쁨"]
-
-        GOOD_THRESHOLD = 0.7
-        BAD_THRESHOLD = 0.3
-
-        def get_status(score: float) -> str:
-            if score >= GOOD_THRESHOLD:
-                return "좋음"
-            elif score >= BAD_THRESHOLD:
-                return "보통"
-            else:
-                return "나쁨"
-
-        # TODO :: {ctry}_stock_factors 완성시 수정해야 함.
-        financial_data = (
-            get_status(current_stock[0].financial_stability_score) if ctry == "kr" else random.choice(status_options)
-        )
-        price_trend = (
-            get_status(current_stock[0].price_stability_score) if ctry == "kr" else random.choice(status_options)
-        )
-        market_situation = (
-            get_status(current_stock[0].market_stability_score) if ctry == "kr" else random.choice(status_options)
-        )
-        industry_situation = random.choice(status_options)
 
         if not current_stock:
             return Indicators(
@@ -129,45 +110,27 @@ class StockInfoService:
                 industry_situation="보통",
             )
 
-        # 관련 섹터의 ticker 조회
-        sector_ticker = ticker.replace("-US", "")
-        sector_tickers = await self.get_related_sectors(sector_ticker)
+        # 섹터 관련 데이터 계산
+        sector_metrics = await self._calculate_sector_metrics(ticker, ctry, table_name, basic_columns)
 
-        # US 시장인 경우 -US 접미사 추가
-        if ctry == "us":
-            sector_tickers = [f"{t}-US" for t in sector_tickers]
-
-        # 섹터 종목이 있는 경우에만 쿼리 실행
-        if sector_tickers:
-            sector_results = self.db._select(table=table_name, columns=columns, **{"ticker__in": sector_tickers})
-
-            # 섹터 평균 계산 (소수점 1자리로 반올림, 소수점이 0이면 정수로)
-            if sector_results:
-                sector_per = self.round_and_clean(
-                    sum(stock.per for stock in sector_results if stock.per) / len(sector_results)
-                )
-                sector_pbr = self.round_and_clean(
-                    sum(stock.pbr for stock in sector_results if stock.pbr) / len(sector_results)
-                )
-                sector_roe = self.round_and_clean(
-                    sum(stock.roe for stock in sector_results if stock.roe) / len(sector_results)
-                )
+        # 안정성 지표 상태 계산
+        stability_statuses = {}
+        for stability_type, info in STABILITY_INFO.items():
+            if ctry == "kr":
+                score = getattr(current_stock[0], info.db_column)
+                status = self.get_stability_status(score, stability_type)
             else:
-                sector_per = sector_pbr = sector_roe = 0
-        else:
-            sector_per = sector_pbr = sector_roe = 0
+                status = random.choice(list(StabilityStatus))
+            stability_statuses[info.api_field] = status.value
 
         return Indicators(
             per=self.round_and_clean(current_stock[0].per),
-            industry_per=sector_per,
+            industry_per=sector_metrics["per"],
             pbr=self.round_and_clean(current_stock[0].pbr),
-            industry_pbr=sector_pbr,
+            industry_pbr=sector_metrics["pbr"],
             roe=self.round_and_clean(current_stock[0].roe),
-            industry_roe=sector_roe,
-            financial_data=financial_data,
-            price_trend=price_trend,
-            market_situation=market_situation,
-            industry_situation=industry_situation,
+            industry_roe=sector_metrics["roe"],
+            **stability_statuses,
         )
 
     # 관련 섹터 조회
@@ -195,43 +158,33 @@ class StockInfoService:
         Returns:
             List[SimilarStock]: 연관 종목 리스트
         """
-        # ticker의 섹터 조회
-        query = select(StockInformation).where(StockInformation.ticker == ticker)
-        result = await db.execute(query)
-        stock_info = result.scalars().first()
-
-        if not stock_info:
+        ticker_sector = self.db._select(table="stock_information", columns=["sector_2"], **{"ticker": ticker})
+        if not ticker_sector:
             raise HTTPException(status_code=404, detail=f"Stock not found: {ticker}")
 
-        sector = stock_info.sector_2
+        similar_tickers = self.db._select(
+            table="stock_information",
+            columns=["ticker"],
+            limit=6,
+            **{"sector_2": ticker_sector[0].sector_2, "ticker__not": ticker, "is_activate": True},
+        )
+        similar_tickers = [ticker.ticker for ticker in similar_tickers]
 
-        # 같은 섹터의 다른 종목들을 랜덤하게 6개 조회
-        query = (
-            select(StockInformation)
-            .where(and_(StockInformation.sector_2 == sector, StockInformation.ticker != ticker))
-            .order_by(func.rand())
-            .limit(6)
+        similar_stocks_data = self.db._select(
+            table="stock_trend",
+            columns=["ticker", "kr_name", "ctry", "current_price", "change_rt"],
+            **{"ticker__in": similar_tickers, "is_delisted": 0, "is_trading_stopped": 0},
         )
 
-        result = await db.execute(query)
-        stocks = result.scalars().all()
-
-        # 종목 SimilarStock 리스트 생성
         similar_stocks = []
-        for stock in stocks:
-            # 각 종목별로 현재가와 변동률 조회
-            current_price, current_price_rate = await self.get_current_price(
-                ticker=stock.ticker,  # 각 종목의 ticker 사용
-                table_name=f"stock_{stock.ctry}_1d",  # 각 종목의 국가에 맞는 테이블 사용
-            )
-
+        for stock in similar_stocks_data:
             similar_stocks.append(
                 SimilarStock(
                     ticker=stock.ticker,
                     name=stock.kr_name,
                     ctry=stock.ctry,
-                    current_price=current_price,
-                    current_price_rate=current_price_rate,
+                    current_price=stock.current_price,
+                    current_price_rate=stock.change_rt,
                 )
             )
 
@@ -266,6 +219,35 @@ class StockInfoService:
         price_rate = round(((current_price - open_price) / open_price * 100), 2) if open_price != 0 else 0.0
 
         return current_price, price_rate
+
+    async def _calculate_sector_metrics(
+        self, ticker: str, ctry: str, table_name: str, columns: List[str]
+    ) -> Dict[str, float]:
+        """섹터 관련 지표 계산"""
+        sector_ticker = ticker.replace("-US", "")
+        sector_tickers = await self.get_related_sectors(sector_ticker)
+
+        if ctry == "us":
+            sector_tickers = [f"{t}-US" for t in sector_tickers]
+
+        if not sector_tickers:
+            return {metric: 0 for metric in columns}
+
+        sector_results = self.db._select(table=table_name, columns=columns, **{"ticker__in": sector_tickers})
+
+        if not sector_results:
+            return {metric: 0 for metric in columns}
+
+        # 섹터 평균 계산
+        sector_metrics = {}
+        for metric in columns:
+            values = [getattr(stock, metric) for stock in sector_results if getattr(stock, metric)]
+            if values:
+                sector_metrics[metric] = self.round_and_clean(sum(values) / len(values))
+            else:
+                sector_metrics[metric] = 0
+
+        return sector_metrics
 
 
 def get_stock_info_service() -> StockInfoService:

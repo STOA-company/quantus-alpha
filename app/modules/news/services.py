@@ -106,8 +106,6 @@ class NewsService:
         df["emotion"] = df["emotion"].str.lower()
         df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
 
-        df["key_points"] = df["key_points"].str.replace(r'[\[\]"]', "", regex=True)
-
         return df
 
     def get_renewal_data(self, ctry: str = None) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
@@ -154,6 +152,8 @@ class NewsService:
                     "date",
                     "title",
                     "summary",
+                    "impact_reason",
+                    "key_points",
                     "emotion",
                     "that_time_price",
                     "current_price",
@@ -218,7 +218,6 @@ class NewsService:
         df["change_rate"] = df[change_rate_column].round(2)
 
         if is_disclosure:
-            df["ko_name"] = df["ko_name"].apply(self.remove_parentheses)
             return [
                 DisclosureRenewalItem(
                     id=row["id"],
@@ -245,6 +244,8 @@ class NewsService:
                 ctry=row["ctry"],
                 title=row["title"],
                 summary=row["summary"],
+                impact_reason=row["impact_reason"],
+                key_points=row["key_points"],
                 emotion=row["emotion"],
                 name=row["kr_name"],
                 change_rate=row["change_rate"],
@@ -284,7 +285,6 @@ class NewsService:
                 ],
                 order="date",
                 ascending=False,
-                limit=100,
                 **condition,
             )
         )
@@ -304,7 +304,6 @@ class NewsService:
                     "en_name",
                     "ctry",
                     "date",
-                    "url",
                     "summary",
                     "impact_reason",
                     "key_points",
@@ -314,7 +313,6 @@ class NewsService:
                 ],
                 order="date",
                 ascending=False,
-                limit=100,
                 **condition,
             )
         )
@@ -325,6 +323,7 @@ class NewsService:
                 + " "
                 + df_disclosure["form_type"].map(document_type_mapping).fillna(df_disclosure["form_type"])
             )
+            df_disclosure.drop(columns=["form_type"], inplace=True)
             df_disclosure["type"] = "disclosure"
 
         # 데이터 통합 및 정렬
@@ -342,18 +341,15 @@ class NewsService:
         df_price = pd.DataFrame(
             self.db._select(
                 table="stock_trend",
-                columns=["ticker", "current_price", "change_rt", "change_1d"],
+                columns=["ticker", "current_price", "change_rt"],
                 **{"ticker__in": unique_tickers},
             )
         )
         total_df["price_impact"] = 0.0
-        ctry = total_df.iloc[0]["ctry"]
-        change_rate_column = "change_rt" if ctry == "us" else "change_1d"
 
         if not df_price.empty:
             total_df = pd.merge(total_df, df_price, on="ticker", how="left")
             total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
-            total_df[change_rate_column] = total_df[change_rate_column].fillna(0.0)
             total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
 
             mask = (total_df["current_price"] != 0) & (total_df["that_time_price"] != 0)
@@ -389,7 +385,7 @@ class NewsService:
                         id=row["id"],
                         price_impact=price_impact,
                         date=row["date"],
-                        title=self.remove_parentheses(row["title"]),
+                        title=row["title"],
                         summary=row["summary"],
                         impact_reason=row["impact_reason"],
                         key_points=row["key_points"],
@@ -408,7 +404,7 @@ class NewsService:
                     current_price=ticker_news.iloc[0]["current_price"]
                     if ticker_news.iloc[0].get("current_price")
                     else 0.0,
-                    change_rate=ticker_news.iloc[0][change_rate_column],
+                    change_rate=ticker_news.iloc[0]["change_rt"],
                     items_count=len(news_items),
                     news=news_items,
                     is_viewed=not ticker_has_unviewed,

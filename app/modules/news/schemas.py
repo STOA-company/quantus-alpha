@@ -27,6 +27,8 @@ class NewsRenewalItem(BaseModel):
     ticker: str | None
     title: str
     summary: str | None
+    impact_reason: str | None
+    key_points: str | None
     emotion: str | None
     name: str | None
     change_rate: float | None
