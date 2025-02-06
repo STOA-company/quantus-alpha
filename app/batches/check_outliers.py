@@ -9,15 +9,22 @@ from app.kispy.sdk import fetch_stock_data
 logger = logging.getLogger(__name__)
 
 
-def detect_and_deactivate_stock_trend_outliers():
+def detect_and_deactivate_stock_trend_outliers(nation: str):
     """
     stock_trend 테이블의 변화율 필드에서 이상치 탐지 및 is_activate 비활성화
     """
+
+    if nation == "US":
+        market = ["NAS", "NYS", "AMS"]
+    elif nation == "KR":
+        market = ["KOSPI", "KOSDAQ"]
+    else:
+        raise ValueError(f"Invalid nation: {nation}")
+
     df = database._select(
         table="stock_trend",
         columns=[
             "ticker",
-            "market",
             "change_rt",
             "change_1d",
             "change_1w",
@@ -26,6 +33,7 @@ def detect_and_deactivate_stock_trend_outliers():
             "change_1y",
             "is_activate",
         ],
+        market__in=market,
     )
 
     df = pd.DataFrame(
@@ -76,18 +84,18 @@ def detect_and_deactivate_stock_trend_outliers():
     return list(deactivate_tickers)
 
 
-def fetch_and_update_stock_data(ticker: str, market: str):
+def fetch_and_update_stock_data(ticker: str, nation: str):
     try:
         logger.info(f"Starting data update process for {ticker}")
 
         # 새로운 데이터 가져오기
-        new_data = fetch_stock_data(symbol=ticker, market=market)
+        new_data = fetch_stock_data(symbol=ticker, nation=nation)
         if new_data is None:
             logger.error(f"Failed to fetch new data for {ticker}")
             return None
 
         # 데이터 업데이트
-        result = update_price_data(ticker=ticker, df=new_data, market=market)
+        result = _update_price_data(ticker=ticker, df=new_data, market=market)
         return result
 
     except Exception as e:
@@ -95,7 +103,7 @@ def fetch_and_update_stock_data(ticker: str, market: str):
         return None
 
 
-def update_price_data(ticker: str, df: pd.DataFrame, market: str):
+def _update_price_data(ticker: str, df: pd.DataFrame, market: str):
     try:
         logger.info(f"Updating price data for {ticker}")
 
@@ -152,12 +160,31 @@ def update_price_data(ticker: str, df: pd.DataFrame, market: str):
         raise
 
 
+def check_and_recollect_outliers_us():
+    deactivated_tickers = detect_and_deactivate_stock_trend_outliers(nation="US")
+
+    for ticker, market in deactivated_tickers:
+        fetch_and_update_stock_data(ticker, nation="US")
+        activate_stock(ticker)
+
+    detect_and_deactivate_stock_trend_outliers(nation="US")
+
+
+def check_and_recollect_outliers_kr():
+    deactivated_tickers = detect_and_deactivate_stock_trend_outliers(nation="KR")
+
+    for ticker, market in deactivated_tickers:
+        fetch_and_update_stock_data(ticker, nation="KR")
+        activate_stock(ticker)
+
+    detect_and_deactivate_stock_trend_outliers(nation="KR")
+
+
 if __name__ == "__main__":
     deactivated_tickers = detect_and_deactivate_stock_trend_outliers()
 
-    print("비활성화된 티커:")
     for ticker, market in deactivated_tickers:
-        fetch_and_update_stock_data(ticker, market)
+        fetch_and_update_stock_data(ticker, nation="US")
         activate_stock(ticker)
         print(ticker, market)
 
