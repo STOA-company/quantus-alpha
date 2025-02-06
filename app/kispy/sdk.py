@@ -16,10 +16,10 @@ auth = KisAuth(
 )
 
 
-def fetch_stock_data(symbol: str, market: str):
+def fetch_stock_data(symbol: str, nation: str):
     try:
         # KisClientV2 초기화
-        client = KisClientV2(auth=auth, nation="KR" if market in ["KOSPI", "KOSDAQ"] else "US")
+        client = KisClientV2(auth=auth, nation=nation)
 
         # 전체 기간 일봉 데이터 조회
         # period="d": 일봉
