@@ -58,8 +58,10 @@ def collect_kr_stock_minute_data():
 
             try:
                 kr_tz = pytz.timezone("Asia/Seoul")
+                now = datetime.utcnow().replace(tzinfo=pytz.UTC).astimezone(kr_tz)
+                logger.info(f"Starting data collection at KST: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+                current_time = now.strftime("%H%M%S")
 
-                current_time = datetime.now(kr_tz).strftime("%H%M%S")
                 while True:
                     data = api.get_stock_price_history_by_minute(symbol=ticker, time=current_time, limit=16, desc=True)
 
