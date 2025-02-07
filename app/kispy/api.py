@@ -6,6 +6,13 @@ logger = logging.getLogger(__name__)
 
 
 class KISAPI:
+    INDEX_MARKET_CODES = {
+        "KOSPI": "0001",
+        "KOSDAQ": "1001",
+        "NASDAQ": "COMP",
+        "SNP500": "SPX",
+    }
+
     def __init__(self):
         """Initialize the Korean Stock API client"""
         self.app_key = settings.KIS_APP_KEY
@@ -133,3 +140,143 @@ class KISAPI:
         except Exception as e:
             print(f"Error fetching status for overseas stock {ticker}: {str(e)}")
             return {"ticker": ticker, "error": str(e), "is_trading_stopped": False, "is_delisted": False}
+
+    def get_domestic_index_minute(self, period: str, market: str):
+        try:
+            endpoint = "/uapi/domestic-stock/v1/quotations/inquire-index-timeprice"
+            url = f"{self.base_url}{endpoint}"
+
+            headers = {
+                "content-type": "application/json; charset=utf-8",
+                "authorization": f"Bearer {self.access_token}",
+                "appkey": self.app_key,
+                "appsecret": self.app_secret,
+                "tr_id": "FHPUP02110200",
+                "custtype": "P",
+            }
+
+            if period[-1] == "s":
+                time_period = int(period[:-1])
+            elif period[-1] == "m":
+                time_period = int(period[:-1]) * 60
+            elif period[-1] == "h":
+                time_period = int(period[:-1]) * 60 * 60
+            else:
+                raise ValueError(f"지원하지 않는 period: {period}")
+
+            params = {
+                "fid_input_hour_1": str(time_period),
+                "fid_input_iscd": self.INDEX_MARKET_CODES[market],
+                "fid_cond_mrkt_div_code": "U",
+            }
+
+            response = requests.get(url, headers=headers, params=params)
+
+            if response.status_code != 200:
+                raise Exception(f"API request failed with status {response.status_code}")
+
+            data = response.json()
+
+            if data["rt_cd"] != "0":  # API 에러 체크
+                raise Exception(f"API error: {data['msg1']}")
+
+            return data["output"]
+
+        except Exception as e:
+            print(f"Error fetching stock index for {market}: {str(e)}")
+            return {"error": str(e)}
+
+    def get_global_index_minute(self, index_code: str, include_history: bool = True) -> dict:
+        """
+        해외 지수 분봉 데이터 조회
+
+        Args:
+            index_code (str): 지수 코드 (SPX: S&P500, COMP: 나스닥)
+            include_history (bool): 과거 데이터 포함 여부
+
+        Returns:
+            dict: {
+                'current_data': 현재가 정보,
+                'minute_data': 분봉 데이터 DataFrame
+            }
+        """
+        try:
+            url = f"{self.base_url}/uapi/overseas-price/v1/quotations/inquire-time-indexchartprice"
+
+            headers = {
+                "content-type": "application/json; charset=utf-8",
+                "authorization": f"Bearer {self.access_token}",
+                "appkey": self.app_key,
+                "appsecret": self.app_secret,
+                "tr_id": "FHKST03030200",
+                "custtype": "P",
+            }
+
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "N",  # 해외지수
+                "FID_INPUT_ISCD": self.INDEX_MARKET_CODES[index_code],
+                "FID_HOUR_CLS_CODE": "0",  # 정규장
+                "FID_PW_DATA_INCU_YN": "Y" if include_history else "N",
+            }
+
+            response = requests.get(url, headers=headers, params=params)
+
+            if response.status_code != 200:
+                raise Exception(f"API request failed with status {response.status_code}")
+
+            data = response.json()
+
+            if not data or "output1" not in data:
+                raise Exception(f"Failed to fetch data for {index_code}")
+
+            return data
+
+        except Exception as e:
+            logger.error(f"Error fetching global index data for {index_code}: {str(e)}")
+            raise
+
+    def get_domestic_index_1d(self, index_code: str, date: str, include_history: bool = True) -> dict:
+        """
+        국내 지수 일봉 데이터 조회
+
+        Args:
+            index_code (str): 지수 코드 (KOSPI, KOSDAQ, KOSPI200)
+            include_history (bool): 과거 데이터 포함 여부
+
+        Returns:
+            dict: {
+                'current_data': 현재가 정보,
+                'day_data': 일봉 데이터 DataFrame
+            }
+        """
+        try:
+            url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-index-daily-price"
+            headers = {
+                "content-type": "application/json; charset=utf-8",
+                "authorization": f"Bearer {self.access_token}",
+                "appkey": self.app_key,
+                "appsecret": self.app_secret,
+                "tr_id": "FHPUP02120000",
+                "custtype": "P",
+            }
+
+            params = {
+                "fid_cond_mrkt_div_code": "U",
+                "fid_input_iscd": self.INDEX_MARKET_CODES[index_code],
+                "fid_input_date_1": date,
+                "fid_period_div_code": "D",
+            }
+            response = requests.get(url, headers=headers, params=params)
+
+            if response.status_code != 200:
+                raise Exception(f"API request failed with status {response.status_code}")
+
+            data = response.json()
+
+            if data["rt_cd"] != "0":
+                raise Exception(f"API error: {data['msg1']}")
+
+            return data
+        except Exception as e:
+            print(f"Error fetching domestic index data for {index_code}: {str(e)}")
+            return {"error": str(e)}
