@@ -164,10 +164,8 @@ def _update_market_data(ticker: str, result: dict):
 
 #################주가 지수 수집 로직#################
 
-kisapi = KISAPI()
 
-
-def get_overseas_index_data(ticker: str):
+def get_overseas_index_data(ticker: str, kisapi: KISAPI):
     result = kisapi.get_global_index_minute(ticker)
 
     # 분봉 데이터를 DataFrame으로 변환
@@ -235,7 +233,7 @@ def get_overseas_index_data(ticker: str):
     return len(df)
 
 
-def get_domestic_index_data(ticker: str):
+def get_domestic_index_data(ticker: str, kisapi: KISAPI):
     result = kisapi.get_domestic_index_minute(period="1m", market=ticker)
     df = pd.DataFrame(result)
 
@@ -352,12 +350,12 @@ def retry_on_rate_limit(max_retries: int = 3, retry_delay: int = 60) -> Callable
 
 
 @retry_on_rate_limit(max_retries=3, retry_delay=10)
-def get_stock_indices_data(ticker: str):
+def get_stock_indices_data(ticker: str, kisapi: KISAPI):
     if ticker in ["NASDAQ", "SNP500"]:
-        return get_overseas_index_data(ticker)
+        return get_overseas_index_data(ticker, kisapi)
 
     elif ticker in ["KOSPI", "KOSDAQ"]:
-        return get_domestic_index_data(ticker)
+        return get_domestic_index_data(ticker, kisapi)
     else:
         raise ValueError(f"Invalid ticker: {ticker}")
 
@@ -370,9 +368,9 @@ def _is_market_open(ticker: str) -> bool:
         return check_market_status("KR")
 
 
-# if __name__ == "__main__":
-# logging.info("Starting US market batch job from command line")
-# kr_run_stock_indices_batch()
+if __name__ == "__main__":
+    # logging.info("Starting US market batch job from command line")
+    # kr_run_stock_indices_batch()
 
-# get_stock_indices_data("NASDAQ")
-# get_stock_indices_data("SNP500")
+    get_stock_indices_data("KOSPI")
+    get_stock_indices_data("KOSDAQ")
