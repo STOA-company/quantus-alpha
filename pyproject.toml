@@ -36,6 +36,7 @@ exchange-calendars = "^4.6"
 kispy = {git = "https://github.com/zeroam/kispy"}
 scipy = "^1.15.1"
 pytz = "^2025.1"
+numpy = "^2.2.2"
 
 
 
