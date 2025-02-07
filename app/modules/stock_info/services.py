@@ -140,12 +140,12 @@ class StockInfoService:
             stability_statuses[info.api_field] = status.value
 
         return Indicators(
-            per=self.round_and_clean(current_stock[0].per),
-            industry_per=sector_metrics["per"],
-            pbr=self.round_and_clean(current_stock[0].pbr),
-            industry_pbr=sector_metrics["pbr"],
-            roe=self.round_and_clean(current_stock[0].roe),
-            industry_roe=sector_metrics["roe"],
+            per=self.round_and_clean(current_stock[0].per) if current_stock[0].per else 0,
+            industry_per=sector_metrics["per"] if sector_metrics["per"] else 0,
+            pbr=self.round_and_clean(current_stock[0].pbr) if current_stock[0].pbr else 0,
+            industry_pbr=sector_metrics["pbr"] if sector_metrics["pbr"] else 0,
+            roe=self.round_and_clean(current_stock[0].roe) if current_stock[0].roe else 0,
+            industry_roe=sector_metrics["roe"] if sector_metrics["roe"] else 0,
             **stability_statuses,
         )
 

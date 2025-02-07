@@ -249,7 +249,6 @@ class FinancialService:
 
         try:
             income_data = self.get_income_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
-
             # data를 details로 변경
             if not income_data.data.details:
                 logger.warning(f"No data found for ticker: {ticker}")
@@ -773,8 +772,22 @@ class FinancialService:
         quarters = self.financial_crud.get_debt_ratio_quarters(table_name, ticker, db)
 
         if not quarters:
-            logger.warning(f"부채비율 데이터를 찾을 수 없습니다: {ticker}")
-            raise DataNotFoundException(ticker=ticker, data_type="부채비율")
+            if ticker.endswith("-US"):
+                ticker = ticker[:-3]
+            target_en_name = self.db._select(table="stock_information", columns=["en_name"], ticker=ticker)
+            same_company_tickers = self.db._select(
+                table="stock_information", columns=["ticker", "en_name"], en_name=target_en_name[0][0]
+            )
+            ticker_list = [ticker[0] for ticker in same_company_tickers]
+            ticker_list = [f"{t}-US" if country == FinancialCountry.USA else t for t in ticker_list if t != ticker]
+            if len(ticker_list) == 1:
+                quarters = self.financial_crud.get_debt_ratio_quarters(table_name, ticker_list[0], db)
+            elif not ticker_list and len(ticker_list) > 1:
+                logger.warning(f"No debt ratio data found for ticker: {ticker}")
+                raise DataNotFoundException(ticker=ticker, data_type="부채비율")
+            else:
+                logger.warning(f"부채비율 데이터를 찾을 수 없습니다: {ticker}")
+                raise DataNotFoundException(ticker=ticker, data_type="부채비율")
 
         if len(quarters) < 4:
             logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
@@ -816,8 +829,22 @@ class FinancialService:
         quarters = self.financial_crud.get_liquidity_ratio_quarters(table_name, ticker, db)
 
         if not quarters:
-            logger.warning(f"유동비율 데이터를 찾을 수 없습니다: {ticker}")
-            raise DataNotFoundException(ticker=ticker, data_type="유동비율")
+            if ticker.endswith("-US"):
+                ticker = ticker[:-3]
+            target_en_name = self.db._select(table="stock_information", columns=["en_name"], ticker=ticker)
+            same_company_tickers = self.db._select(
+                table="stock_information", columns=["ticker", "en_name"], en_name=target_en_name[0][0]
+            )
+            ticker_list = [ticker[0] for ticker in same_company_tickers]
+            ticker_list = [f"{t}-US" if country == FinancialCountry.USA else t for t in ticker_list if t != ticker]
+            if len(ticker_list) == 1:
+                quarters = self.financial_crud.get_liquidity_ratio_quarters(table_name, ticker_list[0], db)
+            elif not ticker_list and len(ticker_list) > 1:
+                logger.warning(f"No liquidity ratio data found for ticker: {ticker}")
+                raise DataNotFoundException(ticker=ticker, data_type="유동비율")
+            else:
+                logger.warning(f"유동비율 데이터를 찾을 수 없습니다: {ticker}")
+                raise DataNotFoundException(ticker=ticker, data_type="유동비율")
 
         if len(quarters) < 4:
             logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
@@ -859,8 +886,22 @@ class FinancialService:
         quarters = self.financial_crud.get_interest_coverage_ratio_quarters(table_name, ticker, db)
 
         if not quarters:
-            logger.warning(f"이자보상배율 데이터를 찾을 수 없습니다: {ticker}")
-            raise DataNotFoundException(ticker=ticker, data_type="이자보상배율")
+            if ticker.endswith("-US"):
+                ticker = ticker[:-3]
+            target_en_name = self.db._select(table="stock_information", columns=["en_name"], ticker=ticker)
+            same_company_tickers = self.db._select(
+                table="stock_information", columns=["ticker", "en_name"], en_name=target_en_name[0][0]
+            )
+            ticker_list = [ticker[0] for ticker in same_company_tickers]
+            ticker_list = [f"{t}-US" if country == FinancialCountry.USA else t for t in ticker_list if t != ticker]
+            if len(ticker_list) == 1:
+                quarters = self.financial_crud.get_interest_coverage_ratio_quarters(table_name, ticker_list[0], db)
+            elif not ticker_list and len(ticker_list) > 1:
+                logger.warning(f"No interest coverage ratio data found for ticker: {ticker}")
+                raise DataNotFoundException(ticker=ticker, data_type="이자보상배율")
+            else:
+                logger.warning(f"이자보상배율 데이터를 찾을 수 없습니다: {ticker}")
+                raise DataNotFoundException(ticker=ticker, data_type="이자보상배율")
 
         if len(quarters) < 4:
             logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
