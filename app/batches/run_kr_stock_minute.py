@@ -4,6 +4,8 @@ from typing import List, Dict
 from app.kispy.sdk import auth
 from kispy.domestic_stock import QuoteAPI
 from app.database.crud import database
+import pytz
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -55,7 +57,9 @@ def collect_kr_stock_minute_data():
             ticker = ticker_row[0][1:] if ticker_row[0].startswith("A") else ticker_row[0]
 
             try:
-                current_time = datetime.now("Asia/Seoul").strftime("%H%M%S")
+                kr_tz = pytz.timezone("Asia/Seoul")
+
+                current_time = datetime.now(kr_tz).strftime("%H%M%S")
                 while True:
                     data = api.get_stock_price_history_by_minute(symbol=ticker, time=current_time, limit=16, desc=True)
 
