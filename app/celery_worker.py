@@ -29,7 +29,6 @@ from app.batches.check_split import check_kr_stock_splits, check_us_stock_splits
 from app.batches.check_outliers import check_and_recollect_outliers_kr, check_and_recollect_outliers_us
 
 from app.utils.date_utils import check_market_status
-from app.kispy.api import KISAPI
 
 notifier = SlackNotifier()
 
@@ -280,9 +279,8 @@ def kr_stock_indices_collect():
         return
     try:
         notifier.notify_info("KR_stock_indices_collect process started")
-        kisapi = KISAPI()
-        get_stock_indices_data("KOSPI", kisapi)
-        get_stock_indices_data("KOSDAQ", kisapi)
+        get_stock_indices_data("KOSPI")
+        get_stock_indices_data("KOSDAQ")
         notifier.notify_success("KR_stock_indices_collect process completed")
     except Exception as e:
         notifier.notify_error(f"KR_stock_indices_collect process failed: {str(e)}")
@@ -297,9 +295,8 @@ def us_stock_indices_collect():
         return
     try:
         notifier.notify_info("US_stock_indices_collect process started")
-        kisapi = KISAPI()
-        get_stock_indices_data("NASDAQ", kisapi)
-        get_stock_indices_data("SNP500", kisapi)
+        get_stock_indices_data("NASDAQ")
+        get_stock_indices_data("SNP500")
         notifier.notify_success("US_stock_indices_collect process completed")
     except Exception as e:
         notifier.notify_error(f"US_stock_indices_collect process failed: {str(e)}")

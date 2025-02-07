@@ -9,6 +9,7 @@ from sqlalchemy.sql import text
 from app.database.crud import database
 from app.utils.date_utils import now_utc, check_market_status
 from app.kispy.api import KISAPI
+from app.kispy.sdk import auth
 
 
 def kr_run_stock_indices_batch():
@@ -163,9 +164,10 @@ def _update_market_data(ticker: str, result: dict):
 
 
 #################주가 지수 수집 로직#################
+kisapi = KISAPI(auth=auth)
 
 
-def get_overseas_index_data(ticker: str, kisapi: KISAPI):
+def get_overseas_index_data(ticker: str):
     result = kisapi.get_global_index_minute(ticker)
 
     # 분봉 데이터를 DataFrame으로 변환
@@ -233,7 +235,7 @@ def get_overseas_index_data(ticker: str, kisapi: KISAPI):
     return len(df)
 
 
-def get_domestic_index_data(ticker: str, kisapi: KISAPI):
+def get_domestic_index_data(ticker: str):
     result = kisapi.get_domestic_index_minute(period="1m", market=ticker)
     df = pd.DataFrame(result)
 
@@ -350,12 +352,12 @@ def retry_on_rate_limit(max_retries: int = 3, retry_delay: int = 60) -> Callable
 
 
 @retry_on_rate_limit(max_retries=3, retry_delay=10)
-def get_stock_indices_data(ticker: str, kisapi: KISAPI):
+def get_stock_indices_data(ticker: str):
     if ticker in ["NASDAQ", "SNP500"]:
-        return get_overseas_index_data(ticker, kisapi)
+        return get_overseas_index_data(ticker)
 
     elif ticker in ["KOSPI", "KOSDAQ"]:
-        return get_domestic_index_data(ticker, kisapi)
+        return get_domestic_index_data(ticker)
     else:
         raise ValueError(f"Invalid ticker: {ticker}")
 
@@ -368,9 +370,9 @@ def _is_market_open(ticker: str) -> bool:
         return check_market_status("KR")
 
 
-if __name__ == "__main__":
-    # logging.info("Starting US market batch job from command line")
-    # kr_run_stock_indices_batch()
+# if __name__ == "__main__":
+# logging.info("Starting US market batch job from command line")
+# kr_run_stock_indices_batch()
 
-    get_stock_indices_data("KOSPI")
-    get_stock_indices_data("KOSDAQ")
+# get_stock_indices_data("KOSPI")
+# get_stock_indices_data("KOSDAQ")
