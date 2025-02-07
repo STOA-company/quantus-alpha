@@ -47,6 +47,7 @@ class TrendingService:
             ctry=request.ctry.value,
             limit=100,
             ticker__in=activate_tickers,
+            is_trading_stopped=0,
             is_delisted=0,
         )
 
