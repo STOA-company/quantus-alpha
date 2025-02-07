@@ -3,7 +3,6 @@ import pandas as pd
 
 import yfinance as yf
 from app.database.crud import database
-from app.utils.activate_utils import deactivate_stock
 from app.kispy.sdk import fetch_stock_data
 
 
@@ -96,11 +95,10 @@ def check_kr_stock_splits():
 
                 if recent_splits != 0:
                     logger.info(f"Split detected for {ticker}")
-                    split_detected.append("A" + ticker)
 
-                deactivate_stock("A" + ticker)
-                deactivated_count += 1
-                logger.info(f"Deactivated {ticker}")
+                    df = fetch_stock_data(ticker, "KR")
+                    if df is not None and _update_price_data(ticker, df, "KR"):
+                        logger.warning(f"Updated {ticker}")
 
             except Exception as e:
                 logger.error(f"Failed to process KR ticker {ticker}: {str(e)}")
