@@ -276,7 +276,7 @@ def process_outliers_us():
 def kr_stock_indices_collect():
     """한국 주가지수 데이터 수집"""
     if not check_market_status("KR"):
-        logging.notify_info("KR market is not open. KR_stock_indices_collect process skipped.")
+        notifier.notify_info("KR market is not open. KR_stock_indices_collect process skipped.")
         return
     try:
         notifier.notify_info("KR_stock_indices_collect process started")

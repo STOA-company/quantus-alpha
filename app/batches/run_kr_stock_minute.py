@@ -1,8 +1,8 @@
 import logging
 from datetime import datetime
 from typing import List, Dict
+from app.kispy.api import KISAPI
 from app.kispy.sdk import auth
-from kispy.domestic_stock import QuoteAPI
 from app.database.crud import database
 import pytz
 
@@ -44,7 +44,7 @@ def save_minute_data(ticker: str, data: List[Dict]):
 def collect_kr_stock_minute_data():
     """국내 주식 분봉 데이터 수집"""
     try:
-        api = QuoteAPI(auth=auth)
+        api = KISAPI(auth=auth)
 
         tickers = database._select(table="stock_information", columns=["ticker"], ctry="kr")
 
@@ -63,7 +63,8 @@ def collect_kr_stock_minute_data():
                 current_time = now.strftime("%H%M%S")
 
                 while True:
-                    data = api.get_stock_price_history_by_minute(symbol=ticker, time=current_time, limit=16, desc=True)
+                    logger.info(f"Current time: {current_time}")
+                    data = api.get_stock_price_history_by_minute(symbol=ticker, limit=16, desc=True)
 
                     if not data:
                         logger.info(f"No more data for ticker {ticker}")
