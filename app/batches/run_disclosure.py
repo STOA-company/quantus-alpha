@@ -277,7 +277,7 @@ def renewal_kr_run_disclosure_batch(date: str = None):
     query = text("""
     SELECT
         a.filing_id, a.ai_summary as en_summary, a.market_impact as en_market_impact, a.impact_reason as en_impact_reason, a.key_points as en_key_points,
-        d.company_name as ko_name, d.form_type, d.category_type, d.extra_info, d.ticker, d.url, d.processed_at as filing_date,
+        d.company_name as ko_name, d.form_type, d.category_type, d.extra_info, d.ticker, d.url, d.filing_date,
         t.ai_summary as kr_summary, t.impact_reason as kr_impact_reason, t.key_points as kr_key_points
     FROM kor_disclosure_analysis_translation t
     LEFT JOIN kor_disclosure d ON t.filing_id = d.filing_id

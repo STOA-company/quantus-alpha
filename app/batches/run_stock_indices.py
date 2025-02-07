@@ -172,6 +172,9 @@ def get_overseas_index_data(ticker: str):
 
     # 분봉 데이터를 DataFrame으로 변환
     df = pd.DataFrame(result["output2"])
+    df["stck_cntg_hour"] = df["stck_cntg_hour"].astype(int)
+    df = df[(df["stck_cntg_hour"] >= 90000) & (df["stck_cntg_hour"] <= 162000)]
+    df["stck_cntg_hour"] = df["stck_cntg_hour"].astype(str).str.zfill(6)
 
     # 컬럼 이름 변경
     df = df.rename(
@@ -198,6 +201,8 @@ def get_overseas_index_data(ticker: str):
 
     # 날짜와 시간 처리
     df["date"] = pd.to_datetime(df["date"] + df["time"], format="%Y%m%d%H%M%S")
+    # 시간대 변경 (미국 동부 -> utc)
+    df["date"] = df["date"].dt.tz_localize("America/New_York").dt.tz_convert("UTC")
 
     # 필요한 컬럼만 선택하고 DB 저장 형식에 맞게 재구성
     df["ticker"] = ticker
@@ -281,6 +286,7 @@ def get_domestic_index_data(ticker: str):
     # 날짜와 시간 처리
     df["time"] = df["time"].astype(str).str.zfill(6)
     df["date"] = pd.to_datetime(today + df["time"].str[:4], format="%Y%m%d%H%M")
+    df["date"] = df["date"].dt.tz_localize("Asia/Seoul").dt.tz_convert("UTC")
 
     # 필요한 컬럼만 선택하고 DB 저장 형식에 맞게 재구성
     df["ticker"] = ticker
