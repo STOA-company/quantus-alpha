@@ -55,7 +55,7 @@ def collect_kr_stock_minute_data():
             ticker = ticker_row[0][1:] if ticker_row[0].startswith("A") else ticker_row[0]
 
             try:
-                current_time = datetime.now().strftime("%H%M%S")
+                current_time = datetime.now("Asia/Seoul").strftime("%H%M%S")
                 while True:
                     data = api.get_stock_price_history_by_minute(symbol=ticker, time=current_time, limit=16, desc=True)
 
