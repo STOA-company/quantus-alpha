@@ -25,6 +25,7 @@ def detect_and_deactivate_stock_trend_outliers(nation: str):
         table="stock_trend",
         columns=[
             "ticker",
+            "market",
             "change_rt",
             "change_1d",
             "change_1w",
@@ -181,11 +182,11 @@ def check_and_recollect_outliers_kr():
 
 
 if __name__ == "__main__":
-    deactivated_tickers = detect_and_deactivate_stock_trend_outliers()
+    deactivated_tickers = detect_and_deactivate_stock_trend_outliers(nation="KR")
 
     for ticker, market in deactivated_tickers:
-        fetch_and_update_stock_data(ticker, nation="US")
+        fetch_and_update_stock_data(ticker, nation="KR")
         activate_stock(ticker)
         print(ticker, market)
 
-    detect_and_deactivate_stock_trend_outliers()
+    detect_and_deactivate_stock_trend_outliers(nation="KR")
