@@ -113,7 +113,7 @@ class NewsService:
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
 
-        change_rate_column = "change_rt" if ctry == "us" else "change_1d"
+        change_rate_column = "change_rt"
 
         join_info = lambda table: JoinInfo(  # noqa: E731
             primary_table=table,

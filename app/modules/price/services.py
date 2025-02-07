@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 
 from sse_starlette import EventSourceResponse
+from app.common.constants import KST
 from app.models.models_stock import StockInformation
 from app.modules.common.cache import MemoryCache
 from app.modules.common.enum import Country, Frequency
@@ -503,7 +504,7 @@ class PriceService:
                 # "is_delisted": 0, # 상폐 종목 데이터를 보여주면 안될시 해제
             }
 
-            change_rate_column = "change_rt" if ctry == "us" else "change_1d"
+            change_rate_column = "change_rt"
             query_result = self.database._select(
                 table="stock_trend",
                 columns=["ticker", "current_price", "prev_close", change_rate_column, "is_trading_stopped"],
@@ -654,11 +655,29 @@ class PriceService:
         result = self.database._select(
             table=f"{ctry_3}_stock_factors", columns=["week_52_high", "week_52_low"], ticker=ticker_with_suffix
         )
+        if not result:
+            kst_now = datetime.now(KST)
+            one_year_ago = kst_now - timedelta(days=365)
+            next_result = pd.DataFrame(
+                self.database._select(
+                    table=f"stock_{ctry}_1d",
+                    columns=["Date", "High", "Low", "Close"],
+                    Ticker=ticker,
+                    Date__gte=one_year_ago,
+                )
+            )
+            week_52_high, week_52_low, last_close = self._process_price_data(next_result)
+            if next_result.empty:
+                week_52_high, week_52_low, last_close = 0.0, 0.0, 0.0
+                return pd.DataFrame(
+                    [{"week_52_high": week_52_high, "week_52_low": week_52_low, "last_close": last_close}]
+                )
+
         last_close = self.database._select(table="stock_trend", columns=["prev_close"], ticker=ticker)
         combined_data = {
-            "week_52_high": result[0][0] if result else None,
-            "week_52_low": result[0][1] if result else None,
-            "last_close": last_close[0][0] if last_close else None,
+            "week_52_high": result[0][0] if result else week_52_high,
+            "week_52_low": result[0][1] if result else week_52_low,
+            "last_close": last_close[0][0] if last_close else last_close,
         }
 
         return pd.DataFrame([combined_data])

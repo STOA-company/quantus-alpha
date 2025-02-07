@@ -16,7 +16,7 @@ from app.batches.run_stock_trend import (
     run_stock_trend_tickers_batch,
     run_stock_trend_by_realtime_batch,
 )
-from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_stock_indices_batch
+from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_stock_indices_batch, get_stock_indices_data
 from app.utils.date_utils import now_kr
 from app.batches.run_disclosure import (
     renewal_kr_run_disclosure_batch,
@@ -29,7 +29,6 @@ from app.batches.check_split import check_kr_stock_splits, check_us_stock_splits
 from app.batches.check_outliers import check_and_recollect_outliers_kr, check_and_recollect_outliers_us
 
 from app.utils.date_utils import check_market_status
-
 
 notifier = SlackNotifier()
 
@@ -111,7 +110,7 @@ def stock_trend_1d_us_task():
 @log_task_execution
 def stock_trend_1d_kr_task():
     """한국 주식 일별 트렌드 업데이트 (장 마감 후)"""
-    if check_market_status("KR"):
+    if not check_market_status("KR"):  # TODO :: 장 마감 후로 바뀌면, "not" 제거 해야함.
         logging.info("KR market is open. KR_stock_trend_1d_batch process skipped.")
         return
     notifier.notify_info("KR_stock_trend_1d_batch process started")
@@ -142,8 +141,8 @@ def stock_trend_realtime_us_task():
 @log_task_execution
 def stock_trend_realtime_kr_task():
     """한국 주식 실시간 트렌드 업데이트 (장 운영 중)"""
-    if not check_market_status("KR"):
-        logging.info("KR market is not open. KR_stock_trend_realtime_batch process skipped.")
+    if check_market_status("KR"):
+        logging.info("KR market is open. KR_stock_trend_realtime_batch process skipped.")
         return
     notifier.notify_info("KR_stock_trend_realtime_batch process started")
     try:
@@ -269,6 +268,38 @@ def process_outliers_us():
         notifier.notify_success("US_process_outliers process completed")
     except Exception as e:
         notifier.notify_error(f"US_process_outliers process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="kr_stock_indices_collect", ignore_result=True)
+def kr_stock_indices_collect():
+    """한국 주가지수 데이터 수집"""
+    if not check_market_status("KR"):
+        notifier.notify_info("KR market is not open. KR_stock_indices_collect process skipped.")
+        return
+    try:
+        notifier.notify_info("KR_stock_indices_collect process started")
+        get_stock_indices_data("KOSPI")
+        get_stock_indices_data("KOSDAQ")
+        notifier.notify_success("KR_stock_indices_collect process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_stock_indices_collect process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="us_stock_indices_collect", ignore_result=True)
+def us_stock_indices_collect():
+    """미국 주가지수 데이터 수집"""
+    if not check_market_status("US"):
+        logging.notify_info("US market is not open. US_stock_indices_collect process skipped.")
+        return
+    try:
+        notifier.notify_info("US_stock_indices_collect process started")
+        get_stock_indices_data("NASDAQ")
+        get_stock_indices_data("SNP500")
+        notifier.notify_success("US_stock_indices_collect process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_stock_indices_collect process failed: {str(e)}")
         raise
 
 
