@@ -68,7 +68,7 @@ def detect_and_deactivate_stock_trend_outliers(nation: str):
         logger.info(f"Column outliers: {column_outliers}")
 
         # 이상치 티커 추가
-        deactivate_tickers.update(zip(column_outliers["ticker"], column_outliers["market"]))
+        deactivate_tickers.update(zip(column_outliers["ticker"][1:], column_outliers["market"]))
 
     # 이상치 티커들 비활성화
     for ticker, market in deactivate_tickers:
@@ -96,7 +96,7 @@ def fetch_and_update_stock_data(ticker: str, nation: str):
             return None
 
         # 데이터 업데이트
-        result = _update_price_data(ticker=ticker, df=new_data, market=market)
+        result = _update_price_data(ticker=ticker, df=new_data, nation=nation)
         return result
 
     except Exception as e:
@@ -104,16 +104,18 @@ def fetch_and_update_stock_data(ticker: str, nation: str):
         return None
 
 
-def _update_price_data(ticker: str, df: pd.DataFrame, market: str):
+def _update_price_data(ticker: str, df: pd.DataFrame, nation: str):
     try:
         logger.info(f"Updating price data for {ticker}")
 
-        table = "stock_kr_1d" if market in ["KOSPI", "KOSDAQ"] else "stock_us_1d"
+        table = "stock_kr_1d" if nation == "KR" else "stock_us_1d"
 
-        existing_data = database._select(table=table, columns=["Category"], Ticker=ticker, limit=1)
+        existing_data = database._select(table=table, columns=["Category", "Market"], Ticker=ticker, limit=1)
         category = existing_data[0][0] if existing_data else ""
+        market = existing_data[0][1] if existing_data else ""
 
-        if market in ["KOSPI", "KOSDAQ"]:
+        if nation == "KR":
+            ticker = "A" + ticker
             stock_info = database._select(table="stock_information", columns=["kr_name"], ticker=ticker, limit=1)
 
             logger.info(f"stock_info: {stock_info}")
@@ -140,7 +142,7 @@ def _update_price_data(ticker: str, df: pd.DataFrame, market: str):
                 "Category": category,
             }
 
-            if market in ["KOSPI", "KOSDAQ"]:
+            if nation == "KR":
                 base_data.update({"Name": kr_name, "Isin": ""})
 
             update_data.append(base_data)
@@ -184,9 +186,8 @@ def check_and_recollect_outliers_kr():
 if __name__ == "__main__":
     deactivated_tickers = detect_and_deactivate_stock_trend_outliers(nation="KR")
 
-    for ticker, market in deactivated_tickers:
+    for ticker in deactivated_tickers:
         fetch_and_update_stock_data(ticker, nation="KR")
         activate_stock(ticker)
-        print(ticker, market)
 
     detect_and_deactivate_stock_trend_outliers(nation="KR")

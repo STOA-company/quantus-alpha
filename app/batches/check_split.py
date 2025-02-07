@@ -175,6 +175,6 @@ def check_us_stock_splits():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting stock split check process...")
-    # check_kr_stock_splits()
+    check_kr_stock_splits()
     check_us_stock_splits()
     logger.info("Completed stock split check process")
