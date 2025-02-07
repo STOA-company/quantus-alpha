@@ -110,7 +110,7 @@ def stock_trend_1d_us_task():
 @log_task_execution
 def stock_trend_1d_kr_task():
     """한국 주식 일별 트렌드 업데이트 (장 마감 후)"""
-    if not check_market_status("KR"):  # TODO :: 장 마감 후로 바뀌면, "not" 제거 해야함.
+    if check_market_status("KR"):
         logging.info("KR market is open. KR_stock_trend_1d_batch process skipped.")
         return
     notifier.notify_info("KR_stock_trend_1d_batch process started")
@@ -141,7 +141,7 @@ def stock_trend_realtime_us_task():
 @log_task_execution
 def stock_trend_realtime_kr_task():
     """한국 주식 실시간 트렌드 업데이트 (장 운영 중)"""
-    if check_market_status("KR"):
+    if not check_market_status("KR"):
         logging.info("KR market is open. KR_stock_trend_realtime_batch process skipped.")
         return
     notifier.notify_info("KR_stock_trend_realtime_batch process started")
