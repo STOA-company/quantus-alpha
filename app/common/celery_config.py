@@ -42,7 +42,7 @@ CELERY_APP.conf.beat_schedule = {
     # # 한국 주식 스케줄
     "kr-daily-stock-trend": {
         "task": "stock_trend_1d_kr",
-        "schedule": crontab(hour="13", minute="10"),  # KST 13:10 - 한국 장 마감 후인 16시로 변경 예정
+        "schedule": crontab(hour="16", minute="10"),  # KST 16:10
     },
     "kr-realtime-stock-trend": {
         "task": "stock_trend_realtime_kr",
@@ -56,6 +56,14 @@ CELERY_APP.conf.beat_schedule = {
     "kr-stock-indices": {
         "task": "kr_stock_indices_batch",
         "schedule": crontab(minute="*/15"),  # 15분마다 실행
+    },
+    "kr-stock-indices-collect": {
+        "task": "kr_stock_indices_collect",
+        "schedule": crontab(minute="*/2"),  # 2분마다 실행
+    },
+    "us-stock-indices-collect": {
+        "task": "us_stock_indices_collect",
+        "schedule": crontab(minute="*/2"),  # 2분마다 실행
     },
     # 공통 스케줄
     "ticker-update": {

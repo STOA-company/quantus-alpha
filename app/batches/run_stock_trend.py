@@ -195,12 +195,6 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
         business_days.sort()
 
         latest_business_day = business_days[-1]
-        if ctry == TrendingCountry.KR:
-            if pd.Timestamp(current_time.date()) in business_days:
-                print(f"current_time: {current_time}###")
-                latest_business_day = business_days[-2]
-            else:
-                latest_business_day = business_days[-1]
 
         stock_trends = database._select(
             table="stock_trend",
@@ -214,7 +208,7 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
         if ctry == TrendingCountry.US:
             table_name = "stock_us_1m"
         elif ctry == TrendingCountry.KR:
-            table_name = "stock_kr_1d"
+            table_name = "stock_kr_1m"
         else:
             raise ValueError(f"Invalid country: {ctry.value}")
 
