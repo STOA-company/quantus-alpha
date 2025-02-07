@@ -2,6 +2,9 @@ from typing import List
 from app.database.crud import database
 from app.modules.common.enum import TranslateCountry
 from app.modules.search.schemas import SearchItem
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SearchService:
@@ -37,12 +40,16 @@ class SearchService:
             is_activate=1,
         )
 
+        logger.warning(f"Initial search result for AA: {search_result}")
+
         if not search_result:
             return []
 
         sorted_result = sorted(search_result, key=lambda x: 1 if x._mapping["ticker"] == query else 2)
 
         search_result = sorted_result[offset : offset + limit]
+
+        logger.warning(f"Sorted result: {sorted_result}")
 
         country_groups = {}
         search_map = {}
@@ -56,6 +63,8 @@ class SearchService:
                 "language": ctry,
             }
 
+        logger.warning(f"Search map: {search_map}")
+
         prices = {}
         for country, tickers in country_groups.items():
             change_rate_column = "change_rt" if country == "us" else "change_1d"
@@ -68,6 +77,8 @@ class SearchService:
                     ascending=False,
                     limit=len(tickers),
                 )
+
+                logger.warning(f"Price results for {tickers}: {price_results}")
 
                 for row in price_results:
                     mapping = row._mapping
@@ -89,15 +100,17 @@ class SearchService:
             item_info = search_map[ticker]
             current_price, rate = prices.get(ticker, (None, None))
 
-            search_items.append(
-                SearchItem(
-                    ticker=ticker,
-                    name=item_info["name"],
-                    language=item_info["language"],
-                    current_price=current_price,
-                    current_price_rate=round(rate, 2),
+            logger.warning(f"Ticker: {ticker}, Item info: {item_info}, Current price: {current_price}, Rate: {rate}")
+            if rate is not None:
+                search_items.append(
+                    SearchItem(
+                        ticker=ticker,
+                        name=item_info["name"],
+                        language=item_info["language"],
+                        current_price=current_price,
+                        current_price_rate=round(rate, 2),
+                    )
                 )
-            )
 
         return search_items
 

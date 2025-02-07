@@ -30,7 +30,6 @@ from app.batches.check_outliers import check_and_recollect_outliers_kr, check_an
 
 from app.utils.date_utils import check_market_status
 
-
 notifier = SlackNotifier()
 
 
@@ -276,7 +275,7 @@ def process_outliers_us():
 def kr_stock_indices_collect():
     """한국 주가지수 데이터 수집"""
     if not check_market_status("KR"):
-        logging.notify_info("KR market is not open. KR_stock_indices_collect process skipped.")
+        notifier.notify_info("KR market is not open. KR_stock_indices_collect process skipped.")
         return
     try:
         notifier.notify_info("KR_stock_indices_collect process started")
