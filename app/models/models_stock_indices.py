@@ -10,7 +10,7 @@ class StockIndices(Base):
     date = Column(DateTime, nullable=True, comment="날짜")
     price = Column(Float, nullable=True, comment="현재가")
     change = Column(Float, nullable=True, comment="변동 금액")
-    change_rate = Column(Float, nullable=True, comment="변동률")
+    price_rate = Column(Float, nullable=True, comment="현재가 변동률")
     market = Column(String(100), nullable=True, comment="시장")
     included_indices = Column(String(100), nullable=True, comment="포함되어 있는 지수")
     rise_ratio = Column(Float, nullable=True, comment="급상승 비율")
