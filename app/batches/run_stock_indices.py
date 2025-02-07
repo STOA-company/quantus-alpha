@@ -9,6 +9,7 @@ from sqlalchemy.sql import text
 from app.database.crud import database
 from app.utils.date_utils import now_utc, check_market_status
 from app.kispy.api import KISAPI
+from app.kispy.sdk import auth
 
 
 def kr_run_stock_indices_batch():
@@ -163,8 +164,7 @@ def _update_market_data(ticker: str, result: dict):
 
 
 #################주가 지수 수집 로직#################
-
-kisapi = KISAPI()
+kisapi = KISAPI(auth=auth)
 
 
 def get_overseas_index_data(ticker: str):
@@ -374,5 +374,5 @@ def _is_market_open(ticker: str) -> bool:
 # logging.info("Starting US market batch job from command line")
 # kr_run_stock_indices_batch()
 
-# get_stock_indices_data("NASDAQ")
-# get_stock_indices_data("SNP500")
+# get_stock_indices_data("KOSPI")
+# get_stock_indices_data("KOSDAQ")

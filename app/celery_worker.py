@@ -30,7 +30,6 @@ from app.batches.check_outliers import check_and_recollect_outliers_kr, check_an
 
 from app.utils.date_utils import check_market_status
 
-
 notifier = SlackNotifier()
 
 
