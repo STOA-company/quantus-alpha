@@ -390,7 +390,7 @@ def retry_on_rate_limit(max_retries: int = 3, retry_delay: int = 60) -> Callable
 
 @retry_on_rate_limit(max_retries=3, retry_delay=10)
 def get_stock_indices_data(ticker: str):
-    if ticker in ["NASDAQ", "SNP500"]:
+    if ticker in ["NASDAQ", "SP500"]:
         return get_overseas_index_data(ticker)
 
     elif ticker in ["KOSPI", "KOSDAQ"]:
