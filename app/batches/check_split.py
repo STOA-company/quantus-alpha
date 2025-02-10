@@ -71,7 +71,6 @@ def check_kr_stock_splits():
 
         tickers = []
         split_detected = []
-        deactivated_count = 0
 
         for ticker, market in stock_info:
             ticker = f"{ticker[1:]}.KS" if market == "KOSPI" else f"{ticker[1:]}.KQ"
@@ -104,7 +103,6 @@ def check_kr_stock_splits():
                 logger.error(f"Failed to process KR ticker {ticker}: {str(e)}")
                 continue
 
-        logger.info(f"KR split check completed. Deactivated {deactivated_count} tickers")
         if split_detected:
             logger.info(f"Splits detected for: {split_detected}")
 
