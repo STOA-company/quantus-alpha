@@ -6,3 +6,4 @@ US_EXCLUDE_DATES = ["2025-01-09"]
 
 KST = pytz.timezone("Asia/Seoul")
 UTC = pytz.timezone("UTC")
+USE = pytz.timezone("America/New_York")
