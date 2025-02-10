@@ -6,6 +6,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 from sqlalchemy.sql import text
+from app.common.constants import KST
 from app.database.crud import database
 from app.utils.date_utils import now_utc, check_market_status
 from app.kispy.api import KISAPI
@@ -274,7 +275,7 @@ def get_domestic_index_data(ticker: str):
     df["high"] = 0
     df["low"] = 0
 
-    today = datetime.datetime.now().strftime("%Y%m%d")
+    today = datetime.datetime.now(KST).strftime("%Y%m%d")
 
     # 장 시작 시점의 데이터가 있는 경우에만 OHLC 데이터 가져오기
     if len(df) <= 10 and 90000 in df["time"].values:
