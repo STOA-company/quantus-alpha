@@ -81,7 +81,7 @@ def collect_kr_stock_minute_data():
 
             except Exception as e:
                 logger.error(f"Error processing ticker {ticker}: {e}")
-                continue
+                raise
 
         logger.info(f"Completed processing {len(tickers)} tickers")
 
