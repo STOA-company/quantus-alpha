@@ -4,6 +4,7 @@ from scipy import stats
 from app.database.crud import database
 import logging
 from app.kispy.sdk import fetch_stock_data
+from app.utils.activate_utils import activate_stock
 
 logger = logging.getLogger(__name__)
 
@@ -157,23 +158,25 @@ def _update_price_data(ticker: str, df: pd.DataFrame, nation: str):
         raise
 
 
-def check_and_recollect_outliers_us():
-    outlier_tickers = detect_stock_trend_outliers(nation="US")
+def check_and_recollect_outliers(nation: str):
+    outlier_tickers = detect_stock_trend_outliers(nation=nation)
+
+    if not outlier_tickers:
+        return
+
+    database._update(
+        table="stock_trend",
+        is_activate=0,
+        ticker__in=outlier_tickers,
+    )
 
     for ticker in outlier_tickers:
-        fetch_and_update_stock_data(ticker, nation="US")
-
-
-def check_and_recollect_outliers_kr():
-    outlier_tickers = detect_stock_trend_outliers(nation="KR")
-
-    for ticker in outlier_tickers:
-        fetch_and_update_stock_data(ticker, nation="KR")
+        try:
+            fetch_and_update_stock_data(ticker, nation=nation)
+            activate_stock(ticker)
+        except Exception as e:
+            logger.error(f"Failed to update {ticker}: {str(e)}")
 
 
 if __name__ == "__main__":
-    outlier_tickers = detect_stock_trend_outliers(nation="KR")
-
-    for ticker in outlier_tickers:
-        fetch_and_update_stock_data(ticker, nation="KR")
-        print(ticker)
+    check_and_recollect_outliers(nation="KR")
