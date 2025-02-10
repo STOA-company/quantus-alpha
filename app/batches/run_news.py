@@ -28,7 +28,7 @@ def renewal_kr_run_news_batch(date: str = None):
     query = text("""
     SELECT
         n.id, n.ticker, n.title, n.related_tickers, n.url, n.news_date,
-        a.ai_summary as en_summary, a.market_impact as emotion, a.impact_reason as en_impact_reason, a.key_points as en_key_points,
+        a.ai_summary as en_summary, a.market_impact as emotion, a.impact_reason as en_impact_reason, a.key_points as en_key_points, a.is_related,
         t.ai_title, t.ai_summary as kr_summary, t.impact_reason as kr_impact_reason, t.key_points as kr_key_points
     FROM kor_news_analysis_translation as t
     LEFT JOIN kor_news as n ON t.collect_id = n.id
@@ -160,6 +160,7 @@ def renewal_kr_run_news_batch(date: str = None):
                     "that_time_price": 0,
                     "is_top_story": False,
                     "is_exist": row["ticker"] in existing_tickers,
+                    "is_related": row["is_related"],
                 }
                 news_records.append(news_record)
 
@@ -254,7 +255,7 @@ def renewal_us_run_news_batch(date: str = None):
     query = text("""
     SELECT
         n.id, n.ticker, n.title, n.related_tickers, n.url, n.news_date,
-        a.ai_summary as en_summary, a.market_impact as emotion, a.impact_reason as en_impact_reason, a.key_points as en_key_points,
+        a.ai_summary as en_summary, a.market_impact as emotion, a.impact_reason as en_impact_reason, a.key_points as en_key_points, a.is_related,
         t.ai_title, t.ai_summary as kr_summary, t.impact_reason as kr_impact_reason, t.key_points as kr_key_points
     FROM usa_news_analysis_translation as t
     LEFT JOIN usa_news as n ON t.collect_id = n.id
@@ -382,6 +383,7 @@ def renewal_us_run_news_batch(date: str = None):
                     "that_time_price": 0,
                     "is_top_story": False,
                     "is_exist": row["ticker"] in existing_tickers,
+                    "is_related": row["is_related"],
                 }
                 news_records.append(news_record)
 

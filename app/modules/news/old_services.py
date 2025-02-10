@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 from sqlalchemy import text
+from app.common.constants import KST, UTC
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.news.schemas import LatestNewsResponse, NewsItem, TopStoriesResponse
@@ -261,10 +262,15 @@ class NewsService:
         # 3. 날짜 비교하여 최신 데이터 선택
         result = self._select_latest_data(disclosure_info, news_info)
 
+        date = result.get("date", "")
+        date = date.replace(tzinfo=UTC).astimezone(KST).strftime("%Y-%m-%d %H:%M:%S")
+        content = result.get("content", "")
+        type = result.get("type", "")
+
         return LatestNewsResponse(
-            date=result.get("date", ""),
-            content=result.get("content", ""),
-            type=result.get("type", ""),
+            date=date,
+            content=content,
+            type=type,
         )
 
     def _parse_key_points(self, key_points: list) -> str:
@@ -293,7 +299,7 @@ class NewsService:
             **dict(ticker=ticker, is_exist=True),
         )
         if disclosure_data:
-            date = disclosure_data[0][0].strftime("%Y-%m-%d %H:%M:%S")
+            date = disclosure_data[0][0]
             content = f"{disclosure_data[0][1]} {self._parse_key_points(disclosure_data[0][2])}"
 
             return {"date": date, "content": content, "type": "disclosure"}
@@ -302,16 +308,40 @@ class NewsService:
 
     def _get_news_data(self, ticker: str) -> Optional[Dict]:
         """뉴스 데이터 조회"""
+        ticker_en_name = self.db._select(
+            table="stock_information",
+            columns=["en_name"],
+            **dict(ticker=ticker),
+        )
+        duplicate_ticker = self.db._select(
+            table="stock_information",
+            columns=["ticker"],
+            **dict(en_name=ticker_en_name[0][0]),
+        )
+        tickers = [info[0] for info in duplicate_ticker]
+        if len(tickers) == 2:
+            condition = {
+                "ticker__in": tickers,
+                "is_exist": True,
+                "is_related": True,
+            }
+        else:
+            condition = {
+                "ticker": ticker,
+                "is_exist": True,
+                "is_related": True,
+            }
+
         news_data = self.db._select(
             table="news_analysis",
             columns=["date", "summary", "impact_reason"],
             order="date",
             ascending=False,
             limit=1,
-            **dict(ticker=ticker, is_exist=True),
+            **condition,
         )
         if news_data:
-            date = news_data[0][0].strftime("%Y-%m-%d %H:%M:%S")
+            date = news_data[0][0]
             content = f"{news_data[0][1]} / {news_data[0][2]}"
 
             return {"date": date, "content": content, "type": "news"}
