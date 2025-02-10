@@ -1,4 +1,5 @@
 from app.kispy.api import KISAPI
+from app.kispy.sdk import auth
 import pandas as pd
 from app.database.crud import database
 import logging
@@ -10,7 +11,7 @@ def _collect_domestic_stock_status():
     """
     모든 주식의 상장 및 거래 상태 수집
     """
-    api = KISAPI()
+    api = KISAPI(auth=auth)
 
     try:
         tickers = database._select(table="stock_trend", columns=["ticker"], market__in=["KOSPI", "KOSDAQ", "KONEX"])
@@ -49,7 +50,7 @@ def _collect_overseas_stock_status():
     """
     모든 해외 주식의 상장 및 거래 상태 수집
     """
-    api = KISAPI()
+    api = KISAPI(auth=auth)
 
     try:
         stocks = database._select(table="stock_trend", columns=["ticker", "market"], market__in=["NYS", "NAS", "AMEX"])

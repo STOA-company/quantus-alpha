@@ -73,6 +73,9 @@ def fetch_stock_data(symbol: str, nation: str):
             logger.warning(f"No OHLCV data for {symbol}")
             return None
 
+        today = datetime.now().date()
+        ohlcv = [item for item in ohlcv if item.date.date() != today]
+
         logger.info(f"Fetched OHLCV data for {symbol}")
 
         return pd.DataFrame(
