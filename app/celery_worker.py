@@ -296,7 +296,7 @@ def us_stock_indices_collect():
     try:
         notifier.notify_info("US_stock_indices_collect process started")
         get_stock_indices_data("NASDAQ")
-        get_stock_indices_data("SNP500")
+        get_stock_indices_data("SP500")
         notifier.notify_success("US_stock_indices_collect process completed")
     except Exception as e:
         notifier.notify_error(f"US_stock_indices_collect process failed: {str(e)}")

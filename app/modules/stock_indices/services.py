@@ -73,7 +73,8 @@ class StockIndicesService:
         try:
             cache_key = f"{market}_data"
             now = datetime.now(utc_tz).astimezone(korea_tz)
-            is_market_open = check_market_status("KR") if market in ["kospi", "kosdaq"] else check_market_status("US")
+            country = "KR" if market in ["kospi", "kosdaq"] else "US"
+            is_market_open = check_market_status(country)
 
             if cache_key in self._cache:
                 cached_data, timestamp = self._cache[cache_key]
@@ -81,17 +82,26 @@ class StockIndicesService:
                 if not is_market_open or cache_age < 60:
                     return cached_data
 
-            today = now.date()
+            target_date = now.date()
 
-            result = self.db._select(
-                table="stock_indices_1m",
-                columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
-                order="date",
-                ascending=True,
-                ticker=market,
-                date__gte=today.strftime("%Y-%m-%d 00:00:00"),
-                date__lt=(today + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00"),
-            )
+            while True:
+                result = self.db._select(
+                    table="stock_indices_1m",
+                    columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
+                    order="date",
+                    ascending=True,
+                    ticker=market,
+                    date__gte=target_date.strftime("%Y-%m-%d 00:00:00"),
+                    date__lt=(target_date + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00"),
+                )
+
+                if result:
+                    break
+
+                target_date -= timedelta(days=1)
+
+                if target_date < datetime(2000, 1, 1).date():
+                    raise ValueError("No data found for market: {market} in the available date range.")
 
             prev_close = float(result[-1].close) if result else 0.0
             min1_data = {}

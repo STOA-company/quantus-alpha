@@ -13,7 +13,7 @@ class KISAPI(BaseAPI):
         "KOSPI": "0001",
         "KOSDAQ": "1001",
         "NASDAQ": "COMP",
-        "SNP500": "SPX",
+        "SP500": "SPX",
     }
 
     def __init__(self, auth):
