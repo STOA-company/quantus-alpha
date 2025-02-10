@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     KIS_SECRET: str = os.getenv("KIS_SECRET", "")
     KIS_ACCOUNT_NO: str = os.getenv("KIS_ACCOUNT_NO", "")
 
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
     else:
