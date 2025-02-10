@@ -26,7 +26,7 @@ from app.batches.run_disclosure import (
 )
 from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
 from app.batches.check_split import check_kr_stock_splits, check_us_stock_splits
-from app.batches.check_outliers import check_and_recollect_outliers_kr, check_and_recollect_outliers_us
+from app.batches.check_outliers import check_and_recollect_outliers
 
 from app.utils.date_utils import check_market_status
 
@@ -249,7 +249,7 @@ def process_outliers_kr():
     notifier.notify_info("KR_process_outliers process started")
     try:
         check_kr_stock_splits()
-        check_and_recollect_outliers_kr()
+        check_and_recollect_outliers(nation="KR")
         stock_trend_1d_kr_task()
         notifier.notify_success("KR_process_outliers process completed")
     except Exception as e:
@@ -263,7 +263,7 @@ def process_outliers_us():
     notifier.notify_info("US_process_outliers process started")
     try:
         check_us_stock_splits()
-        check_and_recollect_outliers_us()
+        check_and_recollect_outliers(nation="US")
         stock_trend_1d_us_task()
         notifier.notify_success("US_process_outliers process completed")
     except Exception as e:
@@ -296,7 +296,7 @@ def us_stock_indices_collect():
     try:
         notifier.notify_info("US_stock_indices_collect process started")
         get_stock_indices_data("NASDAQ")
-        get_stock_indices_data("SNP500")
+        get_stock_indices_data("SP500")
         notifier.notify_success("US_stock_indices_collect process completed")
     except Exception as e:
         notifier.notify_error(f"US_stock_indices_collect process failed: {str(e)}")

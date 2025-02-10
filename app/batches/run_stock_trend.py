@@ -63,7 +63,6 @@ def run_stock_trend_tickers_batch():
 
 def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000):
     try:
-        # 1. stock_trend와 1일 데이터 테이블의 공통 티커 조회
         stock_trend_tickers = database._select(table="stock_trend", columns=["ticker"], distinct=True, ctry=ctry.value)
         stock_trend_set = set(row[0] for row in stock_trend_tickers)
 

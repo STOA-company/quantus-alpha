@@ -3,18 +3,18 @@ import pandas as pd
 from scipy import stats
 from app.database.crud import database
 import logging
-from app.utils.activate_utils import activate_stock, deactivate_stock
 from app.kispy.sdk import fetch_stock_data
+from app.utils.activate_utils import activate_stock
 
 logger = logging.getLogger(__name__)
 
 
-ZSCORE_THRESHOLD = 1.5
+ZSCORE_THRESHOLD = 3
 
 
-def detect_and_deactivate_stock_trend_outliers(nation: str):
+def detect_stock_trend_outliers(nation: str):
     """
-    stock_trend 테이블의 변화율 필드에서 이상치 탐지 및 is_activate 비활성화
+    stock_trend change_rt 이상치 탐지
     """
     if nation == "US":
         market = ["NAS", "NYS", "AMS"]
@@ -55,7 +55,7 @@ def detect_and_deactivate_stock_trend_outliers(nation: str):
     )
 
     change_columns = ["change_rt", "change_1d", "change_1w", "change_1m", "change_6m", "change_1y"]
-    deactivate_tickers = set()
+    outlier_tickers = set()
 
     for column in change_columns:
         # 결측치가 있는 행 제외
@@ -72,21 +72,9 @@ def detect_and_deactivate_stock_trend_outliers(nation: str):
                 logger.info(f"Values: {outliers[column].tolist()}")
                 logger.info(f"Z-scores: {z_scores[z_scores > ZSCORE_THRESHOLD].tolist()}")
 
-                deactivate_tickers.update(outliers["ticker"].tolist())
+                outlier_tickers.update(outliers["ticker"].tolist())
 
-    # 이상치 티커들 비활성화
-    for ticker in deactivate_tickers:
-        try:
-            deactivate_stock(ticker)
-
-            logger.info(f"티커 {ticker} 비활성화")
-
-        except Exception as e:
-            logger.error(f"티커 {ticker} 비활성화 실패: {e}")
-
-    logger.info(f"총 {len(deactivate_tickers)}개의 티커 비활성화")
-
-    return list(deactivate_tickers)
+    return list(outlier_tickers)
 
 
 def fetch_and_update_stock_data(ticker: str, nation: str):
@@ -170,28 +158,28 @@ def _update_price_data(ticker: str, df: pd.DataFrame, nation: str):
         raise
 
 
-def check_and_recollect_outliers_us():
-    deactivated_tickers = detect_and_deactivate_stock_trend_outliers(nation="US")
+def check_and_recollect_outliers(nation: str):
+    outlier_tickers = detect_stock_trend_outliers(nation=nation)
 
-    for ticker in deactivated_tickers:
-        fetch_and_update_stock_data(ticker, nation="US")
-        activate_stock(ticker)
+    if not outlier_tickers:
+        return
 
+    database._update(
+        table="stock_trend",
+        is_activate=0,
+        ticker__in=outlier_tickers,
+    )
 
-def check_and_recollect_outliers_kr():
-    deactivated_tickers = detect_and_deactivate_stock_trend_outliers(nation="KR")
-
-    for ticker in deactivated_tickers:
-        fetch_and_update_stock_data(ticker, nation="KR")
-        activate_stock(ticker)
+    for ticker in outlier_tickers:
+        try:
+            fetch_and_update_stock_data(ticker, nation=nation)
+            activate_stock(ticker)
+        except Exception as e:
+            logger.error(f"Failed to update {ticker}: {str(e)}")
 
 
 if __name__ == "__main__":
-    deactivated_tickers = detect_and_deactivate_stock_trend_outliers(nation="KR")
-
-    for ticker in deactivated_tickers:
-        fetch_and_update_stock_data(ticker, nation="KR")
-        activate_stock(ticker)
-        print(ticker)
-
-    detect_and_deactivate_stock_trend_outliers(nation="KR")
+    # 테스트 용
+    tickers = ["A042940", "A101140", "A192250", "A200230", "A031860", "A192410"]
+    for ticker in tickers:
+        fetch_and_update_stock_data(ticker=ticker, nation="KR")

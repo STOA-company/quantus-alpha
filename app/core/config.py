@@ -11,6 +11,7 @@ load_dotenv(f".env.{ENV}")
 # Time Zone
 korea_tz = pytz.timezone("Asia/Seoul")
 utc_tz = pytz.timezone("UTC")
+us_eastern_tz = pytz.timezone("America/New_York")
 
 
 class Settings(BaseSettings):
