@@ -291,7 +291,7 @@ def kr_stock_indices_collect():
 def us_stock_indices_collect():
     """미국 주가지수 데이터 수집"""
     if not check_market_status("US"):
-        logging.notify_info("US market is not open. US_stock_indices_collect process skipped.")
+        logging.info("US market is not open. US_stock_indices_collect process skipped.")
         return
     try:
         notifier.notify_info("US_stock_indices_collect process started")

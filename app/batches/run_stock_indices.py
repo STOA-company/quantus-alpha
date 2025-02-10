@@ -6,10 +6,10 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 from sqlalchemy.sql import text
+from app.common.constants import KST
 from app.database.crud import database
 from app.utils.date_utils import now_utc, check_market_status
-from app.kispy.api import KISAPI
-from app.kispy.sdk import auth
+from app.kispy.manager import KISAPIManager
 
 
 def kr_run_stock_indices_batch():
@@ -164,7 +164,7 @@ def _update_market_data(ticker: str, result: dict):
 
 
 #################주가 지수 수집 로직#################
-kisapi = KISAPI(auth=auth)
+kisapi = KISAPIManager().get_api()
 
 
 def get_overseas_index_data(ticker: str):
@@ -274,7 +274,7 @@ def get_domestic_index_data(ticker: str):
     df["high"] = 0
     df["low"] = 0
 
-    today = datetime.datetime.now().strftime("%Y%m%d")
+    today = datetime.datetime.now(KST).strftime("%Y%m%d")
 
     # 장 시작 시점의 데이터가 있는 경우에만 OHLC 데이터 가져오기
     if len(df) <= 10 and 90000 in df["time"].values:
@@ -302,12 +302,13 @@ def get_domestic_index_data(ticker: str):
     )
 
     # 기존 데이터의 (ticker, date) 조합을 set으로 생성
-    existing_keys = {(row[0], row[1]) for row in existing_data}
+    existing_keys = {(row[0], row[1].strftime("%Y-%m-%d %H:%M:%S")) for row in existing_data}
 
     # 새로운 데이터만 필터링
     new_records = []
     for record in df.to_dict("records"):
-        if (record["ticker"], record["date"]) not in existing_keys:
+        key = (record["ticker"], record["date"].strftime("%Y-%m-%d %H:%M:%S"))
+        if key not in existing_keys:
             new_records.append(record)
 
     # 새로운 데이터만 insert
