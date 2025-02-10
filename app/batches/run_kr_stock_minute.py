@@ -1,8 +1,7 @@
 import logging
 from datetime import datetime
 from typing import List, Dict
-from app.kispy.api import KISAPI
-from app.kispy.sdk import auth
+from app.kispy.manager import KISAPIManager
 from app.database.crud import database
 import pytz
 
@@ -44,7 +43,7 @@ def save_minute_data(ticker: str, data: List[Dict]):
 def collect_kr_stock_minute_data():
     """국내 주식 분봉 데이터 수집"""
     try:
-        api = KISAPI(auth=auth)
+        api = KISAPIManager().get_api()
 
         tickers = database._select(table="stock_information", columns=["ticker"], ctry="kr")
 
