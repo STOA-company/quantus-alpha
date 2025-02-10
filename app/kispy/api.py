@@ -35,6 +35,47 @@ class KISAPI(BaseAPI):
 
         return response_data.get("access_token")
 
+    def refresh_token(self) -> bool:
+        """토큰 갱신 메서드"""
+        try:
+            new_token = self._get_access_token()
+            if new_token:
+                self.access_token = new_token
+                logger.info("Successfully refreshed access token")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error refreshing token: {str(e)}")
+            return False
+
+    def is_token_valid(self) -> bool:
+        """토큰 유효성 검사"""
+        if not self.access_token:
+            return False
+
+        try:
+            # 테스트 API 호출
+            test_url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
+            headers = {
+                "content-type": "application/json; charset=utf-8",
+                "authorization": f"Bearer {self.access_token}",
+                "appkey": self.app_key,
+                "appsecret": self.app_secret,
+                "tr_id": "FHKST01010100",
+            }
+
+            response = requests.get(test_url, headers=headers)
+
+            # 토큰 만료
+            if response.status_code == 403:
+                return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error checking token validity: {str(e)}")
+            return False
+
     def get_domestic_stock_status(self, stock_code: str) -> dict:
         """
         개별 종목의 거래중지/상장폐지 여부 조회
