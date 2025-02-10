@@ -9,8 +9,7 @@ from sqlalchemy.sql import text
 from app.common.constants import KST
 from app.database.crud import database
 from app.utils.date_utils import now_utc, check_market_status
-from app.kispy.api import KISAPI
-from app.kispy.sdk import auth
+from app.kispy.manager import KISAPIManager
 
 
 def kr_run_stock_indices_batch():
@@ -165,7 +164,7 @@ def _update_market_data(ticker: str, result: dict):
 
 
 #################주가 지수 수집 로직#################
-kisapi = KISAPI(auth=auth)
+kisapi = KISAPIManager().get_api()
 
 
 def get_overseas_index_data(ticker: str):
