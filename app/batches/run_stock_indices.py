@@ -302,12 +302,13 @@ def get_domestic_index_data(ticker: str):
     )
 
     # 기존 데이터의 (ticker, date) 조합을 set으로 생성
-    existing_keys = {(row[0], row[1]) for row in existing_data}
+    existing_keys = {(row[0], row[1].strftime("%Y-%m-%d %H:%M:%S")) for row in existing_data}
 
     # 새로운 데이터만 필터링
     new_records = []
     for record in df.to_dict("records"):
-        if (record["ticker"], record["date"]) not in existing_keys:
+        key = (record["ticker"], record["date"].strftime("%Y-%m-%d %H:%M:%S"))
+        if key not in existing_keys:
             new_records.append(record)
 
     # 새로운 데이터만 insert
