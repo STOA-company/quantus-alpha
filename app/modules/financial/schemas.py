@@ -67,7 +67,7 @@ class IncomeStatementResponse(BaseModel):
 
 
 class CashFlowDetail(BaseModel):
-    period_q: Optional[str] = Field(max_length=20)
+    period_q: Optional[str] = Field(default=None, max_length=20)
     operating_cashflow: Optional[float] = None
     non_controlling_changes: Optional[float] = None
     working_capital_changes: Optional[float] = None

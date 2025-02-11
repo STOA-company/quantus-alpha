@@ -251,7 +251,6 @@ class FinancialService:
 
         try:
             income_data = self.get_income_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
-            print("###3", income_data)
             # data를 details로 변경
             if not income_data.data.details:
                 logger.warning(f"No data found for ticker: {ticker}")
@@ -440,15 +439,11 @@ class FinancialService:
             )
 
             name = sorted_result[0][1] if sorted_result else ""
-            print("###1", name)
 
             # 정렬된 결과로 처리
             statements = self._process_income_statement_result(sorted_result)
-            print("###2", statements)
             ttm = self._process_income_ttm_result(sorted_result)
-            print("###3", ttm)
             total = self._process_income_total_result(sorted_result)
-            print("###4", total)
 
             ctry_code = contry_mapping.get(ctry.value, "").lower()
 
@@ -1141,7 +1136,7 @@ class FinancialService:
             # 각 필드별로 년도별 합산
             for field_name, value in zip(row._fields, row):
                 if field_name not in exclude_columns:
-                    yearly_data[year][field_name] += self._to_decimal(value)
+                    yearly_data[year][field_name] += self._to_decimal(value) or Decimal("0.00")
 
         # 연도별 합산 데이터를 CashFlowDetail 객체로 변환
         yearly_statements = []
