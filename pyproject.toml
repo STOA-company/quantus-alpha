@@ -37,6 +37,11 @@ kispy = {git = "https://github.com/zeroam/kispy"}
 scipy = "^1.15.1"
 pytz = "^2025.1"
 numpy = "^2.2.2"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+google-auth-oauthlib = "^1.2.1"
+google-auth = "^2.38.0"
+python-multipart = "^0.0.20"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 
 
 
