@@ -15,6 +15,7 @@ from app.batches.run_stock_trend import (
     run_stock_trend_by_1d_batch,
     run_stock_trend_tickers_batch,
     run_stock_trend_by_realtime_batch,
+    run_stock_trend_by_1d_batch_open,
 )
 from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_stock_indices_batch, get_stock_indices_data
 from app.utils.date_utils import now_kr
@@ -120,6 +121,38 @@ def stock_trend_1d_kr_task():
         notifier.notify_success("KR_stock_trend_1d_batch process completed")
     except Exception as e:
         notifier.notify_error(f"KR_stock_trend_1d_batch process failed: {str(e)}")
+        logging.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
+
+
+@CELERY_APP.task(name="stock_trend_1d_kr_open")
+@log_task_execution
+def stock_trend_1d_kr_open_task():
+    """한국 주식 일별 트렌드 업데이트 (장 운영 중)"""
+    if check_market_status("KR"):
+        logging.info("KR market is open. KR_stock_trend_1d_batch process skipped.")
+        return
+    notifier.notify_info("KR_stock_trend_1d_batch process started")
+    try:
+        run_stock_trend_by_1d_batch_open(ctry=TrendingCountry.KR)
+        notifier.notify_success("KR_stock_trend_1d_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_stock_trend_1d_batch process failed: {str(e)}")
+        logging.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
+
+
+@CELERY_APP.task(name="stock_trend_1d_us_open")
+@log_task_execution
+def stock_trend_1d_us_open_task():
+    """미국 주식 일별 트렌드 업데이트 (장 운영 중)"""
+    if check_market_status("US"):
+        logging.info("US market is open. US_stock_trend_1d_batch process skipped.")
+        return
+    notifier.notify_info("US_stock_trend_1d_batch process started")
+    try:
+        run_stock_trend_by_1d_batch_open(ctry=TrendingCountry.US)
+        notifier.notify_success("US_stock_trend_1d_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_stock_trend_1d_batch process failed: {str(e)}")
         logging.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
 
 
