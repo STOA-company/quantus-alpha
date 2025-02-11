@@ -180,6 +180,6 @@ def check_and_recollect_outliers(nation: str):
 
 if __name__ == "__main__":
     # 테스트 용
-    tickers = ["A042940", "A101140", "A192250", "A200230", "A031860", "A192410"]
+    tickers = ["A340930", "A419530", "A033790", "A090710"]
     for ticker in tickers:
         fetch_and_update_stock_data(ticker=ticker, nation="KR")
