@@ -67,12 +67,12 @@ class StockInfoService:
             logger.error(f"Error in get_stock_info for {ticker}: {str(e)}")
             return StockInfo(introduction="", homepage_url="", ceo_name="", establishment_date="", listing_date="")
 
-    def round_and_clean(self, value: float) -> float:
+    def round_and_clean(self, value: float, round_num: int = 1) -> float:
         """
         소수점 첫째자리에서 반올림하고, 소수점이 0이면 정수로 변환
         예: 15.7 -> 15.7, 15.0 -> 15
         """
-        rounded = round(value, 1)
+        rounded = round(value, round_num)
         return int(rounded) if rounded.is_integer() else rounded
 
     def get_stability_status(self, score: float, stability_type: StabilityType) -> StabilityStatus:
@@ -144,8 +144,8 @@ class StockInfoService:
             industry_per=sector_metrics["per"] if sector_metrics["per"] is not None else None,
             pbr=self.round_and_clean(current_stock[0].pbr) if current_stock[0].pbr is not None else None,
             industry_pbr=sector_metrics["pbr"] if sector_metrics["pbr"] is not None else None,
-            roe=self.round_and_clean(current_stock[0].roe) if current_stock[0].roe is not None else None,
-            industry_roe=sector_metrics["roe"] if sector_metrics["roe"] is not None else None,
+            roe=self.round_and_clean(current_stock[0].roe, 2) * 100 if current_stock[0].roe is not None else None,
+            industry_roe=sector_metrics["roe"] * 100 if sector_metrics["roe"] is not None else None,
             **stability_statuses,
         )
 
@@ -259,7 +259,10 @@ class StockInfoService:
         for metric in columns:
             values = [getattr(stock, metric) for stock in sector_results if getattr(stock, metric)]
             if values:
-                sector_metrics[metric] = self.round_and_clean(sum(values) / len(values))
+                if metric == "roe":
+                    sector_metrics[metric] = self.round_and_clean(sum(values) / len(values), 2)
+                else:
+                    sector_metrics[metric] = self.round_and_clean(sum(values) / len(values))
             else:
                 sector_metrics[metric] = 0
 
