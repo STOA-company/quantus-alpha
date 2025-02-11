@@ -28,6 +28,4 @@ class UserStockInterest(BaseMixin, Base):
     user_id: Mapped[BigInteger] = mapped_column(
         BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    ticker: Mapped[String] = mapped_column(
-        String(100), ForeignKey("stock_information.ticker", ondelete="CASCADE"), nullable=True, index=True
-    )
+    ticker: Mapped[String] = mapped_column(String(length=20), nullable=True)

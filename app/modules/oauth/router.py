@@ -6,10 +6,9 @@ import httpx
 from jose import JWTError
 import os
 from app.models.models_users import AlphafinderUser
-from app.database.crud import database
 import logging
 from app.utils.oauth_utils import create_jwt_token, create_refresh_token, get_current_user, refresh_access_token
-
+from app.modules.oauth.service import get_user_by_email, create_user, delete_user
 
 logger = logging.getLogger(__name__)
 
@@ -69,21 +68,12 @@ def google_callback(code: str):
             )
 
             email = google_user["email"]
-            nickname = google_user.get("name", email.split("@")[0])
 
-            user = database._select(table="alphafinder_user", columns=["id", "email", "nickname"], email=email, limit=1)
-
-            user = user[0] if user else None
+            user = get_user_by_email(email)
 
             if not user:
                 logger.info("user not found, create user")
-                database._insert(
-                    table="alphafinder_user",
-                    sets={
-                        "email": email,
-                        "nickname": nickname,
-                    },
-                )
+                create_user(email)
 
             access_token = create_jwt_token(user.id)
             refresh_token = create_refresh_token(user.id)
@@ -93,7 +83,6 @@ def google_callback(code: str):
                 "user": {
                     "id": user.id,
                     "email": user.email,
-                    "nickname": user.nickname,
                 },
                 **access_token,
                 "refresh_token": refresh_token,
@@ -129,4 +118,10 @@ def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
     }
 
 
-# @router.get("/cancel")
+@router.get("/cancel")
+def google_join_cancel(current_user: AlphafinderUser = Depends(get_current_user)):
+    try:
+        delete_user(current_user.id)
+        return {"message": "User deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
