@@ -37,24 +37,24 @@ class FinancialDataResponse(BaseModel):
 
 
 class IncomeStatementDetail(BaseModel):
-    period_q: Optional[str] = Field(max_length=20)
-    rev: float
-    cost_of_sales: float
-    gross_profit: float
-    sell_admin_cost: float
-    rnd_expense: float
-    operating_income: float
-    other_rev_gains: float
-    other_exp_losses: float
-    equity_method_gain: float
-    fin_profit: float
-    fin_cost: float
-    pbt: float
-    corp_tax_cost: float
-    profit_continuing_ops: float
-    net_income_total: float
-    net_income: float
-    net_income_not_control: float
+    period_q: Optional[str] = Field(default=None, max_length=20)
+    rev: Optional[float] = None
+    cost_of_sales: Optional[float] = None
+    gross_profit: Optional[float] = None
+    sell_admin_cost: Optional[float] = None
+    rnd_expense: Optional[float] = None
+    operating_income: Optional[float] = None
+    other_rev_gains: Optional[float] = None
+    other_exp_losses: Optional[float] = None
+    equity_method_gain: Optional[float] = None
+    fin_profit: Optional[float] = None
+    fin_cost: Optional[float] = None
+    pbt: Optional[float] = None
+    corp_tax_cost: Optional[float] = None
+    profit_continuing_ops: Optional[float] = None
+    net_income_total: Optional[float] = None
+    net_income: Optional[float] = None
+    net_income_not_control: Optional[float] = None
 
 
 class IncomeStatementResponse(BaseModel):
@@ -68,19 +68,19 @@ class IncomeStatementResponse(BaseModel):
 
 class CashFlowDetail(BaseModel):
     period_q: Optional[str] = Field(max_length=20)
-    operating_cashflow: float
-    non_controlling_changes: float
-    working_capital_changes: float
-    finance_cashflow: float
-    dividends: float
-    investing_cashflow: float
-    depreciation: float
-    free_cash_flow1: float
-    free_cash_flow2: float
-    cash_earnings: float
-    capex: float
-    other_cash_flows: float
-    cash_increment: float
+    operating_cashflow: Optional[float] = None
+    non_controlling_changes: Optional[float] = None
+    working_capital_changes: Optional[float] = None
+    finance_cashflow: Optional[float] = None
+    dividends: Optional[float] = None
+    investing_cashflow: Optional[float] = None
+    depreciation: Optional[float] = None
+    free_cash_flow1: Optional[float] = None
+    free_cash_flow2: Optional[float] = None
+    cash_earnings: Optional[float] = None
+    capex: Optional[float] = None
+    other_cash_flows: Optional[float] = None
+    cash_increment: Optional[float] = None
 
 
 class CashFlowResponse(BaseModel):
@@ -94,39 +94,39 @@ class CashFlowResponse(BaseModel):
 
 class FinPosDetail(BaseModel):
     period_q: Optional[str] = Field(max_length=20)
-    total_asset: float
-    current_asset: float
-    stock_asset: float
-    trade_and_other_receivables: float
-    cash_asset: float
-    assets_held_for_sale: float
-    non_current_asset: float
-    tangible_asset: float
-    intangible_asset: float
-    investment_asset: float
-    non_current_trade_and_other_receivables: float
-    deferred_tax_asset: float
-    extra_intangible: float
-    total_dept: float
-    current_dept: float
-    trade_and_other_payables: float
-    liabilities_held_for_sale: float
-    non_current_liability: float
-    debenture: float
-    non_current_trade_and_other_payables: float
-    deferred_tax_liability: float
-    equity: float
-    total_equity: float
-    controlling_equity: float
-    capital: float
-    preferred_cap_stock: float
-    cap_stock_common: float
-    new_cap_security: float
-    capital_surplus: float
-    other_capital: float
-    comp_income: float
-    retained_earnings: float
-    non_ctrl_shrhld_eq: float
+    total_asset: Optional[float] = None
+    current_asset: Optional[float] = None
+    stock_asset: Optional[float] = None
+    trade_and_other_receivables: Optional[float] = None
+    cash_asset: Optional[float] = None
+    assets_held_for_sale: Optional[float] = None
+    non_current_asset: Optional[float] = None
+    tangible_asset: Optional[float] = None
+    intangible_asset: Optional[float] = None
+    investment_asset: Optional[float] = None
+    non_current_trade_and_other_receivables: Optional[float] = None
+    deferred_tax_asset: Optional[float] = None
+    extra_intangible: Optional[float] = None
+    total_dept: Optional[float] = None
+    current_dept: Optional[float] = None
+    trade_and_other_payables: Optional[float] = None
+    liabilities_held_for_sale: Optional[float] = None
+    non_current_liability: Optional[float] = None
+    debenture: Optional[float] = None
+    non_current_trade_and_other_payables: Optional[float] = None
+    deferred_tax_liability: Optional[float] = None
+    equity: Optional[float] = None
+    total_equity: Optional[float] = None
+    controlling_equity: Optional[float] = None
+    capital: Optional[float] = None
+    preferred_cap_stock: Optional[float] = None
+    cap_stock_common: Optional[float] = None
+    new_cap_security: Optional[float] = None
+    capital_surplus: Optional[float] = None
+    other_capital: Optional[float] = None
+    comp_income: Optional[float] = None
+    retained_earnings: Optional[float] = None
+    non_ctrl_shrhld_eq: Optional[float] = None
 
 
 class FinPosResponse(BaseModel):

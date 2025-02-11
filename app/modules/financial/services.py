@@ -124,23 +124,25 @@ class FinancialService:
 
         return conditions
 
-    def _to_decimal(self, value) -> Decimal:
+    def _to_decimal(self, value) -> Optional[Decimal]:
         """
         값을 Decimal로 변환하고 JSON 직렬화 가능한 값으로 처리
         소수점 2자리까지 반올림
+        None이나 빈 값은 None으로 반환
         """
         try:
             if value is None or (isinstance(value, str) and not value.strip()):
-                return Decimal("0.00")
+                return None
+
             if isinstance(value, (float, Decimal)):
                 if isinstance(value, float) and math.isnan(value):
-                    return Decimal("0.00")
+                    return None
                 if isinstance(value, Decimal) and value.is_nan():
-                    return Decimal("0.00")
+                    return None
                 if isinstance(value, float) and math.isinf(value):
-                    return Decimal("0.00")
+                    return None
                 if isinstance(value, Decimal) and value.is_infinite():
-                    return Decimal("0.00")
+                    return None
 
             # 값을 Decimal로 변환하고 소수점 2자리로 반올림
             return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -249,6 +251,7 @@ class FinancialService:
 
         try:
             income_data = self.get_income_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+            print("###3", income_data)
             # data를 details로 변경
             if not income_data.data.details:
                 logger.warning(f"No data found for ticker: {ticker}")
@@ -437,11 +440,15 @@ class FinancialService:
             )
 
             name = sorted_result[0][1] if sorted_result else ""
+            print("###1", name)
 
             # 정렬된 결과로 처리
             statements = self._process_income_statement_result(sorted_result)
+            print("###2", statements)
             ttm = self._process_income_ttm_result(sorted_result)
+            print("###3", ttm)
             total = self._process_income_total_result(sorted_result)
+            print("###4", total)
 
             ctry_code = contry_mapping.get(ctry.value, "").lower()
 
@@ -1013,7 +1020,7 @@ class FinancialService:
 
         # TTM 계산
         ttm_dict = {
-            col: sum(self._to_decimal(getattr(row, col, 0)) for row in recent_12_months)
+            col: sum(self._to_decimal(getattr(row, col, 0)) or Decimal("0.00") for row in recent_12_months)
             for col, val in zip(first_row._fields, first_row)
             if col not in exclude_columns and col != "period_q"
         }
@@ -1042,7 +1049,7 @@ class FinancialService:
 
         # TTM 계산을 위한 딕셔너리 초기화
         ttm_dict = {
-            col: sum(self._to_decimal(getattr(row, col, 0)) for row in recent_12_months)
+            col: sum(self._to_decimal(getattr(row, col, 0)) or Decimal("0.00") for row in recent_12_months)
             for col, val in zip(first_row._fields, first_row)
             if col not in exclude_columns and col != "period_q"
         }
@@ -1072,7 +1079,7 @@ class FinancialService:
 
         # TTM 계산을 위한 딕셔너리 초기화
         ttm_dict = {
-            col: sum(self._to_decimal(getattr(row, col, 0)) for row in recent_12_months)
+            col: sum(self._to_decimal(getattr(row, col, 0)) or Decimal("0.00") for row in recent_12_months)
             for col, val in zip(first_row._fields, first_row)
             if col not in exclude_columns and col != "period_q"
         }
@@ -1101,7 +1108,7 @@ class FinancialService:
             # 각 필드별로 년도별 합산
             for field_name, value in zip(row._fields, row):
                 if field_name not in exclude_columns:
-                    yearly_data[year][field_name] += self._to_decimal(value)
+                    yearly_data[year][field_name] += self._to_decimal(value) or Decimal("0.00")
 
         # 연도별 합산 데이터를 IncomeStatementDetail 객체로 변환
         yearly_statements = []
