@@ -1,100 +1,59 @@
-# import os
-# from fastapi import APIRouter, logger, status, Request, Depends
-# from fastapi.responses import JSONResponse, Response, RedirectResponse
-# from app.database.crud import dml
-# from app.database.schemas import Token, RefreshToken
-# from app.utils.logger import set_logging
-# from app.utils.oauth import delete_token, refresh_access_token, request_google_token
-# from app.common.configs import BASE_URL, API_ENV
-# from app.common.consts import CLIENTS
-# from app.common.auth_configs import GOOGLE_CLIENT_INFO
-# from app.common.auth_consts import CLIENT_URI
-# from app.core.exception.custom import (
-#     AuthException,
-#     InvalidAuthCodeException,
-#     TokenRefreshFailedException,
-#     InvalidTokenException,
-#     TokenExpiredException
-# )
+from typing import List
+from fastapi import APIRouter, Depends, File, UploadFile
+from app.models.models_users import AlphafinderUser
+from app.utils.oauth_utils import get_current_user
+from app.modules.user.service import update_user, delete_user
+from app.modules.user.schemas import UserInfoResponse
+from app.modules.user.schemas import RefreshTokenResponse
+from fastapi import HTTPException, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose.exceptions import JWTError
+from app.utils.oauth_utils import refresh_access_token
 
-# router = APIRouter(
-#     prefix="/oauth",
-#     tags=["Auth"]
-# )
 
-# @router.get("/login/google")
-# async def login_google():
-#     REDIRECT_URI = os.path.join(BASE_URL, "oauth/callback/google")
-#     SCOPE = 'openid email profile'
-#     google_client_info = GOOGLE_CLIENT_INFO["web"]
+router = APIRouter()
 
-#     authorization_url = (
-#         "https://accounts.google.com/o/oauth2/v2/auth?"
-#         f"response_type=code&"
-#         f"client_id={google_client_info['client_id']}&"
-#         f"redirect_uri={REDIRECT_URI}&"
-#         f"scope={SCOPE}&"
-#         f"access_type=offline&"
-#         f"prompt=consent"
-#     )
-#     return RedirectResponse(url=authorization_url)
+security = HTTPBearer()
 
-# @router.get("/callback/google")
-# async def callback_google(request: Request):
-#     code = request.query_params.get("code")
-#     if not code:
-#         raise InvalidAuthCodeException()
 
-#     try:
-#         access_token = await request_google_token(
-#             code=code,
-#             client_type="alphafinder"
-#         )
+@router.post("/signup")
+async def signup(
+    nickname: str,
+    profile_image: UploadFile = File(...),
+    favorite_stock: List[str] = [],
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    update_user(current_user.id, nickname, profile_image, favorite_stock)
+    return {"message": "Signup successful"}
 
-#         client_uri = CLIENT_URI["alphafinder"][API_ENV]
-#         redirect_uri = os.path.join(client_uri, f'oauth/callback?access_token={access_token}')
 
-#         return RedirectResponse(redirect_uri)
-#     except Exception as e:
-#         logger.error(f"Google OAuth callback failed: {str(e)}")
-#         raise AuthException(message="Google 로그인 처리 중 오류가 발생했습니다")
+@router.get("/me", response_model=UserInfoResponse)
+def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
+    """현재 인증된 사용자 정보 반환"""
+    return UserInfoResponse(id=current_user.id, email=current_user.email, nickname=current_user.nickname)
 
-# @router.post("/refresh_token")
-# async def refresh_token(token: Token):
-#     if not token.token:
-#         raise InvalidTokenException()
 
-#     try:
-#         res = await refresh_access_token(
-#             access_token=token.token,
-#             sns_type="google",
-#             client_type="alphafinder",
-#             is_app=False
-#         )
+@router.post("/refresh", response_model=RefreshTokenResponse)
+def refresh_token(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+):
+    """리프레시 토큰을 사용하여 새로운 액세스 토큰 발급"""
+    try:
+        new_access_token = refresh_access_token(credentials)
+        return RefreshTokenResponse(new_access_token=new_access_token)
 
-#         status_code = res["status_code"]
-#         if status_code != 200:
-#             raise TokenRefreshFailedException()
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-#         token_data = res["token_data"]
-#         return JSONResponse(
-#             status_code=status_code,
-#             content={"access_token": token_data.get("access_token")}
-#         )
-#     except TokenExpiredException:
-#         raise
-#     except Exception as e:
-#         logger.error(f"Token refresh failed: {str(e)}")
-#         raise TokenRefreshFailedException()
 
-# @router.post("/logout")
-# async def logout(token: Token):
-#     if not token.token:
-#         raise InvalidTokenException()
-
-#     try:
-#         delete_token(access_token=token.token)
-#         return Response(status_code=status.HTTP_200_OK)
-#     except Exception as e:
-#         logger.error(f"Logout failed: {str(e)}")
-#         raise AuthException(message="로그아웃 처리 중 오류가 발생했습니다")
+@router.get("/cancel")
+def signup_cancel(current_user: AlphafinderUser = Depends(get_current_user)):
+    try:
+        delete_user(current_user.id)
+        return {"message": "User deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

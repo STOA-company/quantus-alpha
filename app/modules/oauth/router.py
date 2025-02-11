@@ -1,20 +1,19 @@
-from fastapi import APIRouter, HTTPException, Depends, Security
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, HTTPException
 from google.oauth2 import id_token
 from google.auth.transport import requests
 import httpx
-from jose import JWTError
 import os
-from app.models.models_users import AlphafinderUser
 import logging
-from app.utils.oauth_utils import create_jwt_token, create_refresh_token, get_current_user, refresh_access_token
-from app.modules.oauth.service import get_user_by_email, create_user, delete_user
+from app.utils.oauth_utils import create_jwt_token, create_refresh_token
+from app.modules.user.service import get_user_by_email, create_user
+from app.modules.oauth.schemas import (
+    GoogleLoginResponse,
+    GoogleCallbackResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-security = HTTPBearer()
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -23,7 +22,7 @@ GOOGLE_TOKEN_ENDPOINT = os.getenv("GOOGLE_TOKEN_ENDPOINT")
 GOOGLE_AUTH_URL = os.getenv("GOOGLE_AUTH_URL")
 
 
-@router.get("/google/login")
+@router.get("/google/login", response_model=GoogleLoginResponse)
 def google_login():
     """Google 로그인 페이지로 리다이렉트"""
     params = {
@@ -36,10 +35,10 @@ def google_login():
 
     query_string = "&".join(f"{k}={v}" for k, v in params.items())
     logger.info(f"{GOOGLE_AUTH_URL}?{query_string}")
-    return {"oauth_url": f"{GOOGLE_AUTH_URL}?{query_string}"}
+    return GoogleLoginResponse(oauth_url=f"{GOOGLE_AUTH_URL}?{query_string}")
 
 
-@router.get("/google/callback")
+@router.get("/google/callback", response_model=GoogleCallbackResponse)
 def google_callback(code: str):
     """Google OAuth 콜백 처리"""
     try:
@@ -78,50 +77,12 @@ def google_callback(code: str):
             access_token = create_jwt_token(user.id)
             refresh_token = create_refresh_token(user.id)
 
-            return {
-                "message": "Login successful",
-                "user": {
-                    "id": user.id,
-                    "email": user.email,
-                },
-                **access_token,
-                "refresh_token": refresh_token,
-            }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post("/refresh")
-def refresh_token(
-    credentials: HTTPAuthorizationCredentials = Security(security),
-):
-    """리프레시 토큰을 사용하여 새로운 액세스 토큰 발급"""
-    try:
-        new_access_token = refresh_access_token(credentials)
-        return new_access_token
-
-    except JWTError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid refresh token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-
-@router.get("/me")
-def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
-    """현재 인증된 사용자 정보 반환"""
-    return {
-        "id": current_user.id,
-        "email": current_user.email,
-        "nickname": current_user.nickname,
-    }
-
-
-@router.get("/cancel")
-def google_join_cancel(current_user: AlphafinderUser = Depends(get_current_user)):
-    try:
-        delete_user(current_user.id)
-        return {"message": "User deleted successfully"}
+            return GoogleCallbackResponse(
+                message="Login successful",
+                user={"id": user.id, "email": user.email},
+                access_token=access_token,
+                token_type="Bearer",
+                refresh_token=refresh_token,
+            )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

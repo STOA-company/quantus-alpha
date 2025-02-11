@@ -1,4 +1,6 @@
 from app.database.crud import database
+from typing import List
+from fastapi import UploadFile
 
 
 def get_user_by_email(email: str):
@@ -17,3 +19,15 @@ def create_user(email: str):
 
 def delete_user(id: int):
     database._delete(table="alphafinder_user", id=id)
+
+
+def update_user(id: int, nickname: str = None, profile_image: UploadFile = None, favorite_stock: List[str] = None):
+    database._update(
+        table="alphafinder_user",
+        sets={
+            "nickname": nickname,
+            "profile_image": profile_image,
+            "favorite_stock": favorite_stock,
+        },
+        id=id,
+    )
