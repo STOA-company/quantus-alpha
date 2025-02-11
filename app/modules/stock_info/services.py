@@ -117,16 +117,16 @@ class StockInfoService:
 
         if not current_stock:
             return Indicators(
-                per=0,
-                industry_per=0,
-                pbr=0,
-                industry_pbr=0,
-                roe=0,
-                industry_roe=0,
-                financial_data="보통",
-                price_trend="보통",
-                market_situation="보통",
-                industry_situation="보통",
+                per=None,
+                industry_per=None,
+                pbr=None,
+                industry_pbr=None,
+                roe=None,
+                industry_roe=None,
+                financial_data=None,
+                price_trend=None,
+                market_situation=None,
+                industry_situation=None,
             )
 
         # 섹터 관련 데이터 계산
@@ -140,12 +140,12 @@ class StockInfoService:
             stability_statuses[info.api_field] = status.value
 
         return Indicators(
-            per=self.round_and_clean(current_stock[0].per) if current_stock[0].per else 0,
-            industry_per=sector_metrics["per"] if sector_metrics["per"] else 0,
-            pbr=self.round_and_clean(current_stock[0].pbr) if current_stock[0].pbr else 0,
-            industry_pbr=sector_metrics["pbr"] if sector_metrics["pbr"] else 0,
-            roe=self.round_and_clean(current_stock[0].roe) if current_stock[0].roe else 0,
-            industry_roe=sector_metrics["roe"] if sector_metrics["roe"] else 0,
+            per=self.round_and_clean(current_stock[0].per) if current_stock[0].per is not None else None,
+            industry_per=sector_metrics["per"] if sector_metrics["per"] is not None else None,
+            pbr=self.round_and_clean(current_stock[0].pbr) if current_stock[0].pbr is not None else None,
+            industry_pbr=sector_metrics["pbr"] if sector_metrics["pbr"] is not None else None,
+            roe=self.round_and_clean(current_stock[0].roe) if current_stock[0].roe is not None else None,
+            industry_roe=sector_metrics["roe"] if sector_metrics["roe"] is not None else None,
             **stability_statuses,
         )
 
