@@ -89,7 +89,7 @@ class StockIndicesService:
                     table="stock_indices_1m",
                     columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
                     order="date",
-                    ascending=True,
+                    ascending=False,
                     ticker=market,
                     date__gte=target_date.strftime("%Y-%m-%d 00:00:00"),
                     date__lt=(target_date + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00"),
@@ -103,7 +103,7 @@ class StockIndicesService:
                 if target_date < datetime(2000, 1, 1).date():
                     raise ValueError("No data found for market: {market} in the available date range.")
 
-            prev_close = float(result[-1].close) if result else 0.0
+            prev_close = float(result[0].close) if result else 0.0
             min1_data = {}
             latest_close = 0.0
             latest_change = 0.0
