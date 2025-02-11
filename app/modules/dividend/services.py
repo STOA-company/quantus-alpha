@@ -59,6 +59,9 @@ class DividendService:
 
         # 현재 연도 구하기
         current_year = pd.Timestamp.now().year
+
+        # 6년 전 연도 계산 (현재 연도 포함 총 7년)
+        df2 = df1[df1["year"] >= (current_year - 6)].copy()
         # 3년 전 연도 계산 (현재 연도 포함 총 4년)
         min_year = current_year - 3
 
@@ -95,10 +98,14 @@ class DividendService:
         # 배당지급일 기준으로 작년 데이터 필터링
         last_year_data = df1[df1["payment_year"] == last_year]
 
-        last_dividend_ratio = round(self.calculate_dividend_ratio(df1, ctry, ticker), 2)
-        last_dividend_growth_rate = self.calculate_growth_rate(df1)
-        if np.isnan(last_dividend_growth_rate) or np.isinf(last_dividend_growth_rate):
-            last_dividend_growth_rate = 0.0
+        last_dividend_ratio = self.calculate_dividend_ratio(df1, ctry, ticker)
+        last_dividend_ratio = round(last_dividend_ratio, 2) if last_dividend_ratio is not None else None
+        last_dividend_growth_rate = self.calculate_growth_rate(df2, current_year)
+
+        if last_dividend_growth_rate is None:
+            last_dividend_growth_rate = None
+        elif np.isnan(last_dividend_growth_rate) or np.isinf(last_dividend_growth_rate):
+            last_dividend_growth_rate = None
         else:
             last_dividend_growth_rate = round(last_dividend_growth_rate, 2)
 
@@ -136,7 +143,7 @@ class DividendService:
         )
 
         if not shares_data or not income_data:
-            return 0.0
+            return None
 
         latest_shares = shares_data[0][0]
         latest_net_income = income_data[0][0] * 1_000_000  # 백만 단위를 실제 금액으로 변환
@@ -151,18 +158,17 @@ class DividendService:
         eps = latest_net_income / latest_shares  # 이제 단위가 맞음
 
         # 배당성향 = (1주당 배당금 / EPS) * 100
-        return (latest_dividend_per_share / eps) * 100 if eps != 0 else 0.0
+        return (latest_dividend_per_share / eps) * 100 if eps != 0 else None
 
-    def calculate_growth_rate(self, df):
+    def calculate_growth_rate(self, df, current_year):
         """배당 성장률 계산"""
-        latest_year = df["year"].max()
-        current_year_div = df[df["year"] == latest_year]["배당금"].sum()
-        prev_year_div = df[df["year"] == (latest_year - 1)]["배당금"].sum()
+        latest_year = current_year - 1
+        current_year_div = df[df["year"] == (latest_year)]["배당금"].sum()
+        prev_year_div = df[df["year"] == (latest_year - 5)]["배당금"].sum()
 
-        if prev_year_div == 0:
-            return 0.0
+        result = ((current_year_div - prev_year_div) ** (1 / 5)) - 1 if prev_year_div != 0 else None
 
-        return (current_year_div - prev_year_div) / prev_year_div
+        return result
 
 
 def get_dividend_service():

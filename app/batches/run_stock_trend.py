@@ -63,7 +63,6 @@ def run_stock_trend_tickers_batch():
 
 def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000):
     try:
-        # 1. stock_trend와 1일 데이터 테이블의 공통 티커 조회
         stock_trend_tickers = database._select(table="stock_trend", columns=["ticker"], distinct=True, ctry=ctry.value)
         stock_trend_set = set(row[0] for row in stock_trend_tickers)
 
@@ -85,7 +84,7 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
 
                 ticker_data = database._select(
                     table=f"stock_{ctry.value}_1d",
-                    columns=["Ticker", "Date", "Close", "Volume", "Open", "High", "Low"],
+                    columns=["Ticker", "Name", "Date", "Close", "Volume", "Open", "High", "Low"],
                     Ticker=ticker,
                     Date__gte=one_year_ago,
                     order="Date",
@@ -93,7 +92,7 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
                 )
                 daily_data.extend(ticker_data)
 
-            df = pd.DataFrame(daily_data, columns=["Ticker", "Date", "Close", "Volume", "Open", "High", "Low"])
+            df = pd.DataFrame(daily_data, columns=["Ticker", "Name", "Date", "Close", "Volume", "Open", "High", "Low"])
             df = df.sort_values(by=["Ticker", "Date"], ascending=[True, False])
 
             df["volume_change"] = (df["Open"] + df["High"] + df["Low"] + df["Close"]) / 4 * df["Volume"]
@@ -117,6 +116,7 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
             results["change_sign"] = np.where(
                 current_data["Close"] > prev_data["Close"], 1, np.where(current_data["Close"] < prev_data["Close"], -1, 0)
             )
+            results["name"] = current_data["Name"]
 
             periods = {"1w": 5, "1m": 20, "6m": 120, "1y": None}
 
@@ -149,6 +149,7 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
         for _, row in results.iterrows():
             update_dict = {
                 "ticker": row["ticker"],
+                "name": row["name"],
                 "last_updated": row["last_updated"],
                 "current_price": row["current_price"],
                 "prev_close": row["prev_close"],
@@ -280,6 +281,52 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
 
     except Exception as e:
         logging.error(f"Error in run_stock_trend_by_realtime_batch: {str(e)}")
+        raise e
+
+
+def run_stock_trend_by_1d_batch_open(ctry: TrendingCountry):
+    try:
+        stock_trend_tickers = database._select(
+            table="stock_trend",
+            columns=["ticker"],
+            distinct=True,
+            ctry=ctry.value,
+        )
+
+        if not stock_trend_tickers:
+            logging.info(f"No tickers found in stock_trend for {ctry.value}")
+            return
+
+        tickers = [row[0] for row in stock_trend_tickers]
+
+        latest_closes = database._select(
+            table=f"stock_{ctry.value.lower()}_1d",
+            columns=["Ticker", "Close"],
+            Ticker__in=tickers,
+            group_by=["Ticker"],
+            aggregates={"Date": ("Date", "max")},
+        )
+
+        if not latest_closes:
+            logging.info(f"No close prices found in stock_{ctry.value.lower()}_1d")
+            return
+
+        update_data = [
+            {
+                "ticker": ticker,
+                "prev_close": close,
+            }
+            for ticker, close, _ in latest_closes
+        ]
+
+        if update_data:
+            database._bulk_update(table="stock_trend", data=update_data, key_column="ticker")
+            logging.info(f"Successfully updated {len(update_data)} records' prev_close in stock_trend table")
+        else:
+            logging.info(f"No records to update for {ctry.value}")
+
+    except Exception as e:
+        logging.error(f"Error in run_stock_trend_by_1d_batch_open: {str(e)}")
         raise e
 
 

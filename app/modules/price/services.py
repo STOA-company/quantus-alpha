@@ -610,15 +610,16 @@ class PriceService:
             week_52_high = df["week_52_high"].iloc[0] or 0.0
             week_52_low = df["week_52_low"].iloc[0] or 0.0
             last_day_close = df["last_close"].iloc[0] or 0.0
+            market_cap = df["market_cap"].iloc[0] or None
         else:
-            week_52_high = 0.0
-            week_52_low = 0.0
-            last_day_close = 0.0
+            week_52_high = None
+            week_52_low = None
+            last_day_close = None
+            market_cap = None
 
         sector = await self._get_sector_by_ticker(ticker, lang) or ""
         name = self._get_us_ticker_name(ticker) or ""
         market = self._get_market(ticker, lang) or ""
-        market_cap = await self._get_market_cap(ctry, ticker) or 0.0
         name = remove_parentheses(name) or ""
         is_market_close = check_market_status(ctry.upper())
 
@@ -653,7 +654,9 @@ class PriceService:
             ticker_with_suffix = f"{ticker}-US"
 
         result = self.database._select(
-            table=f"{ctry_3}_stock_factors", columns=["week_52_high", "week_52_low"], ticker=ticker_with_suffix
+            table=f"{ctry_3}_stock_factors",
+            columns=["week_52_high", "week_52_low", "market_cap"],
+            ticker=ticker_with_suffix,
         )
         if not result:
             kst_now = datetime.now(KST)
@@ -678,6 +681,7 @@ class PriceService:
             "week_52_high": result[0][0] if result else week_52_high,
             "week_52_low": result[0][1] if result else week_52_low,
             "last_close": last_close[0][0] if last_close else last_close,
+            "market_cap": result[0][2] if result else None,
         }
 
         return pd.DataFrame([combined_data])
