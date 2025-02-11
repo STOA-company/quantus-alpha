@@ -27,7 +27,15 @@ def update_user(id: int, nickname: str = None, profile_image: UploadFile = None,
         sets={
             "nickname": nickname,
             "profile_image": profile_image,
-            "favorite_stock": favorite_stock,
         },
         id=id,
     )
+
+    for ticker in favorite_stock:
+        database._insert(
+            table="user_stock_interest",
+            sets={
+                "user_id": id,
+                "ticker": ticker,
+            },
+        )
