@@ -282,6 +282,52 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
         raise e
 
 
+def run_stock_trend_by_1d_batch_open(ctry: TrendingCountry):
+    try:
+        stock_trend_tickers = database._select(
+            table="stock_trend",
+            columns=["ticker"],
+            distinct=True,
+            ctry=ctry.value,
+        )
+
+        if not stock_trend_tickers:
+            logging.info(f"No tickers found in stock_trend for {ctry.value}")
+            return
+
+        tickers = [row[0] for row in stock_trend_tickers]
+
+        latest_closes = database._select(
+            table=f"stock_{ctry.value.lower()}_1d",
+            columns=["Ticker", "Close"],
+            Ticker__in=tickers,
+            group_by=["Ticker"],
+            aggregates={"Date": ("Date", "max")},
+        )
+
+        if not latest_closes:
+            logging.info(f"No close prices found in stock_{ctry.value.lower()}_1d")
+            return
+
+        update_data = [
+            {
+                "ticker": ticker,
+                "prev_close": close,
+            }
+            for ticker, close, _ in latest_closes
+        ]
+
+        if update_data:
+            database._bulk_update(table="stock_trend", data=update_data, key_column="ticker")
+            logging.info(f"Successfully updated {len(update_data)} records' prev_close in stock_trend table")
+        else:
+            logging.info(f"No records to update for {ctry.value}")
+
+    except Exception as e:
+        logging.error(f"Error in run_stock_trend_by_1d_batch_open: {str(e)}")
+        raise e
+
+
 if __name__ == "__main__":
     run_stock_trend_by_1d_batch(ctry=TrendingCountry.KR)
     # run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
