@@ -102,6 +102,14 @@ CELERY_APP.conf.beat_schedule = {
         "task": "us_news_renewal",
         "schedule": crontab(minute="10,25,40,55"),
     },
+    "kr-top-stories": {
+        "task": "kr_top_stories",
+        "schedule": crontab(minute="6,16,26,36,46,56"),
+    },
+    "us-top-stories": {
+        "task": "us_top_stories",
+        "schedule": crontab(minute="6,16,26,36,46,56"),
+    },
     "process_outliers_us": {
         "task": "process_outliers_us",
         "schedule": crontab(hour="23", minute="35"),
