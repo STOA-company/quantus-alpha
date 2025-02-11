@@ -144,8 +144,8 @@ class StockInfoService:
             industry_per=sector_metrics["per"] if sector_metrics["per"] is not None else None,
             pbr=self.round_and_clean(current_stock[0].pbr) if current_stock[0].pbr is not None else None,
             industry_pbr=sector_metrics["pbr"] if sector_metrics["pbr"] is not None else None,
-            roe=self.round_and_clean(current_stock[0].roe, 2) * 100 if current_stock[0].roe is not None else None,
-            industry_roe=sector_metrics["roe"] * 100 if sector_metrics["roe"] is not None else None,
+            roe=self.round_and_clean(current_stock[0].roe * 100, 1) if current_stock[0].roe is not None else None,
+            industry_roe=sector_metrics["roe"] if sector_metrics["roe"] is not None else None,
             **stability_statuses,
         )
 
@@ -260,7 +260,7 @@ class StockInfoService:
             values = [getattr(stock, metric) for stock in sector_results if getattr(stock, metric)]
             if values:
                 if metric == "roe":
-                    sector_metrics[metric] = self.round_and_clean(sum(values) / len(values), 2)
+                    sector_metrics[metric] = self.round_and_clean(sum(values) / len(values), 2) * 100
                 else:
                     sector_metrics[metric] = self.round_and_clean(sum(values) / len(values))
             else:
