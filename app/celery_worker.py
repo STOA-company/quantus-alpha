@@ -250,7 +250,7 @@ def process_outliers_kr():
     try:
         check_kr_stock_splits()
         check_and_recollect_outliers(nation="KR")
-        stock_trend_1d_kr_task()
+        run_stock_trend_by_1d_batch(ctry=TrendingCountry.KR)
         notifier.notify_success("KR_process_outliers process completed")
     except Exception as e:
         notifier.notify_error(f"KR_process_outliers process failed: {str(e)}")
@@ -264,7 +264,7 @@ def process_outliers_us():
     try:
         check_us_stock_splits()
         check_and_recollect_outliers(nation="US")
-        stock_trend_1d_us_task()
+        run_stock_trend_by_1d_batch(ctry=TrendingCountry.US)
         notifier.notify_success("US_process_outliers process completed")
     except Exception as e:
         notifier.notify_error(f"US_process_outliers process failed: {str(e)}")
