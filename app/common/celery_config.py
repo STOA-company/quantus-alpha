@@ -26,10 +26,10 @@ CELERY_APP.conf.worker_prefetch_multiplier = 1  # 작업 분배 최적화
 # Celery Beat Schedule
 CELERY_APP.conf.beat_schedule = {
     # 한국 주식 분봉 스케줄
-    "kr-stock-minute-batch": {
-        "task": "kr_stock_minute_batch",
-        "schedule": crontab(minute="1,16,31,46"),  # 15분마다 실행 (장중)
-    },
+    # "kr-stock-minute-batch": {
+    #     "task": "kr_stock_minute_batch",
+    #     "schedule": crontab(minute="1,16,31,46"),  # 15분마다 실행 (장중)
+    # },
     # 미국 주식 스케줄
     "us-daily-stock-trend": {
         "task": "stock_trend_1d_us",
@@ -44,10 +44,10 @@ CELERY_APP.conf.beat_schedule = {
         "task": "stock_trend_1d_kr",
         "schedule": crontab(hour="16", minute="10"),  # KST 16:10
     },
-    "kr-realtime-stock-trend": {
-        "task": "stock_trend_realtime_kr",
-        "schedule": crontab(minute="12,27,42,57"),  # 15분마다 실행 (장중)
-    },
+    # "kr-realtime-stock-trend": {
+    #     "task": "stock_trend_realtime_kr",
+    #     "schedule": crontab(minute="12,27,42,57"),  # 15분마다 실행 (장중)
+    # },
     # 주가 지수 스케줄
     "us-stock-indices": {
         "task": "us_stock_indices_batch",
