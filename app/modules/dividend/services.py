@@ -100,7 +100,7 @@ class DividendService:
 
         last_dividend_ratio = self.calculate_dividend_ratio(df1, ctry, ticker)
         last_dividend_ratio = round(last_dividend_ratio, 2) if last_dividend_ratio is not None else None
-        last_dividend_growth_rate = self.calculate_growth_rate(df2)
+        last_dividend_growth_rate = self.calculate_growth_rate(df2, current_year)
 
         if last_dividend_growth_rate is None:
             last_dividend_growth_rate = None
@@ -160,11 +160,11 @@ class DividendService:
         # 배당성향 = (1주당 배당금 / EPS) * 100
         return (latest_dividend_per_share / eps) * 100 if eps != 0 else None
 
-    def calculate_growth_rate(self, df):
+    def calculate_growth_rate(self, df, current_year):
         """배당 성장률 계산"""
-        latest_year = df["year"].max()
-        current_year_div = df[df["year"] == (latest_year - 1)]["배당금"].sum()
-        prev_year_div = df[df["year"] == (latest_year - 6)]["배당금"].sum()
+        latest_year = current_year - 1
+        current_year_div = df[df["year"] == (latest_year)]["배당금"].sum()
+        prev_year_div = df[df["year"] == (latest_year - 5)]["배당금"].sum()
 
         result = ((current_year_div - prev_year_div) ** (1 / 5)) - 1 if prev_year_div != 0 else None
 
