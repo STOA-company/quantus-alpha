@@ -105,9 +105,8 @@ class StockIndicesService:
 
             prev_close = float(result[0].close) if result else 0.0
             min1_data = {}
-            latest_close = 0.0
-            latest_change = 0.0
-            latest_change_rate = 0.0
+            latest_change = float(result[0].change) if result else 0.0
+            latest_change_rate = float(result[0].change_rate) if result else 0.0
 
             for row in result:
                 timestamp = row.date.strftime("%Y-%m-%d %H:%M:%S")
@@ -118,14 +117,10 @@ class StockIndicesService:
                     close=round(float(row.close), 2),
                     volume=round(float(row.volume), 2),
                 )
-                latest_close = float(row.close)
-                latest_change = float(row.change)
-                latest_change_rate = float(row.change_rate)
 
             market_data = {
                 "daily": {
                     "prev_close": round(prev_close, 2),
-                    "close": round(latest_close, 2),
                     "change": round(latest_change, 2),
                     "change_percent": round(latest_change_rate, 2),
                 },
