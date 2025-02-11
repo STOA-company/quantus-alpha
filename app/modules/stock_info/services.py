@@ -260,7 +260,7 @@ class StockInfoService:
             values = [getattr(stock, metric) for stock in sector_results if getattr(stock, metric)]
             if values:
                 if metric == "roe":
-                    sector_metrics[metric] = self.round_and_clean(sum(values) / len(values), 2) * 100
+                    sector_metrics[metric] = self.round_and_clean(sum(values) * 100 / len(values), 2)
                 else:
                     sector_metrics[metric] = self.round_and_clean(sum(values) / len(values))
             else:
