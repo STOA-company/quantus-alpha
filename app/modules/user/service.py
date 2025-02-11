@@ -32,10 +32,20 @@ def update_user(id: int, nickname: str = None, profile_image: UploadFile = None,
     )
 
     for ticker in favorite_stock:
-        database._insert(
-            table="user_stock_interest",
-            sets={
-                "user_id": id,
-                "ticker": ticker,
-            },
-        )
+        add_favorite_stock(id, ticker)
+
+
+def add_favorite_stock(id: int, ticker: str):
+    if database._select(table="user_stock_interest", user_id=id, ticker=ticker, limit=1):
+        return
+    database._insert(
+        table="user_stock_interest",
+        sets={
+            "user_id": id,
+            "ticker": ticker,
+        },
+    )
+
+
+def delete_favorite_stock(id: int, ticker: str):
+    database._delete(table="user_stock_interest", user_id=id, ticker=ticker)
