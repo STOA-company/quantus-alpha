@@ -10,13 +10,12 @@ import time
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+MAX_RETRIES = 3
+FETCH_COUNT = 30
+
 
 def save_minute_data(ticker: str, data: List[Dict]) -> bool:
-    """
-    분봉 데이터 저장
-    Returns:
-        bool: 저장 성공 여부
-    """
+    """분봉 데이터 저장"""
     try:
         records = []
 
@@ -47,16 +46,12 @@ def save_minute_data(ticker: str, data: List[Dict]) -> bool:
         return False
 
 
-def process_single_ticker(api, ticker: str, max_retries: int = 3) -> bool:
-    """
-    단일 티커 처리 함수
-    Returns:
-        bool: 처리 성공 여부
-    """
+def process_single_ticker(api, ticker: str) -> bool:
+    """단일 티커 처리"""
     ticker = ticker[1:] if ticker.startswith("A") else ticker
     retry_count = 0
 
-    while retry_count < max_retries:
+    while retry_count < MAX_RETRIES:
         try:
             kr_tz = pytz.timezone("Asia/Seoul")
             now = datetime.utcnow().replace(tzinfo=pytz.UTC).astimezone(kr_tz)
@@ -65,7 +60,9 @@ def process_single_ticker(api, ticker: str, max_retries: int = 3) -> bool:
 
             while True:
                 try:
-                    data = api.get_stock_price_history_by_minute(symbol=ticker, time=current_time, limit=16, desc=True)
+                    data = api.get_stock_price_history_by_minute(
+                        symbol=ticker, time=current_time, limit=FETCH_COUNT, desc=True
+                    )
 
                     if not data:
                         logger.info(f"No more data for ticker {ticker}")
@@ -84,26 +81,26 @@ def process_single_ticker(api, ticker: str, max_retries: int = 3) -> bool:
 
                 except Exception as e:
                     if "EGW00133" in str(e):
-                        wait_time = min(60 * (retry_count + 1), 300)  # 점진적으로 대기 시간 증가, 최대 5분
+                        wait_time = min(60)
                         logger.warning(
-                            f"Rate limit reached (attempt {retry_count + 1}/{max_retries}). Waiting {wait_time} seconds..."
+                            f"Rate limit reached (attempt {retry_count + 1}/{MAX_RETRIES}). Waiting {wait_time} seconds..."
                         )
                         time.sleep(wait_time)
                         retry_count += 1
-                        if retry_count >= max_retries:
+                        if retry_count >= MAX_RETRIES:
                             logger.error(f"Max retries reached for ticker {ticker}")
                             return False
                         break
                     else:
                         raise
 
-            if retry_count < max_retries:
+            if retry_count < MAX_RETRIES:
                 return True
 
         except Exception as e:
             retry_count += 1
-            logger.error(f"Error processing ticker {ticker} (attempt {retry_count}/{max_retries}): {e}")
-            if retry_count < max_retries:
+            logger.error(f"Error processing ticker {ticker} (attempt {retry_count}/{MAX_RETRIES}): {e}")
+            if retry_count < MAX_RETRIES:
                 time.sleep(5)
             else:
                 return False
@@ -117,7 +114,7 @@ def collect_kr_stock_minute_data():
         api = KISAPIManager().get_api()
         failed_tickers = []
 
-        tickers = database._select(table="stock_information", columns=["ticker"], ctry="kr")
+        tickers = database._select(table="stock_trend", columns=["ticker"], ctry="kr")
 
         if not tickers:
             logger.warning("No tickers found")
@@ -143,6 +140,8 @@ def collect_kr_stock_minute_data():
             logger.error(f"Failed to process the following tickers after retries: {failed_tickers}")
         else:
             logger.info("Successfully processed all tickers")
+
+        return len(failed_tickers)
 
     except Exception as e:
         logger.error(f"Error in data collection process: {e}")
