@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     KIS_SECRET: str = os.getenv("KIS_SECRET", "")
     KIS_ACCOUNT_NO: str = os.getenv("KIS_ACCOUNT_NO", "")
 
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "")
+    GOOGLE_TOKEN_ENDPOINT: str = os.getenv("GOOGLE_TOKEN_ENDPOINT", "")
+    GOOGLE_AUTH_URL: str = os.getenv("GOOGLE_AUTH_URL", "")
+
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "")
+
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
     else:
