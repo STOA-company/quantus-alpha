@@ -78,6 +78,7 @@ def kr_stock_indices_batch():
     try:
         if check_market_status("KR"):
             kr_run_stock_indices_batch()
+
         else:
             notifier.notify_info("KR market is not open. KR_stock_indices_batch process skipped.")
             logging.info("KR market is not open. KR_stock_indices_batch process skipped.")
@@ -236,8 +237,11 @@ def kr_stock_minute_batch():
     """한국 주식 분봉 데이터 업데이트"""
     notifier.notify_info("KR_stock_minute_batch process started")
     if check_market_status("KR"):
-        collect_kr_stock_minute_data()
-        notifier.notify_success("KR_stock_minute_batch process completed")
+        failed_count = collect_kr_stock_minute_data()
+        if failed_count > 0:
+            notifier.notify_error(f"KR_stock_minute_batch process failed. Failed count: {failed_count}")
+        else:
+            notifier.notify_success("KR_stock_minute_batch process completed")
     else:
         notifier.notify_info("KR market is not open. KR_stock_minute_batch process skipped.")
         return
