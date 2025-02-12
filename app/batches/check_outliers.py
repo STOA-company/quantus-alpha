@@ -166,7 +166,7 @@ def check_and_recollect_outliers(nation: str):
 
     database._update(
         table="stock_trend",
-        is_activate=0,
+        sets={"is_activate": 0},
         ticker__in=outlier_tickers,
     )
 
@@ -180,6 +180,8 @@ def check_and_recollect_outliers(nation: str):
 
 if __name__ == "__main__":
     # 테스트 용
-    tickers = ["A340930", "A419530", "A033790", "A090710"]
-    for ticker in tickers:
-        fetch_and_update_stock_data(ticker=ticker, nation="KR")
+    # tickers = ["A340930", "A419530", "A033790", "A090710"]
+    # for ticker in tickers:
+    #     fetch_and_update_stock_data(ticker=ticker, nation="KR")
+
+    check_and_recollect_outliers(nation="KR")
