@@ -419,5 +419,63 @@ class Database:
             logging.error(f"Error in bulk update operation: {str(e)}")
             raise
 
+    def _bulk_insert(self, table: str, data_list: list[dict], chunk_size: int = 1000):
+        """대량의 데이터를 효율적으로 삽입하는 메서드입니다.
+
+        Args:
+            table (str): 데이터를 삽입할 테이블 이름
+            data_list (list[dict]): 삽입할 데이터 리스트. 각 딕셔너리는 컬럼명을 키로 가지며, 삽입할 값을 값으로 가집니다.
+            chunk_size (int, optional): 한 번에 처리할 레코드 수. 기본값은 1000입니다.
+
+        Raises:
+            ValueError: data_list가 비어있거나, 테이블에 존재하지 않는 컬럼이 포함된 경우
+            Exception: 데이터베이스 작업 중 오류가 발생한 경우
+
+        Example:
+            >>> data = [
+            ...     {"ticker": "AAPL", "price": 150.0, "volume": 1000000},
+            ...     {"ticker": "GOOGL", "price": 2800.0, "volume": 500000}
+            ... ]
+            >>> database._bulk_insert(
+            ...     table="stock_prices",
+            ...     data_list=data
+            ... )
+        """
+        try:
+            if not data_list:
+                raise ValueError("data_list cannot be empty")
+
+            obj = self.meta_data.tables[table]
+
+            sample_data = data_list[0]
+            invalid_columns = [col for col in sample_data if col not in obj.columns]
+            if invalid_columns:
+                raise ValueError(f"Invalid columns found: {invalid_columns}")
+
+            for i in range(0, len(data_list), chunk_size):
+                chunk = data_list[i : i + chunk_size]
+
+                processed_chunk = []
+                for item in chunk:
+                    processed_item = {}
+                    for col, val in item.items():
+                        if col in obj.columns:
+                            processed_item[getattr(obj.columns, col)] = val
+                    processed_chunk.append(processed_item)
+
+                stmt = insert(obj).values(chunk)
+
+                with self.get_connection() as connection:
+                    connection.execute(stmt)
+
+                logging.info(
+                    f"Bulk insert completed for chunk {i//chunk_size + 1}, " f"processed {len(chunk)} records in {table}"
+                )
+                time.sleep(1)
+
+        except Exception as e:
+            logging.error(f"Error in bulk insert operation: {str(e)}")
+            raise
+
 
 database = Database()
