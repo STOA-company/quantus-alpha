@@ -18,7 +18,7 @@ from app.batches.run_stock_trend import (
     run_stock_trend_by_1d_batch_open,
 )
 from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_stock_indices_batch, get_stock_indices_data
-from app.utils.date_utils import now_kr
+from app.utils.date_utils import get_session_checker, now_kr, now_us
 from app.batches.run_disclosure import (
     renewal_kr_run_disclosure_batch,
     kr_run_disclosure_is_top_story,
@@ -329,33 +329,46 @@ def process_outliers_us():
 @CELERY_APP.task(name="kr_stock_indices_collect", ignore_result=True)
 def kr_stock_indices_collect():
     """한국 주가지수 데이터 수집"""
-    if not check_market_status("KR"):
-        notifier.notify_info("KR market is not open. KR_stock_indices_collect process skipped.")
-        return
-    try:
-        notifier.notify_info("KR_stock_indices_collect process started")
-        get_stock_indices_data("KOSPI")
-        get_stock_indices_data("KOSDAQ")
-        notifier.notify_success("KR_stock_indices_collect process completed")
-    except Exception as e:
-        notifier.notify_error(f"KR_stock_indices_collect process failed: {str(e)}")
-        raise
+    now_kr_datetime = now_kr()
+    now_kr_date = now_kr_datetime.strftime("%Y-%m-%d")
+    now_kr_time = now_kr_datetime.strftime("%H:%M:%S")
+    if (
+        get_session_checker(country="KR", start_date=now_kr_date).is_session(now_kr_date)
+        and "09:00:00" <= now_kr_time <= "15:40:00"
+    ):
+        try:
+            notifier.notify_info("KR_stock_indices_collect process started")
+            get_stock_indices_data("KOSPI")
+            get_stock_indices_data("KOSDAQ")
+            notifier.notify_success("KR_stock_indices_collect process completed")
+        except Exception as e:
+            notifier.notify_error(f"KR_stock_indices_collect process failed: {str(e)}")
+            raise
+    else:
+        logging.info("KR market is not open. KR_stock_indices_collect process skipped.")
 
 
 @CELERY_APP.task(name="us_stock_indices_collect", ignore_result=True)
 def us_stock_indices_collect():
     """미국 주가지수 데이터 수집"""
-    if not check_market_status("US"):
+    now_us_datetime = now_us()
+    now_us_date = now_us_datetime.strftime("%Y-%m-%d")
+    now_us_time = now_us_datetime.strftime("%H:%M:%S")
+    if (
+        get_session_checker(country="US", start_date=now_us_date).is_session(now_us_date)
+        and "09:30:00" <= now_us_time <= "16:30:00"
+    ):
+        try:
+            notifier.notify_info("US_stock_indices_collect process started")
+            get_stock_indices_data("NASDAQ")
+            get_stock_indices_data("SP500")
+            notifier.notify_success("US_stock_indices_collect process completed")
+        except Exception as e:
+            notifier.notify_error(f"US_stock_indices_collect process failed: {str(e)}")
+            raise
+    else:
         logging.info("US market is not open. US_stock_indices_collect process skipped.")
         return
-    try:
-        notifier.notify_info("US_stock_indices_collect process started")
-        get_stock_indices_data("NASDAQ")
-        get_stock_indices_data("SP500")
-        notifier.notify_success("US_stock_indices_collect process completed")
-    except Exception as e:
-        notifier.notify_error(f"US_stock_indices_collect process failed: {str(e)}")
-        raise
 
 
 # Worker 시작점
