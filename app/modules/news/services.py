@@ -506,7 +506,14 @@ class NewsService:
             )
         return data, total_count, total_page, offset, emotion_count, ctry
 
-    def news_detail_v2(self, ticker: str, date: str = None, end_date: str = None, page: int = 1, size: int = 6):
+    def news_detail_v2(
+        self,
+        ticker: str,
+        date: str = None,
+        end_date: str = None,
+        page: int = 1,
+        size: int = 6,
+    ):
         kst = pytz.timezone("Asia/Seoul")
         utc = pytz.timezone("UTC")
 
@@ -534,35 +541,37 @@ class NewsService:
             end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
 
         ctry = check_ticker_country_len_2(ticker)
-        if not end_date:
-            condition = {
-                "ticker": ticker,
-                "date__gte": f"{date} 00:00:00",
-                "date__lt": f"{date} 23:59:59",
-                "is_exist": True,
-            }
-        else:
-            condition = {
-                "ticker": ticker,
-                "date__gte": f"{date} 00:00:00",
-                "date__lt": f"{end_date} 23:59:59",
-                "is_exist": True,
-            }
 
-        condition = {
-            "ticker": ticker,
-            "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-            "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-            "is_exist": True,
-        }
-
-        stock_info_columns = ["ticker"]
+        stock_info_columns = ["ticker", "en_name"]
         stock_info_columns.append("is_kospi_200" if ctry == "kr" else "is_snp_500")
         stock_info = self.db._select(
             table="stock_information",
             columns=stock_info_columns,
             **{"ticker": ticker},
         )
+        duplicate_stock_info = self.db._select(
+            table="stock_information",
+            columns=["ticker"],
+            **{"en_name": stock_info[0][1]},
+        )
+        if len(duplicate_stock_info) == 2:
+            unique_tickers = [info[0] for info in duplicate_stock_info]
+            condition = {
+                "ticker__in": unique_tickers,
+                "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                "is_exist": True,
+                "is_related": True,
+            }
+        else:
+            condition = {
+                "ticker": ticker,
+                "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                "is_exist": True,
+                "is_related": True,
+            }
+
         df_news = pd.DataFrame(
             self.db._select(
                 table="news_analysis",
@@ -584,7 +593,7 @@ class NewsService:
             )
         )
         if df_news.empty:
-            if stock_info[0][1]:
+            if stock_info[0][-1]:
                 emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
                 return [], 0, 0, 0, emotion_count, ctry
             else:

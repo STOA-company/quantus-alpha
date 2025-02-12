@@ -1,14 +1,16 @@
 import logging
 from datetime import datetime
 from typing import List, Dict
-from app.kispy.api import KISAPI
-from app.kispy.sdk import auth
+from app.kispy.manager import KISAPIManager
 from app.database.crud import database
 import pytz
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+FETCH_COUNT = 30
 
 
 def save_minute_data(ticker: str, data: List[Dict]):
@@ -44,7 +46,7 @@ def save_minute_data(ticker: str, data: List[Dict]):
 def collect_kr_stock_minute_data():
     """국내 주식 분봉 데이터 수집"""
     try:
-        api = KISAPI(auth=auth)
+        api = KISAPIManager().get_api()
 
         tickers = database._select(table="stock_information", columns=["ticker"], ctry="kr")
 
@@ -64,7 +66,9 @@ def collect_kr_stock_minute_data():
 
                 while True:
                     logger.info(f"Current time: {current_time}")
-                    data = api.get_stock_price_history_by_minute(symbol=ticker, limit=16, desc=True)
+                    data = api.get_stock_price_history_by_minute(
+                        symbol=ticker, time=current_time, limit=FETCH_COUNT, desc=True
+                    )
 
                     if not data:
                         logger.info(f"No more data for ticker {ticker}")
@@ -82,7 +86,7 @@ def collect_kr_stock_minute_data():
 
             except Exception as e:
                 logger.error(f"Error processing ticker {ticker}: {e}")
-                continue
+                raise
 
         logger.info(f"Completed processing {len(tickers)} tickers")
 

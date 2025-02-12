@@ -3,13 +3,12 @@ from functools import wraps
 import logging
 import time
 from typing import Callable
-import numpy as np
 import pandas as pd
 from sqlalchemy.sql import text
+from app.common.constants import KST, USE, UTC
 from app.database.crud import database
 from app.utils.date_utils import now_utc, check_market_status
-from app.kispy.api import KISAPI
-from app.kispy.sdk import auth
+from app.kispy.manager import KISAPIManager
 
 
 def kr_run_stock_indices_batch():
@@ -164,7 +163,7 @@ def _update_market_data(ticker: str, result: dict):
 
 
 #################주가 지수 수집 로직#################
-kisapi = KISAPI(auth=auth)
+kisapi = KISAPIManager().get_api()
 
 
 def get_overseas_index_data(ticker: str):
@@ -172,6 +171,10 @@ def get_overseas_index_data(ticker: str):
 
     # 분봉 데이터를 DataFrame으로 변환
     df = pd.DataFrame(result["output2"])
+    df["stck_cntg_hour"] = df["stck_cntg_hour"].astype(int)
+    df_last_data = df[df["stck_cntg_hour"] == 888888]
+    df = df[(df["stck_cntg_hour"] >= 90000) & (df["stck_cntg_hour"] <= 162000)]
+    df["stck_cntg_hour"] = df["stck_cntg_hour"].astype(str).str.zfill(6)
 
     # 컬럼 이름 변경
     df = df.rename(
@@ -188,8 +191,6 @@ def get_overseas_index_data(ticker: str):
 
     # API에서 제공하는 변화량과 변동률 사용
     df["change"] = float(result["output1"]["ovrs_nmix_prdy_vrss"])
-    if result["output1"]["prdy_vrss_sign"] == "5":  # 하락
-        df["change"] = -df["change"]
     df["change_rate"] = float(result["output1"]["prdy_ctrt"])
 
     # 데이터 타입 변환
@@ -198,10 +199,29 @@ def get_overseas_index_data(ticker: str):
 
     # 날짜와 시간 처리
     df["date"] = pd.to_datetime(df["date"] + df["time"], format="%Y%m%d%H%M%S")
+    # 시간대 변경 (미국 동부 -> utc)
+    df["date"] = df["date"].dt.tz_localize("America/New_York").dt.tz_convert("UTC")
 
     # 필요한 컬럼만 선택하고 DB 저장 형식에 맞게 재구성
     df["ticker"] = ticker
     df = df[["ticker", "date", "open", "high", "low", "close", "volume", "change", "change_rate"]]
+
+    if not df_last_data.empty:
+        last_time = datetime.datetime.strptime(df.iloc[0]["date"].strftime("%Y%m%d") + "162000", "%Y%m%d%H%M%S")
+        last_time = USE.localize(last_time).astimezone(UTC)
+
+        update_data = {
+            "close": float(df_last_data["optn_prpr"].iloc[0]),
+            "change": float(result["output1"]["ovrs_nmix_prdy_vrss"]),
+            "change_rate": float(result["output1"]["prdy_ctrt"]),
+        }
+
+        try:
+            database._update(table="stock_indices_1m", sets=update_data, ticker=ticker, date=last_time)
+            logging.info(f"Updated last record for {ticker} at {last_time}")
+        except Exception as e:
+            logging.error(f"Failed to update last record: {str(e)}")
+            raise
 
     # 기존 데이터 확인
     existing_data = database._select(
@@ -213,12 +233,13 @@ def get_overseas_index_data(ticker: str):
     )
 
     # 기존 데이터의 (ticker, date) 조합을 set으로 생성
-    existing_keys = {(row[0], row[1]) for row in existing_data}
+    existing_keys = {(row[0], row[1].strftime("%Y-%m-%d %H:%M:%S")) for row in existing_data}
 
     # 새로운 데이터만 필터링
     new_records = []
     for record in df.to_dict("records"):
-        if (record["ticker"], record["date"]) not in existing_keys:
+        key = (record["ticker"], record["date"].strftime("%Y-%m-%d %H:%M:%S"))
+        if key not in existing_keys:
             new_records.append(record)
 
     # 새로운 데이터만 insert
@@ -241,14 +262,10 @@ def get_domestic_index_data(ticker: str):
 
     # 시간을 정수로 변환하여 필터링 (9:00 ~ 15:30)
     df["bsop_hour"] = df["bsop_hour"].astype(int)
+    df_last_data = df[df["bsop_hour"] == 888888]
     df = df[(df["bsop_hour"] >= 90000) & (df["bsop_hour"] <= 153000)]
-
     # 부호에 따른 변화량 조정
     df["bstp_nmix_prdy_vrss"] = df["bstp_nmix_prdy_vrss"].astype(float)
-    df["bstp_nmix_prdy_vrss"] = np.where(
-        df["prdy_vrss_sign"] == "5", -df["bstp_nmix_prdy_vrss"], df["bstp_nmix_prdy_vrss"]
-    )
-
     # 컬럼 이름 변경
     df = df.rename(
         columns={
@@ -269,7 +286,7 @@ def get_domestic_index_data(ticker: str):
     df["high"] = 0
     df["low"] = 0
 
-    today = datetime.datetime.now().strftime("%Y%m%d")
+    today = datetime.datetime.now(KST).strftime("%Y%m%d")
 
     # 장 시작 시점의 데이터가 있는 경우에만 OHLC 데이터 가져오기
     if len(df) <= 10 and 90000 in df["time"].values:
@@ -281,10 +298,29 @@ def get_domestic_index_data(ticker: str):
     # 날짜와 시간 처리
     df["time"] = df["time"].astype(str).str.zfill(6)
     df["date"] = pd.to_datetime(today + df["time"].str[:4], format="%Y%m%d%H%M")
+    df["date"] = df["date"].dt.tz_localize("Asia/Seoul").dt.tz_convert("UTC")
 
     # 필요한 컬럼만 선택하고 DB 저장 형식에 맞게 재구성
     df["ticker"] = ticker
     df = df[["ticker", "date", "open", "high", "low", "close", "volume", "change", "change_rate"]]
+
+    if not df_last_data.empty:
+        # 15:30 데이터 업데이트
+        last_time = datetime.datetime.strptime(today + "1530", "%Y%m%d%H%M")
+        last_time = KST.localize(last_time).astimezone(UTC)
+        update_data = {
+            "close": float(df_last_data["bstp_nmix_prpr"].iloc[0]),
+            "change": float(df_last_data["bstp_nmix_prdy_vrss"].iloc[0]),
+            "change_rate": float(df_last_data["bstp_nmix_prdy_ctrt"].iloc[0]),
+        }
+
+        try:
+            database._update(table="stock_indices_1m", sets=update_data, ticker=ticker, date=last_time)
+            return 0
+            logging.info(f"Updated last record for {ticker} at {last_time}")
+        except Exception as e:
+            logging.error(f"Failed to update last record: {str(e)}")
+            raise
 
     # 기존 데이터 확인
     existing_data = database._select(
@@ -296,12 +332,13 @@ def get_domestic_index_data(ticker: str):
     )
 
     # 기존 데이터의 (ticker, date) 조합을 set으로 생성
-    existing_keys = {(row[0], row[1]) for row in existing_data}
+    existing_keys = {(row[0], row[1].strftime("%Y-%m-%d %H:%M:%S")) for row in existing_data}
 
     # 새로운 데이터만 필터링
     new_records = []
     for record in df.to_dict("records"):
-        if (record["ticker"], record["date"]) not in existing_keys:
+        key = (record["ticker"], record["date"].strftime("%Y-%m-%d %H:%M:%S"))
+        if key not in existing_keys:
             new_records.append(record)
 
     # 새로운 데이터만 insert
@@ -353,7 +390,7 @@ def retry_on_rate_limit(max_retries: int = 3, retry_delay: int = 60) -> Callable
 
 @retry_on_rate_limit(max_retries=3, retry_delay=10)
 def get_stock_indices_data(ticker: str):
-    if ticker in ["NASDAQ", "SNP500"]:
+    if ticker in ["NASDAQ", "SP500"]:
         return get_overseas_index_data(ticker)
 
     elif ticker in ["KOSPI", "KOSDAQ"]:
@@ -374,5 +411,5 @@ def _is_market_open(ticker: str) -> bool:
 # logging.info("Starting US market batch job from command line")
 # kr_run_stock_indices_batch()
 
-# get_stock_indices_data("KOSPI")
-# get_stock_indices_data("KOSDAQ")
+# get_stock_indices_data("NASDAQ")
+# get_stock_indices_data("SNP500")

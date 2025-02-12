@@ -1,10 +1,7 @@
 import logging
-import yfinance as yf
-import requests
 from typing import Tuple
 import asyncio
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 from app.database.crud import database
 from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
 from app.utils.date_utils import check_market_status
@@ -20,7 +17,7 @@ class StockIndicesService:
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
+            cls._instance = super(StockIndicesService, cls).__new__(cls)
         return cls._instance
 
     def __init__(self):
@@ -28,160 +25,163 @@ class StockIndicesService:
             return
 
         self.db = database
-        self.symbols = {"kospi": "^KS11", "kosdaq": "^KQ11", "nasdaq": "^IXIC", "sp500": "^GSPC"}
+        self.markets = ["kospi", "kosdaq", "nasdaq", "sp500"]
         self._cache = {}
-        self._executor = ThreadPoolExecutor(max_workers=4)
         self._lock = asyncio.Lock()
-        self.session = requests.Session()
         self._initialized = True
 
-    async def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
-        """시장 등락비율 조회"""
+    def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
         try:
             cache_key = f"{market}_ratio"
             now = datetime.now(utc_tz).astimezone(korea_tz)
             is_market_open = check_market_status("KR") if market in ["kospi", "kosdaq"] else check_market_status("US")
 
-            # 장 마감시에는 캐시 유지, 장 중에는 1분마다 갱신
             if cache_key in self._cache:
                 data, timestamp = self._cache[cache_key]
                 cache_age = (now - timestamp).total_seconds()
                 if not is_market_open or cache_age < 60:
                     return data
 
-            async with self._lock:
-                loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(
-                    self._executor,
-                    lambda: self.db._select(
-                        table="stock_indices",
-                        columns=[
-                            "ticker",
-                            "rise_ratio",
-                            "rise_soft_ratio",
-                            "fall_ratio",
-                            "fall_soft_ratio",
-                            "unchanged_ratio",
-                        ],
-                        ticker=market,
-                    ),
-                )
+            result = self.db._select(
+                table="stock_indices",
+                columns=["ticker", "rise_ratio", "rise_soft_ratio", "fall_ratio", "fall_soft_ratio", "unchanged_ratio"],
+                ticker=market,
+            )
 
-                if not result:
-                    return 0.0, 0.0, 0.0
+            if not result:
+                return 0.0, 0.0, 0.0
 
-                row = result[0]
-                _, rise_ratio, rise_soft_ratio, fall_ratio, fall_soft_ratio, unchanged_ratio = row
+            row = result[0]
+            rise_ratio = float(row.rise_ratio + row.rise_soft_ratio)
+            fall_ratio = float(row.fall_ratio + row.fall_soft_ratio)
+            unchanged_ratio = float(row.unchanged_ratio)
 
-                ratios = (
-                    round(float(rise_ratio + rise_soft_ratio), 2),
-                    round(float(fall_ratio + fall_soft_ratio), 2),
-                    round(float(unchanged_ratio), 2),
-                )
+            ratios = (
+                round(rise_ratio, 2),
+                round(fall_ratio, 2),
+                round(unchanged_ratio, 2),
+            )
 
-                self._cache[cache_key] = (ratios, now)
-                return ratios
+            self._cache[cache_key] = (ratios, now)
+            return ratios
 
         except Exception as e:
             logger.error(f"Error in get_market_ratios for {market}: {str(e)}")
             return 0.0, 0.0, 0.0
 
-    async def _fetch_yf_data_concurrent(self, symbol: str, name: str):
-        """비동기로 yfinance 데이터 조회"""
+    def _fetch_market_data(self, market: str):
         try:
-            cache_key = f"{name}_data"
+            cache_key = f"{market}_data"
             now = datetime.now(utc_tz).astimezone(korea_tz)
-            is_market_open = check_market_status("KR") if name in ["kospi", "kosdaq"] else check_market_status("US")
+            country = "KR" if market in ["kospi", "kosdaq"] else "US"
+            is_market_open = check_market_status(country)
 
-            # 장 마감시에는 캐시 유지, 장 중에는 1분마다 갱신
             if cache_key in self._cache:
                 cached_data, timestamp = self._cache[cache_key]
                 cache_age = (now - timestamp).total_seconds()
-
                 if not is_market_open or cache_age < 60:
                     return cached_data
 
-            async def fetch_data():
-                loop = asyncio.get_event_loop()
-                ticker = yf.Ticker(symbol, session=self.session)
+            target_date = now.date()
 
-                def fetch():
-                    daily_df = ticker.history(period="5d")
-                    min5_df = ticker.history("1d", interval="5m")
-                    return daily_df, min5_df
+            while True:
+                result = self.db._select(
+                    table="stock_indices_1m",
+                    columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
+                    order="date",
+                    ascending=False,
+                    ticker=market,
+                    date__gte=target_date.strftime("%Y-%m-%d 00:00:00"),
+                    date__lt=(target_date + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00"),
+                )
 
-                return await loop.run_in_executor(self._executor, fetch)
+                if result:
+                    break
 
-            daily_df, min5_df = await fetch_data()
+                target_date -= timedelta(days=1)
 
-            # 데이터 처리
-            if not daily_df.empty:
-                latest_data = daily_df.iloc[-1]
-                prev_data = daily_df.iloc[-2] if len(daily_df) > 1 else latest_data
-                daily_data = {
-                    "open": round(float(latest_data["Open"]), 2),
-                    "close": round(float(latest_data["Close"]), 2),
-                    "prev_close": round(float(prev_data["Close"]), 2),
-                }
-            else:
-                daily_data = {"open": 0.0, "close": 0.0, "prev_close": 0.0}
+                if target_date < datetime(2000, 1, 1).date():
+                    raise ValueError("No data found for market: {market} in the available date range.")
 
-            min5_data = {}
-            if not min5_df.empty:
-                min5_data = {
-                    index.strftime("%Y-%m-%d %H:%M:%S"): TimeData(
-                        open=round(row["Open"], 2),
-                        high=round(row["High"], 2),
-                        low=round(row["Low"], 2),
-                        close=round(row["Close"], 2),
-                        volume=round(row["Volume"], 2),
-                    )
-                    for index, row in min5_df.iterrows()
-                }
+            prev_close = float(result[0].close) if result else 0.0
+            min1_data = {}
+            latest_change = float(result[0].change) if result else 0.0
+            latest_change_rate = float(result[0].change_rate) if result else 0.0
 
-            market_data = {"daily": daily_data, "min5": min5_data}
+            prev_result = self.db._select(
+                table="stock_indices_1m",
+                columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
+                ticker=market,
+                date__lt=target_date.strftime("%Y-%m-%d 00:00:00"),
+                order="date",
+                ascending=False,
+            )
+
+            for row in result:
+                timestamp = row.date.strftime("%Y-%m-%d %H:%M:%S")
+                min1_data[timestamp] = TimeData(
+                    open=round(float(row.open), 2),
+                    high=round(float(row.high), 2),
+                    low=round(float(row.low), 2),
+                    close=round(float(row.close), 2),
+                    volume=round(float(row.volume), 2),
+                )
+
+            prev_timestamp = prev_result[0].date.strftime("%Y-%m-%d %H:%M:%S")
+            min1_data[prev_timestamp] = TimeData(
+                open=round(float(prev_result[0].open), 2),
+                high=round(float(prev_result[0].high), 2),
+                low=round(float(prev_result[0].low), 2),
+                close=round(float(prev_result[0].close), 2),
+                volume=round(float(prev_result[0].volume), 2),
+            )
+
+            market_data = {
+                "daily": {
+                    "prev_close": round(prev_close, 2),
+                    "change": round(latest_change, 2),
+                    "change_percent": round(latest_change_rate, 2),
+                    "min_data_length": len(min1_data),
+                },
+                "min1": min1_data,
+            }
+
             self._cache[cache_key] = (market_data, now)
             return market_data
 
         except Exception as e:
-            logger.error(f"Error fetching data for {name}: {e}")
+            logger.error(f"Error fetching data for {market}: {e}")
             return None
 
     async def get_indices_data(self) -> IndicesData:
-        """지수 데이터 조회"""
         try:
-            data_tasks = [self._fetch_yf_data_concurrent(symbol, name) for name, symbol in self.symbols.items()]
-            ratio_tasks = [self.get_market_ratios(name) for name in self.symbols.keys()]
+            data_tasks = [asyncio.to_thread(self._fetch_market_data, market) for market in self.markets]
+            ratio_tasks = [asyncio.to_thread(self.get_market_ratios, market) for market in self.markets]
 
-            results = await asyncio.gather(*data_tasks)
-            ratios = await asyncio.gather(*ratio_tasks)
+            results, ratios = await asyncio.gather(asyncio.gather(*data_tasks), asyncio.gather(*ratio_tasks))
 
             indices_summary = {}
             indices_data = {}
 
-            for name, result in zip(self.symbols.keys(), results):
+            for market, result in zip(self.markets, results):
                 if result:
                     daily_data = result["daily"]
-                    min5_data = result["min5"]
+                    min1_data = result["min1"]
 
-                    is_open = check_market_status("KR") if name in ["kospi", "kosdaq"] else check_market_status("US")
+                    is_open = check_market_status("KR") if market in ["kospi", "kosdaq"] else check_market_status("US")
 
-                    change = daily_data["close"] - daily_data["prev_close"]
-                    change_percent = (
-                        round((change / daily_data["prev_close"]) * 100, 2) if daily_data["prev_close"] != 0 else 0.00
-                    )
-
-                    rise_ratio, fall_ratio, unchanged_ratio = ratios[list(self.symbols.keys()).index(name)]
-                    indices_summary[name] = IndexSummary(
-                        prev_close=daily_data["close"],
-                        change=round(change, 2),
-                        change_percent=change_percent,
+                    rise_ratio, fall_ratio, unchanged_ratio = ratios[self.markets.index(market)]
+                    indices_summary[market] = IndexSummary(
+                        prev_close=daily_data["prev_close"],
+                        change=daily_data["change"],
+                        change_percent=daily_data["change_percent"],
                         rise_ratio=rise_ratio,
                         fall_ratio=fall_ratio,
                         unchanged_ratio=unchanged_ratio,
+                        min_data_length=daily_data["min_data_length"],
                         is_open=is_open,
                     )
-                    indices_data[name] = min5_data
+                    indices_data[market] = min1_data
 
             return IndicesData(
                 status_code=200,

@@ -33,10 +33,10 @@ class News(Base):
 
 class NewsAnalysis(Base):
     __tablename__ = "news_analysis"
-    
+
     __table_args__ = (
         # collect_id와 ctry를 복합 unique 제약조건으로 설정
-        UniqueConstraint('collect_id', 'ctry', name='uix_collect_id_ctry'),
+        UniqueConstraint("collect_id", "ctry", name="uix_collect_id_ctry"),
         # 종목 각 나라별 최신 뉴스 조회
         Index("idx_ticker_ctry", "ticker", "ctry", unique=False),
         # 나라별 최신순 조회
@@ -67,3 +67,4 @@ class NewsAnalysis(Base):
     that_time_price = Column(Float, nullable=True, comment="해당 시간 종가")
     is_top_story = Column(Boolean, nullable=True, comment="주요 소식 선정 여부")
     is_exist = Column(Boolean, nullable=True, comment="DB 존재 여부")
+    is_related = Column(Boolean, nullable=True, default=True, comment="관련 종목 여부")

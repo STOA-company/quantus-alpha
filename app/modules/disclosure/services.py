@@ -243,7 +243,7 @@ class DisclosureService:
             raise DataNotFoundException(ticker=ticker, data_type="disclosure")
 
         df_disclosure = self._process_dataframe_disclosure(df_disclosure)
-        df_disclosure["date"] = pd.to_datetime(df_disclosure["date"]).dt.tz_localize("Asia/Seoul").dt.tz_convert("UTC")
+        df_disclosure["date"] = pd.to_datetime(df_disclosure["date"]).dt.tz_localize("UTC").dt.tz_convert("Asia/Seoul")
 
         current_price = self.db._select(table="stock_trend", columns=["ticker", "current_price"], **{"ticker": ticker})
         df_disclosure["price_impact"] = 0.00

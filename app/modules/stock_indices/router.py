@@ -33,5 +33,5 @@ async def get_stock_indices(
 #     service: StockIndicesService = Depends(StockIndicesService),
 # ):
 #     nasdaq = service.get_nasdaq_ticker()
-#     snp500 = service.get_snp500_ticker()
+#     sp500 = service.get_snp500_ticker()
 #     return nasdaq, snp500
