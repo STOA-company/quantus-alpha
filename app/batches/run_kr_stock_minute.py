@@ -67,7 +67,7 @@ def collect_kr_stock_minute_data():
                 while True:
                     logger.info(f"Current time: {current_time}")
                     data = api.get_stock_price_history_by_minute(
-                        symbol=ticker, time="153000", limit=FETCH_COUNT, desc=True
+                        symbol=ticker, time=current_time, limit=FETCH_COUNT, desc=True
                     )
 
                     if not data:
