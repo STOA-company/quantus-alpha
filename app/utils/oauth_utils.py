@@ -15,7 +15,7 @@ JWT_ALGORITHM = os.getenv("JWT_ALGORITHM")
 security = HTTPBearer()
 
 
-def create_jwt_token(user_id: int, expires_delta: timedelta = None) -> dict:
+def create_jwt_token(user_id: int, expires_delta: timedelta = None) -> str:
     """JWT 토큰 생성"""
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -24,9 +24,7 @@ def create_jwt_token(user_id: int, expires_delta: timedelta = None) -> dict:
 
     to_encode = {"exp": expire, "sub": str(user_id), "iat": datetime.utcnow()}
 
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-
-    return {"access_token": encoded_jwt, "token_type": "bearer", "expires_at": expire.isoformat()}
+    return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
 def create_refresh_token(user_id: int) -> str:
