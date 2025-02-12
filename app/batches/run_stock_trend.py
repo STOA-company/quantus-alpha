@@ -96,7 +96,13 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
                 )
                 daily_data.extend(ticker_data)
 
-            df = pd.DataFrame(daily_data, columns=["Ticker", "Name", "Date", "Close", "Volume", "Open", "High", "Low"])
+            if ctry == TrendingCountry.KR:
+                df = pd.DataFrame(
+                    daily_data, columns=["Ticker", "Name", "Date", "Close", "Volume", "Open", "High", "Low"]
+                )
+            else:
+                df = pd.DataFrame(daily_data, columns=["Ticker", "Date", "Close", "Volume", "Open", "High", "Low"])
+
             df = df.sort_values(by=["Ticker", "Date"], ascending=[True, False])
 
             df["volume_change"] = (df["Open"] + df["High"] + df["Low"] + df["Close"]) / 4 * df["Volume"]
@@ -120,7 +126,8 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
             results["change_sign"] = np.where(
                 current_data["Close"] > prev_data["Close"], 1, np.where(current_data["Close"] < prev_data["Close"], -1, 0)
             )
-            results["name"] = current_data["Name"]
+            if ctry == TrendingCountry.KR:
+                results["name"] = current_data["Name"]
 
             periods = {"1w": 5, "1m": 20, "6m": 120, "1y": None}
 
@@ -153,7 +160,6 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
         for _, row in results.iterrows():
             update_dict = {
                 "ticker": row["ticker"],
-                "name": row["name"],
                 "last_updated": row["last_updated"],
                 "current_price": row["current_price"],
                 "prev_close": row["prev_close"],
@@ -177,6 +183,9 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
                 "volume_change_6m": row["volume_change_6m"],
                 "volume_change_1y": row["volume_change_1y"],
             }
+            if ctry == TrendingCountry.KR:
+                update_dict["name"] = row["name"]
+
             update_data.append(update_dict)
 
         # 벌크 업데이트 실행
