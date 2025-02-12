@@ -52,7 +52,7 @@ Category.posts = relationship("Post", back_populates="category")
 
 # Post relationships
 Post.category = relationship("Category", back_populates="posts")
-Post.user = relationship("AlphafinderUser", back_populates="posts", passive_deletes=True)  # 유저 삭제시 게시글 유지
+Post.user = relationship("AlphafinderUser", back_populates="posts", passive_deletes=True)
 Post.comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
 Post.likes = relationship("PostLike", back_populates="post", cascade="all, delete-orphan")
 Post.bookmarks = relationship("Bookmark", back_populates="post", cascade="all, delete-orphan")
@@ -60,16 +60,17 @@ Post.stocks = relationship(
     "StockInformation",
     secondary=post_stocks,
     back_populates="posts",
-    primaryjoin="Post.id == post_stocks.c.post_id",  # 수정
-    secondaryjoin="StockInformation.ticker == post_stocks.c.stock_ticker",  # 수정
-    validate=lambda k: len(k) <= 3,
+    primaryjoin="Post.id == post_stocks.c.post_id",
+    secondaryjoin="StockInformation.ticker == post_stocks.c.stock_ticker",
 )
-Post.statistics = relationship("PostStatistics", back_populates="post", uselist=False)
+Post.statistics = relationship("PostStatistics", back_populates="post", uselist=False, cascade="all, delete-orphan")
 
 # Comment relationships
 Comment.post = relationship("Post", back_populates="comments")
-Comment.user = relationship("AlphafinderUser", back_populates="comments", passive_deletes=True)  # 유저 삭제시 댓글 유지
+Comment.user = relationship("AlphafinderUser", back_populates="comments", passive_deletes=True)
 Comment.likes = relationship("CommentLike", back_populates="comment", cascade="all, delete-orphan")
+Comment.replies = relationship("Comment", back_populates="parent", cascade="all, delete-orphan")
+Comment.parent = relationship("Comment", back_populates="replies", remote_side=[Comment.id])
 
 # PostLike relationships
 PostLike.post = relationship("Post", back_populates="likes")
