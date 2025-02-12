@@ -75,16 +75,20 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
 
         latest_tickers = [row for row in latest_date_tickers if row[0] in stock_trend_set]
 
+        if ctry == TrendingCountry.KR:
+            columns = ["Ticker", "Name", "Date", "Close", "Volume", "Open", "High", "Low"]
+        else:
+            columns = ["Ticker", "Date", "Close", "Volume", "Open", "High", "Low"]
+
         for i in range(0, len(latest_tickers), chunk_size):
             chunk_tickers = latest_tickers[i : i + chunk_size]
             daily_data = []
 
             for ticker, max_date in chunk_tickers:
                 one_year_ago = (pd.Timestamp(max_date) - pd.DateOffset(years=1)).strftime("%Y-%m-%d")
-
                 ticker_data = database._select(
                     table=f"stock_{ctry.value}_1d",
-                    columns=["Ticker", "Name", "Date", "Close", "Volume", "Open", "High", "Low"],
+                    columns=columns,
                     Ticker=ticker,
                     Date__gte=one_year_ago,
                     order="Date",
@@ -284,10 +288,20 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
         raise e
 
 
-def run_stock_trend_by_1d_batch_open(ctry: TrendingCountry, chunk_size: int = 500):
+def run_stock_trend_reset_batch(ctry: TrendingCountry, chunk_size: int = 500):
     try:
         stock_trend_tickers = database._select(table="stock_trend", columns=["ticker"], distinct=True, ctry=ctry.value)
         stock_trend_set = set(row[0] for row in stock_trend_tickers)
+
+        database._update(
+            table="stock_trend",
+            sets={
+                "change_rt": 0,
+                "volume_rt": 0,
+                "volume_change_rt": 0,
+            },
+            ctry=ctry.value,
+        )
 
         update_data = []
         for ticker in stock_trend_set:
@@ -304,6 +318,7 @@ def run_stock_trend_by_1d_batch_open(ctry: TrendingCountry, chunk_size: int = 50
                 update_dict = {
                     "ticker": stock_trend_data[0][0],
                     "prev_close": stock_trend_data[0][1],
+                    "current_price": stock_trend_data[0][1],
                 }
                 update_data.append(update_dict)
 
@@ -318,10 +333,10 @@ def run_stock_trend_by_1d_batch_open(ctry: TrendingCountry, chunk_size: int = 50
         logging.info(f"Successfully completed prev_close updates for {ctry.value} stocks")
 
     except Exception as e:
-        logging.error(f"Error in run_stock_trend_by_1d_batch_open: {str(e)}")
+        logging.error(f"Error in run_stock_trend_by_1d_reset_batch: {str(e)}")
         raise e
 
 
 if __name__ == "__main__":
-    run_stock_trend_by_1d_batch_open(ctry=TrendingCountry.KR)
+    run_stock_trend_by_1d_batch(ctry=TrendingCountry.US)
     # run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)

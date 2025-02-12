@@ -39,18 +39,18 @@ CELERY_APP.conf.beat_schedule = {
         "task": "stock_trend_realtime_us",
         "schedule": crontab(minute="12,27,42,57"),  # 15분마다 실행 (장중)
     },
-    "us-daily-stock-trend-open": {
-        "task": "stock_trend_1d_us_open",
-        "schedule": crontab(hour="10", minute="35"),  # KST 10:35 미국장 시작 후 (서머타임 고려 필요)
+    "us-daily-stock-trend-reset": {
+        "task": "stock_trend_reset_us",
+        "schedule": crontab(hour="22", minute="20"),  # KST 22:20
     },
     # # 한국 주식 스케줄
     "kr-daily-stock-trend": {
         "task": "stock_trend_1d_kr",
         "schedule": crontab(hour="16", minute="10"),  # KST 16:10
     },
-    "kr-daily-stock-trend-open": {
-        "task": "stock_trend_1d_kr_open",
-        "schedule": crontab(hour="9", minute="5"),  # KST 09:05 한국장 시작 후
+    "kr-daily-stock-trend-reset": {
+        "task": "stock_trend_reset_kr",
+        "schedule": crontab(hour="8", minute="50"),  # KST 08:50
     },
     "kr-realtime-stock-trend": {
         "task": "stock_trend_realtime_kr",
