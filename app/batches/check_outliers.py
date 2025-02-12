@@ -166,7 +166,7 @@ def check_and_recollect_outliers(nation: str):
 
     database._update(
         table="stock_trend",
-        is_activate=0,
+        sets={"is_activate": 0},
         ticker__in=outlier_tickers,
     )
 
