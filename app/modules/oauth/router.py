@@ -10,6 +10,8 @@ from app.modules.oauth.schemas import (
     GoogleLoginResponse,
     GoogleCallbackResponse,
 )
+from fastapi.responses import RedirectResponse
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +72,12 @@ def google_callback(code: str):
 
             user = get_user_by_email(email)
 
+            is_login = True
+
             if not user:
                 logger.info("user not found, create user")
                 create_user(email)
-
+                is_login = False
                 user = get_user_by_email(email)
                 if not user:
                     raise HTTPException(status_code=500, detail="Failed to create user")
@@ -81,12 +85,18 @@ def google_callback(code: str):
             access_token = create_jwt_token(user.id)
             refresh_token = create_refresh_token(user.id)
 
-            return GoogleCallbackResponse(
-                message="Login successful",
-                user={"id": user.id, "email": user.email},
-                access_token=access_token,
-                token_type="Bearer",
-                refresh_token=refresh_token,
-            )
+            FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+            params = {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "user_id": user.id,
+                "email": user.email,
+                "is_login": is_login,
+            }
+
+            redirect_url = f"{FRONTEND_URL}/oauth/callback?{urlencode(params)}"
+            return RedirectResponse(url=redirect_url)
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
