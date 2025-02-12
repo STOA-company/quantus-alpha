@@ -1075,29 +1075,20 @@ class FinancialService:
         # 기간으로 정렬 (최신 데이터가 앞으로 오도록)
         sorted_result = sorted(result, key=lambda x: x.period_q, reverse=True)
 
-        # 최근 12개월 데이터 선택
-        recent_12_months = sorted_result[:4]
+        # 최근 분기 데이터
+        latest_quarter = sorted_result[0]
 
         # 첫 번째 row에서 컬럼 추출
         exclude_columns = ["Code", "Name", "StmtDt"]
-        first_row = recent_12_months[0]
+        latest_quarter_dict = {
+            col: self._to_decimal(getattr(latest_quarter, col, None)) or Decimal("0.00")
+            for col in latest_quarter._fields
+            if col not in exclude_columns and col != "period_q"
+        }
 
-        # TTM 계산을 위한 딕셔너리 초기화
-        ttm_dict = {}
-        for col, val in zip(first_row._fields, first_row):
-            if col not in exclude_columns and col != "period_q":
-                # 모든 값이 None인 경우 None을 유지
-                values = [self._to_decimal(getattr(row, col)) for row in recent_12_months]
-                if all(v is None for v in values):
-                    ttm_dict[col] = None
-                else:
-                    # None이 아닌 값들만 합산
-                    ttm_dict[col] = sum((v or Decimal("0.00")) for v in values)
+        latest_quarter_dict["period_q"] = "TTM"
 
-        # TTM 값에는 'TTM'이라고 표시
-        ttm_dict["period_q"] = "TTM"
-
-        return self._create_finpos_detail(ttm_dict)
+        return self._create_finpos_detail(latest_quarter_dict)
 
     def _process_income_total_result(self, result) -> List[IncomeStatementDetail]:
         """
