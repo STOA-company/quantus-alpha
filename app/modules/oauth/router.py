@@ -74,6 +74,10 @@ def google_callback(code: str):
                 logger.info("user not found, create user")
                 create_user(email)
 
+                user = get_user_by_email(email)
+                if not user:
+                    raise HTTPException(status_code=500, detail="Failed to create user")
+
             access_token = create_jwt_token(user.id)
             refresh_token = create_refresh_token(user.id)
 
