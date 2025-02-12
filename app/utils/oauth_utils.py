@@ -5,6 +5,7 @@ from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.models.models_users import AlphafinderUser
 from app.database.crud import database
+from typing import Optional
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -68,9 +69,12 @@ def decode_jwt_token(token: str):
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Security(security),
-) -> AlphafinderUser:
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
+) -> Optional[AlphafinderUser]:
     """현재 인증된 사용자 정보 조회"""
+    if not credentials:
+        return None
+
     credentials_exception = HTTPException(
         status_code=401,
         detail="Could not validate credentials",
