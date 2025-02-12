@@ -75,20 +75,17 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
 
         latest_tickers = [row for row in latest_date_tickers if row[0] in stock_trend_set]
 
-        if ctry == TrendingCountry.KR:
-            columns = ["Ticker", "Name", "Date", "Close", "Volume", "Open", "High", "Low"]
-        else:
-            columns = ["Ticker", "Date", "Close", "Volume", "Open", "High", "Low"]
-
         for i in range(0, len(latest_tickers), chunk_size):
             chunk_tickers = latest_tickers[i : i + chunk_size]
             daily_data = []
+
+            select_columns = ["Ticker", "Date", "Close", "Volume", "Open", "High", "Low"]
 
             for ticker, max_date in chunk_tickers:
                 one_year_ago = (pd.Timestamp(max_date) - pd.DateOffset(years=1)).strftime("%Y-%m-%d")
                 ticker_data = database._select(
                     table=f"stock_{ctry.value}_1d",
-                    columns=columns,
+                    columns=select_columns,
                     Ticker=ticker,
                     Date__gte=one_year_ago,
                     order="Date",
@@ -96,13 +93,7 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
                 )
                 daily_data.extend(ticker_data)
 
-            if ctry == TrendingCountry.KR:
-                df = pd.DataFrame(
-                    daily_data, columns=["Ticker", "Name", "Date", "Close", "Volume", "Open", "High", "Low"]
-                )
-            else:
-                df = pd.DataFrame(daily_data, columns=["Ticker", "Date", "Close", "Volume", "Open", "High", "Low"])
-
+            df = pd.DataFrame(daily_data, columns=select_columns)
             df = df.sort_values(by=["Ticker", "Date"], ascending=[True, False])
 
             df["volume_change"] = (df["Open"] + df["High"] + df["Low"] + df["Close"]) / 4 * df["Volume"]
@@ -126,8 +117,6 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
             results["change_sign"] = np.where(
                 current_data["Close"] > prev_data["Close"], 1, np.where(current_data["Close"] < prev_data["Close"], -1, 0)
             )
-            if ctry == TrendingCountry.KR:
-                results["name"] = current_data["Name"]
 
             periods = {"1w": 5, "1m": 20, "6m": 120, "1y": None}
 
@@ -138,7 +127,6 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
                     period_data = df.groupby("Ticker").head(n_records)
 
                 period_start_prices = period_data.groupby("Ticker").last()[["Close"]].reset_index()
-
                 period_volumes = (
                     period_data.groupby("Ticker").agg({"Volume": "sum", "volume_change": "sum"}).reset_index()
                 )
@@ -156,41 +144,38 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
                 results[f"volume_change_{period}"] = results["volume_change"].round(4)
                 results = results.drop(columns=["Volume", "volume_change"])
 
-        update_data = []
-        for _, row in results.iterrows():
-            update_dict = {
-                "ticker": row["ticker"],
-                "last_updated": row["last_updated"],
-                "current_price": row["current_price"],
-                "prev_close": row["prev_close"],
-                "change_sign": row["change_sign"],
-                "change_rt": row["change_1d"],
-                "change_1d": row["change_1d"],
-                "change_1w": row["change_1w"],
-                "change_1m": row["change_1m"],
-                "change_6m": row["change_6m"],
-                "change_1y": row["change_1y"],
-                "volume_rt": row["volume_1d"],
-                "volume_1d": row["volume_1d"],
-                "volume_1w": row["volume_1w"],
-                "volume_1m": row["volume_1m"],
-                "volume_6m": row["volume_6m"],
-                "volume_1y": row["volume_1y"],
-                "volume_change_rt": row["volume_change_1d"],
-                "volume_change_1d": row["volume_change_1d"],
-                "volume_change_1w": row["volume_change_1w"],
-                "volume_change_1m": row["volume_change_1m"],
-                "volume_change_6m": row["volume_change_6m"],
-                "volume_change_1y": row["volume_change_1y"],
-            }
-            if ctry == TrendingCountry.KR:
-                update_dict["name"] = row["name"]
+            update_data = []
+            for _, row in results.iterrows():
+                update_dict = {
+                    "ticker": row["ticker"],
+                    "last_updated": row["last_updated"],
+                    "current_price": row["current_price"],
+                    "prev_close": row["prev_close"],
+                    "change_sign": row["change_sign"],
+                    "change_rt": row["change_1d"],
+                    "change_1d": row["change_1d"],
+                    "change_1w": row["change_1w"],
+                    "change_1m": row["change_1m"],
+                    "change_6m": row["change_6m"],
+                    "change_1y": row["change_1y"],
+                    "volume_rt": row["volume_1d"],
+                    "volume_1d": row["volume_1d"],
+                    "volume_1w": row["volume_1w"],
+                    "volume_1m": row["volume_1m"],
+                    "volume_6m": row["volume_6m"],
+                    "volume_1y": row["volume_1y"],
+                    "volume_change_rt": row["volume_change_1d"],
+                    "volume_change_1d": row["volume_change_1d"],
+                    "volume_change_1w": row["volume_change_1w"],
+                    "volume_change_1m": row["volume_change_1m"],
+                    "volume_change_6m": row["volume_change_6m"],
+                    "volume_change_1y": row["volume_change_1y"],
+                }
 
-            update_data.append(update_dict)
+                update_data.append(update_dict)
 
-        # 벌크 업데이트 실행
-        database._bulk_update(table="stock_trend", data=update_data, key_column="ticker")
-        logging.info(f"Successfully updated {len(update_data)} records in stock_trend table")
+            database._bulk_update(table="stock_trend", data=update_data, key_column="ticker")
+            logging.info(f"Successfully updated {len(update_data)} records in stock_trend table")
 
     except Exception as e:
         logging.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
@@ -347,5 +332,5 @@ def run_stock_trend_reset_batch(ctry: TrendingCountry, chunk_size: int = 500):
 
 
 if __name__ == "__main__":
-    run_stock_trend_by_1d_batch(ctry=TrendingCountry.US)
+    run_stock_trend_by_1d_batch(ctry=TrendingCountry.KR)
     # run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)

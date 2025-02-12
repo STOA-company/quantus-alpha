@@ -4,8 +4,8 @@ from fastapi import UploadFile
 
 
 def get_user_by_email(email: str):
-    user = database._select(table="alphafinder_user", columns=["id", "email", "nickname"], email=email, limit=1)
-    return user[0]
+    users = database._select(table="alphafinder_user", columns=["id", "email", "nickname"], email=email, limit=1)
+    return users[0] if users else None
 
 
 def create_user(email: str):
