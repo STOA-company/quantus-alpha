@@ -210,8 +210,6 @@ def kr_disclosure_batch():
     try:
         renewal_kr_run_disclosure_batch()
         notifier.notify_success("KR_disclosure_batch process completed")
-        kr_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
-        notifier.notify_success("KR_disclosure_is_top_story process completed")
     except Exception as e:
         notifier.notify_error(f"KR_disclosure_batch process failed: {str(e)}")
         raise
@@ -224,8 +222,6 @@ def us_disclosure_batch():
     try:
         renewal_us_run_disclosure_batch()
         notifier.notify_success("US_disclosure_batch process completed")
-        us_run_disclosure_is_top_story()  # stock_trend_1d 테이블 완성 시 temp 제거한 로직 사용
-        notifier.notify_success("US_disclosure_is_top_story process completed")
     except Exception as e:
         notifier.notify_error(f"US_disclosure_batch process failed: {str(e)}")
         raise
@@ -238,8 +234,6 @@ def kr_news_renewal():
     try:
         renewal_kr_run_news_batch()
         notifier.notify_success("KR_news_renewal process completed")
-        renewal_kr_run_news_is_top_story()
-        notifier.notify_success("KR_news_is_top_story_renewal process completed")
     except Exception as e:
         notifier.notify_error(f"KR_news_renewal process failed: {str(e)}")
         raise
@@ -252,10 +246,34 @@ def us_news_renewal():
     try:
         renewal_us_run_news_batch()
         notifier.notify_success("US_news_renewal process completed")
-        renewal_us_run_news_is_top_story()
-        notifier.notify_success("US_news_is_top_story_renewal process completed")
     except Exception as e:
         notifier.notify_error(f"US_news_renewal process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="kr_top_stories", ignore_result=True)
+def kr_top_stories():
+    """한국 주요 소식 선정"""
+    notifier.notify_info("KR_top_stories process started")
+    try:
+        kr_run_disclosure_is_top_story()
+        renewal_kr_run_news_is_top_story()
+        notifier.notify_success("KR_top_stories process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_top_stories process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="us_top_stories", ignore_result=True)
+def us_top_stories():
+    """미국 주요 소식 선정"""
+    notifier.notify_info("US_top_stories process started")
+    try:
+        us_run_disclosure_is_top_story()
+        renewal_us_run_news_is_top_story()
+        notifier.notify_success("US_top_stories process completed")
+    except Exception as e:
+        notifier.notify_error(f"US_top_stories process failed: {str(e)}")
         raise
 
 
