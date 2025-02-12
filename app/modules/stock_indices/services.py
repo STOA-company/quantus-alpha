@@ -108,6 +108,15 @@ class StockIndicesService:
             latest_change = float(result[0].change) if result else 0.0
             latest_change_rate = float(result[0].change_rate) if result else 0.0
 
+            prev_result = self.db._select(
+                table="stock_indices_1m",
+                columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
+                ticker=market,
+                date__lt=target_date.strftime("%Y-%m-%d 00:00:00"),
+                order="date",
+                ascending=False,
+            )
+
             for row in result:
                 timestamp = row.date.strftime("%Y-%m-%d %H:%M:%S")
                 min1_data[timestamp] = TimeData(
@@ -118,11 +127,21 @@ class StockIndicesService:
                     volume=round(float(row.volume), 2),
                 )
 
+            prev_timestamp = prev_result[0].date.strftime("%Y-%m-%d %H:%M:%S")
+            min1_data[prev_timestamp] = TimeData(
+                open=round(float(prev_result[0].open), 2),
+                high=round(float(prev_result[0].high), 2),
+                low=round(float(prev_result[0].low), 2),
+                close=round(float(prev_result[0].close), 2),
+                volume=round(float(prev_result[0].volume), 2),
+            )
+
             market_data = {
                 "daily": {
                     "prev_close": round(prev_close, 2),
                     "change": round(latest_change, 2),
                     "change_percent": round(latest_change_rate, 2),
+                    "min_data_length": len(min1_data),
                 },
                 "min1": min1_data,
             }
@@ -159,6 +178,7 @@ class StockIndicesService:
                         rise_ratio=rise_ratio,
                         fall_ratio=fall_ratio,
                         unchanged_ratio=unchanged_ratio,
+                        min_data_length=daily_data["min_data_length"],
                         is_open=is_open,
                     )
                     indices_data[market] = min1_data
