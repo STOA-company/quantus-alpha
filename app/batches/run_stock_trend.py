@@ -284,46 +284,38 @@ def run_stock_trend_by_realtime_batch(ctry: TrendingCountry):
         raise e
 
 
-def run_stock_trend_by_1d_batch_open(ctry: TrendingCountry):
+def run_stock_trend_by_1d_batch_open(ctry: TrendingCountry, chunk_size: int = 500):
     try:
-        stock_trend_tickers = database._select(
-            table="stock_trend",
-            columns=["ticker"],
-            distinct=True,
-            ctry=ctry.value,
-        )
+        stock_trend_tickers = database._select(table="stock_trend", columns=["ticker"], distinct=True, ctry=ctry.value)
+        stock_trend_set = set(row[0] for row in stock_trend_tickers)
 
-        if not stock_trend_tickers:
-            logging.info(f"No tickers found in stock_trend for {ctry.value}")
-            return
+        update_data = []
+        for ticker in stock_trend_set:
+            stock_trend_data = database._select(
+                table=f"stock_{ctry.value}_1d",
+                columns=["Ticker", "Close", "Date"],
+                Ticker=ticker,
+                order="Date",
+                ascending=False,
+                limit=1,
+            )
 
-        tickers = [row[0] for row in stock_trend_tickers]
+            if stock_trend_data:
+                update_dict = {
+                    "ticker": stock_trend_data[0][0],
+                    "prev_close": stock_trend_data[0][1],
+                }
+                update_data.append(update_dict)
 
-        latest_closes = database._select(
-            table=f"stock_{ctry.value.lower()}_1d",
-            columns=["Ticker", "Close"],
-            Ticker__in=tickers,
-            group_by=["Ticker"],
-            aggregates={"Date": ("Date", "max")},
-        )
+        for i in range(0, len(update_data), chunk_size):
+            chunk = update_data[i : i + chunk_size]
+            database._bulk_update(table="stock_trend", data=chunk, key_column="ticker")
+            logging.info(
+                f"Updated prev_close for {len(chunk)} records in stock_trend table "
+                f"(chunk {i//chunk_size + 1}/{(len(update_data)-1)//chunk_size + 1})"
+            )
 
-        if not latest_closes:
-            logging.info(f"No close prices found in stock_{ctry.value.lower()}_1d")
-            return
-
-        update_data = [
-            {
-                "ticker": ticker,
-                "prev_close": close,
-            }
-            for ticker, close, _ in latest_closes
-        ]
-
-        if update_data:
-            database._bulk_update(table="stock_trend", data=update_data, key_column="ticker")
-            logging.info(f"Successfully updated {len(update_data)} records' prev_close in stock_trend table")
-        else:
-            logging.info(f"No records to update for {ctry.value}")
+        logging.info(f"Successfully completed prev_close updates for {ctry.value} stocks")
 
     except Exception as e:
         logging.error(f"Error in run_stock_trend_by_1d_batch_open: {str(e)}")
@@ -331,5 +323,5 @@ def run_stock_trend_by_1d_batch_open(ctry: TrendingCountry):
 
 
 if __name__ == "__main__":
-    run_stock_trend_by_1d_batch(ctry=TrendingCountry.KR)
+    run_stock_trend_by_1d_batch_open(ctry=TrendingCountry.KR)
     # run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
