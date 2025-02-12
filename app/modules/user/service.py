@@ -8,11 +8,13 @@ def get_user_by_email(email: str):
     return users[0] if users else None
 
 
-def create_user(email: str):
+def create_user(email: str, provider: str):
     database._insert(
         table="alphafinder_user",
         sets={
             "email": email,
+            "nickname": f"{provider}_{email.split('@')[0]}",
+            "provider": provider,
         },
     )
 

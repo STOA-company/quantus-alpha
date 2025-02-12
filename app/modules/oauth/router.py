@@ -76,7 +76,7 @@ def google_callback(code: str):
 
             if not user:
                 logger.info("user not found, create user")
-                create_user(email)
+                create_user(email, "google")
                 is_login = False
                 user = get_user_by_email(email)
                 if not user:
@@ -96,6 +96,7 @@ def google_callback(code: str):
             }
 
             redirect_url = f"{FRONTEND_URL}/oauth/callback?{urlencode(params)}"
+            logger.info(f"redirect_url: {redirect_url}")
             return RedirectResponse(url=redirect_url)
 
     except Exception as e:
