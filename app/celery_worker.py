@@ -344,6 +344,7 @@ def kr_stock_indices_collect():
 
 @CELERY_APP.task(name="us_stock_indices_collect", ignore_result=True)
 def us_stock_indices_collect():
+    """미국 주가지수 데이터 수집"""
     now_us_datetime = now_us()
     now_us_date = now_us_datetime.strftime("%Y-%m-%d")
     now_us_time = now_us_datetime.strftime("%H:%M:%S")
