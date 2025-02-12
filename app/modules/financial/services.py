@@ -1013,12 +1013,17 @@ class FinancialService:
         exclude_columns = ["Code", "Name", "StmtDt"]
         first_row = recent_12_months[0]
 
-        # TTM 계산
-        ttm_dict = {
-            col: sum(self._to_decimal(getattr(row, col, 0)) or Decimal("0.00") for row in recent_12_months)
-            for col, val in zip(first_row._fields, first_row)
-            if col not in exclude_columns and col != "period_q"
-        }
+        # TTM 계산을 위한 딕셔너리 초기화
+        ttm_dict = {}
+        for col, val in zip(first_row._fields, first_row):
+            if col not in exclude_columns and col != "period_q":
+                # 모든 값이 None인 경우 None을 유지
+                values = [self._to_decimal(getattr(row, col)) for row in recent_12_months]
+                if all(v is None for v in values):
+                    ttm_dict[col] = None
+                else:
+                    # None이 아닌 값들만 합산
+                    ttm_dict[col] = sum((v or Decimal("0.00")) for v in values)
 
         ttm_dict["period_q"] = "TTM"
 
@@ -1043,11 +1048,16 @@ class FinancialService:
         first_row = recent_12_months[0]
 
         # TTM 계산을 위한 딕셔너리 초기화
-        ttm_dict = {
-            col: sum(self._to_decimal(getattr(row, col, 0)) or Decimal("0.00") for row in recent_12_months)
-            for col, val in zip(first_row._fields, first_row)
-            if col not in exclude_columns and col != "period_q"
-        }
+        ttm_dict = {}
+        for col, val in zip(first_row._fields, first_row):
+            if col not in exclude_columns and col != "period_q":
+                # 모든 값이 None인 경우 None을 유지
+                values = [self._to_decimal(getattr(row, col)) for row in recent_12_months]
+                if all(v is None for v in values):
+                    ttm_dict[col] = None
+                else:
+                    # None이 아닌 값들만 합산
+                    ttm_dict[col] = sum((v or Decimal("0.00")) for v in values)
 
         # TTM 값에는 'TTM'이라고 표시
         ttm_dict["period_q"] = "TTM"
@@ -1065,24 +1075,20 @@ class FinancialService:
         # 기간으로 정렬 (최신 데이터가 앞으로 오도록)
         sorted_result = sorted(result, key=lambda x: x.period_q, reverse=True)
 
-        # 최근 12개월 데이터 선택
-        recent_12_months = sorted_result[:4]
+        # 최근 분기 데이터
+        latest_quarter = sorted_result[0]
 
         # 첫 번째 row에서 컬럼 추출
         exclude_columns = ["Code", "Name", "StmtDt"]
-        first_row = recent_12_months[0]
-
-        # TTM 계산을 위한 딕셔너리 초기화
-        ttm_dict = {
-            col: sum(self._to_decimal(getattr(row, col, 0)) or Decimal("0.00") for row in recent_12_months)
-            for col, val in zip(first_row._fields, first_row)
+        latest_quarter_dict = {
+            col: self._to_decimal(getattr(latest_quarter, col, None)) or Decimal("0.00")
+            for col in latest_quarter._fields
             if col not in exclude_columns and col != "period_q"
         }
 
-        # TTM 값에는 'TTM'이라고 표시
-        ttm_dict["period_q"] = "TTM"
+        latest_quarter_dict["period_q"] = "TTM"
 
-        return self._create_finpos_detail(ttm_dict)
+        return self._create_finpos_detail(latest_quarter_dict)
 
     def _process_income_total_result(self, result) -> List[IncomeStatementDetail]:
         """
@@ -1092,7 +1098,7 @@ class FinancialService:
             return []
 
         # 년도별 데이터 집계
-        yearly_data = defaultdict(lambda: defaultdict(Decimal))
+        yearly_data = defaultdict(lambda: defaultdict(list))
 
         for row in result:
             year = str(row.period_q)[:4]  # YYYYMM 형식에서 YYYY 추출
@@ -1100,19 +1106,30 @@ class FinancialService:
             # 제외할 컬럼
             exclude_columns = ["Code", "Name", "StmtDt", "period_q"]
 
-            # 각 필드별로 년도별 합산
+            # 각 필드별로 년도별 데이터 수집
             for field_name, value in zip(row._fields, row):
                 if field_name not in exclude_columns:
-                    yearly_data[year][field_name] += self._to_decimal(value) or Decimal("0.00")
+                    yearly_data[year][field_name].append(self._to_decimal(value))
 
         # 연도별 합산 데이터를 IncomeStatementDetail 객체로 변환
         yearly_statements = []
         for year in sorted(yearly_data.keys(), reverse=True):
+            year_dict = {}
+
+            # 각 필드별로 처리
+            for field_name, values in yearly_data[year].items():
+                # 모든 값이 None인 경우 None을 유지
+                if all(v is None for v in values):
+                    year_dict[field_name] = None
+                else:
+                    # None이 아닌 값들만 합산
+                    year_dict[field_name] = sum((v or Decimal("0.00")) for v in values)
+
             # period_q를 연도로 설정
-            yearly_data[year]["period_q"] = year
+            year_dict["period_q"] = year
 
             # IncomeStatementDetail 객체 생성
-            yearly_statement = self._create_income_statement_detail(yearly_data[year])
+            yearly_statement = self._create_income_statement_detail(year_dict)
             yearly_statements.append(yearly_statement)
 
         return yearly_statements
@@ -1125,7 +1142,7 @@ class FinancialService:
             return []
 
         # 년도별 데이터 집계
-        yearly_data = defaultdict(lambda: defaultdict(Decimal))
+        yearly_data = defaultdict(lambda: defaultdict(list))
 
         for row in result:
             year = str(row.period_q)[:4]  # YYYYMM 형식에서 YYYY 추출
@@ -1133,19 +1150,30 @@ class FinancialService:
             # 제외할 컬럼
             exclude_columns = ["Code", "Name", "StmtDt", "period_q"]
 
-            # 각 필드별로 년도별 합산
+            # 각 필드별로 년도별 데이터 수집
             for field_name, value in zip(row._fields, row):
                 if field_name not in exclude_columns:
-                    yearly_data[year][field_name] += self._to_decimal(value) or Decimal("0.00")
+                    yearly_data[year][field_name].append(self._to_decimal(value))
 
         # 연도별 합산 데이터를 CashFlowDetail 객체로 변환
         yearly_statements = []
         for year in sorted(yearly_data.keys(), reverse=True):
+            year_dict = {}
+
+            # 각 필드별로 처리
+            for field_name, values in yearly_data[year].items():
+                # 모든 값이 None인 경우 None을 유지
+                if all(v is None for v in values):
+                    year_dict[field_name] = None
+                else:
+                    # None이 아닌 값들만 합산
+                    year_dict[field_name] = sum((v or Decimal("0.00")) for v in values)
+
             # period_q를 연도로 설정
-            yearly_data[year]["period_q"] = year
+            year_dict["period_q"] = year
 
             # CashFlowDetail 객체 생성
-            yearly_statement = self._create_cashflow_detail(yearly_data[year])
+            yearly_statement = self._create_cashflow_detail(year_dict)
             yearly_statements.append(yearly_statement)
 
         return yearly_statements

@@ -17,6 +17,7 @@ class IndexSummary(BaseModel):
     rise_ratio: float = 0.00
     fall_ratio: float = 0.00
     unchanged_ratio: float = 0.00
+    min_data_length: int = 0
     is_open: bool = False
 
 
