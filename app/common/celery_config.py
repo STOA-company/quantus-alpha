@@ -30,6 +30,10 @@ CELERY_APP.conf.beat_schedule = {
         "task": "kr_stock_minute_batch",
         "schedule": crontab(minute="1,16,31,46"),  # 15분마다 실행 (장중)
     },
+    "kr-stock-minute-batch-last": {
+        "task": "kr_stock_minute_batch_last",
+        "schedule": crontab(hour="15", minute="30"),
+    },
     # 미국 주식 스케줄
     "us-daily-stock-trend": {
         "task": "stock_trend_1d_us",
