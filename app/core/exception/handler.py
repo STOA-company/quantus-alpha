@@ -15,6 +15,7 @@ from starlette.status import (
 )
 from app.core.exception.custom import (
     AuthException,
+    CommunityException,
     InvalidCountryException,
     InvalidTickerException,
     NoFinancialDataException,
@@ -150,7 +151,14 @@ def exception_handler(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
+async def community_exception_handler(request: Request, exc: CommunityException) -> JSONResponse:
+    return _make_detailed_error_response(request, exc)
+
+
 def initialize(app: FastAPI) -> None:
+    # Community Exceptions
+    app.add_exception_handler(CommunityException, community_exception_handler)
+
     # Financial Exceptions (가장 구체적인 것부터)
     app.add_exception_handler(DataNotFoundException, data_not_found_exception_handler)
     app.add_exception_handler(NoFinancialDataException, no_financial_data_exception_handler)

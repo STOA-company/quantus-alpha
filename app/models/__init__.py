@@ -82,7 +82,7 @@ CommentLike.user = relationship("AlphafinderUser", back_populates="comment_likes
 
 # Bookmark relationships
 Bookmark.post = relationship("Post", back_populates="bookmarks")
-Bookmark.user = relationship("AlphafinderUser", back_populates="bookmarks", cascade="all, delete")
+Bookmark.user = relationship("AlphafinderUser", back_populates="bookmarks")
 
 # StockInformation relationships
 StockInformation.posts = relationship(

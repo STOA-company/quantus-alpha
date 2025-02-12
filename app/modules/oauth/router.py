@@ -84,6 +84,7 @@ def google_callback(code: str):
 
             access_token = create_jwt_token(user.id)
             refresh_token = create_refresh_token(user.id)
+            logger.info(f"access_token: {access_token}")
 
             FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 

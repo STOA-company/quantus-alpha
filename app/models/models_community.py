@@ -36,7 +36,7 @@ class Post(Base, BaseMixin):
     comment_count = Column(Integer, default=0)
 
     # Foreign Key
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
     user_id = Column(BigInteger, ForeignKey("alphafinder_user.id"), nullable=False)
 
     __table_args__ = (
@@ -65,10 +65,10 @@ class Comment(Base, BaseMixin):
     content = Column(Text, nullable=False)
     like_count = Column(Integer, default=0)
     depth = Column(Integer, default=0, comment="댓글 깊이")
-    parent_id = Column(Integer, ForeignKey("comments.id"), nullable=True, comment="부모 댓글 ID")
+    parent_id = Column(Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True, comment="부모 댓글 ID")
 
     # Foreign Key
-    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(BigInteger, ForeignKey("alphafinder_user.id"), nullable=False)
 
     __table_args__ = (
@@ -88,8 +88,8 @@ class PostLike(Base, BaseMixin):
     __tablename__ = "post_likes"
 
     # Foreign keys
-    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id"), nullable=False, primary_key=True)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=False, primary_key=True)
 
     __table_args__ = (Index("idx_post_likes_user", user_id),)
 
@@ -104,8 +104,8 @@ class CommentLike(Base, BaseMixin):
     __tablename__ = "comment_likes"
 
     # Foreign keys
-    comment_id = Column(Integer, ForeignKey("comments.id"), nullable=False, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id"), nullable=False, primary_key=True)
+    comment_id = Column(Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=False, primary_key=True)
 
     __table_args__ = (Index("idx_comment_likes_user", user_id),)
 
@@ -120,8 +120,8 @@ class Bookmark(Base, BaseMixin):
     __tablename__ = "bookmarks"
 
     # Foreign keys
-    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id"), nullable=False, primary_key=True)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=False, primary_key=True)
 
     __table_args__ = (Index("idx_bookmarks_user", user_id),)
 
@@ -135,7 +135,7 @@ class Bookmark(Base, BaseMixin):
 class PostStatistics(Base, BaseMixin):
     __tablename__ = "post_statistics"
 
-    post_id = Column(Integer, ForeignKey("posts.id"), primary_key=True)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True)
     weekly_likes = Column(Integer, default=0)
 
     __table_args__ = (Index("idx_post_statistics_weekly_likes", weekly_likes.desc()),)
