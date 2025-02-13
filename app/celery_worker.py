@@ -1,6 +1,7 @@
 import logging
 from functools import wraps
 
+from app.batches.run_community import update_post_statistics, update_stock_statistics
 from app.batches.run_news import (
     renewal_kr_run_news_batch,
     renewal_us_run_news_batch,
@@ -375,6 +376,30 @@ def us_stock_indices_collect():
     else:
         logging.info("US market is not open. US_stock_indices_collect process skipped.")
         return
+
+
+@CELERY_APP.task(name="community_trending_stock_update", ignore_result=True)
+def community_trending_stock_update():
+    """커뮤니티 인기 종목 업데이트"""
+    notifier.notify_info("Community_trending_stock_update process started")
+    try:
+        update_stock_statistics()
+        notifier.notify_success("Community_trending_stock_update process completed")
+    except Exception as e:
+        notifier.notify_error(f"Community_trending_stock_update process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="community_trending_post_update", ignore_result=True)
+def community_trending_post_update():
+    """커뮤니티 인기 게시글 업데이트"""
+    notifier.notify_info("Community_trending_post_update process started")
+    try:
+        update_post_statistics()
+        notifier.notify_success("Community_trending_post_update process completed")
+    except Exception as e:
+        notifier.notify_error(f"Community_trending_post_update process failed: {str(e)}")
+        raise
 
 
 # Worker 시작점

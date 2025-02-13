@@ -127,4 +127,14 @@ CELERY_APP.conf.beat_schedule = {
         "task": "memory-status",
         "schedule": crontab(minute="1,11,21,31,41,51"),
     },
+    # 커뮤니티 인기 종목 업데이트
+    "community_trending_stock_update": {
+        "task": "community_trending_stock_update",
+        "schedule": crontab(minute="4,9,14,19,24,29,34,39,44,49,54,59"),
+    },
+    # 커뮤니티 인기 게시글 업데이트
+    "community_trending_post_update": {
+        "task": "community_trending_post_update",
+        "schedule": crontab(minute="4,9,14,19,24,29,34,39,44,49,54,59"),
+    },
 }
