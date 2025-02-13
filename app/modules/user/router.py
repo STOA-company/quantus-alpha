@@ -20,12 +20,12 @@ security = HTTPBearer()
 async def signup(
     email_token: str = Form(...),
     nickname: str = Form(...),
-    favorite_stock: Optional[str] = Form(...),
+    favorite_stocks: Optional[str] = Form(None),
     profile_image: UploadFile = File(...),
 ):
     email = decode_email_token(email_token)["sub"]
     user = create_user(email, nickname)  # profile image 활성화 필요
-    favorite_stock_list = json.loads(favorite_stock)
+    favorite_stock_list = json.loads(favorite_stocks)
     for ticker in favorite_stock_list:
         add_favorite_stock(user.id, ticker)
     access_token = create_jwt_token(user.id)
