@@ -136,6 +136,8 @@ class StockTrend(Base):
     market = Column(String(10), nullable=True, index=True, comment="시장 구분")
     is_trading_stopped = Column(Boolean, default=False, comment="거래 정지 여부")
     is_delisted = Column(Boolean, default=False, comment="상장 폐지 여부")
+    is_cared = Column(Boolean, default=False, comment="관리종목 여부")
+    is_warned = Column(Boolean, default=False, comment="경고종목 여부")
     is_activate = Column(Boolean, ForeignKey("stock_information.is_activate"), comment="사용 가능 여부")
 
     # 현재가

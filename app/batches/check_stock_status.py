@@ -162,6 +162,41 @@ def deactivate_zero_volume():
         return []
 
 
+def iscd_stat_cls_code_batch():
+    api = KISAPIManager().get_api()
+    cared_tickers = []
+    warned_tickers = []
+    tickers = database._select(table="stock_trend", columns=["ticker"], ctry="kr")
+    tickers = [ticker[0] for ticker in tickers]
+    for ticker in tickers:
+        iscd_stat_cls_code = api.iscd_stat_cls_code(ticker)
+        logger.info(iscd_stat_cls_code)
+        if iscd_stat_cls_code is None:
+            logger.info(f"No iscd_stat_cls_code for {ticker}")
+            continue
+        if iscd_stat_cls_code == "51":
+            cared_tickers.append(ticker)
+        elif iscd_stat_cls_code == "52":
+            warned_tickers.append(ticker)
+
+    database._update(table="stock_trend", sets={"is_cared": 1}, ticker__in=cared_tickers)
+    database._update(table="stock_trend", sets={"is_warned": 1}, ticker__in=warned_tickers)
+
+
+def check_warned_stock_us():
+    tickers = database._select(table="stock_trend", columns=["ticker"], ctry="us")
+    tickers = [ticker[0] for ticker in tickers]
+    database._update(table="stock_trend", sets={"is_warned": 0}, ticker__in=tickers)
+    stocks = database._select(
+        table="USA_stock_factors",
+        columns=["ticker", "last_close", "market_cap"],
+        market_cap__lt=50000000,  # market_cap < 50,000,000
+        last_close__lt=1,  # last_close < 1
+    )
+    tickers = [stock[0].split("-")[0] for stock in stocks]
+    database._update(table="stock_trend", sets={"is_warned": 1}, ticker__in=tickers)
+
+
 def main():
     database._update(
         table="stock_trend",
@@ -178,4 +213,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    check_warned_stock_us()
+    # iscd_stat_cls_code_batch()
