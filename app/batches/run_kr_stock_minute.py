@@ -17,33 +17,48 @@ def save_minute_data(ticker: str, data: List[Dict]):
     """분봉 데이터 저장"""
     try:
         records = []
+        ticker_symbol = "A" + ticker
+
+        # 저장하려는 데이터의 날짜들
+        dates = [record["stck_cntg_hour"] for record in data]
+
+        existing_records = database._select(
+            table="stock_kr_1m",
+            columns=["Date"],
+            Ticker=ticker_symbol,
+            Date__in=dates,
+        )
+
+        existing_dates = {record[0] for record in existing_records} if existing_records else set()
 
         for record in data:
-            records.append(
-                {
-                    "Ticker": "A" + ticker,
-                    "Date": record["stck_cntg_hour"],
-                    "Open": float(record["stck_oprc"]),
-                    "High": float(record["stck_hgpr"]),
-                    "Low": float(record["stck_lwpr"]),
-                    "Close": float(record["stck_prpr"]),
-                    "Volume": float(record["cntg_vol"]),
-                }
-            )
+            date = record["stck_cntg_hour"]
+            if date not in existing_dates:
+                records.append(
+                    {
+                        "Ticker": ticker_symbol,
+                        "Date": date,
+                        "Open": float(record["stck_oprc"]),
+                        "High": float(record["stck_hgpr"]),
+                        "Low": float(record["stck_lwpr"]),
+                        "Close": float(record["stck_prpr"]),
+                        "Volume": float(record["cntg_vol"]),
+                    }
+                )
 
         if records:
             database._insert(table="stock_kr_1m", sets=records)
-            logger.info(f"Successfully saved {len(records)} records for {ticker}")
+            logger.info(f"Successfully saved {len(records)} new records for {ticker}")
+            logger.info(f"Skipped {len(data) - len(records)} existing records for {ticker}")
         else:
-            logger.warning(f"No records to save for ticker {ticker}")
+            logger.info(f"All {len(data)} records already exist for {ticker}")
 
     except Exception as e:
         logger.error(f"Error saving data for {ticker}: {e}")
-        logger.error(f"Error details: {str(e)}")  # 상세 에러 메시지
-        raise
+        logger.error(f"Error details: {str(e)}")
 
 
-def collect_kr_stock_minute_data():
+def collect_kr_stock_minute_data(last: bool = False):
     """국내 주식 분봉 데이터 수집"""
     try:
         api = KISAPIManager().get_api()
@@ -63,6 +78,9 @@ def collect_kr_stock_minute_data():
                 now = datetime.utcnow().replace(tzinfo=pytz.UTC).astimezone(kr_tz)
                 logger.info(f"Starting data collection at KST: {now.strftime('%Y-%m-%d %H:%M:%S')}")
                 current_time = now.strftime("%H%M%S")
+
+                if last:
+                    current_time = "153000"
 
                 while True:
                     logger.info(f"Current time: {current_time}")
@@ -96,4 +114,4 @@ def collect_kr_stock_minute_data():
 
 
 if __name__ == "__main__":
-    collect_kr_stock_minute_data()
+    collect_kr_stock_minute_data(last=True)

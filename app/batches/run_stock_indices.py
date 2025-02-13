@@ -407,9 +407,9 @@ def _is_market_open(ticker: str) -> bool:
         return check_market_status("KR")
 
 
-# if __name__ == "__main__":
-# logging.info("Starting US market batch job from command line")
-# kr_run_stock_indices_batch()
+if __name__ == "__main__":
+    # logging.info("Starting US market batch job from command line")
+    # kr_run_stock_indices_batch()
 
-# get_stock_indices_data("NASDAQ")
-# get_stock_indices_data("SNP500")
+    get_stock_indices_data("KOSPI")
+    # get_stock_indices_data("KOSDAQ")
