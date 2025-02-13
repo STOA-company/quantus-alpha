@@ -1,11 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
-
-
-class SignupRequest(BaseModel):
-    email_token: str
-    nickname: str
-    favorite_stock: List[str] = []
+from typing import Optional
 
 
 class UserInfoResponse(BaseModel):
