@@ -378,6 +378,30 @@ def us_stock_indices_collect():
         return
 
 
+@CELERY_APP.task(name="iscd_stat_cls_code_batch", ignore_result=True)
+def iscd_stat_cls_code_batch():
+    """한국 주식 상태 코드 업데이트"""
+    try:
+        notifier.notify_info("iscd_stat_cls_code_batch process started")
+        iscd_stat_cls_code_batch()
+        notifier.notify_success("iscd_stat_cls_code_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"iscd_stat_cls_code_batch process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="check_warned_stock_us", ignore_result=True)
+def check_warned_stock_us():
+    """미국 주식 경고 처리"""
+    try:
+        notifier.notify_info("check_warned_stock_us process started")
+        check_warned_stock_us()
+        notifier.notify_success("check_warned_stock_us process completed")
+    except Exception as e:
+        notifier.notify_error(f"check_warned_stock_us process failed: {str(e)}")
+        raise
+
+
 @CELERY_APP.task(name="community_trending_stock_update", ignore_result=True)
 def community_trending_stock_update():
     """커뮤니티 인기 종목 업데이트"""
