@@ -1,7 +1,8 @@
 from typing import List
 from app.database.crud import database
 from app.modules.common.enum import TranslateCountry
-from app.modules.search.schemas import SearchItem
+from app.modules.community.services import CommunityService
+from app.modules.search.schemas import CommunitySearchItem, SearchItem
 import logging
 
 logger = logging.getLogger(__name__)
@@ -113,6 +114,55 @@ class SearchService:
                 )
 
         return search_items
+
+    async def search_community(
+        self, query: str, lang: TranslateCountry, offset: int, limit: int, community_service: CommunityService
+    ) -> List[CommunitySearchItem]:
+        """커뮤니티 종목 검색 기능"""
+        if not query:
+            trending_stocks = await community_service.get_trending_stocks(limit=limit, lang=lang)
+            return [
+                CommunitySearchItem(
+                    ticker=stock.ticker,
+                    name=stock.name,
+                )
+                for stock in trending_stocks
+            ]
+        else:
+            return await self._search_result(query, lang, offset, limit)
+
+    async def _search_result(
+        self, query: str, lang: TranslateCountry, offset: int, limit: int
+    ) -> List[CommunitySearchItem]:
+        """종목 검색"""
+        search_term = f"%{query}%"
+
+        search_result = self.db._select(
+            table="stock_information",
+            columns=["ticker", "kr_name", "en_name"],
+            or__=[
+                {"ticker": query},
+                {"ticker__like": search_term},
+                {"kr_name__like": search_term},
+                {"en_name__like": search_term},
+            ],
+            is_activate=1,
+        )
+
+        if not search_result:
+            return []
+
+        # 정확한 매칭을 우선으로 정렬
+        sorted_result = sorted(search_result, key=lambda x: 1 if x._mapping["ticker"] == query else 2)
+        search_result = sorted_result[offset : offset + limit]
+
+        return [
+            CommunitySearchItem(
+                ticker=row._mapping["ticker"],
+                name=row._mapping["kr_name"] if lang == TranslateCountry.KO else row._mapping["en_name"],
+            )
+            for row in search_result
+        ]
 
 
 def get_search_service() -> SearchService:

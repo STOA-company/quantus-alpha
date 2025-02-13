@@ -1,8 +1,10 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.database.conn import db
 from app.modules.common.enum import TranslateCountry
-from app.modules.search.schemas import SearchResponse
+from app.modules.common.schemas import InfiniteScrollResponse
+from app.modules.search.schemas import CommunitySearchItem, SearchResponse
 from app.modules.search.service import SearchService, get_search_service
 
 
@@ -25,3 +27,17 @@ def search(
         search_result = search_result[:-1]  # 마지막 항목 제거
 
     return SearchResponse(status_code=200, message="검색이 완료되었습니다.", data=search_result, has_more=has_more)
+
+
+@router.get("/community", summary="종목 검색")
+def search_community(
+    query: Optional[str] = Query(None, description="검색 쿼리"),
+    ctry: TranslateCountry = Query(default=TranslateCountry.KO, description="검색 시 나올 기업명 언어(ko, en)"),
+    offset: int = Query(0, description="검색 시작 위치"),
+    limit: int = Query(20, description="검색 결과 수"),
+    service: SearchService = Depends(get_search_service),
+) -> InfiniteScrollResponse[CommunitySearchItem]:
+    search_result = service.search_community(query, ctry, offset, limit + 1)
+    has_more = len(search_result) > limit
+    if has_more:
+        search_result = search_result[:-1]  # 마지막 항목 제거
