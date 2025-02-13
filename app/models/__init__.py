@@ -92,10 +92,13 @@ StockInformation.posts = relationship(
     primaryjoin="StockInformation.ticker == post_stocks.c.stock_ticker",
     secondaryjoin="Post.id == post_stocks.c.post_id",
 )
-StockInformation.statistics = relationship("StockStatistics", back_populates="stock", uselist=False)
 
 # PostStatistics relationships
 PostStatistics.post = relationship("Post", back_populates="statistics", uselist=False)
 
-# StockStatistics relationships
-StockStatistics.stock = relationship("StockInformation", back_populates="statistics", uselist=False)
+# AlphafinderUser relationships
+AlphafinderUser.posts = relationship("Post", back_populates="user", passive_deletes=True)
+AlphafinderUser.comments = relationship("Comment", back_populates="user", passive_deletes=True)
+AlphafinderUser.post_likes = relationship("PostLike", back_populates="user", passive_deletes=True)
+AlphafinderUser.comment_likes = relationship("CommentLike", back_populates="user", passive_deletes=True)
+AlphafinderUser.bookmarks = relationship("Bookmark", back_populates="user")
