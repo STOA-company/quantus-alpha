@@ -126,6 +126,10 @@ CELERY_APP.conf.beat_schedule = {
         "task": "iscd_stat_cls_code_batch",
         "schedule": crontab(hour="08", minute="00"),
     },
+    "check_warned_stock_us": {
+        "task": "check_warned_stock_us",
+        "schedule": crontab(hour="22", minute="00"),
+    },
     # 메모리 상태 체크
     "memory-status": {
         "task": "memory-status",

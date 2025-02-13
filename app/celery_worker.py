@@ -389,6 +389,18 @@ def iscd_stat_cls_code_batch():
         raise
 
 
+@CELERY_APP.task(name="check_warned_stock_us", ignore_result=True)
+def check_warned_stock_us():
+    """미국 주식 경고 처리"""
+    try:
+        notifier.notify_info("check_warned_stock_us process started")
+        check_warned_stock_us()
+        notifier.notify_success("check_warned_stock_us process completed")
+    except Exception as e:
+        notifier.notify_error(f"check_warned_stock_us process failed: {str(e)}")
+        raise
+
+
 # Worker 시작점
 if __name__ == "__main__":
     CONCURRENCY = getattr(settings, "CELERY_CONCURRENCY", 7)
