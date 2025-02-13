@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from kispy.base import BaseAPI
 from app.core.config import settings
 import pytz
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -415,3 +416,20 @@ class KISAPI(BaseAPI):
         last_time: datetime = last_record["stck_cntg_hour"]
         next_time = last_time - timedelta(minutes=period)
         return next_time.strftime("%H%M%S")
+
+    def iscd_stat_cls_code(self, stock_code: str) -> bool:
+        url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
+        headers = {
+            "Content-Type": "application/json",
+            "authorization": f"Bearer {self.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "FHKST01010100",
+        }
+        params = {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": stock_code}
+        response = requests.get(url, headers=headers, params=params)
+        stock_info = json.loads(response.text)
+        logger.info(stock_info)
+
+        iscd_stat_cls_code = stock_info["output"]["iscd_stat_cls_code"]
+        return iscd_stat_cls_code
