@@ -27,8 +27,9 @@ async def signup(
     email = decode_email_token(email_token)["sub"]
     user = create_user(email, nickname, provider)  # profile image 활성화 필요
     favorite_stock_list = json.loads(favorite_stocks)
-    for ticker in favorite_stock_list:
-        add_favorite_stock(user.id, ticker)
+    if favorite_stock_list:
+        for ticker in favorite_stock_list:
+            add_favorite_stock(user.id, ticker)
     access_token = create_jwt_token(user.id)
     refresh_token = create_refresh_token(user.id)
 
