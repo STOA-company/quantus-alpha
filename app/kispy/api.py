@@ -439,7 +439,7 @@ class KISAPI(BaseAPI):
 
     def iscd_stat_cls_code(self, stock_code: str, retry_count: int = 3) -> Optional[str]:
         stock_code = stock_code[1:]
-        url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
+        url = "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-price"
 
         for attempt in range(retry_count):
             try:
