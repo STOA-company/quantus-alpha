@@ -170,6 +170,9 @@ def iscd_stat_cls_code_batch():
     for ticker in tickers:
         iscd_stat_cls_code = api.iscd_stat_cls_code(ticker)
         logger.info(iscd_stat_cls_code)
+        if iscd_stat_cls_code is None:
+            logger.info(f"No iscd_stat_cls_code for {ticker}")
+            continue
         if iscd_stat_cls_code == "51":
             cared_tickers.append(ticker)
         elif iscd_stat_cls_code == "52":
@@ -195,4 +198,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    iscd_stat_cls_code_batch()
