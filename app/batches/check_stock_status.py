@@ -183,6 +183,20 @@ def iscd_stat_cls_code_batch():
     database._update(table="stock_trend", sets={"is_warned": 1}, ticker__in=warned_tickers)
 
 
+def check_warned_stock_us():
+    tickers = database._select(table="stock_trend", columns=["ticker"], ctry="us")
+    tickers = [ticker[0] for ticker in tickers]
+    database._update(table="stock_trend", sets={"is_warned": 0}, ticker__in=tickers)
+    stocks = database._select(
+        table="USA_stock_factors",
+        columns=["ticker", "last_close", "market_cap"],
+        market_cap__lt=50000000,  # market_cap < 50,000,000
+        last_close__lt=1,  # last_close < 1
+    )
+    tickers = [stock[0].split("-")[0] for stock in stocks]
+    database._update(table="stock_trend", sets={"is_warned": 1}, ticker__in=tickers)
+
+
 def main():
     database._update(
         table="stock_trend",
@@ -199,4 +213,5 @@ def main():
 
 
 if __name__ == "__main__":
-    iscd_stat_cls_code_batch()
+    check_warned_stock_us()
+    # iscd_stat_cls_code_batch()
