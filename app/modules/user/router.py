@@ -7,8 +7,9 @@ from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose.exceptions import JWTError
 from app.utils.oauth_utils import refresh_access_token, decode_email_token, create_jwt_token, create_refresh_token
-from app.modules.user.service import create_user
-from typing import List
+from app.modules.user.service import create_user, add_favorite_stock
+import json
+from typing import Optional
 
 router = APIRouter()
 
@@ -19,11 +20,14 @@ security = HTTPBearer()
 async def signup(
     email_token: str = Form(...),
     nickname: str = Form(...),
-    favorite_stock: List[str] = Form(...),
+    favorite_stock: Optional[str] = Form(...),
     profile_image: UploadFile = File(...),
 ):
     email = decode_email_token(email_token)["sub"]
-    user = create_user(email, nickname, profile_image, favorite_stock)
+    user = create_user(email, nickname)  # profile image 활성화 필요
+    favorite_stock_list = json.loads(favorite_stock)
+    for ticker in favorite_stock_list:
+        add_favorite_stock(user.id, ticker)
     access_token = create_jwt_token(user.id)
     refresh_token = create_refresh_token(user.id)
 
