@@ -71,6 +71,11 @@ class PostUpdate(BaseModel):
         }
 
 
+class PostInfo(BaseModel):
+    id: int
+    title: str
+
+
 ### 댓글 스키마 ###
 
 
@@ -99,6 +104,24 @@ class CommentItem(BaseModel):
     is_mine: bool
     user_info: UserInfo
     sub_comments: List["CommentItem"] = Field(default=list)
+
+    class Config:
+        from_attributes = True
+
+
+class CommentItemWithPostInfo(BaseModel):
+    id: int
+    content: str
+    like_count: int
+    depth: int
+    parent_id: Optional[int] = None
+    created_at: datetime
+    is_changed: bool
+    is_liked: bool
+    is_mine: bool
+    user_info: UserInfo
+    sub_comments: List["CommentItem"] = Field(default=list)
+    post_info: PostInfo
 
     class Config:
         from_attributes = True
