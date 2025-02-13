@@ -14,6 +14,7 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     description=f"Alphafinder API Documentation - {settings.ENV}",
     version="1.0.0",
+    swagger_ui_parameters={"persistAuthorization": True},
 )
 handler.initialize(app)
 
