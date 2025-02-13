@@ -9,7 +9,7 @@ def get_user_by_email(email: str):
 
 
 def create_user(email: str, nickname: str, provider: str):
-    user = database._insert(
+    database._insert(
         table="alphafinder_user",
         sets={
             "email": email,
@@ -17,6 +17,8 @@ def create_user(email: str, nickname: str, provider: str):
             "provider": provider,
         },
     )
+
+    user = get_user_by_email(email)
     return user
 
 
