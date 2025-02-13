@@ -19,15 +19,17 @@ security = HTTPBearer()
 @router.post("/signup")
 async def signup(
     email_token: str = Form(...),
+    provider: str = Form(default="google"),
     nickname: str = Form(...),
     favorite_stocks: Optional[str] = Form(None),
     profile_image: UploadFile = File(...),
 ):
     email = decode_email_token(email_token)["sub"]
-    user = create_user(email, nickname)  # profile image 활성화 필요
+    user = create_user(email, nickname, provider)  # profile image 활성화 필요
     favorite_stock_list = json.loads(favorite_stocks)
-    for ticker in favorite_stock_list:
-        add_favorite_stock(user.id, ticker)
+    if favorite_stock_list:
+        for ticker in favorite_stock_list:
+            add_favorite_stock(user.id, ticker)
     access_token = create_jwt_token(user.id)
     refresh_token = create_refresh_token(user.id)
 
