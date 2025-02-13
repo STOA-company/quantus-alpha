@@ -32,3 +32,10 @@ class PaginationBaseResponse(BaseResponse):
     current_page: int
     offset: int
     size: int
+
+
+class InfiniteScrollResponse(BaseModel, Generic[T]):
+    status_code: int
+    message: str
+    has_more: bool
+    data: List[T]

@@ -4,8 +4,19 @@ from sqlalchemy import text
 from app.common.constants import UTC
 from app.core.exception.custom import PostException, TooManyStockTickersException
 from app.models.models_users import AlphafinderUser
-from .schemas import CommentCreate, CommentItem, CommentUpdate, PostCreate, PostUpdate, ResponsePost, UserInfo
-from typing import List, Optional
+from app.modules.common.enum import TranslateCountry
+from .schemas import (
+    CommentCreate,
+    CommentItem,
+    CommentUpdate,
+    PostCreate,
+    PostUpdate,
+    ResponsePost,
+    TrendingPostResponse,
+    TrendingStockResponse,
+    UserInfo,
+)
+from typing import List, Optional, Tuple
 from app.database.crud import database
 
 
@@ -16,6 +27,10 @@ class CommunityService:
     async def create_post(self, current_user: AlphafinderUser, post_create: PostCreate) -> bool:
         """게시글 생성"""
         current_time = datetime.now(UTC)
+        is_stock_ticker = self._is_stock_ticker(post_create.stock_tickers)
+        if not is_stock_ticker:
+            raise PostException(message="종목 코드가 유효하지 않습니다", status_code=400)
+
         user_id = current_user[0][0]
 
         insert_query = text("""
@@ -60,6 +75,20 @@ class CommunityService:
             self.db._insert("post_stocks", stock_data)
 
         return True
+
+    def _is_stock_ticker(self, stock_tickers: List[str]) -> bool:
+        """종목 코드 유효성 검사"""
+        if not stock_tickers:
+            return True
+
+        query = """
+            SELECT COUNT(DISTINCT ticker)
+            FROM stock_information
+            WHERE ticker IN :stock_tickers AND is_activate = 1
+        """
+        result = self.db._execute(text(query), {"stock_tickers": stock_tickers})
+        count = result.scalar()
+        return count == len(stock_tickers)
 
     async def get_post_detail(self, current_user: AlphafinderUser, post_id: int) -> ResponsePost:
         """게시글 상세 조회"""
@@ -196,7 +225,7 @@ class CommunityService:
                 is_changed=post["created_at"] != post["updated_at"],
                 is_bookmarked=post["is_bookmarked"],
                 created_at=post["created_at"],
-                stock_tickers=(post["stock_tickers"]).split(",") if post["stock_tickers"] else [],  # None 값 제거
+                stock_tickers=(post["stock_tickers"]).split(",") if post["stock_tickers"] else [],
                 user_info=(
                     UserInfo(id=post["user_id"], nickname=post["nickname"], profile_image=post.get("profile_image"))
                     if post["nickname"]
@@ -209,6 +238,10 @@ class CommunityService:
     async def update_post(self, current_user: AlphafinderUser, post_id: int, post_update: PostUpdate) -> bool:
         """게시글 수정"""
         user_id = current_user[0][0] if current_user else None
+        is_stock_ticker = self._is_stock_ticker(post_update.stock_tickers)
+        if not is_stock_ticker:
+            raise PostException(message="종목 코드가 유효하지 않습니다", status_code=400)
+
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
@@ -286,8 +319,15 @@ class CommunityService:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
         # 1. 게시글 존재 여부 확인
-        post = self.db._select(table="posts", columns=["id"], id=post_id)
-        if not post:
+        exists_query = text("""
+            SELECT EXISTS (
+                SELECT 1 FROM posts WHERE id = :post_id
+            ) as exists_flag
+        """)
+        result = self.db._execute(exists_query, {"post_id": post_id})
+        post_exists = bool(result.scalar())
+
+        if not post_exists:
             raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
 
         # 2. 부모 댓글 확인 (대댓글인 경우)
@@ -334,15 +374,14 @@ class CommunityService:
 
     async def get_comments(
         self, current_user: Optional[AlphafinderUser], post_id: int, offset: int = 0, limit: int = 20
-    ) -> List[CommentItem]:
+    ) -> Tuple[List[CommentItem], bool]:
         """댓글 목록 조회"""
         current_user_id = current_user[0][0] if current_user else None
 
         # 1. 원댓글 조회 (limit + 1개)
         parent_query = """
             SELECT
-                c.id, c.content, c.like_count, c.depth, c.parent_id,
-                c.created_at, c.updated_at,
+                c.id, c.content, c.like_count, c.depth, c.parent_id, c.created_at, c.updated_at,
                 u.id as user_id, u.nickname, u.profile_image,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
@@ -398,7 +437,7 @@ class CommunityService:
                     id=comment["user_id"], nickname=comment["nickname"], profile_image=comment.get("profile_image")
                 )
             return UserInfo(
-                id=0,  # 또는 None
+                id=0,
                 nickname="(알 수 없는 유저)",
                 profile_image=None,
             )
@@ -419,8 +458,9 @@ class CommunityService:
                     created_at=child["created_at"],
                     is_changed=child["created_at"] != child["updated_at"],
                     is_liked=child["is_liked"],
+                    is_mine=child["user_id"] == current_user_id if current_user_id else False,
                     user_info=create_user_info(child),
-                    sub_comments=[],  # 대댓글은 하위 댓글을 가질 수 없음
+                    sub_comments=[],
                 )
             )
 
@@ -435,6 +475,7 @@ class CommunityService:
                 created_at=comment["created_at"],
                 is_changed=comment["created_at"] != comment["updated_at"],
                 is_liked=comment["is_liked"],
+                is_mine=comment["user_id"] == current_user_id if current_user_id else False,
                 user_info=create_user_info(comment),
                 sub_comments=child_map.get(comment["id"], []),
             )
@@ -502,6 +543,197 @@ class CommunityService:
             self.db._update(table="posts", sets=update_data, id=post_id)
 
         return True
+
+    ###################
+    ###  좋아요 CRUD  ###
+    ###################
+
+    async def update_post_like(self, current_user: AlphafinderUser, post_id: int, is_liked: bool) -> Tuple[bool, int]:
+        """게시글 좋아요 상태 업데이트"""
+        current_time = datetime.now(UTC)
+        user_id = current_user[0][0] if current_user else None
+
+        if not user_id:
+            raise PostException(message="로그인이 필요합니다", status_code=401)
+
+        # 1. 게시글 확인
+        post = self.db._select(table="posts", columns=["id", "like_count"], id=post_id)
+
+        if not post:
+            raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
+
+        current_like_count = post[0][1]
+
+        # 2. 현재 좋아요 상태 확인
+        like_exists = bool(self.db._select(table="post_likes", post_id=post_id, user_id=user_id))
+
+        # 3. 상태가 같으면 아무 것도 하지 않음
+        if like_exists == is_liked:
+            return is_liked, current_like_count
+
+        # 4. 상태가 다르면 업데이트
+        if is_liked:
+            like_data = {"post_id": post_id, "user_id": user_id, "created_at": current_time, "updated_at": current_time}
+            self.db._insert("post_likes", like_data)
+            new_like_count = current_like_count + 1
+        else:
+            self.db._delete(table="post_likes", post_id=post_id, user_id=user_id)
+            new_like_count = current_like_count - 1
+
+        # 5. 게시글 좋아요 수 업데이트
+        self.db._update(table="posts", sets={"like_count": new_like_count}, id=post_id)
+
+        return is_liked, new_like_count
+
+    async def update_comment_like(
+        self, current_user: AlphafinderUser, comment_id: int, is_liked: bool
+    ) -> Tuple[bool, int]:
+        """댓글 좋아요 상태 업데이트"""
+        current_time = datetime.now(UTC)
+        user_id = current_user[0][0] if current_user else None
+
+        if not user_id:
+            raise PostException(message="로그인이 필요합니다", status_code=401)
+
+        # 1. 댓글 확인
+        comment = self.db._select(table="comments", columns=["id", "like_count"], id=comment_id)
+
+        if not comment:
+            raise PostException(message="댓글을 찾을 수 없습니다", status_code=404, comment_id=comment_id)
+
+        current_like_count = comment[0][1]
+
+        # 2. 현재 좋아요 상태 확인
+        like_exists = bool(self.db._select(table="comment_likes", comment_id=comment_id, user_id=user_id))
+
+        # 3. 상태가 같으면 아무 것도 하지 않음
+        if like_exists == is_liked:
+            return is_liked, current_like_count
+
+        # 4. 상태가 다르면 업데이트
+        if is_liked:
+            like_data = {
+                "comment_id": comment_id,
+                "user_id": user_id,
+                "created_at": current_time,
+                "updated_at": current_time,
+            }
+            self.db._insert("comment_likes", like_data)
+            new_like_count = current_like_count + 1
+        else:
+            self.db._delete(table="comment_likes", comment_id=comment_id, user_id=user_id)
+            new_like_count = current_like_count - 1
+
+        # 5. 게시글 좋아요 수 업데이트
+        self.db._update(table="comments", sets={"like_count": new_like_count}, id=comment_id)
+
+        return is_liked, new_like_count
+
+    ###################
+    ###  북마크 CRUD  ###
+    ###################
+
+    async def update_post_bookmark(
+        self, current_user: AlphafinderUser, post_id: int, is_bookmarked: bool
+    ) -> Tuple[bool, int]:
+        """게시글 북마크 상태 업데이트"""
+        current_time = datetime.now(UTC)
+        user_id = current_user[0][0] if current_user else None
+
+        if not user_id:
+            raise PostException(message="로그인이 필요합니다", status_code=401)
+
+        # 1. 게시글 확인
+        exists_query = text("""
+            SELECT EXISTS (
+                SELECT 1 FROM posts WHERE id = :post_id
+            ) as exists_flag
+        """)
+        result = self.db._execute(exists_query, {"post_id": post_id})
+        post_exists = bool(result.scalar())
+
+        if not post_exists:
+            raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
+
+        # 2. 현재 북마크 상태 확인
+        bookmark_exists = bool(self.db._select(table="bookmarks", post_id=post_id, user_id=user_id))
+
+        # 3. 상태가 같으면 아무 것도 하지 않음
+        if bookmark_exists == is_bookmarked:
+            return is_bookmarked
+
+        # 4. 상태가 다르면 업데이트
+        if is_bookmarked:
+            bookmark_data = {
+                "post_id": post_id,
+                "user_id": user_id,
+                "created_at": current_time,
+                "updated_at": current_time,
+            }
+            self.db._insert("bookmarks", bookmark_data)
+        else:
+            self.db._delete(table="bookmarks", post_id=post_id, user_id=user_id)
+
+        return is_bookmarked
+
+    async def get_trending_posts(
+        self,
+        limit: int = 5,
+    ) -> List[TrendingPostResponse]:
+        """실시간 인기 게시글 조회 (24시간)"""
+        query = """
+            SELECT
+                p.id, p.title, p.created_at,
+                ROW_NUMBER() OVER (ORDER BY ps.daily_likes DESC, ps.last_liked_at DESC) as rank,
+                u.id as user_id, u.nickname, u.profile_image
+            FROM posts p
+            JOIN post_statistics ps ON p.id = ps.post_id
+            LEFT JOIN alphafinder_user u ON p.user_id = u.id
+            WHERE ps.last_liked_at >= UTC_TIMESTAMP() - INTERVAL 24 HOUR
+            ORDER BY ps.daily_likes DESC, ps.last_liked_at DESC
+            LIMIT :limit
+        """
+
+        result = self.db._execute(text(query), {"limit": limit})
+        posts = result.mappings().all()
+
+        return [
+            TrendingPostResponse(
+                id=post["id"],
+                rank=post["rank"],
+                title=post["title"],
+                created_at=post["created_at"],
+                user_info=UserInfo(
+                    id=post["user_id"] if post["user_id"] else 0,
+                    nickname=post["nickname"] if post["nickname"] else "(알 수 없는 유저)",
+                    profile_image=post.get("profile_image"),
+                ),
+            )
+            for post in posts
+        ]
+
+    async def get_trending_stocks(
+        self, limit: int = 5, lang: TranslateCountry = TranslateCountry.KO
+    ) -> List[TrendingStockResponse]:
+        """실시간 인기 종목 조회 (24시간)"""
+        name_field = "si.kr_name" if lang == TranslateCountry.KO else "si.en_name"
+
+        query = f"""
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY s.daily_post_count DESC, s.last_tagged_at DESC) as rank,
+                s.stock_ticker as ticker,
+                {name_field} as name
+            FROM stock_statistics s
+            JOIN stock_information si ON s.stock_ticker = si.ticker
+            WHERE s.last_tagged_at >= UTC_TIMESTAMP() - INTERVAL 24 HOUR
+            ORDER BY s.daily_post_count DESC, s.last_tagged_at DESC
+            LIMIT :limit
+        """
+
+        result = self.db._execute(text(query), {"limit": limit})
+        stocks = result.mappings().all()
+
+        return [TrendingStockResponse(id=stock["rank"], ticker=stock["ticker"], name=stock["name"]) for stock in stocks]
 
 
 def get_community_service() -> CommunityService:

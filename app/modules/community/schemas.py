@@ -71,6 +71,11 @@ class PostUpdate(BaseModel):
         }
 
 
+class PostInfo(BaseModel):
+    id: int
+    title: str
+
+
 ### 댓글 스키마 ###
 
 
@@ -96,8 +101,27 @@ class CommentItem(BaseModel):
     created_at: datetime
     is_changed: bool
     is_liked: bool
+    is_mine: bool
     user_info: UserInfo
     sub_comments: List["CommentItem"] = Field(default=list)
+
+    class Config:
+        from_attributes = True
+
+
+class CommentItemWithPostInfo(BaseModel):
+    id: int
+    content: str
+    like_count: int
+    depth: int
+    parent_id: Optional[int] = None
+    created_at: datetime
+    is_changed: bool
+    is_liked: bool
+    is_mine: bool
+    user_info: UserInfo
+    sub_comments: List["CommentItem"] = Field(default=list)
+    post_info: PostInfo
 
     class Config:
         from_attributes = True
@@ -115,3 +139,36 @@ class CommentUpdate(BaseModel):
 
     class Config:
         json_schema_extra = {"example": {"content": "댓글 내용 수정입니다."}}
+
+
+##### 좋아요 스키마 #####
+
+
+class LikeRequest(BaseModel):
+    is_liked: bool  # 좋아요 추가(True) 또는 제거(False)
+
+
+class LikeResponse(BaseModel):
+    is_liked: bool  # 현재 좋아요 상태
+    like_count: int
+
+
+### 북마크 스키마
+
+
+class BookmarkItem(BaseModel):
+    is_bookmarked: bool  # 북마크 추가(True) 또는 제거(False)
+
+
+class TrendingPostResponse(BaseModel):
+    id: int
+    rank: int
+    title: str
+    created_at: datetime
+    user_info: UserInfo
+
+
+class TrendingStockResponse(BaseModel):
+    rank: int
+    ticker: str
+    name: str
