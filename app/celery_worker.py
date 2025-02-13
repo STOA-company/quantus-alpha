@@ -377,6 +377,18 @@ def us_stock_indices_collect():
         return
 
 
+@CELERY_APP.task(name="iscd_stat_cls_code_batch", ignore_result=True)
+def iscd_stat_cls_code_batch():
+    """한국 주식 상태 코드 업데이트"""
+    try:
+        notifier.notify_info("iscd_stat_cls_code_batch process started")
+        iscd_stat_cls_code_batch()
+        notifier.notify_success("iscd_stat_cls_code_batch process completed")
+    except Exception as e:
+        notifier.notify_error(f"iscd_stat_cls_code_batch process failed: {str(e)}")
+        raise
+
+
 # Worker 시작점
 if __name__ == "__main__":
     CONCURRENCY = getattr(settings, "CELERY_CONCURRENCY", 7)
