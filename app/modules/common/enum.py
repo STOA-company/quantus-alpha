@@ -20,6 +20,11 @@ class TranslateCountry(Enum):
     EN = "en"
 
 
+class Lang(Enum):
+    KR = "kr"
+    EN = "en"
+
+
 class Frequency(Enum):
     DAILY = "daily"
     MINUTE = "minute"

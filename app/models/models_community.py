@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, ForeignKey, Integer, String, Table, Text, Index
+from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Integer, String, Table, Text, Index, func
 from app.models.models_base import Base, BaseMixin
 from sqlalchemy.orm import validates
 
@@ -43,6 +43,7 @@ class Post(Base, BaseMixin):
         Index("idx_posts_created_at", "created_at"),
         Index("idx_posts_like_count", "like_count"),
         Index("idx_posts_category_id", "category_id"),
+        Index("idx_posts_user_id", "user_id"),
     )
 
     @validates("stocks")
@@ -75,6 +76,7 @@ class Comment(Base, BaseMixin):
         Index("idx_comments_post_id", post_id),
         Index("idx_comments_parent_id", parent_id),
         Index("idx_comments_depth_parent", depth, parent_id),
+        Index("idx_comments_user_id", user_id),
     )
 
     def __str__(self):
@@ -136,12 +138,16 @@ class PostStatistics(Base, BaseMixin):
     __tablename__ = "post_statistics"
 
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True)
-    weekly_likes = Column(Integer, default=0)
+    daily_likes_count = Column(Integer, default=0)
+    last_liked_at = Column(DateTime, default=func.utc_timestamp())
 
-    __table_args__ = (Index("idx_post_statistics_weekly_likes", weekly_likes.desc()),)
+    __table_args__ = (
+        Index("idx_post_statistics_daily_likes", daily_likes_count.desc()),
+        Index("idx_post_statistics_last_liked", last_liked_at),
+    )
 
     def __str__(self):
-        return f"<PostStatistics(post_id={self.post_id}, weekly_likes={self.weekly_likes})>"
+        return f"<PostStatistics(post_id={self.post_id}, daily_likes_count={self.daily_likes_count}, last_liked_at={self.last_liked_at})>"
 
     def __repr__(self):
         return self.__str__()
@@ -151,9 +157,13 @@ class StockStatistics(Base, BaseMixin):
     __tablename__ = "stock_statistics"
 
     stock_ticker = Column(String(20), primary_key=True)
-    weekly_post_count = Column(Integer, default=0)
+    daily_post_count = Column(Integer, default=0)
+    last_tagged_at = Column(DateTime, default=func.utc_timestamp())
 
-    __table_args__ = (Index("idx_stock_statistics_weekly_posts", weekly_post_count.desc()),)
+    __table_args__ = (
+        Index("idx_stock_statistics_daily_posts", daily_post_count.desc()),
+        Index("idx_stock_statistics_last_tagged", last_tagged_at),
+    )
 
     def __str__(self):
         return f"<StockStatistics(stock_ticker={self.stock_ticker}, weekly_post_count={self.weekly_post_count})>"

@@ -1,14 +1,20 @@
-from typing import Optional
+from typing import List, Optional
+from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.community.enum import PostOrderBy
 from app.modules.community.schemas import (
+    BookmarkItem,
     CommentCreate,
     CommentListResponse,
     CommentUpdate,
+    LikeRequest,
+    LikeResponse,
     PostCreate,
     PostListResponse,
     PostUpdate,
     ResponsePost,
+    TrendingPostResponse,
+    TrendingStockResponse,
 )
 from app.modules.community.services import CommunityService, get_community_service
 from app.utils.oauth_utils import get_current_user
@@ -53,7 +59,7 @@ async def get_posts(
     posts = await community_service.get_posts(
         current_user=current_user,
         offset=offset,
-        limit=limit + 1,  # 한 개 더 요청
+        limit=limit + 1,
         category_id=category_id,
         stock_ticker=stock_ticker,
         order_by=order_by,
@@ -144,4 +150,78 @@ async def delete_comment(
     return BaseResponse(status_code=200, message="댓글을 삭제하였습니다.", data=result)
 
 
-##### 좋아요 CRUD #####
+##### 좋아요 on/off #####
+@router.put("/posts/{post_id}/like", response_model=BaseResponse[LikeResponse], summary="게시글 좋아요 상태 업데이트")
+async def update_post_like(
+    post_id: int,
+    like_request: LikeRequest,
+    community_service: CommunityService = Depends(get_community_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    """게시글 좋아요 상태 업데이트"""
+    is_liked, like_count = await community_service.update_post_like(
+        current_user=current_user, post_id=post_id, is_liked=like_request.is_liked
+    )
+
+    return BaseResponse(
+        status_code=200,
+        message="좋아요 상태를 업데이트하였습니다.",
+        data=LikeResponse(is_liked=is_liked, like_count=like_count),
+    )
+
+
+@router.put("/comments/{comment_id}/like", response_model=BaseResponse[LikeResponse], summary="댓글 좋아요 상태 업데이트")
+async def update_comment_like(
+    comment_id: int,
+    like_request: LikeRequest,
+    community_service: CommunityService = Depends(get_community_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    """게시글 좋아요 상태 업데이트"""
+    is_liked, like_count = await community_service.update_comment_like(
+        current_user=current_user, comment_id=comment_id, is_liked=like_request.is_liked
+    )
+
+    return BaseResponse(
+        status_code=200,
+        message="좋아요 상태를 업데이트하였습니다.",
+        data=LikeResponse(is_liked=is_liked, like_count=like_count),
+    )
+
+
+### 북마크 on/off ####
+@router.put("/posts/{post_id}/bookmark", response_model=BaseResponse[BookmarkItem], summary="게시글 북마크 추가")
+async def update_post_bookmark(
+    post_id: int,
+    bookmark_item: BookmarkItem,
+    community_service: CommunityService = Depends(get_community_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    """게시글 북마크 추가"""
+    is_bookmarked = await community_service.update_post_bookmark(
+        current_user=current_user, post_id=post_id, is_bookmarked=bookmark_item.is_bookmarked
+    )
+
+    return BaseResponse(
+        status_code=200, message="북마크 상태를 업데이트하였습니다.", data=BookmarkItem(is_bookmarked=is_bookmarked)
+    )
+
+
+### 실시간 인기 게시글 조회 ###
+@router.get("/trending/posts", response_model=BaseResponse[List[TrendingPostResponse]], summary="실시간 인기 게시글 조회")
+async def get_trending_posts(
+    limit: int = Query(5, description="조회할 게시글 수 / default: 5", ge=1, le=50),
+    community_service: CommunityService = Depends(get_community_service),
+):
+    trending_posts = await community_service.get_trending_posts(limit=limit)
+    return BaseResponse(status_code=200, message="실시간 인기 게시글을 조회하였습니다.", data=trending_posts)
+
+
+@router.get("/trending/stocks", response_model=BaseResponse[List[TrendingStockResponse]], summary="실시간 인기 종목 조회")
+async def get_trending_stocks(
+    limit: int = Query(5, description="조회할 종목 수", ge=1, le=50),
+    lang: Optional[TranslateCountry] = Query(TranslateCountry.KO, description="언어 설정 (ko/en)"),
+    community_service: CommunityService = Depends(get_community_service),
+):
+    trending_stocks = await community_service.get_trending_stocks(limit=limit, lang=lang)
+    return BaseResponse(status_code=200, message="실시간 인기 종목을 조회하였습니다.", data=trending_stocks)
