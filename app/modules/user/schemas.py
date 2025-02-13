@@ -10,3 +10,11 @@ class UserInfoResponse(BaseModel):
 
 class RefreshTokenResponse(BaseModel):
     new_access_token: str
+
+
+class UserProfileResponse(BaseModel):
+    id: int
+    nickname: Optional[str] = None
+    profile_image: Optional[str] = None
+    post_count: int
+    comment_count: int

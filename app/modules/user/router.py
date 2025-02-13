@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, File, UploadFile, Form
+from fastapi import APIRouter, Depends, File, Query, UploadFile, Form
 from app.models.models_users import AlphafinderUser
+from app.modules.common.schemas import BaseResponse
 from app.utils.oauth_utils import get_current_user
-from app.modules.user.service import delete_user
-from app.modules.user.schemas import UserInfoResponse, RefreshTokenResponse
+from app.modules.user.service import UserProfileService, delete_user, get_user_profile_service
+from app.modules.user.schemas import UserInfoResponse, RefreshTokenResponse, UserProfileResponse
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose.exceptions import JWTError
@@ -66,3 +67,13 @@ def signup_cancel(current_user: AlphafinderUser = Depends(get_current_user)):
         return {"message": "User deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/profile")
+def get_profile(
+    user_id: Optional[int] = Query(None, description="보여질 페이지의 사용자 ID, default: 현재 로그인한 사용자"),
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: UserProfileService = Depends(get_user_profile_service),
+) -> BaseResponse[UserProfileResponse]:
+    data = service.get_user_profile(current_user, user_id)
+    return BaseResponse(status_code=200, message="Profile retrieved successfully", data=data)
