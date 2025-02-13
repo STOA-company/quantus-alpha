@@ -4,7 +4,7 @@ from sqlalchemy import text
 from app.common.constants import UTC
 from app.core.exception.custom import PostException, TooManyStockTickersException
 from app.models.models_users import AlphafinderUser
-from app.modules.common.enum import Lang
+from app.modules.common.enum import TranslateCountry
 from .schemas import (
     CommentCreate,
     CommentItem,
@@ -690,9 +690,11 @@ class CommunityService:
             for post in posts
         ]
 
-    async def get_trending_stocks(self, limit: int = 5, lang: Lang = Lang.KR) -> List[TrendingStockResponse]:
+    async def get_trending_stocks(
+        self, limit: int = 5, lang: TranslateCountry = TranslateCountry.KO
+    ) -> List[TrendingStockResponse]:
         """실시간 인기 종목 조회 (24시간)"""
-        name_field = "si.kr_name" if lang == Lang.KR else "si.en_name"
+        name_field = "si.kr_name" if lang == TranslateCountry.KO else "si.en_name"
 
         query = f"""
             SELECT

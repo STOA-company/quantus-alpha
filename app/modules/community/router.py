@@ -1,5 +1,5 @@
 from typing import List, Optional
-from app.modules.common.enum import Lang
+from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.community.enum import PostOrderBy
 from app.modules.community.schemas import (
@@ -220,7 +220,7 @@ async def get_trending_posts(
 @router.get("/trending/stocks", response_model=BaseResponse[List[TrendingStockResponse]], summary="실시간 인기 종목 조회")
 async def get_trending_stocks(
     limit: int = Query(5, description="조회할 종목 수", ge=1, le=50),
-    lang: Optional[Lang] = Query(Lang.KR, description="언어 설정 (kr/en)"),
+    lang: Optional[TranslateCountry] = Query(TranslateCountry.KO, description="언어 설정 (ko/en)"),
     community_service: CommunityService = Depends(get_community_service),
 ):
     trending_stocks = await community_service.get_trending_stocks(limit=limit, lang=lang)
