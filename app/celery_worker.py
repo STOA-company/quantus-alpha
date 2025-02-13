@@ -292,6 +292,18 @@ def kr_stock_minute_batch():
         return
 
 
+@CELERY_APP.task(name="kr_stock_minute_batch_last", ignore_result=True)
+def kr_stock_minute_batch_last():
+    """한국 주식 분봉 데이터 업데이트 (장 마감 전)"""
+    notifier.notify_info("KR_stock_minute_batch_last process started")
+    try:
+        collect_kr_stock_minute_data(last=True)
+        notifier.notify_success("KR_stock_minute_batch_last process completed")
+    except Exception as e:
+        notifier.notify_error(f"KR_stock_minute_batch_last process failed: {str(e)}")
+        raise
+
+
 @CELERY_APP.task(name="process_outliers_kr", ignore_result=True)
 def process_outliers_kr():
     """한국 주식 이상치 처리"""
