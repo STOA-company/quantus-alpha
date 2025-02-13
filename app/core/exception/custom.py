@@ -92,7 +92,7 @@ class CommunityException(CustomException):
 
 
 class PostException(CommunityException):
-    def __init__(self, message: str, status_code: int, post_id: int):
+    def __init__(self, message: str, status_code: int, post_id: Optional[int] = None):
         super().__init__(
             message=message,
             status_code=status_code,

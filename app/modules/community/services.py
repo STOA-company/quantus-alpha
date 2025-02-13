@@ -27,6 +27,10 @@ class CommunityService:
     async def create_post(self, current_user: AlphafinderUser, post_create: PostCreate) -> bool:
         """게시글 생성"""
         current_time = datetime.now(UTC)
+        is_stock_ticker = self._is_stock_ticker(post_create.stock_tickers)
+        if not is_stock_ticker:
+            raise PostException(message="종목 코드가 유효하지 않습니다", status_code=400)
+
         user_id = current_user[0][0]
 
         insert_query = text("""
@@ -71,6 +75,20 @@ class CommunityService:
             self.db._insert("post_stocks", stock_data)
 
         return True
+
+    def _is_stock_ticker(self, stock_tickers: List[str]) -> bool:
+        """종목 코드 유효성 검사"""
+        if not stock_tickers:
+            return True
+
+        query = """
+            SELECT COUNT(DISTINCT ticker)
+            FROM stock_information
+            WHERE ticker IN :stock_tickers AND is_activate = 1
+        """
+        result = self.db._execute(text(query), {"stock_tickers": stock_tickers})
+        count = result.scalar()
+        return count == len(stock_tickers)
 
     async def get_post_detail(self, current_user: AlphafinderUser, post_id: int) -> ResponsePost:
         """게시글 상세 조회"""
@@ -220,6 +238,10 @@ class CommunityService:
     async def update_post(self, current_user: AlphafinderUser, post_id: int, post_update: PostUpdate) -> bool:
         """게시글 수정"""
         user_id = current_user[0][0] if current_user else None
+        is_stock_ticker = self._is_stock_ticker(post_update.stock_tickers)
+        if not is_stock_ticker:
+            raise PostException(message="종목 코드가 유효하지 않습니다", status_code=400)
+
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
