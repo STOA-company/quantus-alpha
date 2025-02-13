@@ -122,6 +122,10 @@ CELERY_APP.conf.beat_schedule = {
         "task": "process_outliers_kr",
         "schedule": crontab(hour="09", minute="05"),
     },
+    "iscd_stat_cls_code_batch": {
+        "task": "iscd_stat_cls_code_batch",
+        "schedule": crontab(hour="08", minute="00"),
+    },
     # 메모리 상태 체크
     "memory-status": {
         "task": "memory-status",
