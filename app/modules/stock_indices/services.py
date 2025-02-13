@@ -82,26 +82,27 @@ class StockIndicesService:
                 if not is_market_open or cache_age < 60:
                     return cached_data
 
-            target_date = now.date()
+            latest_date_result = self.db._select(
+                table="stock_indices_1m", columns=["date"], ticker=market, order="date", ascending=False, limit=1
+            )
 
-            while True:
-                result = self.db._select(
-                    table="stock_indices_1m",
-                    columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
-                    order="date",
-                    ascending=False,
-                    ticker=market,
-                    date__gte=target_date.strftime("%Y-%m-%d 00:00:00"),
-                    date__lt=(target_date + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00"),
-                )
+            if not latest_date_result:
+                raise ValueError(f"No data found for market: {market}")
 
-                if result:
-                    break
+            target_date = latest_date_result[0].date.date()
 
-                target_date -= timedelta(days=1)
+            result = self.db._select(
+                table="stock_indices_1m",
+                columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
+                order="date",
+                ascending=False,
+                ticker=market,
+                date__gte=target_date.strftime("%Y-%m-%d 00:00:00"),
+                date__lt=(target_date + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00"),
+            )
 
-                if target_date < datetime(2000, 1, 1).date():
-                    raise ValueError("No data found for market: {market} in the available date range.")
+            if not result:
+                raise ValueError(f"No data found for market: {market} on {target_date}")
 
             prev_close = float(result[0].close) if result else 0.0
             min1_data = {}
@@ -113,8 +114,10 @@ class StockIndicesService:
                 columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
                 ticker=market,
                 date__lt=target_date.strftime("%Y-%m-%d 00:00:00"),
+                date__gte=(target_date - timedelta(days=10)).strftime("%Y-%m-%d 00:00:00"),
                 order="date",
                 ascending=False,
+                limit=1,
             )
 
             for row in result:
@@ -127,14 +130,15 @@ class StockIndicesService:
                     volume=round(float(row.volume), 2),
                 )
 
-            prev_timestamp = prev_result[0].date.strftime("%Y-%m-%d %H:%M:%S")
-            min1_data[prev_timestamp] = TimeData(
-                open=round(float(prev_result[0].open), 2),
-                high=round(float(prev_result[0].high), 2),
-                low=round(float(prev_result[0].low), 2),
-                close=round(float(prev_result[0].close), 2),
-                volume=round(float(prev_result[0].volume), 2),
-            )
+            if prev_result:
+                prev_timestamp = prev_result[0].date.strftime("%Y-%m-%d %H:%M:%S")
+                min1_data[prev_timestamp] = TimeData(
+                    open=round(float(prev_result[0].open), 2),
+                    high=round(float(prev_result[0].high), 2),
+                    low=round(float(prev_result[0].low), 2),
+                    close=round(float(prev_result[0].close), 2),
+                    volume=round(float(prev_result[0].volume), 2),
+                )
 
             market_data = {
                 "daily": {
