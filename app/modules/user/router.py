@@ -1,10 +1,8 @@
-from typing import List
 from fastapi import APIRouter, Depends, File, UploadFile
 from app.models.models_users import AlphafinderUser
 from app.utils.oauth_utils import get_current_user
 from app.modules.user.service import delete_user
-from app.modules.user.schemas import UserInfoResponse
-from app.modules.user.schemas import RefreshTokenResponse
+from app.modules.user.schemas import UserInfoResponse, SignupRequest, RefreshTokenResponse
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose.exceptions import JWTError
@@ -18,11 +16,12 @@ security = HTTPBearer()
 
 @router.post("/signup")
 async def signup(
-    email_token: str,
-    nickname: str,
+    request: SignupRequest,
     profile_image: UploadFile = File(...),
-    favorite_stock: List[str] = [],
 ):
+    email_token = request.email_token
+    nickname = request.nickname
+    favorite_stock = request.favorite_stock
     email = decode_email_token(email_token)["sub"]
     user = create_user(email, nickname, profile_image, favorite_stock)
     access_token = create_jwt_token(user.id)
