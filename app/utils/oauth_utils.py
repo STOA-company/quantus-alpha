@@ -35,6 +35,22 @@ def create_refresh_token(user_id: int) -> str:
     return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
+def create_email_token(email: str) -> str:
+    """이메일 토큰 생성"""
+    expire = datetime.utcnow() + timedelta(days=1)
+    to_encode = {"exp": expire, "sub": email, "iat": datetime.utcnow(), "type": "email"}
+    return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def decode_email_token(token: str):
+    try:
+        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
 def refresh_access_token(credentials):
     try:
         # JWT 토큰 디코딩 및 검증

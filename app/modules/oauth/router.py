@@ -4,12 +4,11 @@ from google.auth.transport import requests
 import httpx
 import os
 import logging
-from app.utils.oauth_utils import create_jwt_token, create_refresh_token
-from app.modules.user.service import get_user_by_email, create_user
+from app.utils.oauth_utils import create_email_token, create_jwt_token, create_refresh_token
 from app.modules.oauth.schemas import (
     GoogleLoginResponse,
-    GoogleCallbackResponse,
 )
+from app.modules.user.service import get_user_by_email
 from fastapi.responses import RedirectResponse
 from urllib.parse import urlencode
 
@@ -40,7 +39,7 @@ def google_login():
     return GoogleLoginResponse(oauth_url=f"{GOOGLE_AUTH_URL}?{query_string}")
 
 
-@router.get("/google/callback", response_model=GoogleCallbackResponse)
+@router.get("/google/callback")
 def google_callback(code: str):
     """Google OAuth 콜백 처리"""
     try:
@@ -69,32 +68,28 @@ def google_callback(code: str):
             )
 
             email = google_user["email"]
-
             user = get_user_by_email(email)
-
-            is_login = True
-
+            is_login = False
             if not user:
-                logger.info("user not found, create user")
-                create_user(email, "google")
-                is_login = False
-                user = get_user_by_email(email)
-                if not user:
-                    raise HTTPException(status_code=500, detail="Failed to create user")
-
-            access_token = create_jwt_token(user.id)
-            refresh_token = create_refresh_token(user.id)
-            logger.info(f"access_token: {access_token}")
+                email_token = create_email_token(email)
+            else:
+                access_token = create_jwt_token(user.id)
+                refresh_token = create_refresh_token(user.id)
+                is_login = True
 
             FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
-            params = {
-                "access_token": access_token,
-                "refresh_token": refresh_token,
-                "user_id": user.id,
-                "email": user.email,
-                "is_login": is_login,
-            }
+            if is_login:
+                params = {
+                    "is_login": True,
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                }
+            else:
+                params = {
+                    "is_login": False,
+                    "email_token": email_token,
+                }
 
             redirect_url = f"{FRONTEND_URL}/oauth/callback?{urlencode(params)}"
             logger.info(f"redirect_url: {redirect_url}")
