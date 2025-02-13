@@ -166,7 +166,8 @@ def iscd_stat_cls_code_batch():
     api = KISAPIManager().get_api()
     cared_tickers = []
     warned_tickers = []
-    tickers = database._select(table="stock_trend", columns=["ticker"])
+    tickers = database._select(table="stock_trend", columns=["ticker"], ctry="kr")
+    tickers = [ticker[0] for ticker in tickers]
     for ticker in tickers:
         iscd_stat_cls_code = api.iscd_stat_cls_code(ticker)
         logger.info(iscd_stat_cls_code)

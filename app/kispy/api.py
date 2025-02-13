@@ -28,20 +28,33 @@ class KISAPI(BaseAPI):
         super().__init__(auth=auth)
 
     def _get_access_token(self) -> str:
-        try:
-            url = f"{self.base_url}/oauth2/tokenP"
-            data = {"grant_type": "client_credentials", "appkey": self.app_key, "appsecret": self.app_secret}
-            response = requests.post(url, json=data)
-            response.raise_for_status()  # HTTP 에러 체크
+        max_attempts = 3
+        attempt = 0
+        wait_time = 2
 
-            response_data = response.json()
-            if not response_data.get("access_token"):
-                raise ValueError("No access token in response")
+        while attempt < max_attempts:
+            try:
+                url = f"{self.base_url}/oauth2/tokenP"
+                data = {"grant_type": "client_credentials", "appkey": self.app_key, "appsecret": self.app_secret}
+                response = requests.post(url, json=data)
+                response.raise_for_status()  # HTTP 에러 체크
 
-            return response_data["access_token"]
-        except Exception as e:
-            logger.error(f"Error getting access token: {str(e)}")
-            raise
+                response_data = response.json()
+                if not response_data.get("access_token"):
+                    raise ValueError("No access token in response")
+
+                return response_data["access_token"]
+            except requests.exceptions.HTTPError as e:
+                logger.error(f"HTTPError on attempt {attempt + 1}: {str(e)}")
+                attempt += 1
+                if attempt < max_attempts:
+                    logger.info(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+            except Exception as e:
+                logger.error(f"Error getting access token: {str(e)}")
+                raise
+
+        raise Exception("Failed to get access token after multiple attempts")
 
     def refresh_token(self) -> bool:
         """토큰 갱신 메서드"""
@@ -444,11 +457,11 @@ class KISAPI(BaseAPI):
                 response.raise_for_status()  # HTTP 에러 체크
                 stock_info = json.loads(response.text)
 
-                print(stock_info)
-
                 if stock_info.get("rt_cd") == "0":  # 성공 응답
                     output = stock_info.get("output", {})
-                    return output.get("iscd_stat_cls_code")
+                    code = output.get("iscd_stat_cls_code")
+                    logger.info(f"iscd_stat_cls_code: {code}")
+                    return code
 
                 elif stock_info.get("msg_cd") == "EGW00121":  # 토큰 만료
                     logger.warning("Token expired, refreshing token...")
