@@ -726,15 +726,20 @@ class CommunityService:
     ) -> List[TrendingPostResponse]:
         """실시간 인기 게시글 조회 (24시간)"""
         query = """
+            WITH post_likes_count AS (
+                SELECT post_id, COUNT(*) as daily_likes
+                FROM post_likes
+                WHERE created_at >= UTC_TIMESTAMP() - INTERVAL 24 HOUR
+                GROUP BY post_id
+            )
             SELECT
                 p.id, p.title, p.created_at,
-                ROW_NUMBER() OVER (ORDER BY ps.daily_likes DESC, ps.last_liked_at DESC) as rank,
+                ROW_NUMBER() OVER (ORDER BY COALESCE(plc.daily_likes, 0) DESC, p.created_at DESC) as rank_num,
                 u.id as user_id, u.nickname, u.profile_image
             FROM posts p
-            JOIN post_statistics ps ON p.id = ps.post_id
+            LEFT JOIN post_likes_count plc ON p.id = plc.post_id
             LEFT JOIN alphafinder_user u ON p.user_id = u.id
-            WHERE ps.last_liked_at >= UTC_TIMESTAMP() - INTERVAL 24 HOUR
-            ORDER BY ps.daily_likes DESC, ps.last_liked_at DESC
+            ORDER BY COALESCE(plc.daily_likes, 0) DESC, p.created_at DESC
             LIMIT :limit
         """
 
@@ -744,7 +749,7 @@ class CommunityService:
         return [
             TrendingPostResponse(
                 id=post["id"],
-                rank=post["rank"],
+                rank=post["rank_num"],
                 title=post["title"],
                 created_at=post["created_at"],
                 user_info=UserInfo(
