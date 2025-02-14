@@ -32,7 +32,7 @@ class CommunityService:
         if not is_stock_ticker:
             raise PostException(message="종목 코드가 유효하지 않습니다", status_code=400)
 
-        user_id = current_user[0][0]
+        user_id = current_user[0]
 
         insert_query = text("""
                 INSERT INTO posts (
@@ -93,7 +93,7 @@ class CommunityService:
 
     async def get_post_detail(self, current_user: AlphafinderUser, post_id: int) -> ResponsePost:
         """게시글 상세 조회"""
-        current_user_id = current_user[0][0] if current_user else None
+        current_user_id = current_user[0] if current_user else None
 
         # 1. 게시글, 작성자, 카테고리 정보 조회
         query = """
@@ -158,7 +158,7 @@ class CommunityService:
         order_by: str = "created_at",
     ) -> List[ResponsePost]:
         """게시글 목록 조회"""
-        current_user_id = current_user[0][0] if current_user else None
+        current_user_id = current_user[0] if current_user else None
         order_by = order_by.value
 
         base_query = """
@@ -238,7 +238,7 @@ class CommunityService:
 
     async def update_post(self, current_user: AlphafinderUser, post_id: int, post_update: PostUpdate) -> bool:
         """게시글 수정"""
-        user_id = current_user[0][0] if current_user else None
+        user_id = current_user[0] if current_user else None
         is_stock_ticker = self._is_stock_ticker(post_update.stock_tickers)
         if not is_stock_ticker:
             raise PostException(message="종목 코드가 유효하지 않습니다", status_code=400)
@@ -287,7 +287,7 @@ class CommunityService:
 
     async def delete_post(self, current_user: AlphafinderUser, post_id: int) -> bool:
         """게시글 삭제"""
-        user_id = current_user[0][0] if current_user else None
+        user_id = current_user[0] if current_user else None
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
@@ -314,7 +314,7 @@ class CommunityService:
     async def create_comment(self, current_user: AlphafinderUser, post_id: int, comment_create: CommentCreate) -> bool:
         """댓글 생성"""
         current_time = datetime.now(UTC)
-        user_id = current_user[0][0] if current_user else None
+        user_id = current_user[0] if current_user else None
 
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
@@ -377,7 +377,7 @@ class CommunityService:
         self, current_user: Optional[AlphafinderUser], post_id: int, offset: int = 0, limit: int = 20
     ) -> Tuple[List[CommentItem], bool]:
         """댓글 목록 조회"""
-        current_user_id = current_user[0][0] if current_user else None
+        current_user_id = current_user[0] if current_user else None
 
         # 1. 원댓글 조회 (limit + 1개)
         parent_query = """
@@ -488,7 +488,7 @@ class CommunityService:
     async def update_comment(self, current_user: AlphafinderUser, comment_id: int, comment_update: CommentUpdate) -> bool:
         """댓글 수정"""
         current_time = datetime.now(UTC)
-        user_id = current_user[0][0] if current_user else None
+        user_id = current_user[0] if current_user else None
 
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
@@ -514,7 +514,7 @@ class CommunityService:
 
     async def delete_comment(self, current_user: AlphafinderUser, comment_id: int) -> bool:
         """댓글 삭제"""
-        user_id = current_user[0][0] if current_user else None
+        user_id = current_user[0] if current_user else None
 
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
@@ -552,7 +552,7 @@ class CommunityService:
     async def update_post_like(self, current_user: AlphafinderUser, post_id: int, is_liked: bool) -> Tuple[bool, int]:
         """게시글 좋아요 상태 업데이트"""
         current_time = datetime.now(UTC)
-        user_id = current_user[0][0] if current_user else None
+        user_id = current_user[0] if current_user else None
 
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
@@ -591,7 +591,7 @@ class CommunityService:
     ) -> Tuple[bool, int]:
         """댓글 좋아요 상태 업데이트"""
         current_time = datetime.now(UTC)
-        user_id = current_user[0][0] if current_user else None
+        user_id = current_user[0] if current_user else None
 
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
@@ -639,7 +639,7 @@ class CommunityService:
     ) -> Tuple[bool, int]:
         """게시글 북마크 상태 업데이트"""
         current_time = datetime.now(UTC)
-        user_id = current_user[0][0] if current_user else None
+        user_id = current_user[0] if current_user else None
 
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
