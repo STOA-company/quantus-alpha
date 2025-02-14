@@ -4,7 +4,7 @@ from google.auth.transport import requests
 import httpx
 import os
 import logging
-from app.utils.oauth_utils import create_email_token, create_jwt_token, create_refresh_token
+from app.utils.oauth_utils import create_email_token, create_jwt_token, create_refresh_token, store_token
 from app.modules.oauth.schemas import (
     GoogleLoginResponse,
 )
@@ -70,6 +70,7 @@ def google_callback(code: str):
             email = google_user["email"]
             user = get_user_by_email(email)
             is_login = False
+
             if not user:
                 email_token = create_email_token(email)
             else:
@@ -79,11 +80,12 @@ def google_callback(code: str):
 
             FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
+            access_token_hash = store_token(access_token, refresh_token)
+
             if is_login:
                 params = {
                     "is_login": True,
-                    "access_token": access_token,
-                    "refresh_token": refresh_token,
+                    "access_token_hash": access_token_hash,
                 }
             else:
                 params = {
