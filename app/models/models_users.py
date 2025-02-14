@@ -29,3 +29,13 @@ class UserStockInterest(BaseMixin, Base):
         BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=True, index=True
     )
     ticker: Mapped[String] = mapped_column(String(length=20), nullable=False)
+
+
+class AlphaFinderOAuthToken(BaseMixin, Base):
+    __tablename__ = "alphafinder_oauth_token"
+    __table_args__ = {"extend_existing": True}
+
+    id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    access_token_hash: Mapped[String] = mapped_column(String(length=64), index=True, nullable=False)
+    refresh_token: Mapped[String] = mapped_column(String(length=1000), nullable=False)
+    access_token: Mapped[String] = mapped_column(String(length=1000), nullable=False)

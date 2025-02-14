@@ -258,6 +258,18 @@ def get_overseas_index_data(ticker: str):
 
 def get_domestic_index_data(ticker: str):
     result = kisapi.get_domestic_index_minute(period="1m", market=ticker)
+    logging.info(f"result: {result}")
+    logging.info(f"type: {type(result)}")
+
+    if isinstance(result, dict):
+        result = [result]
+
+    if not result or not isinstance(result, list):
+        raise ValueError(f"Invalid result: {result}")
+
+    if len(result) == 0:
+        return pd.DataFrame()
+
     df = pd.DataFrame(result)
 
     # 시간을 정수로 변환하여 필터링 (9:00 ~ 15:30)
@@ -407,9 +419,9 @@ def _is_market_open(ticker: str) -> bool:
         return check_market_status("KR")
 
 
-if __name__ == "__main__":
-    # logging.info("Starting US market batch job from command line")
-    # kr_run_stock_indices_batch()
+# if __name__ == "__main__":
+# logging.info("Starting US market batch job from command line")
+# kr_run_stock_indices_batch()
 
-    get_stock_indices_data("KOSPI")
-    # get_stock_indices_data("KOSDAQ")
+# get_stock_indices_data("KOSPI")
+# get_stock_indices_data("KOSDAQ")
