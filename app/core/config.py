@@ -34,8 +34,11 @@ class Settings(BaseSettings):
     RABBITMQ_PASSWORD: str = os.getenv("RABBITMQ_PASSWORD", "admin")
     RABBITMQ_PORT: int = os.getenv("RABBITMQ_PORT", 5672)
 
-    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
+    # Redis
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "redis")
     REDIS_PORT: int = os.getenv("REDIS_PORT", 6379)
+    REDIS_DB: int = os.getenv("REDIS_DB", 0)
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
 
     CELERY_CONCURRENCY: int = os.getenv("CELERY_CONCURRENCY", 7)
 
