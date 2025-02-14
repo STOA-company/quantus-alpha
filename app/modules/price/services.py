@@ -507,7 +507,15 @@ class PriceService:
             change_rate_column = "change_rt"
             query_result = self.database._select(
                 table="stock_trend",
-                columns=["ticker", "current_price", "prev_close", change_rate_column, "is_trading_stopped"],
+                columns=[
+                    "ticker",
+                    "current_price",
+                    "prev_close",
+                    change_rate_column,
+                    "is_trading_stopped",
+                    "is_cared",
+                    "is_warned",
+                ],
                 ascending=False,
                 limit=1,
                 **conditions,  # conditions를 언패킹하여 전달
@@ -528,6 +536,8 @@ class PriceService:
                 price_change=float(price_change),
                 price_change_rate=float(price_change_rate),
                 is_trading_stopped=record.is_trading_stopped,
+                is_cared=record.is_cared if record.is_cared is not None else False,
+                is_warned=record.is_warned if record.is_warned is not None else False,
             )
 
             return BaseResponse(status_code=200, message="Data retrieved successfully", data=result)
