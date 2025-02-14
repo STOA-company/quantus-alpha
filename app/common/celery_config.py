@@ -145,4 +145,8 @@ CELERY_APP.conf.beat_schedule = {
         "task": "community_trending_post_update",
         "schedule": crontab(minute="4,9,14,19,24,29,34,39,44,49,54,59"),
     },
+    "reset-daily-leaderboard": {
+        "task": "reset_daily_leaderboard",
+        "schedule": crontab(hour="0", minute="0"),
+    },
 }
