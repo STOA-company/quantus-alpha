@@ -178,6 +178,7 @@ class TrendingStockResponse(BaseModel):
     rank: int
     ticker: str
     name: str
+    ctry: str
 
 
 ### 카테고리 스키마 ###

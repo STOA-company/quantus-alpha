@@ -726,15 +726,20 @@ class CommunityService:
     ) -> List[TrendingPostResponse]:
         """실시간 인기 게시글 조회 (24시간)"""
         query = """
+            WITH post_likes_count AS (
+                SELECT post_id, COUNT(*) as daily_likes
+                FROM post_likes
+                WHERE created_at >= UTC_TIMESTAMP() - INTERVAL 24 HOUR
+                GROUP BY post_id
+            )
             SELECT
                 p.id, p.title, p.created_at,
-                ROW_NUMBER() OVER (ORDER BY ps.daily_likes DESC, ps.last_liked_at DESC) as rank,
+                ROW_NUMBER() OVER (ORDER BY COALESCE(plc.daily_likes, 0) DESC, p.created_at DESC) as rank_num,
                 u.id as user_id, u.nickname, u.profile_image
             FROM posts p
-            JOIN post_statistics ps ON p.id = ps.post_id
+            LEFT JOIN post_likes_count plc ON p.id = plc.post_id
             LEFT JOIN alphafinder_user u ON p.user_id = u.id
-            WHERE ps.last_liked_at >= UTC_TIMESTAMP() - INTERVAL 24 HOUR
-            ORDER BY ps.daily_likes DESC, ps.last_liked_at DESC
+            ORDER BY COALESCE(plc.daily_likes, 0) DESC, p.created_at DESC
             LIMIT :limit
         """
 
@@ -744,7 +749,7 @@ class CommunityService:
         return [
             TrendingPostResponse(
                 id=post["id"],
-                rank=post["rank"],
+                rank=post["rank_num"],
                 title=post["title"],
                 created_at=post["created_at"],
                 user_info=UserInfo(
@@ -763,21 +768,32 @@ class CommunityService:
         name_field = "si.kr_name" if lang == TranslateCountry.KO else "si.en_name"
 
         query = f"""
+            WITH recent_stock_mentions AS (
+                SELECT ps.stock_ticker, COUNT(*) as mention_count
+                FROM posts p
+                JOIN post_stocks ps ON p.id = ps.post_id
+                WHERE p.created_at >= UTC_TIMESTAMP() - INTERVAL 24 HOUR
+                GROUP BY ps.stock_ticker
+            )
             SELECT
-                ROW_NUMBER() OVER (ORDER BY s.daily_post_count DESC, s.last_tagged_at DESC) as rank,
-                s.stock_ticker as ticker,
-                {name_field} as name
-            FROM stock_statistics s
-            JOIN stock_information si ON s.stock_ticker = si.ticker
-            WHERE s.last_tagged_at >= UTC_TIMESTAMP() - INTERVAL 24 HOUR
-            ORDER BY s.daily_post_count DESC, s.last_tagged_at DESC
+                ROW_NUMBER() OVER (ORDER BY rsm.mention_count DESC) as rank_num,
+                rsm.stock_ticker as ticker,
+                {name_field} as name,
+                si.ctry as ctry,
+                rsm.mention_count
+            FROM recent_stock_mentions rsm
+            JOIN stock_information si ON rsm.stock_ticker = si.ticker
+            ORDER BY rsm.mention_count DESC, ticker ASC
             LIMIT :limit
         """
 
         result = self.db._execute(text(query), {"limit": limit})
         stocks = result.mappings().all()
 
-        return [TrendingStockResponse(id=stock["rank"], ticker=stock["ticker"], name=stock["name"]) for stock in stocks]
+        return [
+            TrendingStockResponse(rank=stock["rank_num"], ticker=stock["ticker"], name=stock["name"], ctry=stock["ctry"])
+            for stock in stocks
+        ]
 
     async def get_categories(self) -> List[CategoryResponse]:
         """카테고리 리스트 조회"""
