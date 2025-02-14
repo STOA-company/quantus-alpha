@@ -1,4 +1,5 @@
 import os
+import hashlib
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
 from fastapi import HTTPException, Security
@@ -6,6 +7,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.models.models_users import AlphafinderUser
 from app.database.crud import database
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -51,28 +55,6 @@ def decode_email_token(token: str):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-def refresh_access_token(credentials):
-    try:
-        # JWT 토큰 디코딩 및 검증
-        payload = decode_jwt_token(credentials.credentials)
-
-        # 리프레시 토큰 검증
-        if payload.get("type") != "refresh":
-            raise HTTPException(status_code=400, detail="Invalid token type")
-
-        # 사용자 조회
-        user_id = int(payload.get("sub"))
-        user = database._select(table="alphafinder_user", id=user_id)
-
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        return create_jwt_token(user.id)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 def decode_jwt_token(token: str):
     try:
         return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
@@ -96,10 +78,46 @@ async def get_current_user(
     )
 
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        user_id = int(payload.get("sub"))
-        if user_id is None:
+        hashed_token = credentials.credentials
+
+        token_record = database._select(table="alphafinder_oauth_token", access_token_hash=hashed_token)
+
+        if not token_record:
             raise credentials_exception
+
+        token_data = token_record[0]
+
+        try:
+            payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+            user_id = int(payload.get("sub"))
+            if user_id is None:
+                raise credentials_exception
+
+        except jwt.ExpiredSignatureError:
+            try:
+                refresh_payload = jwt.decode(token_data.refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+
+                user_id = int(refresh_payload.get("sub"))
+                if user_id is None:
+                    raise credentials_exception
+                new_access_token = create_jwt_token(user_id)
+                new_hashed_token = hashlib.sha256(new_access_token.encode()).hexdigest()
+
+                database._update(
+                    table="alphafinder_oauth_token",
+                    where={"access_token_hash": hashed_token},
+                    access_token=new_access_token,
+                    access_token_hash=new_hashed_token,
+                )
+
+            except jwt.ExpiredSignatureError:
+                database._delete(table="alphafinder_oauth_token", access_token_hash=hashed_token)
+                raise HTTPException(
+                    status_code=401,
+                    detail="Token has expired. Please log in again",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
     except JWTError:
         raise credentials_exception
 
@@ -108,3 +126,34 @@ async def get_current_user(
         raise credentials_exception
 
     return user[0]
+
+
+def store_token(access_token: str, refresh_token: str):
+    try:
+        access_token_hash = hashlib.sha256(access_token.encode()).hexdigest()
+
+        existing_token = database._select(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
+
+        if existing_token:
+            database._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
+
+        database._insert(
+            table="alphafinder_oauth_token",
+            sets={
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "access_token_hash": access_token_hash,
+            },
+        )
+        logger.info(f"Token stored: {access_token} {refresh_token}")
+        return access_token_hash
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def delete_token(access_token_hash: str):
+    try:
+        database._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
+        logger.info(f"Token deleted: {access_token_hash}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
