@@ -17,7 +17,7 @@ JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM")
 
 # Security configurations
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 def create_jwt_token(user_id: int, expires_delta: timedelta = None) -> str:
