@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from app.database.crud import database
 from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
 from app.utils.date_utils import check_market_status
-from app.core.config import korea_tz, utc_tz
+from app.core.config import korea_tz
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -32,15 +32,15 @@ class StockIndicesService:
 
     def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
         try:
-            cache_key = f"{market}_ratio"
-            now = datetime.now(utc_tz).astimezone(korea_tz)
-            is_market_open = check_market_status("KR") if market in ["kospi", "kosdaq"] else check_market_status("US")
+            # cache_key = f"{market}_ratio"
+            # now = datetime.now(utc_tz).astimezone(korea_tz)
+            # is_market_open = check_market_status("KR") if market in ["kospi", "kosdaq"] else check_market_status("US")
 
-            if cache_key in self._cache:
-                data, timestamp = self._cache[cache_key]
-                cache_age = (now - timestamp).total_seconds()
-                if not is_market_open or cache_age < 60:
-                    return data
+            # if cache_key in self._cache:
+            #     data, timestamp = self._cache[cache_key]
+            #     cache_age = (now - timestamp).total_seconds()
+            #     if not is_market_open or cache_age < 60:
+            #         return data
 
             result = self.db._select(
                 table="stock_indices",
@@ -62,7 +62,7 @@ class StockIndicesService:
                 round(unchanged_ratio, 2),
             )
 
-            self._cache[cache_key] = (ratios, now)
+            # self._cache[cache_key] = (ratios, now)
             return ratios
 
         except Exception as e:
@@ -71,37 +71,38 @@ class StockIndicesService:
 
     def _fetch_market_data(self, market: str):
         try:
-            cache_key = f"{market}_data"
-            now = datetime.now(utc_tz).astimezone(korea_tz)
-            country = "KR" if market in ["kospi", "kosdaq"] else "US"
-            is_market_open = check_market_status(country)
+            # cache_key = f"{market}_data"
+            # now = datetime.now(utc_tz).astimezone(korea_tz)
+            # country = "KR" if market in ["kospi", "kosdaq"] else "US"
+            # is_market_open = check_market_status(country)
 
-            if cache_key in self._cache:
-                cached_data, timestamp = self._cache[cache_key]
-                cache_age = (now - timestamp).total_seconds()
-                if not is_market_open or cache_age < 60:
-                    return cached_data
+            # if cache_key in self._cache:
+            #     cached_data, timestamp = self._cache[cache_key]
+            #     cache_age = (now - timestamp).total_seconds()
+            #     if not is_market_open or cache_age < 60:
+            #         return cached_data
 
-            target_date = now.date()
+            latest_date_result = self.db._select(
+                table="stock_indices_1m", columns=["date"], ticker=market, order="date", ascending=False, limit=1
+            )
 
-            while True:
-                result = self.db._select(
-                    table="stock_indices_1m",
-                    columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
-                    order="date",
-                    ascending=False,
-                    ticker=market,
-                    date__gte=target_date.strftime("%Y-%m-%d 00:00:00"),
-                    date__lt=(target_date + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00"),
-                )
+            if not latest_date_result:
+                raise ValueError(f"No data found for market: {market}")
 
-                if result:
-                    break
+            target_date = latest_date_result[0].date.date()
 
-                target_date -= timedelta(days=1)
+            result = self.db._select(
+                table="stock_indices_1m",
+                columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
+                order="date",
+                ascending=False,
+                ticker=market,
+                date__gte=target_date.strftime("%Y-%m-%d 00:00:00"),
+                date__lt=(target_date + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00"),
+            )
 
-                if target_date < datetime(2000, 1, 1).date():
-                    raise ValueError("No data found for market: {market} in the available date range.")
+            if not result:
+                raise ValueError(f"No data found for market: {market} on {target_date}")
 
             prev_close = float(result[0].close) if result else 0.0
             min1_data = {}
@@ -113,8 +114,10 @@ class StockIndicesService:
                 columns=["date", "open", "high", "low", "close", "volume", "change", "change_rate"],
                 ticker=market,
                 date__lt=target_date.strftime("%Y-%m-%d 00:00:00"),
+                date__gte=(target_date - timedelta(days=10)).strftime("%Y-%m-%d 00:00:00"),
                 order="date",
                 ascending=False,
+                limit=1,
             )
 
             for row in result:
@@ -127,14 +130,15 @@ class StockIndicesService:
                     volume=round(float(row.volume), 2),
                 )
 
-            prev_timestamp = prev_result[0].date.strftime("%Y-%m-%d %H:%M:%S")
-            min1_data[prev_timestamp] = TimeData(
-                open=round(float(prev_result[0].open), 2),
-                high=round(float(prev_result[0].high), 2),
-                low=round(float(prev_result[0].low), 2),
-                close=round(float(prev_result[0].close), 2),
-                volume=round(float(prev_result[0].volume), 2),
-            )
+            if prev_result:
+                prev_timestamp = prev_result[0].date.strftime("%Y-%m-%d %H:%M:%S")
+                min1_data[prev_timestamp] = TimeData(
+                    open=round(float(prev_result[0].open), 2),
+                    high=round(float(prev_result[0].high), 2),
+                    low=round(float(prev_result[0].low), 2),
+                    close=round(float(prev_result[0].close), 2),
+                    volume=round(float(prev_result[0].volume), 2),
+                )
 
             market_data = {
                 "daily": {
@@ -146,7 +150,7 @@ class StockIndicesService:
                 "min1": min1_data,
             }
 
-            self._cache[cache_key] = (market_data, now)
+            # self._cache[cache_key] = (market_data, now)
             return market_data
 
         except Exception as e:
