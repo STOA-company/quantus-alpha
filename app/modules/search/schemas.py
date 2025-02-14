@@ -14,6 +14,7 @@ class SearchItem(BaseModel):
 class CommunitySearchItem(BaseModel):
     ticker: str
     name: str
+    ctry: str
 
 
 class SearchResponse(BaseModel):

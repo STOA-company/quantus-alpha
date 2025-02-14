@@ -84,8 +84,11 @@ async def update_post(
     community_service: CommunityService = Depends(get_community_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
-    post = await community_service.update_post(current_user=current_user, post_id=post_id, post_update=post_update)
-    return BaseResponse(status_code=200, message="게시글을 수정하였습니다.", data=post)
+    result, post_id = await community_service.update_post(
+        current_user=current_user, post_id=post_id, post_update=post_update
+    )
+    data = {"success": result, "post_id": post_id}
+    return BaseResponse(status_code=200, message="게시글을 수정하였습니다.", data=data)
 
 
 @router.delete("/posts/{post_id}", response_model=BaseResponse[bool], summary="게시글 삭제")
