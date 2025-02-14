@@ -32,7 +32,7 @@ class UserStockInterest(BaseMixin, Base):
 
 
 class AlphaFinderOAuthToken(BaseMixin, Base):
-    __tablename__ = "user_token"
+    __tablename__ = "alphafinder_oauth_token"
     __table_args__ = {"extend_existing": True}
 
     id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
