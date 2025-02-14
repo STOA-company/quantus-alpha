@@ -279,7 +279,7 @@ class CommunityService:
             for post in posts
         ]
 
-    async def update_post(self, current_user: AlphafinderUser, post_id: int, post_update: PostUpdate) -> bool:
+    async def update_post(self, current_user: AlphafinderUser, post_id: int, post_update: PostUpdate) -> Tuple[bool, int]:
         """게시글 수정"""
         user_id = current_user[0] if current_user else None
         is_stock_ticker = self._is_stock_ticker(post_update.stock_tickers)
@@ -326,7 +326,7 @@ class CommunityService:
             self.db._delete("post_stocks", post_id=post_id)
             self.db._insert("post_stocks", stock_data)
 
-        return True
+        return True, post_id
 
     async def delete_post(self, current_user: AlphafinderUser, post_id: int) -> bool:
         """게시글 삭제"""
