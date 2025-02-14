@@ -1,7 +1,9 @@
 from typing import List
+
+from fastapi import Depends
 from app.database.crud import database
 from app.modules.common.enum import TranslateCountry
-from app.modules.community.services import CommunityService
+from app.modules.community.services import CommunityService, get_community_service
 from app.modules.search.schemas import CommunitySearchItem, SearchItem
 import logging
 
@@ -116,15 +118,23 @@ class SearchService:
         return search_items
 
     async def search_community(
-        self, query: str, lang: TranslateCountry, offset: int, limit: int, community_service: CommunityService
+        self,
+        query: str,
+        lang: TranslateCountry,
+        offset: int,
+        limit: int,
+        community_service: CommunityService = Depends(get_community_service),
     ) -> List[CommunitySearchItem]:
         """커뮤니티 종목 검색 기능"""
         if not query:
-            trending_stocks = await community_service.get_trending_stocks(limit=limit, lang=lang)
+            service = get_community_service()
+            trending_stocks = await service.get_trending_stocks(limit=limit, lang=lang)
+            print(f"Trending stocks: {trending_stocks}###")
             return [
                 CommunitySearchItem(
                     ticker=stock.ticker,
                     name=stock.name,
+                    ctry=stock.ctry,
                 )
                 for stock in trending_stocks
             ]
@@ -139,7 +149,7 @@ class SearchService:
 
         search_result = self.db._select(
             table="stock_information",
-            columns=["ticker", "kr_name", "en_name"],
+            columns=["ticker", "kr_name", "en_name", "ctry"],
             or__=[
                 {"ticker": query},
                 {"ticker__like": search_term},
@@ -160,6 +170,7 @@ class SearchService:
             CommunitySearchItem(
                 ticker=row._mapping["ticker"],
                 name=row._mapping["kr_name"] if lang == TranslateCountry.KO else row._mapping["en_name"],
+                ctry=row._mapping["ctry"],
             )
             for row in search_result
         ]
