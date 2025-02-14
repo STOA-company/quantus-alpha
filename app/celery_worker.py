@@ -29,6 +29,7 @@ from app.batches.run_disclosure import (
 from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
 from app.batches.check_split import check_kr_stock_splits, check_us_stock_splits
 from app.batches.check_outliers import check_and_recollect_outliers
+from app.batches.check_stock_status import check_warned_stock_us_batch
 
 from app.utils.date_utils import check_market_status
 
@@ -424,7 +425,7 @@ def check_warned_stock_us():
     """미국 주식 경고 처리"""
     try:
         notifier.notify_info("check_warned_stock_us process started")
-        # check_warned_stock_us() # 재귀 발생
+        check_warned_stock_us_batch()
         notifier.notify_success("check_warned_stock_us process completed")
     except Exception as e:
         notifier.notify_error(f"check_warned_stock_us process failed: {str(e)}")
@@ -452,6 +453,20 @@ def community_trending_post_update():
         notifier.notify_success("Community_trending_post_update process completed")
     except Exception as e:
         notifier.notify_error(f"Community_trending_post_update process failed: {str(e)}", "고경민")
+        raise
+
+
+@CELERY_APP.task(name="reset_daily_leaderboard", ignore_result=True)
+def reset_daily_leaderboard():
+    """일일 리더보드 초기화"""
+    notifier.notify_info("Reset_daily_leaderboard process started")
+    try:
+        from app.core.redis import redis_client
+
+        redis_client.delete("daily_search_leaderboard")
+        notifier.notify_success("Reset_daily_leaderboard process completed")
+    except Exception as e:
+        notifier.notify_error(f"Reset_daily_leaderboard process failed: {str(e)}")
         raise
 
 

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union, List, Dict
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.database.conn import db
@@ -6,20 +6,23 @@ from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import InfiniteScrollResponse
 from app.modules.search.schemas import CommunitySearchItem, SearchResponse
 from app.modules.search.service import SearchService, get_search_service
-
+from app.utils.redis_utils import Leaderboard
 
 router = APIRouter()
 
 
 @router.get("", summary="검색 기능")
 def search(
-    query: str,
+    query: Optional[str] = Query(None, description="검색 쿼리"),
     ctry: TranslateCountry = Query(default=TranslateCountry.KO, description="검색 시 나올 기업명 언어(ko, en)"),
     offset: int = Query(0, description="검색 시작 위치"),
     limit: int = Query(20, description="검색 결과 수"),
     service: SearchService = Depends(get_search_service),
     db: Session = Depends(db.get_db),
-) -> SearchResponse:
+) -> Union[SearchResponse, List[Dict]]:
+    if not query:
+        redis = Leaderboard()
+        return redis.get_leaderboard(ctry)
     # limit + 1개를 요청하여 더 있는지 확인
     search_result = service.search(query, ctry, offset, limit + 1)
     has_more = len(search_result) > limit
