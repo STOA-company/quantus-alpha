@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Integer, String, Table, Text, Index, func
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Table, Text, Index, func
 from app.models.models_base import Base, BaseMixin
 from sqlalchemy.orm import validates
 
@@ -6,7 +6,7 @@ from sqlalchemy.orm import validates
 post_stocks = Table(
     "post_stocks",
     Base.metadata,
-    Column("post_id", Integer, ForeignKey("posts.id"), primary_key=True),
+    Column("post_id", Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True),
     Column("stock_ticker", String(20), primary_key=True),
     Index("idx_post_stocks_stock_ticker", "stock_ticker"),
 )
@@ -92,6 +92,7 @@ class PostLike(Base, BaseMixin):
     # Foreign keys
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, primary_key=True)
     user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+    is_liked = Column(Boolean, default=True, comment="좋아요/싫어요 여부")
 
     __table_args__ = (Index("idx_post_likes_user", user_id),)
 
@@ -108,7 +109,7 @@ class CommentLike(Base, BaseMixin):
     # Foreign keys
     comment_id = Column(Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=False, primary_key=True)
     user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=False, primary_key=True)
-
+    is_liked = Column(Boolean, default=True, comment="좋아요/싫어요 여부")
     __table_args__ = (Index("idx_comment_likes_user", user_id),)
 
     def __str__(self):
