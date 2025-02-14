@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from app.database.crud import database
 from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
 from app.utils.date_utils import check_market_status
-from app.core.config import korea_tz, utc_tz
+from app.core.config import korea_tz
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -32,15 +32,15 @@ class StockIndicesService:
 
     def get_market_ratios(self, market: str) -> Tuple[float, float, float]:
         try:
-            cache_key = f"{market}_ratio"
-            now = datetime.now(utc_tz).astimezone(korea_tz)
-            is_market_open = check_market_status("KR") if market in ["kospi", "kosdaq"] else check_market_status("US")
+            # cache_key = f"{market}_ratio"
+            # now = datetime.now(utc_tz).astimezone(korea_tz)
+            # is_market_open = check_market_status("KR") if market in ["kospi", "kosdaq"] else check_market_status("US")
 
-            if cache_key in self._cache:
-                data, timestamp = self._cache[cache_key]
-                cache_age = (now - timestamp).total_seconds()
-                if not is_market_open or cache_age < 60:
-                    return data
+            # if cache_key in self._cache:
+            #     data, timestamp = self._cache[cache_key]
+            #     cache_age = (now - timestamp).total_seconds()
+            #     if not is_market_open or cache_age < 60:
+            #         return data
 
             result = self.db._select(
                 table="stock_indices",
@@ -62,7 +62,7 @@ class StockIndicesService:
                 round(unchanged_ratio, 2),
             )
 
-            self._cache[cache_key] = (ratios, now)
+            # self._cache[cache_key] = (ratios, now)
             return ratios
 
         except Exception as e:
@@ -71,16 +71,16 @@ class StockIndicesService:
 
     def _fetch_market_data(self, market: str):
         try:
-            cache_key = f"{market}_data"
-            now = datetime.now(utc_tz).astimezone(korea_tz)
-            country = "KR" if market in ["kospi", "kosdaq"] else "US"
-            is_market_open = check_market_status(country)
+            # cache_key = f"{market}_data"
+            # now = datetime.now(utc_tz).astimezone(korea_tz)
+            # country = "KR" if market in ["kospi", "kosdaq"] else "US"
+            # is_market_open = check_market_status(country)
 
-            if cache_key in self._cache:
-                cached_data, timestamp = self._cache[cache_key]
-                cache_age = (now - timestamp).total_seconds()
-                if not is_market_open or cache_age < 60:
-                    return cached_data
+            # if cache_key in self._cache:
+            #     cached_data, timestamp = self._cache[cache_key]
+            #     cache_age = (now - timestamp).total_seconds()
+            #     if not is_market_open or cache_age < 60:
+            #         return cached_data
 
             latest_date_result = self.db._select(
                 table="stock_indices_1m", columns=["date"], ticker=market, order="date", ascending=False, limit=1
@@ -150,7 +150,7 @@ class StockIndicesService:
                 "min1": min1_data,
             }
 
-            self._cache[cache_key] = (market_data, now)
+            # self._cache[cache_key] = (market_data, now)
             return market_data
 
         except Exception as e:

@@ -172,3 +172,11 @@ class TrendingStockResponse(BaseModel):
     rank: int
     ticker: str
     name: str
+
+
+### 카테고리 스키마 ###
+
+
+class CategoryResponse(BaseModel):
+    id: int
+    name: str

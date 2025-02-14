@@ -6,6 +6,7 @@ from app.core.exception.custom import PostException, TooManyStockTickersExceptio
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from .schemas import (
+    CategoryResponse,
     CommentCreate,
     CommentItem,
     CommentUpdate,
@@ -734,6 +735,11 @@ class CommunityService:
         stocks = result.mappings().all()
 
         return [TrendingStockResponse(id=stock["rank"], ticker=stock["ticker"], name=stock["name"]) for stock in stocks]
+
+    async def get_categories(self) -> List[CategoryResponse]:
+        """카테고리 리스트 조회"""
+        categories = self.db._select(table="categories", columns=["id", "name"])
+        return [CategoryResponse(id=category[0], name=category[1]) for category in categories]
 
 
 def get_community_service() -> CommunityService:
