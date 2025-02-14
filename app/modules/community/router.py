@@ -4,6 +4,7 @@ from app.modules.common.schemas import BaseResponse
 from app.modules.community.enum import PostOrderBy
 from app.modules.community.schemas import (
     BookmarkItem,
+    CategoryResponse,
     CommentCreate,
     CommentListResponse,
     CommentUpdate,
@@ -225,3 +226,12 @@ async def get_trending_stocks(
 ):
     trending_stocks = await community_service.get_trending_stocks(limit=limit, lang=lang)
     return BaseResponse(status_code=200, message="실시간 인기 종목을 조회하였습니다.", data=trending_stocks)
+
+
+### 카테고리 리스트 조회 ###
+@router.get("/categories", response_model=BaseResponse[List[CategoryResponse]], summary="카테고리 리스트 조회")
+async def get_categories(
+    community_service: CommunityService = Depends(get_community_service),
+):
+    categories = await community_service.get_categories()
+    return BaseResponse(status_code=200, message="카테고리 리스트를 조회하였습니다.", data=categories)

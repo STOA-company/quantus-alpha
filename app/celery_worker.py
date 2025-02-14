@@ -33,6 +33,7 @@ from app.batches.check_outliers import check_and_recollect_outliers
 from app.utils.date_utils import check_market_status
 
 notifier = SlackNotifier()
+logger = logging.getLogger(__name__)
 
 
 def log_task_execution(func):
@@ -42,12 +43,12 @@ def log_task_execution(func):
     def wrapper(*args, **kwargs):
         task_name = func.__name__
         try:
-            logging.info(f"Starting task: {task_name}")
+            logger.info(f"Starting task: {task_name}")
             result = func(*args, **kwargs)
-            logging.info(f"Successfully completed task: {task_name}")
+            logger.info(f"Successfully completed task: {task_name}")
             return result
         except Exception as e:
-            logging.error(f"Error in {task_name}: {str(e)}", exc_info=True)
+            logger.error(f"Error in {task_name}: {str(e)}", exc_info=True)
             raise
 
     return wrapper
@@ -63,33 +64,34 @@ def us_stock_indices_batch():
             us_run_stock_indices_batch()
         else:
             notifier.notify_info("US market is not open. US_stock_indices_batch process skipped.")
-            logging.info("US market is not open. US_stock_indices_batch process skipped.")
+            logger.info("US market is not open. US_stock_indices_batch process skipped.")
             return
 
         notifier.notify_success("US_stock_indices_batch process completed")
     except Exception as e:
         notifier.notify_error(f"US_stock_indices_batch process failed: {str(e)}")
-        logging.error(f"Error in us_run_stock_indices_batch: {str(e)}")
+        logger.error(f"Error in us_run_stock_indices_batch: {str(e)}")
 
 
 # KR Stock Indices task
 @CELERY_APP.task(name="kr_stock_indices_batch", ignore_result=True)
 def kr_stock_indices_batch():
     """한국 주가지수 데이터 업데이트"""
-    notifier.notify_info("KR_stock_indices_batch process started")
+
     try:
         if check_market_status("KR"):
+            notifier.notify_info("KR_stock_indices_batch process started")
             kr_run_stock_indices_batch()
 
         else:
             notifier.notify_info("KR market is not open. KR_stock_indices_batch process skipped.")
-            logging.info("KR market is not open. KR_stock_indices_batch process skipped.")
+            logger.info("KR market is not open. KR_stock_indices_batch process skipped.")
             return
 
         notifier.notify_success("KR_stock_indices_batch process completed")
     except Exception as e:
         notifier.notify_error(f"KR_stock_indices_batch process failed: {str(e)}")
-        logging.error(f"Error in kr_run_stock_indices_batch: {str(e)}")
+        logger.error(f"Error in kr_run_stock_indices_batch: {str(e)}")
 
 
 # Stock trend tasks
@@ -98,7 +100,7 @@ def kr_stock_indices_batch():
 def stock_trend_1d_us_task():
     """미국 주식 일별 트렌드 업데이트 (장 마감 후)"""
     if check_market_status("US"):
-        logging.info("US market is open. US_stock_trend_1d_batch process skipped.")
+        logger.info("US market is open. US_stock_trend_1d_batch process skipped.")
         return
     notifier.notify_info("US_stock_trend_1d_batch process started")
     try:
@@ -106,7 +108,7 @@ def stock_trend_1d_us_task():
         notifier.notify_success("US_stock_trend_1d_batch process completed")
     except Exception as e:
         notifier.notify_error(f"US_stock_trend_1d_batch process failed: {str(e)}")
-        logging.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
+        logger.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
 
 
 @CELERY_APP.task(name="stock_trend_1d_kr")
@@ -114,7 +116,7 @@ def stock_trend_1d_us_task():
 def stock_trend_1d_kr_task():
     """한국 주식 일별 트렌드 업데이트 (장 마감 후)"""
     if check_market_status("KR"):
-        logging.info("KR market is open. KR_stock_trend_1d_batch process skipped.")
+        logger.info("KR market is open. KR_stock_trend_1d_batch process skipped.")
         return
     notifier.notify_info("KR_stock_trend_1d_batch process started")
     try:
@@ -122,7 +124,7 @@ def stock_trend_1d_kr_task():
         notifier.notify_success("KR_stock_trend_1d_batch process completed")
     except Exception as e:
         notifier.notify_error(f"KR_stock_trend_1d_batch process failed: {str(e)}")
-        logging.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
+        logger.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
 
 
 @CELERY_APP.task(name="stock_trend_reset_kr")
@@ -135,7 +137,7 @@ def stock_trend_reset_kr():
         notifier.notify_success("KR_stock_trend_1d_batch process completed")
     except Exception as e:
         notifier.notify_error(f"KR_stock_trend_1d_batch process failed: {str(e)}")
-        logging.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
+        logger.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
 
 
 @CELERY_APP.task(name="stock_trend_reset_us")
@@ -148,7 +150,7 @@ def stock_trend_reset_us():
         notifier.notify_success("US_stock_trend_1d_batch process completed")
     except Exception as e:
         notifier.notify_error(f"US_stock_trend_1d_batch process failed: {str(e)}")
-        logging.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
+        logger.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
 
 
 @CELERY_APP.task(name="stock_trend_realtime_us")
@@ -156,14 +158,14 @@ def stock_trend_reset_us():
 def stock_trend_realtime_us_task():
     """미국 주식 실시간 트렌드 업데이트 (장 운영 중)"""
     if not check_market_status("US"):
-        logging.info("US market is not open. US_stock_trend_realtime_batch process skipped.")
+        logger.info("US market is not open. US_stock_trend_realtime_batch process skipped.")
         return
     notifier.notify_info("US_stock_trend_realtime_batch process started")
     try:
         run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
         notifier.notify_success("US_stock_trend_realtime_batch process completed")
     except Exception as e:
-        logging.error(f"Error in run_stock_trend_by_realtime_batch: {str(e)}")
+        logger.error(f"Error in run_stock_trend_by_realtime_batch: {str(e)}")
 
 
 @CELERY_APP.task(name="stock_trend_realtime_kr")
@@ -171,7 +173,7 @@ def stock_trend_realtime_us_task():
 def stock_trend_realtime_kr_task():
     """한국 주식 실시간 트렌드 업데이트 (장 운영 중)"""
     if not check_market_status("KR"):
-        logging.info("KR market is open. KR_stock_trend_realtime_batch process skipped.")
+        logger.info("KR market is open. KR_stock_trend_realtime_batch process skipped.")
         return
     notifier.notify_info("KR_stock_trend_realtime_batch process started")
     try:
@@ -179,7 +181,7 @@ def stock_trend_realtime_kr_task():
         notifier.notify_success("KR_stock_trend_realtime_batch process completed")
     except Exception as e:
         notifier.notify_error(f"KR_stock_trend_realtime_batch process failed: {str(e)}")
-        logging.error(f"Error in run_stock_trend_by_realtime_batch: {str(e)}")
+        logger.error(f"Error in run_stock_trend_by_realtime_batch: {str(e)}")
 
 
 @CELERY_APP.task(name="stock_trend_tickers")
@@ -195,7 +197,7 @@ def hello_task():
     current_time = now_kr().strftime("%Y-%m-%d %H:%M:%S")
     message = f"Hello, World! Current time: {current_time}"
     print(message)
-    logging.info(message)
+    logger.info(message)
 
 
 @CELERY_APP.task(name="kr_disclosure_batch", ignore_result=True)
@@ -206,7 +208,7 @@ def kr_disclosure_batch():
         renewal_kr_run_disclosure_batch()
         notifier.notify_success("KR_disclosure_batch process completed")
     except Exception as e:
-        notifier.notify_error(f"KR_disclosure_batch process failed: {str(e)}")
+        notifier.notify_error(f"KR_disclosure_batch process failed: {str(e)}", "고경민")
         raise
 
 
@@ -218,7 +220,7 @@ def us_disclosure_batch():
         renewal_us_run_disclosure_batch()
         notifier.notify_success("US_disclosure_batch process completed")
     except Exception as e:
-        notifier.notify_error(f"US_disclosure_batch process failed: {str(e)}")
+        notifier.notify_error(f"US_disclosure_batch process failed: {str(e)}", "고경민")
         raise
 
 
@@ -230,7 +232,7 @@ def kr_news_renewal():
         renewal_kr_run_news_batch()
         notifier.notify_success("KR_news_renewal process completed")
     except Exception as e:
-        notifier.notify_error(f"KR_news_renewal process failed: {str(e)}")
+        notifier.notify_error(f"KR_news_renewal process failed: {str(e)}", "고경민")
         raise
 
 
@@ -242,7 +244,7 @@ def us_news_renewal():
         renewal_us_run_news_batch()
         notifier.notify_success("US_news_renewal process completed")
     except Exception as e:
-        notifier.notify_error(f"US_news_renewal process failed: {str(e)}")
+        notifier.notify_error(f"US_news_renewal process failed: {str(e)}", "고경민")
         raise
 
 
@@ -250,26 +252,53 @@ def us_news_renewal():
 def kr_top_stories():
     """한국 주요 소식 선정"""
     notifier.notify_info("KR_top_stories process started")
+
+    has_error = False
+
     try:
         kr_run_disclosure_is_top_story()
-        renewal_kr_run_news_is_top_story()
-        notifier.notify_success("KR_top_stories process completed")
     except Exception as e:
-        notifier.notify_error(f"KR_top_stories process failed: {str(e)}")
-        raise
+        has_error = True
+        error_msg = f"KR disclosure top story failed: {str(e)}"
+        notifier.notify_error(error_msg, "고경민")
+        logging.error(error_msg)
+
+    try:
+        renewal_kr_run_news_is_top_story()
+    except Exception as e:
+        has_error = True
+        error_msg = f"KR news top story failed: {str(e)}"
+        notifier.notify_error(error_msg, "고경민")
+        logging.error(error_msg)
+
+    if not has_error:
+        notifier.notify_success("KR_top_stories process completed")
 
 
 @CELERY_APP.task(name="us_top_stories", ignore_result=True)
 def us_top_stories():
     """미국 주요 소식 선정"""
     notifier.notify_info("US_top_stories process started")
+    has_error = False
+
     try:
         us_run_disclosure_is_top_story()
-        renewal_us_run_news_is_top_story()
-        notifier.notify_success("US_top_stories process completed")
     except Exception as e:
-        notifier.notify_error(f"US_top_stories process failed: {str(e)}")
-        raise
+        has_error = True
+        error_msg = f"US disclosure top story failed: {str(e)}"
+        notifier.notify_error(error_msg, "고경민")
+        logging.error(error_msg)
+
+    try:
+        renewal_us_run_news_is_top_story()
+    except Exception as e:
+        has_error = True
+        error_msg = f"US news top story failed: {str(e)}"
+        notifier.notify_error(error_msg, "고경민")
+        logging.error(error_msg)
+
+    if not has_error:
+        notifier.notify_success("US_top_stories process completed")
 
 
 @CELERY_APP.task(name="memory-status", ignore_result=True)
@@ -349,10 +378,10 @@ def kr_stock_indices_collect():
             get_stock_indices_data("KOSDAQ")
             notifier.notify_success("KR_stock_indices_collect process completed")
         except Exception as e:
-            notifier.notify_error(f"KR_stock_indices_collect process failed: {str(e)}")
+            notifier.notify_error(f"KR_stock_indices_collect process failed: {str(e)}", "고경민")
             raise
     else:
-        logging.info("KR market is not open. KR_stock_indices_collect process skipped.")
+        logger.info("KR market is not open. KR_stock_indices_collect process skipped.")
 
 
 @CELERY_APP.task(name="us_stock_indices_collect", ignore_result=True)
@@ -371,10 +400,10 @@ def us_stock_indices_collect():
             get_stock_indices_data("SP500")
             notifier.notify_success("US_stock_indices_collect process completed")
         except Exception as e:
-            notifier.notify_error(f"US_stock_indices_collect process failed: {str(e)}")
+            notifier.notify_error(f"US_stock_indices_collect process failed: {str(e)}", "고경민")
             raise
     else:
-        logging.info("US market is not open. US_stock_indices_collect process skipped.")
+        logger.info("US market is not open. US_stock_indices_collect process skipped.")
         return
 
 
@@ -395,7 +424,7 @@ def check_warned_stock_us():
     """미국 주식 경고 처리"""
     try:
         notifier.notify_info("check_warned_stock_us process started")
-        check_warned_stock_us()
+        # check_warned_stock_us() # 재귀 발생
         notifier.notify_success("check_warned_stock_us process completed")
     except Exception as e:
         notifier.notify_error(f"check_warned_stock_us process failed: {str(e)}")
@@ -410,7 +439,7 @@ def community_trending_stock_update():
         update_stock_statistics()
         notifier.notify_success("Community_trending_stock_update process completed")
     except Exception as e:
-        notifier.notify_error(f"Community_trending_stock_update process failed: {str(e)}")
+        notifier.notify_error(f"Community_trending_stock_update process failed: {str(e)}", "고경민")
         raise
 
 
@@ -422,7 +451,7 @@ def community_trending_post_update():
         update_post_statistics()
         notifier.notify_success("Community_trending_post_update process completed")
     except Exception as e:
-        notifier.notify_error(f"Community_trending_post_update process failed: {str(e)}")
+        notifier.notify_error(f"Community_trending_post_update process failed: {str(e)}", "고경민")
         raise
 
 
