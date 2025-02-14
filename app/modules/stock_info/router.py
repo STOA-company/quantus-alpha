@@ -99,6 +99,7 @@ async def get_combined(
     if all(v is None for v in data.values()):
         raise HTTPException(status_code=404, detail="No data found for the given ticker")
 
+    stock_service.increment_search_score(ticker)
     return BaseResponse(status_code=200, message="종목 정보, 지표, 기업 정보를 성공적으로 조회했습니다.", data=data)
 
 
