@@ -13,6 +13,7 @@ from .schemas import (
     PostCreate,
     PostUpdate,
     ResponsePost,
+    StockInfo,
     TrendingPostResponse,
     TrendingStockResponse,
     UserInfo,
@@ -25,7 +26,7 @@ class CommunityService:
     def __init__(self):
         self.db = database
 
-    async def create_post(self, current_user: AlphafinderUser, post_create: PostCreate) -> bool:
+    async def create_post(self, current_user: AlphafinderUser, post_create: PostCreate) -> Tuple[bool, int]:
         """게시글 생성"""
         current_time = datetime.now(UTC)
         is_stock_ticker = self._is_stock_ticker(post_create.stock_tickers)
@@ -75,7 +76,7 @@ class CommunityService:
             ]
             self.db._insert("post_stocks", stock_data)
 
-        return True
+        return True, post_id
 
     def _is_stock_ticker(self, stock_tickers: List[str]) -> bool:
         """종목 코드 유효성 검사"""
@@ -91,7 +92,7 @@ class CommunityService:
         count = result.scalar()
         return count == len(stock_tickers)
 
-    async def get_post_detail(self, current_user: AlphafinderUser, post_id: int) -> ResponsePost:
+    async def get_post_detail(self, current_user: AlphafinderUser, post_id: int, lang: TranslateCountry) -> ResponsePost:
         """게시글 상세 조회"""
         current_user_id = current_user[0] if current_user else None
 
@@ -123,6 +124,23 @@ class CommunityService:
         stock_tickers = self.db._select(table="post_stocks", columns=["stock_ticker"], post_id=post_id)
         stock_tickers = [row[0] for row in stock_tickers]
 
+        # 종목 정보 조회
+        columns = ["ticker", "ctry"]
+        if lang == TranslateCountry.KO:
+            columns.append("kr_name")
+        else:
+            columns.append("en_name")
+        stock_info = self.db._select(table="stock_information", columns=columns, ticker__in=stock_tickers)
+        stock_info = [row for row in stock_info]
+        stock_information = [
+            StockInfo(
+                ticker=stock_info[0],
+                name=stock_info[2] if lang == TranslateCountry.KO else stock_info[3],
+                ctry=stock_info[1],
+            )
+            for stock_info in stock_info
+        ]
+
         # 3. UserInfo 객체 생성
         user_info = (
             UserInfo(id=post["user_id"], nickname=post["nickname"], profile_image=post.get("profile_image"))
@@ -142,7 +160,7 @@ class CommunityService:
             is_changed=post["created_at"] != post["updated_at"],
             is_bookmarked=post["is_bookmarked"],
             created_at=post["created_at"],
-            stock_tickers=stock_tickers,
+            stock_tickers=stock_information,
             user_info=user_info,
         )
 
@@ -155,6 +173,7 @@ class CommunityService:
         limit: int = 20,
         category_id: Optional[int] = None,
         stock_ticker: Optional[str] = None,
+        lang: TranslateCountry = TranslateCountry.KO,
         order_by: str = "created_at",
     ) -> List[ResponsePost]:
         """게시글 목록 조회"""
@@ -214,6 +233,28 @@ class CommunityService:
         result = self.db._execute(text(query), params)
         posts = result.mappings().all()
 
+        # 모든 게시글의 티커를 하나의 set으로 모음
+        all_tickers = set()
+        for post in posts:
+            if post["stock_tickers"]:
+                all_tickers.update(post["stock_tickers"])
+
+        # 종목 정보를 한 번에 조회
+        columns = ["ticker", "ctry"]
+        if lang == TranslateCountry.KO:
+            columns.append("kr_name")
+        else:
+            columns.append("en_name")
+
+        stock_info = self.db._select(table="stock_information", columns=columns, ticker__in=list(all_tickers))
+
+        # 티커를 키로 하는 딕셔너리 생성
+        stock_info_map = {
+            row[0]: StockInfo(ticker=row[0], name=row[2] if lang == TranslateCountry.KO else row[2], ctry=row[1])
+            for row in stock_info
+        }
+
+        # 게시글 응답 생성
         return [
             ResponsePost(
                 id=post["id"],
@@ -226,7 +267,9 @@ class CommunityService:
                 is_changed=post["created_at"] != post["updated_at"],
                 is_bookmarked=post["is_bookmarked"],
                 created_at=post["created_at"],
-                stock_tickers=(post["stock_tickers"]).split(",") if post["stock_tickers"] else [],
+                stock_tickers=[
+                    stock_info_map[ticker] for ticker in (post["stock_tickers"] or []) if ticker in stock_info_map
+                ],
                 user_info=(
                     UserInfo(id=post["user_id"], nickname=post["nickname"], profile_image=post.get("profile_image"))
                     if post["nickname"]
