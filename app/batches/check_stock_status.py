@@ -183,7 +183,7 @@ def iscd_stat_cls_code_batch():
     database._update(table="stock_trend", sets={"is_warned": 1}, ticker__in=warned_tickers)
 
 
-def check_warned_stock_us():
+def check_warned_stock_us_batch():
     tickers = database._select(table="stock_trend", columns=["ticker"], ctry="us")
     tickers = [ticker[0] for ticker in tickers]
     database._update(table="stock_trend", sets={"is_warned": 0}, ticker__in=tickers)
@@ -213,5 +213,5 @@ def main():
 
 
 if __name__ == "__main__":
-    check_warned_stock_us()
+    check_warned_stock_us_batch()
     # iscd_stat_cls_code_batch()
