@@ -394,7 +394,7 @@ class CommunityService:
             LEFT JOIN alphafinder_user u ON c.user_id = u.id
             WHERE c.post_id = :post_id
             AND c.depth = 0
-            ORDER BY c.created_at DESC
+            ORDER BY c.created_at ASC
             LIMIT :limit OFFSET :offset
         """
 
