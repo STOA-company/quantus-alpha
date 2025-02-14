@@ -30,6 +30,12 @@ class UserInfo(BaseModel):
     profile_image: Optional[str] = None
 
 
+class StockInfo(BaseModel):
+    ticker: str
+    name: Optional[str] = None
+    ctry: Optional[str] = None
+
+
 class ResponsePost(BaseModel):
     id: int
     title: str
@@ -41,7 +47,7 @@ class ResponsePost(BaseModel):
     is_changed: bool
     is_bookmarked: bool
     created_at: datetime
-    stock_tickers: List[str]
+    stock_tickers: List[StockInfo]
     user_info: UserInfo
 
 

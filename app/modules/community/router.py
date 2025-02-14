@@ -26,23 +26,25 @@ router = APIRouter()
 
 
 ##### 게시글 CRUD #####
-@router.post("/posts", response_model=BaseResponse[bool], summary="게시글 생성")
+@router.post("/posts", response_model=BaseResponse[dict], summary="게시글 생성")
 async def create_new_post(
     post_create: PostCreate,
     community_service: CommunityService = Depends(get_community_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
-    post = await community_service.create_post(current_user=current_user, post_create=post_create)
-    return BaseResponse(status_code=200, message="게시글을 생성하였습니다.", data=post)
+    result, post_id = await community_service.create_post(current_user=current_user, post_create=post_create)
+    result = {"success": result, "post_id": post_id}
+    return BaseResponse(status_code=200, message="게시글을 생성하였습니다.", data=result)
 
 
 @router.get("/posts/{post_id}", response_model=BaseResponse[ResponsePost], summary="게시글 상세 조회")
 async def get_post(
     post_id: int,
+    lang: Optional[TranslateCountry] = Query(TranslateCountry.KO, description="언어 설정 (ko/en)"),
     community_service: CommunityService = Depends(get_community_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
-    post = await community_service.get_post_detail(current_user=current_user, post_id=post_id)
+    post = await community_service.get_post_detail(current_user=current_user, post_id=post_id, lang=lang)
     return BaseResponse(status_code=200, message="게시글을 조회하였습니다.", data=post)
 
 
@@ -52,6 +54,7 @@ async def get_posts(
     limit: int = Query(10, description="검색 결과 수"),
     category_id: Optional[int] = Query(None, description="카테고리 ID"),
     stock_ticker: Optional[str] = Query(None, description="종목 코드"),
+    lang: Optional[TranslateCountry] = Query(TranslateCountry.KO, description="언어 설정 (ko/en)"),
     order_by: Optional[PostOrderBy] = Query(PostOrderBy.created_at, description="정렬 기준 (created_at, like_count)"),
     community_service: CommunityService = Depends(get_community_service),
     current_user: AlphafinderUser = Depends(get_current_user),
@@ -64,6 +67,7 @@ async def get_posts(
         category_id=category_id,
         stock_ticker=stock_ticker,
         order_by=order_by,
+        lang=lang,
     )
 
     has_more = len(posts) > limit
