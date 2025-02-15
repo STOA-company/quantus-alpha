@@ -69,29 +69,25 @@ def google_callback(code: str):
 
             email = google_user["email"]
             user = get_user_by_email(email)
-            is_login = False
 
             if not user:
                 email_token = create_email_token(email)
-            else:
-                access_token = create_jwt_token(user.id)
-                refresh_token = create_refresh_token(user.id)
-                is_login = True
 
-            FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-
-            access_token_hash = store_token(access_token, refresh_token)
-
-            if is_login:
-                params = {
-                    "is_login": True,
-                    "access_token_hash": access_token_hash,
-                }
-            else:
                 params = {
                     "is_login": False,
                     "email_token": email_token,
                 }
+            else:
+                access_token = create_jwt_token(user.id)
+                refresh_token = create_refresh_token(user.id)
+                access_token_hash = store_token(access_token, refresh_token)
+
+                params = {
+                    "is_login": True,
+                    "access_token_hash": access_token_hash,
+                }
+
+            FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
             redirect_url = f"{FRONTEND_URL}/oauth/callback?{urlencode(params)}"
             logger.info(f"redirect_url: {redirect_url}")

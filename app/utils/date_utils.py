@@ -67,31 +67,24 @@ def get_business_days(
     return schedule.tolist()
 
 
-# 장 오픈 시간 조회
 def get_time_checker(country: Literal["KR", "US"]) -> bool:
     """
     현재 시간이 장 운영 시간 안에 있는지 확인
     KR: 09:00 ~ 15:30 (KST)
-    US: 13:30 ~ 20:00 (UTC) = 09:30 ~ 16:00 (ET)
+    US: 09:30 ~ 16:00 (ET) - 서머타임 자동 반영
     """
     try:
         if country == "KR":
-            date = datetime.now(korea_tz)
-            current_time = date.hour * 60 + date.minute
-            logging.info(f"Current time: {current_time}")
-            market_open = 9 * 60  # 09:00 KST
-            market_close = 15 * 60 + 30  # 15:30 KST
+            calendar = ecals.get_calendar("XKRX")
+            current_time = datetime.now(korea_tz)
 
-            return market_open <= current_time <= market_close
+            return calendar.is_open_on_minute(current_time)
 
         elif country == "US":
-            date = datetime.now(utc_tz)
-            current_time = date.hour * 60 + date.minute
-            logging.info(f"Current time: {current_time}")
-            market_open = 13 * 60 + 30  # 13:30 UTC = 09:30 ET
-            market_close = 20 * 60  # 20:00 UTC = 16:00 ET
+            calendar = ecals.get_calendar("XNYS")
+            current_time = datetime.now(us_eastern_tz)
 
-            return market_open <= current_time <= market_close
+            return calendar.is_open_on_minute(current_time)
 
     except Exception as e:
         logging.error(f"Error in get_time_checker: {str(e)}")
