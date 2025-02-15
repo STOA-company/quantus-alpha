@@ -69,63 +69,82 @@ async def get_current_user(
 ) -> Optional[AlphafinderUser]:
     """현재 인증된 사용자 정보 조회"""
     if not credentials:
-        return None
-
-    credentials_exception = HTTPException(
-        status_code=401,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     try:
         hashed_token = credentials.credentials
 
-        token_record = database._select(table="alphafinder_oauth_token", access_token_hash=hashed_token)
-
-        if not token_record:
-            raise credentials_exception
-
-        token_data = token_record[0]
-
         try:
-            payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-            user_id = int(payload.get("sub"))
-            if user_id is None:
-                raise credentials_exception
-
-        except jwt.ExpiredSignatureError:
-            try:
-                refresh_payload = jwt.decode(token_data.refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-
-                user_id = int(refresh_payload.get("sub"))
-                if user_id is None:
-                    raise credentials_exception
-                new_access_token = create_jwt_token(user_id)
-                new_hashed_token = hashlib.sha256(new_access_token.encode()).hexdigest()
-
-                database._update(
-                    table="alphafinder_oauth_token",
-                    where={"access_token_hash": hashed_token},
-                    access_token=new_access_token,
-                    access_token_hash=new_hashed_token,
-                )
-
-            except jwt.ExpiredSignatureError:
-                database._delete(table="alphafinder_oauth_token", access_token_hash=hashed_token)
+            token_record = database._select(table="alphafinder_oauth_token", access_token_hash=hashed_token)
+            if not token_record:
                 raise HTTPException(
                     status_code=401,
-                    detail="Token has expired. Please log in again",
+                    detail="Invalid token",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
 
-    except JWTError:
-        raise credentials_exception
+            token_data = token_record[0]
 
-    user = database._select(table="alphafinder_user", id=user_id)
-    if user is None:
-        raise credentials_exception
+            try:
+                # 액세스 토큰 검증
+                payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+                user_id = int(payload.get("sub"))
 
-    return user[0]
+            except jwt.ExpiredSignatureError:
+                # 리프레시 토큰으로 새 액세스 토큰 발급
+                try:
+                    refresh_payload = jwt.decode(token_data.refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+                    user_id = int(refresh_payload.get("sub"))
+
+                    new_access_token = create_jwt_token(user_id)
+                    new_hashed_token = hashlib.sha256(new_access_token.encode()).hexdigest()
+
+                    # 토큰 업데이트
+                    database._update(
+                        table="alphafinder_oauth_token",
+                        where={"access_token_hash": hashed_token},
+                        access_token=new_access_token,
+                        access_token_hash=new_hashed_token,
+                    )
+
+                except jwt.ExpiredSignatureError:
+                    # 리프레시 토큰도 만료된 경우
+                    database._delete(table="alphafinder_oauth_token", access_token_hash=hashed_token)
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Session expired. Please login again",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
+            # 사용자 조회
+            user = database._select(table="alphafinder_user", id=user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="User not found",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+            return user[0]
+
+        except Exception as e:
+            logger.error(f"Database error: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail="Internal server error",
+            )
+
+    except JWTError as e:
+        logger.error(f"JWT verification failed: {str(e)}")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token format",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 def store_token(access_token: str, refresh_token: str):
