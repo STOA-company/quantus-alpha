@@ -463,7 +463,7 @@ def reset_daily_leaderboard():
     try:
         from app.core.redis import redis_client
 
-        redis_client.delete("daily_search_leaderboard")
+        redis_client().delete("daily_search_leaderboard")
         notifier.notify_success("Reset_daily_leaderboard process completed")
     except Exception as e:
         notifier.notify_error(f"Reset_daily_leaderboard process failed: {str(e)}")
