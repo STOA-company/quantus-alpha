@@ -26,7 +26,7 @@ class SlackNotifier:
     def __get_mention_tags(self, user_name=None) -> str:
         # SLACK_USER_IDS에서 멘션할 사용자 필터링
         mentions = [
-            f"<@{user_id}" for name, user_id in self.SLACK_USER_IDS.items() if user_name is None or name == user_name
+            f"<@{user_id}>" for name, user_id in self.SLACK_USER_IDS.items() if user_name is None or name == user_name
         ]
 
         # mention_ids에서 추가 멘션

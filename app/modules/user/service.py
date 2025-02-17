@@ -208,7 +208,13 @@ class UserProfileService:
                             SELECT 1 FROM bookmarks b
                             WHERE b.post_id = p.id AND b.user_id = :current_user_id
                         )
-                    ELSE false END as is_bookmarked
+                    ELSE false END as is_bookmarked,
+                    CASE WHEN :current_user_id IS NOT NULL THEN
+                        EXISTS(
+                            SELECT 1 FROM post_likes pl
+                            WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
+                        )
+                    ELSE false END as is_liked
                 FROM posts p
                 JOIN categories c ON p.category_id = c.id
                 WHERE p.user_id = :user_id
@@ -247,6 +253,7 @@ class UserProfileService:
                     comment_count=post["comment_count"],
                     is_changed=post["created_at"] != post["updated_at"],
                     is_bookmarked=post["is_bookmarked"],
+                    is_liked=post["is_liked"],
                     created_at=post["created_at"],
                     stock_tickers=post["stock_tickers"].split(",") if post["stock_tickers"] else [],
                     user_info=UserInfo(id=user["id"], nickname=user["nickname"], profile_image=user.get("profile_image")),

@@ -46,6 +46,7 @@ class ResponsePost(BaseModel):
     comment_count: int
     is_changed: bool
     is_bookmarked: bool
+    is_liked: bool
     created_at: datetime
     stock_tickers: List[StockInfo]
     user_info: UserInfo
