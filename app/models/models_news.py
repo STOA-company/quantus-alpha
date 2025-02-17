@@ -36,11 +36,11 @@ class NewsAnalysis(Base):
 
     __table_args__ = (
         # collect_id와 ctry를 복합 unique 제약조건으로 설정
-        UniqueConstraint("collect_id", "ctry", name="uix_collect_id_ctry"),
+        UniqueConstraint("collect_id", "ctry", "lang", name="uix_collect_id_ctry_lang"),
         # 종목 각 나라별 최신 뉴스 조회
-        Index("idx_ticker_ctry", "ticker", "ctry", unique=False),
+        Index("idx_ticker_lang", "ticker", "lang", unique=False),
         # 나라별 최신순 조회
-        Index("idx_ctry_date", "ctry", "date", unique=False),
+        Index("idx_ctry_lang_date", "ctry", "lang", "date", unique=False),
         # Ticker별 최신순 조회
         Index("idx_ticker_date", "ticker", "date", unique=False),
         # 종목 단일 조회
@@ -56,15 +56,13 @@ class NewsAnalysis(Base):
     date = Column(DateTime, nullable=True, comment="날짜, 시간")
     title = Column(String(255), nullable=True, comment="제목")
     emotion = Column(String(20), nullable=True, comment="시장 영향")
-    summary = Column(Text, nullable=True, comment="한글 요약")
-    impact_reason = Column(Text, nullable=True, comment="한글 영향 이유")
-    key_points = Column(Text, nullable=True, comment="한글 주요 포인트")
-    en_summary = Column(Text, nullable=True, comment="영문 요약")
-    en_impact_reason = Column(Text, nullable=True, comment="영문 영향 이유")
-    en_key_points = Column(Text, nullable=True, comment="영문 주요 포인트")
+    summary = Column(Text, nullable=True, comment="요약")
+    impact_reason = Column(Text, nullable=True, comment="영향 이유")
+    key_points = Column(Text, nullable=True, comment="주요 포인트")
     related_tickers = Column(Text, nullable=True, comment="관련 종목")
     url = Column(Text, nullable=True, comment="URL")
     that_time_price = Column(Float, nullable=True, comment="해당 시간 종가")
     is_top_story = Column(Boolean, nullable=True, comment="주요 소식 선정 여부")
     is_exist = Column(Boolean, nullable=True, comment="DB 존재 여부")
     is_related = Column(Boolean, nullable=True, default=True, comment="관련 종목 여부")
+    lang = Column(String(20), nullable=True, comment="언어")
