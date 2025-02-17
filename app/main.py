@@ -47,7 +47,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*", "Authorization", "Authorization_Swagger"],
-    max_request_size=1024 * 1024 * 50,  # 50MB
 )
 
 
