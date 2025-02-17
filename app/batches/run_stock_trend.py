@@ -332,5 +332,5 @@ def run_stock_trend_reset_batch(ctry: TrendingCountry, chunk_size: int = 500):
 
 
 if __name__ == "__main__":
-    run_stock_trend_by_1d_batch(ctry=TrendingCountry.KR)
+    run_stock_trend_by_1d_batch(ctry=TrendingCountry.US)
     # run_stock_trend_by_realtime_batch(ctry=TrendingCountry.US)
