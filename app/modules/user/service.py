@@ -43,6 +43,13 @@ def update_user(id: int, nickname: str = None, profile_image: UploadFile = None,
         add_favorite_stock(id, ticker)
 
 
+def check_nickname_available(nickname: str):
+    is_exist = database._select(table="alphafinder_user", nickname=nickname)
+    if is_exist:
+        return False
+    return True
+
+
 def add_favorite_stock(id: int, ticker: str):
     if database._select(table="user_stock_interest", user_id=id, ticker=ticker, limit=1):
         return
