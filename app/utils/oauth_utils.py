@@ -62,46 +62,45 @@ def refresh_access_token(access_token_hash: str):
         payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         user_id = int(payload.get("sub"))
 
-        if datetime.utcnow() > datetime.fromtimestamp(payload.get("exp"), tz=timezone.utc):
-            raise jwt.ExpiredSignatureError
+        current_time = datetime.now(timezone.utc)
 
-    except jwt.ExpiredSignatureError:
-        refresh_token = token_data.refresh_token
-        refresh_payload = jwt.decode(refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        if current_time > datetime.fromtimestamp(payload.get("exp"), tz=timezone.utc):
+            refresh_token = token_data.refresh_token
+            refresh_payload = jwt.decode(refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
 
-        if datetime.utcnow() > datetime.fromtimestamp(refresh_payload.get("exp"), tz=timezone.utc):
-            raise HTTPException(
-                status_code=401,
-                detail="Refresh Token Expired",
-                headers={"WWW-Authenticate": "Bearer"},
+            if current_time > datetime.fromtimestamp(refresh_payload.get("exp"), tz=timezone.utc):
+                raise HTTPException(
+                    status_code=401,
+                    detail="Refresh Token Expired",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+            user_id = int(refresh_payload.get("sub"))
+
+            new_payload = {
+                "sub": user_id,
+                "exp": (current_time + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp(),
+                "iat": current_time.timestamp(),
+            }
+            new_access_token = jwt.encode(new_payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+            new_access_token_hash = hashlib.sha256(new_access_token.encode()).hexdigest()
+
+            database._update(
+                table="alphafinder_oauth_token",
+                sets={"access_token": new_access_token, "access_token_hash": new_access_token_hash},
+                refresh_token=refresh_token,
             )
 
-        user_id = int(refresh_payload.get("sub"))
+            return new_access_token_hash
 
-        new_payload = {
-            "sub": user_id,
-            "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
-            "iat": datetime.utcnow(),
-        }
-        new_access_token = jwt.encode(new_payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-        new_access_token_hash = hashlib.sha256(new_access_token.encode()).hexdigest()
+        return token_data.access_token_hash
 
-        database._update(
-            table="alphafinder_oauth_token",
-            sets={"access_token": new_access_token, "access_token_hash": new_access_token_hash},
-            refresh_token=refresh_token,
-        )
-
-        return new_access_token_hash
-
-    except jwt.InvalidTokenError:
+    except JWTError:
         raise HTTPException(
             status_code=401,
             detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    return token_data.access_token_hash
 
 
 def decode_email_token(token: str):
