@@ -1,7 +1,7 @@
 import logging
 from typing import Tuple
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.database.crud import database
 from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
 from app.utils.date_utils import check_market_status
@@ -166,6 +166,7 @@ class StockIndicesService:
 
             indices_summary = {}
             indices_data = {}
+            latest_times = []
 
             for market, result in zip(self.markets, results):
                 if result:
@@ -173,6 +174,12 @@ class StockIndicesService:
                     min1_data = result["min1"]
 
                     is_open = check_market_status("KR") if market in ["kospi", "kosdaq"] else check_market_status("US")
+
+                    if min1_data:
+                        latest_date = max(min1_data.keys())
+                        utc_time = datetime.strptime(latest_date, "%Y-%m-%d %H:%M:%S")
+                        kr_time = utc_time.replace(tzinfo=timezone.utc).astimezone(korea_tz)
+                        latest_times.append(kr_time)
 
                     rise_ratio, fall_ratio, unchanged_ratio = ratios[self.markets.index(market)]
                     indices_summary[market] = IndexSummary(
@@ -187,10 +194,13 @@ class StockIndicesService:
                     )
                     indices_data[market] = min1_data
 
+            latest_time = max(latest_times) if latest_times else datetime.now(korea_tz)
+            time_str = latest_time.strftime("%H:%M")
+
             return IndicesData(
                 status_code=200,
                 message="데이터를 성공적으로 조회했습니다.",
-                time=datetime.now(korea_tz).strftime("%H:%M"),
+                time=time_str,
                 kospi=indices_summary.get("kospi", IndexSummary()),
                 kosdaq=indices_summary.get("kosdaq", IndexSummary()),
                 nasdaq=indices_summary.get("nasdaq", IndexSummary()),
