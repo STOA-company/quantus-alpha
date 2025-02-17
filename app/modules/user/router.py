@@ -15,6 +15,7 @@ from app.utils.oauth_utils import (
     refresh_access_token,
 )
 from app.modules.user.service import create_user, add_favorite_stock
+from app.utils.image_utils import convert_file_to_base64
 import json
 from typing import Optional
 
@@ -32,11 +33,15 @@ async def signup(
     profile_image: UploadFile = File(...),
 ):
     email = decode_email_token(email_token)["sub"]
-    user = create_user(email, nickname, provider)  # profile image 활성화 필요
+    base64 = None
+    if profile_image:
+        base64 = convert_file_to_base64(profile_image)
+    user = create_user(email, nickname, provider, base64)
     favorite_stock_list = json.loads(favorite_stocks)
     if favorite_stock_list:
         for ticker in favorite_stock_list:
             add_favorite_stock(user.id, ticker)
+
     access_token = create_jwt_token(user.id)
     refresh_token = create_refresh_token(user.id)
     access_token_hash = store_token(access_token, refresh_token)
