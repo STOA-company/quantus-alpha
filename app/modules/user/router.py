@@ -77,7 +77,12 @@ def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return UserInfoResponse(id=current_user.id, email=current_user.email, nickname=current_user.nickname)
+    return UserInfoResponse(
+        id=current_user.id,
+        email=current_user.email,
+        nickname=current_user.nickname,
+        profile_image=current_user.profile_image,
+    )
 
 
 @router.get("/duplicate")
