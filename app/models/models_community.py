@@ -1,7 +1,7 @@
 from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Table, Text, Index, func
 from app.models.models_base import Base, BaseMixin
 from sqlalchemy.orm import validates
-
+from sqlalchemy.dialects.mysql import LONGTEXT
 
 post_stocks = Table(
     "post_stocks",
@@ -31,7 +31,7 @@ class Post(Base, BaseMixin):
     id = Column(Integer, primary_key=True)
     title = Column(String(100), nullable=False)
     content = Column(Text, nullable=False)
-    image_url = Column(Text, nullable=True)
+    image_url = Column(LONGTEXT, nullable=True)
     like_count = Column(Integer, default=0)
     comment_count = Column(Integer, default=0)
 
