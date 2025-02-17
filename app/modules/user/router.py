@@ -14,7 +14,7 @@ from app.utils.oauth_utils import (
     store_token,
     refresh_access_token,
 )
-from app.modules.user.service import create_user, add_favorite_stock
+from app.modules.user.service import create_user, add_favorite_stock, check_nickname_available
 from app.utils.image_utils import convert_file_to_base64
 import json
 from typing import Optional
@@ -60,6 +60,12 @@ async def get_user_info(current_user: AlphafinderUser = Depends(get_current_user
         )
 
     return UserInfoResponse(id=current_user.id, email=current_user.email, nickname=current_user.nickname)
+
+
+@router.get("/duplicate")
+def check_nickname_duplicate(nickname: str):
+    is_available = check_nickname_available(nickname)
+    return {"is_available": is_available}
 
 
 @router.get("/cancel")
