@@ -13,6 +13,7 @@ from app.modules.trending.router import router as trending_router
 from app.modules.oauth.router import router as oauth_router
 from app.modules.user.router import router as user_router
 from app.modules.community.router import router as community_router
+from app.modules.screener.router import router as screener_router
 
 api_router = APIRouter()
 
@@ -30,3 +31,4 @@ api_router.include_router(trending_router, prefix="/trending", tags=["trending"]
 api_router.include_router(oauth_router, prefix="/oauth", tags=["oauth"])
 api_router.include_router(user_router, prefix="/user", tags=["user"])
 api_router.include_router(community_router, prefix="/community", tags=["community"])
+api_router.include_router(screener_router, prefix="/screener", tags=["screener"])
