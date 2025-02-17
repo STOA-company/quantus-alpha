@@ -16,11 +16,13 @@ class SortDirectionEnum(str, Enum):
 
 
 class UnitEnum(str, Enum):
-    PRICE = "price"
-    VOLUME = "volume"
-    PERCENTAGE = "percentage"
-    MULTIPLE = "multiple"
-    SCORE = "score"
+    PRICE = "price"  # 가격
+    VOLUME = "volume"  # 양
+    PERCENTAGE = "percentage"  # %
+    RATIO = "ratio"  # 비율
+    SCORE = "score"  # 점
+    TIMES = "times"  # 회
+    MULTIPLE = "multiple"  # 배
 
 
 class Factors(Base):
