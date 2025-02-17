@@ -112,6 +112,9 @@ class NewsService:
         condition = {"is_exist": True}
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
+        news_condition = condition.copy()
+        disclosure_condition = condition.copy()
+        news_condition["is_related"] = True
 
         change_rate_column = "change_rt"
 
@@ -126,7 +129,7 @@ class NewsService:
 
         from concurrent.futures import ThreadPoolExecutor
 
-        def fetch_data(table, columns):
+        def fetch_data(table, columns, condition):
             return pd.DataFrame(
                 self.db._select(
                     table=table,
@@ -157,8 +160,10 @@ class NewsService:
                     "emotion",
                     "that_time_price",
                     "current_price",
+                    "is_related",
                     change_rate_column,
                 ],
+                news_condition,
             )
 
             disclosure_future = executor.submit(
@@ -177,10 +182,12 @@ class NewsService:
                     "key_points",
                     "emotion",
                     "form_type",
+                    "category_type",
                     "that_time_price",
                     "current_price",
                     change_rate_column,
                 ],
+                disclosure_condition,
             )
 
             df_news = news_future.result()
@@ -224,7 +231,9 @@ class NewsService:
                     date=row["date"],
                     ctry=row["ctry"],
                     ticker=row["ticker"],
-                    title=f"{row['ko_name']} {document_type_mapping.get(row['form_type'], row['form_type'])}",
+                    title=f"{row['ko_name']} {document_type_mapping.get(row['form_type'], row['form_type'])} [{row['category_type']}]"
+                    if row["category_type"]
+                    else f"{row['ko_name']} {document_type_mapping.get(row['form_type'], row['form_type'])}",
                     summary=row["summary"],
                     impact_reason=row["impact_reason"],
                     key_points=row["key_points"],
@@ -264,7 +273,7 @@ class NewsService:
             except json.JSONDecodeError:
                 viewed_stories = set()
 
-        condition = {"is_top_story": 1, "is_exist": True}
+        condition = {"is_top_story": 1, "is_exist": True, "is_related": True}
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
             self.db._select(
