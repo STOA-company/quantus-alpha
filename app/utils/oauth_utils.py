@@ -62,11 +62,13 @@ def refresh_access_token(access_token_hash: str):
         payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         user_id = int(payload.get("sub"))
 
-        if datetime.utcnow() > datetime.fromtimestamp(payload.get("exp"), tz=timezone.utc):
+        current_time = datetime.now(timezone.utc)
+
+        if current_time > datetime.fromtimestamp(payload.get("exp"), tz=timezone.utc):
             refresh_token = token_data.refresh_token
             refresh_payload = jwt.decode(refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
 
-            if datetime.utcnow() > datetime.fromtimestamp(refresh_payload.get("exp"), tz=timezone.utc):
+            if current_time > datetime.fromtimestamp(refresh_payload.get("exp"), tz=timezone.utc):
                 raise HTTPException(
                     status_code=401,
                     detail="Refresh Token Expired",
@@ -77,8 +79,8 @@ def refresh_access_token(access_token_hash: str):
 
             new_payload = {
                 "sub": user_id,
-                "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
-                "iat": datetime.utcnow(),
+                "exp": (current_time + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp(),
+                "iat": current_time.timestamp(),
             }
             new_access_token = jwt.encode(new_payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
             new_access_token_hash = hashlib.sha256(new_access_token.encode()).hexdigest()
