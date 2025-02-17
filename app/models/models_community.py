@@ -37,7 +37,7 @@ class Post(Base, BaseMixin):
 
     # Foreign Key
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
-    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id"), nullable=False)
+    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="SET NULL"), nullable=True)
 
     __table_args__ = (
         Index("idx_posts_created_at", "created_at"),
@@ -70,7 +70,7 @@ class Comment(Base, BaseMixin):
 
     # Foreign Key
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id"), nullable=False)
+    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="SET NULL"), nullable=True)
 
     __table_args__ = (
         Index("idx_comments_post_id", post_id),
