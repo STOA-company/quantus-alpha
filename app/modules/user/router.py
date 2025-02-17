@@ -7,7 +7,13 @@ from app.modules.user.service import UserProfileService, delete_user, get_user_p
 from app.modules.user.schemas import UserInfoResponse, UserProfileResponse
 from fastapi import HTTPException
 from fastapi.security import HTTPBearer
-from app.utils.oauth_utils import decode_email_token, create_jwt_token, create_refresh_token, store_token
+from app.utils.oauth_utils import (
+    decode_email_token,
+    create_jwt_token,
+    create_refresh_token,
+    store_token,
+    refresh_access_token,
+)
 from app.modules.user.service import create_user, add_favorite_stock
 import json
 from typing import Optional
@@ -68,6 +74,12 @@ def get_profile(
 ) -> BaseResponse[UserProfileResponse]:
     data = service.get_user_profile(current_user, user_id)
     return BaseResponse(status_code=200, message="Profile retrieved successfully", data=data)
+
+
+@router.get("/refresh")
+def get_new_access_token(access_token_hash: str):
+    new_access_token = refresh_access_token(access_token_hash=access_token_hash)
+    return {"new_access_token": new_access_token}
 
 
 @router.get("/users/posts", response_model=InfiniteScrollResponse[ResponsePost], summary="사용자 게시글 목록 조회")
