@@ -43,6 +43,23 @@ def update_user(id: int, nickname: str = None, profile_image: UploadFile = None,
         add_favorite_stock(id, ticker)
 
 
+def update_profile(user_id: int, nickname: Optional[str] = None, base64: Optional[str] = None):
+    sets = {}
+
+    if nickname is not None:
+        sets["nickname"] = nickname
+
+    if base64 is not None:
+        sets["profile_image"] = base64
+
+    if sets:
+        database._update(
+            table="alphafinder_user",
+            sets=sets,
+            id=user_id,
+        )
+
+
 def check_nickname_available(nickname: str):
     is_exist = database._select(table="alphafinder_user", nickname=nickname)
     if is_exist:
