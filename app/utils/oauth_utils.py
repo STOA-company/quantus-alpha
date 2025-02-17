@@ -66,7 +66,8 @@ def refresh_access_token(access_token_hash: str):
             raise jwt.ExpiredSignatureError
 
     except jwt.ExpiredSignatureError:
-        refresh_payload = jwt.decode(token_data.refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        refresh_token = token_data.refresh_token
+        refresh_payload = jwt.decode(refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
 
         if datetime.utcnow() > datetime.fromtimestamp(refresh_payload.get("exp"), tz=timezone.utc):
             raise HTTPException(
@@ -83,12 +84,15 @@ def refresh_access_token(access_token_hash: str):
             "iat": datetime.utcnow(),
         }
         new_access_token = jwt.encode(new_payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+        new_access_token_hash = hashlib.sha256(new_access_token.encode()).hexdigest()
 
         database._update(
-            table="alphafinder_oauth_token", sets={"access_token": new_access_token}, access_token_hash=access_token_hash
+            table="alphafinder_oauth_token",
+            sets={"access_token": new_access_token, "access_token_hash": new_access_token_hash},
+            refresh_token=refresh_token,
         )
 
-        return new_access_token
+        return new_access_token_hash
 
     except jwt.InvalidTokenError:
         raise HTTPException(
@@ -97,7 +101,7 @@ def refresh_access_token(access_token_hash: str):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return token_data.access_token
+    return token_data.access_token_hash
 
 
 def decode_email_token(token: str):
