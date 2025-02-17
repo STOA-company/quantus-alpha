@@ -1,13 +1,12 @@
 import json
 from app.database.crud import database
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from fastapi import HTTPException, UploadFile
 
 from app.models.models_users import AlphafinderUser
 from app.modules.community.schemas import CommentItemWithPostInfo, PostInfo, ResponsePost, UserInfo
 from app.modules.user.schemas import UserProfileResponse
 
-from typing import Optional
 from sqlalchemy import text
 
 
@@ -16,14 +15,10 @@ def get_user_by_email(email: str):
     return users[0] if users else None
 
 
-def create_user(email: str, nickname: str, provider: str):
+def create_user(email: str, nickname: str, provider: str, base64: Optional[str] = None):
     database._insert(
         table="alphafinder_user",
-        sets={
-            "email": email,
-            "nickname": nickname,
-            "provider": provider,
-        },
+        sets={"email": email, "nickname": nickname, "provider": provider, "profile_image": base64},
     )
 
     user = get_user_by_email(email)
