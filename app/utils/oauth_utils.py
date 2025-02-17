@@ -1,6 +1,7 @@
 import os
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
 from jose import jwt, JWTError
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -46,6 +47,59 @@ def create_email_token(email: str) -> str:
     return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
+def refresh_access_token(access_token_hash: str):
+    token_record = database._select(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
+    if not token_record:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token_data = token_record[0]
+
+    try:
+        payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+
+        if datetime.utcnow() > datetime.fromtimestamp(payload.get("exp"), tz=timezone.utc):
+            raise jwt.ExpiredSignatureError
+
+    except jwt.ExpiredSignatureError:
+        refresh_payload = jwt.decode(token_data.refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+
+        if datetime.utcnow() > datetime.fromtimestamp(refresh_payload.get("exp"), tz=timezone.utc):
+            raise HTTPException(
+                status_code=401,
+                detail="Refresh Token Expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        user_id = int(refresh_payload.get("sub"))
+
+        new_payload = {
+            "sub": user_id,
+            "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+            "iat": datetime.utcnow(),
+        }
+        new_access_token = jwt.encode(new_payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+        database._update(
+            table="alphafinder_oauth_token", sets={"access_token": new_access_token}, access_token_hash=access_token_hash
+        )
+
+        return new_access_token
+
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return token_data.access_token
+
+
 def decode_email_token(token: str):
     try:
         return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
@@ -69,11 +123,7 @@ async def get_current_user(
 ) -> Optional[AlphafinderUser]:
     """현재 인증된 사용자 정보 조회"""
     if not credentials:
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        return None
 
     try:
         hashed_token = credentials.credentials
@@ -90,37 +140,16 @@ async def get_current_user(
             token_data = token_record[0]
 
             try:
-                # 액세스 토큰 검증
                 payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
                 user_id = int(payload.get("sub"))
 
             except jwt.ExpiredSignatureError:
-                # 리프레시 토큰으로 새 액세스 토큰 발급
-                try:
-                    refresh_payload = jwt.decode(token_data.refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-                    user_id = int(refresh_payload.get("sub"))
+                raise HTTPException(
+                    status_code=401,
+                    detail="Access Token Expired",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
 
-                    new_access_token = create_jwt_token(user_id)
-                    new_hashed_token = hashlib.sha256(new_access_token.encode()).hexdigest()
-
-                    # 토큰 업데이트
-                    database._update(
-                        table="alphafinder_oauth_token",
-                        where={"access_token_hash": hashed_token},
-                        access_token=new_access_token,
-                        access_token_hash=new_hashed_token,
-                    )
-
-                except jwt.ExpiredSignatureError:
-                    # 리프레시 토큰도 만료된 경우
-                    database._delete(table="alphafinder_oauth_token", access_token_hash=hashed_token)
-                    raise HTTPException(
-                        status_code=401,
-                        detail="Session expired. Please login again",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    )
-
-            # 사용자 조회
             user = database._select(table="alphafinder_user", id=user_id)
             if not user:
                 raise HTTPException(
