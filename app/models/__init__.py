@@ -20,6 +20,7 @@ from app.models.models_community import (
     StockStatistics,
     post_stocks,
 )
+from app.models.models_factors import Factors
 
 
 __all__ = [
@@ -45,6 +46,7 @@ __all__ = [
     "post_stocks",
     "PostStatistics",
     "StockStatistics",
+    "Factors",
 ]
 
 # Category relationships
