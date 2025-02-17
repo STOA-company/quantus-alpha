@@ -33,6 +33,9 @@ class CommunityService:
         if not is_stock_ticker:
             raise PostException(message="종목 코드가 유효하지 않습니다", status_code=400)
 
+        if not current_user or current_user[0] is None:
+            raise PostException(message="로그인이 필요합니다", status_code=401)
+
         user_id = current_user[0]
 
         insert_query = text("""
@@ -188,39 +191,30 @@ class CommunityService:
         order_by = order_by.value
 
         base_query = """
-            WITH post_data AS (
-                SELECT DISTINCT p.id, p.title, p.content, p.image_url, p.like_count, p.comment_count, p.created_at, p.updated_at,
-                    c.name as category_name,
-                    u.id as user_id, u.nickname, u.profile_image,
-                    CASE WHEN :current_user_id IS NOT NULL THEN
-                        EXISTS(
-                            SELECT 1 FROM bookmarks b
-                            WHERE b.post_id = p.id AND b.user_id = :current_user_id
-                        )
-                    ELSE false END as is_bookmarked,
-                    CASE WHEN :current_user_id IS NOT NULL THEN
-                        EXISTS(
-                            SELECT 1 FROM post_likes pl
-                            WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
-                        )
-                    ELSE false END as is_liked
-                FROM posts p
-                JOIN categories c ON p.category_id = c.id
-                LEFT JOIN alphafinder_user u ON p.user_id = u.id
-                {stock_join}  /* stock_ticker 조건 시 JOIN */
-                WHERE 1=1
-                {category_condition}  /* category_id 조건 */
-                {stock_condition}  /* stock_ticker 조건 */
-                ORDER BY p.{order_by} DESC
-                LIMIT :limit OFFSET :offset
-            )
-            SELECT pd.*, GROUP_CONCAT(ps.stock_ticker) as stock_tickers
-            FROM post_data pd
-            LEFT JOIN post_stocks ps ON pd.id = ps.post_id
-            GROUP BY pd.id, pd.title, pd.content, pd.image_url,
-                    pd.like_count, pd.comment_count, pd.created_at, pd.updated_at,
-                    pd.category_name, pd.user_id, pd.nickname, pd.profile_image,
-                    pd.is_bookmarked
+            SELECT p.id, p.title, p.content, p.image_url, p.like_count, p.comment_count, p.created_at, p.updated_at,
+                c.name as category_name,
+                u.id as user_id, u.nickname, u.profile_image,
+                CASE WHEN :current_user_id IS NOT NULL THEN
+                    EXISTS(
+                        SELECT 1 FROM bookmarks b
+                        WHERE b.post_id = p.id AND b.user_id = :current_user_id
+                    )
+                ELSE false END as is_bookmarked,
+                CASE WHEN :current_user_id IS NOT NULL THEN
+                    EXISTS(
+                        SELECT 1 FROM post_likes pl
+                        WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
+                    )
+                ELSE false END as is_liked
+            FROM posts p
+            JOIN categories c ON p.category_id = c.id
+            LEFT JOIN alphafinder_user u ON p.user_id = u.id
+            {stock_join}  /* stock_ticker 조건 시 JOIN */
+            WHERE 1=1
+            {category_condition}  /* category_id 조건 */
+            {stock_condition}  /* stock_ticker 조건 */
+            ORDER BY p.{order_by} DESC
+            LIMIT :limit OFFSET :offset
         """
 
         conditions = {"stock_join": "", "category_condition": "", "stock_condition": ""}
@@ -246,11 +240,26 @@ class CommunityService:
         result = self.db._execute(text(query), params)
         posts = result.mappings().all()
 
+        # 2. stock_tickers 정보 조회
+        post_ids = [post["id"] for post in posts]
+        stock_query = """
+            SELECT post_id, stock_ticker
+            FROM post_stocks
+            WHERE post_id IN :post_ids
+        """
+        stock_result = self.db._execute(text(stock_query), {"post_ids": post_ids})
+
+        # post_id별 stock_tickers 매핑
+        post_stocks = {}
+        for row in stock_result:
+            if row[0] not in post_stocks:
+                post_stocks[row[0]] = []
+            post_stocks[row[0]].append(row[1])
+
         # 모든 게시글의 티커를 하나의 set으로 모음
         all_tickers = set()
-        for post in posts:
-            if post["stock_tickers"]:
-                all_tickers.update(post["stock_tickers"])
+        for post in post_stocks:
+            all_tickers.update(post_stocks[post])
 
         # 종목 정보를 한 번에 조회
         columns = ["ticker", "ctry"]
@@ -282,7 +291,7 @@ class CommunityService:
                 is_liked=post["is_liked"],
                 created_at=post["created_at"],
                 stock_tickers=[
-                    stock_info_map[ticker] for ticker in (post["stock_tickers"] or []) if ticker in stock_info_map
+                    stock_info_map[ticker] for ticker in post_stocks.get(post["id"], []) if ticker in stock_info_map
                 ],
                 user_info=(
                     UserInfo(id=post["user_id"], nickname=post["nickname"], profile_image=post.get("profile_image"))

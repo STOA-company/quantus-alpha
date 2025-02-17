@@ -1,4 +1,6 @@
+import json
 from typing import List, Optional
+
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.community.enum import PostOrderBy
@@ -18,16 +20,47 @@ from app.modules.community.schemas import (
     TrendingStockResponse,
 )
 from app.modules.community.services import CommunityService, get_community_service
+from app.utils.image_utils import convert_file_to_base64
 from app.utils.oauth_utils import get_current_user
 from app.models.models_users import AlphafinderUser
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Form, Query, UploadFile
 
 router = APIRouter()
 
 
 ##### 게시글 CRUD #####
-@router.post("/posts", response_model=BaseResponse[dict], summary="게시글 생성")
+@router.post("/posts-with-image", response_model=BaseResponse[dict], summary="게시글 생성")
 async def create_new_post(
+    title: str = Form(..., min_length=1, max_length=200),
+    content: str = Form(..., min_length=1),
+    category_id: int = Form(...),
+    image_url: Optional[UploadFile] = None,
+    stock_tickers: str = Form(default="[]"),
+    community_service: CommunityService = Depends(get_community_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    stock_ticker_list = json.loads(stock_tickers)
+
+    image_base64 = None
+    if image_url:
+        image_base64 = convert_file_to_base64(image_url)
+
+    post_create = PostCreate(
+        title=title,
+        content=content,
+        category_id=category_id,
+        image_url=image_base64,
+        stock_tickers=stock_ticker_list,
+    )
+
+    result, post_id = await community_service.create_post(current_user=current_user, post_create=post_create)
+    result = {"success": result, "post_id": post_id}
+
+    return BaseResponse(status_code=200, message="게시글을 생성하였습니다.", data=result)
+
+
+@router.post("/posts", response_model=BaseResponse[dict], summary="게시글 생성")
+async def create_post(
     post_create: PostCreate,
     community_service: CommunityService = Depends(get_community_service),
     current_user: AlphafinderUser = Depends(get_current_user),
