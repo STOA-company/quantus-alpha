@@ -107,7 +107,13 @@ class CommunityService:
                         SELECT 1 FROM bookmarks b
                         WHERE b.post_id = p.id AND b.user_id = :current_user_id
                     )
-                ELSE false END as is_bookmarked
+                ELSE false END as is_bookmarked,
+                CASE WHEN :current_user_id IS NOT NULL THEN
+                    EXISTS(
+                        SELECT 1 FROM post_likes pl
+                        WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
+                    )
+                ELSE false END as is_liked
             FROM posts p
             JOIN categories c ON p.category_id = c.id
             LEFT JOIN alphafinder_user u ON p.user_id = u.id
@@ -159,6 +165,7 @@ class CommunityService:
             comment_count=post["comment_count"],
             is_changed=post["created_at"] != post["updated_at"],
             is_bookmarked=post["is_bookmarked"],
+            is_liked=post["is_liked"],
             created_at=post["created_at"],
             stock_tickers=stock_information,
             user_info=user_info,
@@ -190,7 +197,13 @@ class CommunityService:
                             SELECT 1 FROM bookmarks b
                             WHERE b.post_id = p.id AND b.user_id = :current_user_id
                         )
-                    ELSE false END as is_bookmarked
+                    ELSE false END as is_bookmarked,
+                    CASE WHEN :current_user_id IS NOT NULL THEN
+                        EXISTS(
+                            SELECT 1 FROM post_likes pl
+                            WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
+                        )
+                    ELSE false END as is_liked
                 FROM posts p
                 JOIN categories c ON p.category_id = c.id
                 LEFT JOIN alphafinder_user u ON p.user_id = u.id
@@ -266,6 +279,7 @@ class CommunityService:
                 comment_count=post["comment_count"],
                 is_changed=post["created_at"] != post["updated_at"],
                 is_bookmarked=post["is_bookmarked"],
+                is_liked=post["is_liked"],
                 created_at=post["created_at"],
                 stock_tickers=[
                     stock_info_map[ticker] for ticker in (post["stock_tickers"] or []) if ticker in stock_info_map
