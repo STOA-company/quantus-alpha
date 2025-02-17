@@ -6,6 +6,7 @@ class UserInfoResponse(BaseModel):
     id: int
     email: str
     nickname: Optional[str] = None
+    profile_image: Optional[str] = None
 
 
 class RefreshTokenResponse(BaseModel):
