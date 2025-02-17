@@ -14,7 +14,7 @@ from app.utils.oauth_utils import (
     store_token,
     refresh_access_token,
 )
-from app.modules.user.service import create_user, add_favorite_stock, check_nickname_available
+from app.modules.user.service import create_user, add_favorite_stock, check_nickname_available, update_profile
 from app.utils.image_utils import convert_file_to_base64
 import json
 from typing import Optional
@@ -25,7 +25,7 @@ security = HTTPBearer()
 
 
 @router.post("/signup")
-async def signup(
+def signup(
     email_token: str = Form(...),
     provider: str = Form(default="google"),
     nickname: str = Form(...),
@@ -49,8 +49,26 @@ async def signup(
     return {"message": "Signup successful", "access_token_hash": access_token_hash}
 
 
+@router.patch("/nickname")
+def update_nickname(nickname: str, current_user: AlphafinderUser = Depends(get_current_user)):
+    update_profile(current_user.id, nickname)
+
+
+@router.patch("/profile-image")
+def update_profile_image(
+    profile_image: UploadFile = File(...), current_user: AlphafinderUser = Depends(get_current_user)
+):
+    base64 = convert_file_to_base64(profile_image)
+    update_profile(current_user.id, base64)
+
+
+@router.delete("/delete")
+def user_delete(current_user: AlphafinderUser = Depends(get_current_user)):
+    delete_user(current_user.id)
+
+
 @router.get("/me", response_model=UserInfoResponse)
-async def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
+def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
     """현재 인증된 사용자 정보 반환"""
     if not current_user:
         raise HTTPException(
