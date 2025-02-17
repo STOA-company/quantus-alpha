@@ -31,7 +31,7 @@ from app.batches.check_split import check_kr_stock_splits, check_us_stock_splits
 from app.batches.check_outliers import check_and_recollect_outliers
 from app.batches.check_stock_status import check_warned_stock_us_batch
 
-from app.utils.date_utils import check_market_status
+from app.utils.date_utils import check_market_status, is_business_day
 
 notifier = SlackNotifier()
 logger = logging.getLogger(__name__)
@@ -132,26 +132,33 @@ def stock_trend_1d_kr_task():
 @log_task_execution
 def stock_trend_reset_kr():
     """한국 주식 일별 트렌드 업데이트"""
-    notifier.notify_info("KR_stock_trend_1d_batch process started")
+    if not is_business_day("KR"):
+        logger.info("KR market is not a business day. stock_trend_reset_kr process skipped.")
+        return
+    notifier.notify_info("stock_trend_reset_kr process started")
     try:
         run_stock_trend_reset_batch(ctry=TrendingCountry.KR)
-        notifier.notify_success("KR_stock_trend_1d_batch process completed")
+        notifier.notify_success("stock_trend_reset_kr process completed")
     except Exception as e:
-        notifier.notify_error(f"KR_stock_trend_1d_batch process failed: {str(e)}")
-        logger.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
+        notifier.notify_error(f"stock_trend_reset_kr process failed: {str(e)}")
+        logger.error(f"Error in stock_trend_reset_kr: {str(e)}")
 
 
 @CELERY_APP.task(name="stock_trend_reset_us")
 @log_task_execution
 def stock_trend_reset_us():
     """미국 주식 일별 트렌드 업데이트"""
-    notifier.notify_info("US_stock_trend_1d_batch process started")
+    if not is_business_day("US"):
+        logger.info("US market is not a business day. stock_trend_reset_us process skipped.")
+        return
+    notifier.notify_info("stock_trend_reset_us process started")
+    notifier.notify_info("stock_trend_reset_us process started")
     try:
         run_stock_trend_reset_batch(ctry=TrendingCountry.US)
-        notifier.notify_success("US_stock_trend_1d_batch process completed")
+        notifier.notify_success("stock_trend_reset_us process completed")
     except Exception as e:
-        notifier.notify_error(f"US_stock_trend_1d_batch process failed: {str(e)}")
-        logger.error(f"Error in run_stock_trend_by_1d_batch: {str(e)}")
+        notifier.notify_error(f"stock_trend_reset_us process failed: {str(e)}")
+        logger.error(f"Error in stock_trend_reset_us: {str(e)}")
 
 
 @CELERY_APP.task(name="stock_trend_realtime_us")
@@ -463,7 +470,7 @@ def reset_daily_leaderboard():
     try:
         from app.core.redis import redis_client
 
-        redis_client.delete("daily_search_leaderboard")
+        redis_client().delete("daily_search_leaderboard")
         notifier.notify_success("Reset_daily_leaderboard process completed")
     except Exception as e:
         notifier.notify_error(f"Reset_daily_leaderboard process failed: {str(e)}")

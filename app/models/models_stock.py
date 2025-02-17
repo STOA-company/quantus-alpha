@@ -1,6 +1,6 @@
 from pydantic import model_validator
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy import Column, Date, DateTime, Float, Integer, String, Boolean, ForeignKey
+from sqlalchemy import Column, Date, DateTime, Float, Integer, String, Boolean
 
 from app.models.models_base import Base
 
@@ -138,7 +138,7 @@ class StockTrend(Base):
     is_delisted = Column(Boolean, default=False, comment="상장 폐지 여부")
     is_cared = Column(Boolean, default=False, comment="관리종목 여부")
     is_warned = Column(Boolean, default=False, comment="경고종목 여부")
-    is_activate = Column(Boolean, ForeignKey("stock_information.is_activate"), comment="사용 가능 여부")
+    is_activate = Column(Boolean, default=True, comment="사용 가능 여부")
 
     # 현재가
     current_price = Column(Float, nullable=True, comment="현재가")

@@ -39,8 +39,15 @@ async def signup(
 
 
 @router.get("/me", response_model=UserInfoResponse)
-def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
+async def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
     """현재 인증된 사용자 정보 반환"""
+    if not current_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return UserInfoResponse(id=current_user.id, email=current_user.email, nickname=current_user.nickname)
 
 
