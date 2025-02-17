@@ -121,7 +121,7 @@ def decode_jwt_token(token: str):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-async def get_current_user(
+def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
 ) -> Optional[AlphafinderUser]:
     """현재 인증된 사용자 정보 조회"""

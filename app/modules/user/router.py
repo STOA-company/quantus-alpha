@@ -25,7 +25,7 @@ security = HTTPBearer()
 
 
 @router.post("/signup")
-async def signup(
+def signup(
     email_token: str = Form(...),
     provider: str = Form(default="google"),
     nickname: str = Form(...),
