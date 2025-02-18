@@ -3,7 +3,7 @@ from datetime import timedelta
 from io import BytesIO
 import pandas as pd
 from sqlalchemy import text
-from quantus_aws.common.configs import s3_client
+from Aws.common.configs import s3_client
 from app.utils.date_utils import get_business_days, now_kr, now_utc
 from app.database.crud import database
 from app.common.constants import US_EXCLUDE_DATES, KR_EXCLUDE_DATES
