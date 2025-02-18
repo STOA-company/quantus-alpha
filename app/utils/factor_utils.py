@@ -1,7 +1,9 @@
 import pandas as pd
 from app.database.crud import database
 from typing import Dict, List
-from app.modules.screener.schemas import FilterRequest
+from app.modules.screener.schemas import FilterCondition
+from quantus_aws.logic.s3 import get_data_from_bucket
+import io
 
 
 def get_factors_from_db() -> Dict[str, Dict]:
@@ -20,47 +22,65 @@ def get_factors_from_db() -> Dict[str, Dict]:
 
 
 def process_factor_data():
-    # TODO: S3로부터 한국, 미국 parquet 파일 모두 불러온 후 하나의 parquet 파일로 저장 (나라 컬럼 추가)
-    # TODO: 미국, 한국 화폐 단위
-    output_file = "stock_factors.parquet"
-
+    output_file = "parquet/stock_factors.parquet"
     factors_mapping = get_factors_from_db()
-    kr_df = pd.read_parquet("factor_ko_active.parquet")
-    us_df = pd.read_parquet("factor_us_active.parquet")
+
+    us_result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_us_active.parquet", dir="port/")
+    us_df = pd.read_parquet(io.BytesIO(us_result))
+
+    kr_result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_ko_active.parquet", dir="port/")
+    kr_df = pd.read_parquet(io.BytesIO(kr_result))
 
     kr_df["country"] = "kr"
     us_df["country"] = "us"
 
     df = pd.concat([kr_df, us_df])
 
-    selected_columns = ["Code"] + list(factors_mapping.keys())
+    market_mapping = {"NAS": "NASDAQ", "NYS": "NYSE", "KRX": "KOSDAQ", "KOS": "KOSPI"}
+
+    selected_columns = ["Code", "ExchMnem", "country", "WI26업종명(대)", "Name", "거래대금", "수정주가수익률"] + list(
+        factors_mapping.keys()
+    )
     df_selected = df[selected_columns]
-    df_selected.to_parquet(output_file)
+    df_filtered = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
+
+    df_result = df_filtered.rename(
+        columns={
+            "ExchMnem": "market",
+            "WI26업종명(대)": "sector",
+            "Name": "name",
+            "거래대금": "trade_volume",
+            "수정주가수익률": "price_change_rate",
+        }
+    )
+    df_result["market"] = df_result["market"].map(market_mapping)
+
+    df_result.to_parquet(output_file)
 
 
-def filter_stocks(filters: List[FilterRequest]) -> List[str]:
-    # TODO: 나라 필터링 추가
-    df = pd.read_parquet("stock_factors.parquet")
+def filter_stocks(filters: List[FilterCondition]) -> List[str]:
+    df = pd.read_parquet("parquet/stock_factors.parquet")
     filtered_df = df.copy()
 
     for filter in filters:
-        factor = filter.factor
+        factor = filter["factor"]
 
         if factor not in filtered_df.columns:
             raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
 
-        if filter.above is not None:
-            filtered_df = filtered_df[filtered_df[factor] >= filter.above]
+        if filter["above"] is not None:
+            filtered_df = filtered_df[filtered_df[factor] >= filter["above"]]
 
-        if filter.below is not None:
-            filtered_df = filtered_df[filtered_df[factor] <= filter.below]
+        if filter["below"] is not None:
+            filtered_df = filtered_df[filtered_df[factor] <= filter["below"]]
 
     stock_codes = filtered_df["Code"].tolist()
 
     return stock_codes
 
 
-def get_stocks_data(df: pd.DataFrame, codes: List[str]) -> List[Dict]:
+def get_stocks_data(codes: List[str]) -> List[Dict]:
+    df = pd.read_parquet("parquet/stock_factors.parquet")
     filtered_df = df[df["Code"].isin(codes)]
     stocks_data = filtered_df.to_dict(orient="records")
 
