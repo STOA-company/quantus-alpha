@@ -2,7 +2,7 @@ import pandas as pd
 from app.database.crud import database
 from typing import Dict, List
 from app.modules.screener.schemas import FilterCondition
-from quantus_aws.logic.s3 import get_data_from_bucket
+from Aws.logic.s3 import get_data_from_bucket
 import io
 
 
