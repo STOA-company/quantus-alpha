@@ -23,7 +23,16 @@ def get_factors(
     """
     try:
         factors = screener_service.get_factors(category)
-        return factors
+        return [
+            FactorResponse(
+                factor=factor["factor"],
+                description=factor["description"],
+                unit=factor["unit"],
+                sort_direction=factor["sort_direction"],
+                category=factor["category"],
+            )
+            for factor in factors
+        ]
     except Exception as e:
         logger.error(f"Error getting factors: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -36,7 +45,16 @@ def search_factors(query: str):
     """
     try:
         factors = screener_service.search_factors(query)
-        return factors
+        return [
+            FactorResponse(
+                factor=factor["factor"],
+                description=factor["description"],
+                unit=factor["unit"],
+                sort_direction=factor["sort_direction"],
+                category=factor["category"],
+            )
+            for factor in factors
+        ]
     except Exception as e:
         logger.error(f"Error searching factors: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -49,7 +67,13 @@ def get_factor(factor: str):
     """
     try:
         factor = screener_service.get_factor(factor)
-        return factor
+        return FactorResponse(
+            factor=factor["factor"],
+            description=factor["description"],
+            unit=factor["unit"],
+            sort_direction=factor["sort_direction"],
+            category=factor["category"],
+        )
     except Exception as e:
         logger.error(f"Error getting single factor: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -144,4 +168,20 @@ def delete_filter(filter_id: int):
             raise HTTPException(status_code=500, detail="Failed to delete filter")
     except Exception as e:
         logger.error(f"Error deleting filter: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/filters/reorder", response_model=Dict)
+def reorder_filters(filters: List[int]):
+    """
+    필터 순서 업데이트
+    """
+    try:
+        is_success = screener_service.reorder_filters(filters)
+        if is_success:
+            return {"message": "Filter reordered successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to reorder filters")
+    except Exception as e:
+        logger.error(f"Error reordering filters: {e}")
         raise HTTPException(status_code=500, detail=str(e))

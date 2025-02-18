@@ -9,6 +9,7 @@ class ScreenerFilter(Base):
     __tablename__ = "screener_filters"
 
     id = Column(Integer, primary_key=True, index=True)
+    order = Column(Integer, nullable=False)
     user_id = Column(String(50), nullable=True, index=True)  # 추천 필터의 경우 None
     name = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -16,7 +17,10 @@ class ScreenerFilter(Base):
 
     conditions = relationship("ScreenerFilterCondition", back_populates="filter", cascade="all, delete-orphan")
 
-    __table_args__ = (UniqueConstraint("user_id", "name", name="uix_user_filter_name"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uix_user_filter_name"),
+        UniqueConstraint("user_id", "order", name="uix_user_filter_order"),
+    )
 
     def __repr__(self):
         return f"<ScreenerFilter {self.name}>"

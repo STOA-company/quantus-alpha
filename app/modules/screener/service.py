@@ -101,9 +101,14 @@ class ScreenerService:
             logger.error(f"Error in get_filtered_stocks: {e}")
             raise e
 
-    def create_filter(self, user_id: id, name: str, conditions: List[Dict]) -> bool:
+    def create_filter(self, user_id: int, name: str, conditions: List[Dict]) -> bool:
         try:
-            self.database._insert(table="screener_filters", sets={"user_id": user_id, "name": name})
+            last_filter = self.database._select(table="screener_filters", user_id=user_id, order="order", ascending=False)
+            if last_filter:
+                order = last_filter[0].order + 1
+            else:
+                order = 1
+            self.database._insert(table="screener_filters", sets={"user_id": user_id, "name": name, "order": order})
             filter_id = self.database._select(table="screener_filters", user_id=user_id, name=name)[0].id
             for condition in conditions:
                 self.database._insert(
@@ -168,10 +173,19 @@ class ScreenerService:
 
     def get_saved_filters(self, user_id: str) -> List[Dict]:
         try:
-            filters = self.database._select(table="screener_filters", user_id=user_id)
+            filters = self.database._select(table="screener_filters", user_id=user_id, order="order", ascending=True)
             return filters
         except Exception as e:
             logger.error(f"Error in get_saved_filters: {e}")
+            raise e
+
+    def reorder_filters(self, filters: List[int]) -> bool:
+        try:
+            for index, filter_id in enumerate(filters):
+                self.database._update(table="screener_filters", filter_id=filter_id, order=index + 1)
+            return True
+        except Exception as e:
+            logger.error(f"Error in reorder_filters: {e}")
             raise e
 
 
