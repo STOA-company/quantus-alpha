@@ -8,6 +8,7 @@ from fastapi import Request, Response
 import pytz
 
 from app.core.exception.custom import DataNotFoundException
+from app.modules.common.enum import TranslateCountry
 from app.modules.disclosure.mapping import document_type_mapping
 
 import numpy as np
@@ -108,13 +109,34 @@ class NewsService:
 
         return df
 
-    def get_renewal_data(self, ctry: str = None) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
+    def get_renewal_data(
+        self, ctry: str = None, lang: TranslateCountry | None = None
+    ) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
+        if lang is None:
+            lang = TranslateCountry.KO
+
         condition = {"is_exist": True}
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
         news_condition = condition.copy()
         disclosure_condition = condition.copy()
+
         news_condition["is_related"] = True
+
+        if lang == TranslateCountry.KO:
+            # 뉴스 데이터
+            news_condition["lang"] = "ko-KR"
+            # 공시 데이터
+            summary = "summary"
+            impact_reason = "impact_reason"
+            key_points = "key_points"
+        else:
+            # 뉴스 데이터
+            news_condition["lang"] = "en-US"
+            # 공시 데이터
+            summary = "en_summary"
+            impact_reason = "en_impact_reason"
+            key_points = "en_key_points"
 
         change_rate_column = "change_rt"
 
@@ -177,9 +199,9 @@ class NewsService:
                     "ctry",
                     "date",
                     "url",
-                    "summary",
-                    "impact_reason",
-                    "key_points",
+                    summary,
+                    impact_reason,
+                    key_points,
                     "emotion",
                     "form_type",
                     "category_type",
@@ -198,13 +220,15 @@ class NewsService:
         disclosure_data = (
             []
             if df_disclosure.empty
-            else self._process_price_data(self._process_dataframe_disclosure(df_disclosure), is_disclosure=True)
+            else self._process_price_data(
+                self._process_dataframe_disclosure(df_disclosure), is_disclosure=True, lang=lang
+            )
         )
 
         return news_data, disclosure_data
 
     def _process_price_data(
-        self, df: pd.DataFrame, is_disclosure: bool = False
+        self, df: pd.DataFrame, is_disclosure: bool = False, lang: TranslateCountry | None = None
     ) -> List[Union[NewsRenewalItem, DisclosureRenewalItem]]:
         if df.empty:
             return []
@@ -234,9 +258,9 @@ class NewsService:
                     title=f"{row['ko_name']} {document_type_mapping.get(row['form_type'], row['form_type'])} [{row['category_type']}]"
                     if row["category_type"]
                     else f"{row['ko_name']} {document_type_mapping.get(row['form_type'], row['form_type'])}",
-                    summary=row["summary"],
-                    impact_reason=row["impact_reason"],
-                    key_points=row["key_points"],
+                    summary=row["summary"] if lang == TranslateCountry.KO else row["en_summary"],
+                    impact_reason=row["impact_reason"] if lang == TranslateCountry.KO else row["en_impact_reason"],
+                    key_points=row["key_points"] if lang == TranslateCountry.KO else row["en_key_points"],
                     emotion=row["emotion"],
                     name=row["ko_name"],
                     change_rate=row["change_rate"],
@@ -264,7 +288,7 @@ class NewsService:
             for _, row in df.iterrows()
         ]
 
-    def top_stories(self, request: Request):
+    def top_stories(self, request: Request, lang: TranslateCountry | None = None):
         viewed_stories = set()
         if request.cookies.get("viewed_stories"):
             cookie_data = request.cookies.get("viewed_stories", "[]")
@@ -273,7 +297,29 @@ class NewsService:
             except json.JSONDecodeError:
                 viewed_stories = set()
 
-        condition = {"is_top_story": 1, "is_exist": True, "is_related": True}
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        condition = {"is_top_story": 1, "is_exist": True}
+        news_condition = condition.copy()
+        disclosure_condition = condition.copy()
+
+        news_condition["is_related"] = True
+        if lang == TranslateCountry.KO:
+            # 뉴스 데이터
+            news_condition["lang"] = "ko-KR"
+            # 공시 데이터
+            summary = "summary"
+            impact_reason = "impact_reason"
+            key_points = "key_points"
+        else:
+            # 뉴스 데이터
+            news_condition["lang"] = "en-US"
+            # 공시 데이터
+            summary = "en_summary"
+            impact_reason = "en_impact_reason"
+            key_points = "en_key_points"
+
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
             self.db._select(
@@ -294,7 +340,7 @@ class NewsService:
                 ],
                 order="date",
                 ascending=False,
-                **condition,
+                **news_condition,
             )
         )
         if not df_news.empty:
@@ -313,19 +359,23 @@ class NewsService:
                     "en_name",
                     "ctry",
                     "date",
-                    "summary",
-                    "impact_reason",
-                    "key_points",
+                    summary,
+                    impact_reason,
+                    key_points,
                     "emotion",
                     "form_type",
                     "that_time_price",
                 ],
                 order="date",
                 ascending=False,
-                **condition,
+                **disclosure_condition,
             )
         )
         if not df_disclosure.empty:
+            if lang != TranslateCountry.KO:
+                df_disclosure = df_disclosure.rename(
+                    columns={"en_summary": "summary", "en_impact_reason": "impact_reason", "en_key_points": "key_points"}
+                )
             df_disclosure = self._process_dataframe_disclosure(df_disclosure)
             df_disclosure["title"] = (
                 df_disclosure["ko_name"]
@@ -403,10 +453,13 @@ class NewsService:
                         is_viewed=is_viewed,
                     )
                 )
-            ko_name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
+            if lang == TranslateCountry.KO:
+                name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
+            else:
+                name = self.remove_parentheses(ticker_news.iloc[0]["en_name"])
             result.append(
                 TopStoriesResponse(
-                    name=ko_name,
+                    name=name,
                     ticker=ticker,
                     logo_image="추후 반영",
                     ctry=ticker_news.iloc[0]["ctry"],
@@ -522,7 +575,16 @@ class NewsService:
         end_date: str = None,
         page: int = 1,
         size: int = 6,
+        lang: TranslateCountry | None = None,
     ):
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        if lang == TranslateCountry.KO:
+            lang = "ko-KR"
+        else:
+            lang = "en-US"
+
         kst = pytz.timezone("Asia/Seoul")
         utc = pytz.timezone("UTC")
 
@@ -571,6 +633,7 @@ class NewsService:
                 "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
                 "is_exist": True,
                 "is_related": True,
+                "lang": lang,
             }
         else:
             condition = {
@@ -579,6 +642,7 @@ class NewsService:
                 "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
                 "is_exist": True,
                 "is_related": True,
+                "lang": lang,
             }
 
         df_news = pd.DataFrame(

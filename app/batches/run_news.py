@@ -25,7 +25,7 @@ def run_news_batch(ctry: str = None, date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d").date()
     else:
-        check_date = now_utc(is_date=True)
+        check_date = now_kr(is_date=True)
 
     if ctry == "KR":
         ctry_news = "kor_news"
