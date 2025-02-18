@@ -91,6 +91,7 @@ def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
         email=current_user.email,
         nickname=current_user.nickname,
         profile_image=current_user.profile_image,
+        image_format=current_user.image_format,
     )
 
 
