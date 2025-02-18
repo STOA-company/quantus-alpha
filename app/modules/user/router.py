@@ -37,7 +37,7 @@ def signup(
     base64 = None
     if profile_image:
         base64 = convert_file_to_base64(profile_image)
-    user = create_user(email, nickname, provider, base64, image_format)
+    user = create_user(email=email, nickname=nickname, provider=provider, base64=base64, image_format=image_format)
     favorite_stock_list = json.loads(favorite_stocks)
     if favorite_stock_list:
         for ticker in favorite_stock_list:
@@ -52,7 +52,7 @@ def signup(
 
 @router.patch("/nickname")
 def update_nickname(nickname: str, current_user: AlphafinderUser = Depends(get_current_user)):
-    update_profile(current_user.id, nickname)
+    update_profile(user_id=current_user.id, nickname=nickname)
 
     return BaseResponse(status_code=200, message="Nickname updated successfully")
 
@@ -64,7 +64,7 @@ def update_profile_image(
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
     base64 = convert_file_to_base64(profile_image)
-    update_profile(current_user.id, base64, image_format)
+    update_profile(user_id=current_user.id, base64=base64, image_format=image_format)
 
     return BaseResponse(status_code=200, message="Profile image updated successfully")
 
