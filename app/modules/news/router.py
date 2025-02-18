@@ -1,5 +1,6 @@
 from typing import Annotated, List, Literal
 from fastapi import APIRouter, Depends, Query, Request, Response
+from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.news.services import NewsService, get_news_service
 from app.modules.news.schemas import (
@@ -17,9 +18,13 @@ router = APIRouter()
 @router.get("/renewal/real_time", summary="실시간 뉴스", response_model=BaseResponse[NewsRenewalResponse])
 def news_main(
     ctry: Annotated[str, Query(description="국가 코드, 예시: kr, us")] = None,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: KO, EN")] = None,
     news_service: NewsService = Depends(get_news_service),
 ):
-    news_data, disclosure_data = news_service.get_renewal_data(ctry=ctry)
+    if lang is None:
+        lang = TranslateCountry.KO
+
+    news_data, disclosure_data = news_service.get_renewal_data(ctry=ctry, lang=lang)
 
     response_data = NewsRenewalResponse(news=news_data, disclosure=disclosure_data)
 
@@ -29,9 +34,13 @@ def news_main(
 @router.get("/top_stories", summary="주요소식 모아보기", response_model=BaseResponse[List[TopStoriesResponse]])
 def top_stories(
     request: Request,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: KO, EN", optional=True)] = None,
     news_service: NewsService = Depends(get_news_service),
 ):
-    data = news_service.top_stories(request=request)
+    if lang is None:
+        lang = TranslateCountry.KO
+
+    data = news_service.top_stories(request=request, lang=lang)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
 

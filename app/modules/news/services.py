@@ -8,6 +8,7 @@ from fastapi import Request, Response
 import pytz
 
 from app.core.exception.custom import DataNotFoundException
+from app.modules.common.enum import TranslateCountry
 from app.modules.disclosure.mapping import document_type_mapping
 
 import numpy as np
@@ -108,13 +109,21 @@ class NewsService:
 
         return df
 
-    def get_renewal_data(self, ctry: str = None) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
+    def get_renewal_data(
+        self, ctry: str = None, lang: TranslateCountry | None = None
+    ) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
         condition = {"is_exist": True}
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
         news_condition = condition.copy()
         disclosure_condition = condition.copy()
+
         news_condition["is_related"] = True
+
+        if lang == TranslateCountry.KO:
+            news_condition["lang"] = "ko-KR"
+        else:
+            news_condition["lang"] = "en-US"
 
         change_rate_column = "change_rt"
 
@@ -154,9 +163,9 @@ class NewsService:
                     "ctry",
                     "date",
                     "title",
-                    "summary",
-                    "impact_reason",
-                    "key_points",
+                    "summary" if lang == TranslateCountry.KO else "en_summary",
+                    "impact_reason" if lang == TranslateCountry.KO else "en_impact_reason",
+                    "key_points" if lang == TranslateCountry.KO else "en_key_points",
                     "emotion",
                     "that_time_price",
                     "current_price",
@@ -264,7 +273,7 @@ class NewsService:
             for _, row in df.iterrows()
         ]
 
-    def top_stories(self, request: Request):
+    def top_stories(self, request: Request, lang: TranslateCountry | None = None):
         viewed_stories = set()
         if request.cookies.get("viewed_stories"):
             cookie_data = request.cookies.get("viewed_stories", "[]")
@@ -273,7 +282,15 @@ class NewsService:
             except json.JSONDecodeError:
                 viewed_stories = set()
 
-        condition = {"is_top_story": 1, "is_exist": True, "is_related": True}
+        condition = {"is_top_story": 1, "is_exist": True}
+        news_condition = condition.copy()
+        disclosure_condition = condition.copy()
+
+        news_condition["is_related"] = True
+        if lang == TranslateCountry.KO:
+            news_condition["lang"] = "ko-KR"
+        else:
+            news_condition["lang"] = "en-US"
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
             self.db._select(
@@ -294,7 +311,7 @@ class NewsService:
                 ],
                 order="date",
                 ascending=False,
-                **condition,
+                **news_condition,
             )
         )
         if not df_news.empty:
@@ -322,7 +339,7 @@ class NewsService:
                 ],
                 order="date",
                 ascending=False,
-                **condition,
+                **disclosure_condition,
             )
         )
         if not df_disclosure.empty:
