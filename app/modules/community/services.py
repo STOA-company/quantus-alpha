@@ -105,7 +105,7 @@ class CommunityService:
             SELECT
                 p.id, p.title, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at,
                 c.name as category_name,
-                u.id as user_id, u.nickname, u.profile_image,
+                u.id as user_id, u.nickname, u.profile_image, u.image_format,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
                         SELECT 1 FROM bookmarks b
@@ -153,9 +153,14 @@ class CommunityService:
 
         # 3. UserInfo 객체 생성
         user_info = (
-            UserInfo(id=post["user_id"], nickname=post["nickname"], profile_image=post.get("profile_image"))
+            UserInfo(
+                id=post["user_id"],
+                nickname=post["nickname"],
+                profile_image=post.get("profile_image"),
+                image_format=post.get("image_format"),
+            )
             if post["nickname"]
-            else UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None)
+            else UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None, image_format=None)
         )
 
         # 4. ResponsePost 객체 생성 및 반환
@@ -195,7 +200,7 @@ class CommunityService:
         base_query = """
             SELECT p.id, p.title, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at,
                 c.name as category_name,
-                u.id as user_id, u.nickname, u.profile_image,
+                u.id as user_id, u.nickname, u.profile_image, u.image_format,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
                         SELECT 1 FROM bookmarks b
@@ -297,9 +302,14 @@ class CommunityService:
                     stock_info_map[ticker] for ticker in post_stocks.get(post["id"], []) if ticker in stock_info_map
                 ],
                 user_info=(
-                    UserInfo(id=post["user_id"], nickname=post["nickname"], profile_image=post.get("profile_image"))
+                    UserInfo(
+                        id=post["user_id"],
+                        nickname=post["nickname"],
+                        profile_image=post.get("profile_image"),
+                        image_format=post.get("image_format"),
+                    )
                     if post["nickname"]
-                    else UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None)
+                    else UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None, image_format=None)
                 ),
             )
             for post in posts
@@ -453,7 +463,7 @@ class CommunityService:
         parent_query = """
             SELECT
                 c.id, c.content, c.like_count, c.depth, c.parent_id, c.created_at, c.updated_at,
-                u.id as user_id, u.nickname, u.profile_image,
+                u.id as user_id, u.nickname, u.profile_image, u.image_format,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
                         SELECT 1 FROM comment_likes cl
@@ -485,7 +495,7 @@ class CommunityService:
         child_query = """
             SELECT
                 c.id, c.content, c.like_count, c.depth, c.parent_id, c.created_at, c.updated_at,
-                u.id as user_id, u.nickname, u.profile_image,
+                u.id as user_id, u.nickname, u.profile_image, u.image_format,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
                         SELECT 1 FROM comment_likes cl
@@ -505,12 +515,16 @@ class CommunityService:
             """사용자 정보 생성 (탈퇴한 사용자 처리)"""
             if comment["user_id"] and comment["nickname"]:
                 return UserInfo(
-                    id=comment["user_id"], nickname=comment["nickname"], profile_image=comment.get("profile_image")
+                    id=comment["user_id"],
+                    nickname=comment["nickname"],
+                    profile_image=comment.get("profile_image"),
+                    image_format=comment.get("image_format"),
                 )
             return UserInfo(
                 id=0,
                 nickname="(알 수 없는 유저)",
                 profile_image=None,
+                image_format=None,
             )
 
         # 3. 대댓글을 원댓글의 sub_comments에 매핑

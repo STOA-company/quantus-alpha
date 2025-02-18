@@ -29,6 +29,7 @@ class UserInfo(BaseModel):
     id: int
     nickname: str
     profile_image: Optional[str] = None
+    image_format: Optional[str] = None
 
 
 class StockInfo(BaseModel):
