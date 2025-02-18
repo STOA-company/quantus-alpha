@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import text
-from app.common.constants import UTC
+from app.common.constants import KST, UTC
 from app.core.exception.custom import PostException, TooManyStockTickersException
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
@@ -171,7 +171,7 @@ class CommunityService:
             is_changed=post["created_at"] != post["updated_at"],
             is_bookmarked=post["is_bookmarked"],
             is_liked=post["is_liked"],
-            created_at=post["created_at"],
+            created_at=post["created_at"].astimezone(KST),
             stock_tickers=stock_information,
             user_info=user_info,
         )
@@ -292,7 +292,7 @@ class CommunityService:
                 is_changed=post["created_at"] != post["updated_at"],
                 is_bookmarked=post["is_bookmarked"],
                 is_liked=post["is_liked"],
-                created_at=post["created_at"],
+                created_at=post["created_at"].astimezone(KST),
                 stock_tickers=[
                     stock_info_map[ticker] for ticker in post_stocks.get(post["id"], []) if ticker in stock_info_map
                 ],
@@ -526,7 +526,7 @@ class CommunityService:
                     like_count=child["like_count"],
                     depth=child["depth"],
                     parent_id=child["parent_id"],
-                    created_at=child["created_at"],
+                    created_at=child["created_at"].astimezone(KST),
                     is_changed=child["created_at"] != child["updated_at"],
                     is_liked=child["is_liked"],
                     is_mine=child["user_id"] == current_user_id if current_user_id else False,
@@ -543,7 +543,7 @@ class CommunityService:
                 like_count=comment["like_count"],
                 depth=comment["depth"],
                 parent_id=comment["parent_id"],
-                created_at=comment["created_at"],
+                created_at=comment["created_at"].astimezone(KST),
                 is_changed=comment["created_at"] != comment["updated_at"],
                 is_liked=comment["is_liked"],
                 is_mine=comment["user_id"] == current_user_id if current_user_id else False,
@@ -778,7 +778,7 @@ class CommunityService:
                 id=post["id"],
                 rank=post["rank_num"],
                 title=post["title"],
-                created_at=post["created_at"],
+                created_at=post["created_at"].astimezone(KST),
                 user_info=UserInfo(
                     id=post["user_id"] if post["user_id"] else 0,
                     nickname=post["nickname"] if post["nickname"] else "(알 수 없는 유저)",
