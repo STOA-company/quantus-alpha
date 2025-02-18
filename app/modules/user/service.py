@@ -15,10 +15,18 @@ def get_user_by_email(email: str):
     return users[0] if users else None
 
 
-def create_user(email: str, nickname: str, provider: str, base64: Optional[str] = None):
+def create_user(
+    email: str, nickname: str, provider: str, base64: Optional[str] = None, image_format: Optional[str] = None
+):
     database._insert(
         table="alphafinder_user",
-        sets={"email": email, "nickname": nickname, "provider": provider, "profile_image": base64},
+        sets={
+            "email": email,
+            "nickname": nickname,
+            "provider": provider,
+            "profile_image": base64,
+            "image_format": image_format,
+        },
     )
 
     user = get_user_by_email(email)
@@ -43,7 +51,9 @@ def update_user(id: int, nickname: str = None, profile_image: UploadFile = None,
         add_favorite_stock(id, ticker)
 
 
-def update_profile(user_id: int, nickname: Optional[str] = None, base64: Optional[str] = None):
+def update_profile(
+    user_id: int, nickname: Optional[str] = None, base64: Optional[str] = None, image_format: Optional[str] = None
+):
     sets = {}
 
     if nickname is not None:
@@ -51,6 +61,9 @@ def update_profile(user_id: int, nickname: Optional[str] = None, base64: Optiona
 
     if base64 is not None:
         sets["profile_image"] = base64
+
+    if image_format is not None:
+        sets["image_format"] = image_format
 
     if sets:
         database._update(
