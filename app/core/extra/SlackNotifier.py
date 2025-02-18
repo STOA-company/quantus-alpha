@@ -30,7 +30,7 @@ class SlackNotifier:
         ]
 
         # mention_ids에서 추가 멘션
-        mentions.extend(f"@{user_id}" for user_id in self.mention_ids if user_id not in self.SLACK_USER_IDS.values())
+        mentions.extend(f"<@{user_id}>" for user_id in self.mention_ids if user_id not in self.SLACK_USER_IDS.values())
 
         return " ".join(mentions)
 

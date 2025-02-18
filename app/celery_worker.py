@@ -1,12 +1,10 @@
 import logging
 from functools import wraps
 
-from app.batches.run_community import update_post_statistics, update_stock_statistics
 from app.batches.run_news import (
-    renewal_kr_run_news_batch,
-    renewal_us_run_news_batch,
     renewal_kr_run_news_is_top_story,
     renewal_us_run_news_is_top_story,
+    run_news_batch,
 )
 from app.common.celery_config import CELERY_APP
 from app.core.config import settings
@@ -237,7 +235,7 @@ def kr_news_renewal():
     """한국 뉴스 업데이트"""
     notifier.notify_info("KR_news_renewal process started")
     try:
-        renewal_kr_run_news_batch()
+        run_news_batch(ctry="KR")
         notifier.notify_success("KR_news_renewal process completed")
     except Exception as e:
         notifier.notify_error(f"KR_news_renewal process failed: {str(e)}", "고경민")
@@ -249,7 +247,7 @@ def us_news_renewal():
     """미국 뉴스 업데이트"""
     notifier.notify_info("US_news_renewal process started")
     try:
-        renewal_us_run_news_batch()
+        run_news_batch(ctry="US")
         notifier.notify_success("US_news_renewal process completed")
     except Exception as e:
         notifier.notify_error(f"US_news_renewal process failed: {str(e)}", "고경민")
@@ -439,28 +437,28 @@ def check_warned_stock_us():
         raise
 
 
-@CELERY_APP.task(name="community_trending_stock_update", ignore_result=True)
-def community_trending_stock_update():
-    """커뮤니티 인기 종목 업데이트"""
-    notifier.notify_info("Community_trending_stock_update process started")
-    try:
-        update_stock_statistics()
-        notifier.notify_success("Community_trending_stock_update process completed")
-    except Exception as e:
-        notifier.notify_error(f"Community_trending_stock_update process failed: {str(e)}", "고경민")
-        raise
+# @CELERY_APP.task(name="community_trending_stock_update", ignore_result=True)
+# def community_trending_stock_update():
+#     """커뮤니티 인기 종목 업데이트"""
+#     notifier.notify_info("Community_trending_stock_update process started")
+#     try:
+#         update_stock_statistics()
+#         notifier.notify_success("Community_trending_stock_update process completed")
+#     except Exception as e:
+#         notifier.notify_error(f"Community_trending_stock_update process failed: {str(e)}", "고경민")
+#         raise
 
 
-@CELERY_APP.task(name="community_trending_post_update", ignore_result=True)
-def community_trending_post_update():
-    """커뮤니티 인기 게시글 업데이트"""
-    notifier.notify_info("Community_trending_post_update process started")
-    try:
-        update_post_statistics()
-        notifier.notify_success("Community_trending_post_update process completed")
-    except Exception as e:
-        notifier.notify_error(f"Community_trending_post_update process failed: {str(e)}", "고경민")
-        raise
+# @CELERY_APP.task(name="community_trending_post_update", ignore_result=True)
+# def community_trending_post_update():
+#     """커뮤니티 인기 게시글 업데이트"""
+#     notifier.notify_info("Community_trending_post_update process started")
+#     try:
+#         update_post_statistics()
+#         notifier.notify_success("Community_trending_post_update process completed")
+#     except Exception as e:
+#         notifier.notify_error(f"Community_trending_post_update process failed: {str(e)}", "고경민")
+#         raise
 
 
 @CELERY_APP.task(name="reset_daily_leaderboard", ignore_result=True)

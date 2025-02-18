@@ -40,11 +40,11 @@ class CommunityService:
 
         insert_query = text("""
                 INSERT INTO posts (
-                    title, content, category_id, image_url,
+                    title, content, category_id, image_url, image_format,
                     like_count, comment_count, user_id,
                     created_at, updated_at
                 ) VALUES (
-                    :title, :content, :category_id, :image_url,
+                    :title, :content, :category_id, :image_url, :image_format,
                     0, 0, :user_id,
                     :created_at, :updated_at
                 )
@@ -55,6 +55,7 @@ class CommunityService:
             "content": post_create.content,
             "category_id": post_create.category_id,
             "image_url": post_create.image_url,
+            "image_format": post_create.image_format,
             "user_id": user_id,
             "created_at": current_time,
             "updated_at": current_time,
@@ -102,7 +103,7 @@ class CommunityService:
         # 1. 게시글, 작성자, 카테고리 정보 조회
         query = """
             SELECT
-                p.id, p.title, p.content, p.image_url, p.like_count, p.comment_count, p.created_at, p.updated_at,
+                p.id, p.title, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at,
                 c.name as category_name,
                 u.id as user_id, u.nickname, u.profile_image,
                 CASE WHEN :current_user_id IS NOT NULL THEN
@@ -164,6 +165,7 @@ class CommunityService:
             content=post["content"],
             category_name=post["category_name"],
             image_url=post["image_url"],
+            image_format=post["image_format"],
             like_count=post["like_count"],
             comment_count=post["comment_count"],
             is_changed=post["created_at"] != post["updated_at"],
@@ -191,7 +193,7 @@ class CommunityService:
         order_by = order_by.value
 
         base_query = """
-            SELECT p.id, p.title, p.content, p.image_url, p.like_count, p.comment_count, p.created_at, p.updated_at,
+            SELECT p.id, p.title, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at,
                 c.name as category_name,
                 u.id as user_id, u.nickname, u.profile_image,
                 CASE WHEN :current_user_id IS NOT NULL THEN
@@ -284,6 +286,7 @@ class CommunityService:
                 content=post["content"],
                 category_name=post["category_name"],
                 image_url=post["image_url"],
+                image_format=post["image_format"],
                 like_count=post["like_count"],
                 comment_count=post["comment_count"],
                 is_changed=post["created_at"] != post["updated_at"],
@@ -328,6 +331,7 @@ class CommunityService:
             "content": post_update.content,
             "category_id": post_update.category_id,
             "image_url": post_update.image_url,
+            "image_format": post_update.image_format,
             "updated_at": current_time,
         }
         result = self.db._update(table="posts", sets=update_date, id=post_id)
