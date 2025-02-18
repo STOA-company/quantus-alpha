@@ -35,6 +35,7 @@ async def create_new_post(
     content: str = Form(..., min_length=1),
     category_id: int = Form(...),
     image_url: Optional[UploadFile] = None,
+    image_format: Optional[str] = Form(None),
     stock_tickers: str = Form(default="[]"),
     community_service: CommunityService = Depends(get_community_service),
     current_user: AlphafinderUser = Depends(get_current_user),
@@ -50,6 +51,7 @@ async def create_new_post(
         content=content,
         category_id=category_id,
         image_url=image_base64,
+        image_format=image_format,
         stock_tickers=stock_ticker_list,
     )
 
@@ -117,6 +119,40 @@ async def update_post(
     community_service: CommunityService = Depends(get_community_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
+    result, post_id = await community_service.update_post(
+        current_user=current_user, post_id=post_id, post_update=post_update
+    )
+    data = {"success": result, "post_id": post_id}
+    return BaseResponse(status_code=200, message="게시글을 수정하였습니다.", data=data)
+
+
+@router.put("/posts-with-image/{post_id}", response_model=BaseResponse[bool], summary="게시글 수정")
+async def update_post_with_image(
+    post_id: int,
+    title: str = Form(..., min_length=1, max_length=200),
+    content: str = Form(..., min_length=1),
+    category_id: int = Form(...),
+    image_url: Optional[UploadFile] = None,
+    image_format: Optional[str] = Form(None),
+    stock_tickers: str = Form(default="[]"),
+    community_service: CommunityService = Depends(get_community_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    stock_ticker_list = json.loads(stock_tickers)
+
+    image_base64 = None
+    if image_url:
+        image_base64 = convert_file_to_base64(image_url)
+
+    post_update = PostUpdate(
+        title=title,
+        content=content,
+        category_id=category_id,
+        image_url=image_base64,
+        image_format=image_format,
+        stock_tickers=stock_ticker_list,
+    )
+
     result, post_id = await community_service.update_post(
         current_user=current_user, post_id=post_id, post_update=post_update
     )

@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import text
-from app.common.constants import UTC
+from app.common.constants import KST, UTC
 from app.core.exception.custom import PostException, TooManyStockTickersException
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
@@ -40,11 +40,11 @@ class CommunityService:
 
         insert_query = text("""
                 INSERT INTO posts (
-                    title, content, category_id, image_url,
+                    title, content, category_id, image_url, image_format,
                     like_count, comment_count, user_id,
                     created_at, updated_at
                 ) VALUES (
-                    :title, :content, :category_id, :image_url,
+                    :title, :content, :category_id, :image_url, :image_format,
                     0, 0, :user_id,
                     :created_at, :updated_at
                 )
@@ -55,6 +55,7 @@ class CommunityService:
             "content": post_create.content,
             "category_id": post_create.category_id,
             "image_url": post_create.image_url,
+            "image_format": post_create.image_format,
             "user_id": user_id,
             "created_at": current_time,
             "updated_at": current_time,
@@ -102,9 +103,9 @@ class CommunityService:
         # 1. 게시글, 작성자, 카테고리 정보 조회
         query = """
             SELECT
-                p.id, p.title, p.content, p.image_url, p.like_count, p.comment_count, p.created_at, p.updated_at,
+                p.id, p.title, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at,
                 c.name as category_name,
-                u.id as user_id, u.nickname, u.profile_image,
+                u.id as user_id, u.nickname, u.profile_image, u.image_format,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
                         SELECT 1 FROM bookmarks b
@@ -152,9 +153,14 @@ class CommunityService:
 
         # 3. UserInfo 객체 생성
         user_info = (
-            UserInfo(id=post["user_id"], nickname=post["nickname"], profile_image=post.get("profile_image"))
+            UserInfo(
+                id=post["user_id"],
+                nickname=post["nickname"],
+                profile_image=post.get("profile_image"),
+                image_format=post.get("image_format"),
+            )
             if post["nickname"]
-            else UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None)
+            else UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None, image_format=None)
         )
 
         # 4. ResponsePost 객체 생성 및 반환
@@ -164,12 +170,13 @@ class CommunityService:
             content=post["content"],
             category_name=post["category_name"],
             image_url=post["image_url"],
+            image_format=post["image_format"],
             like_count=post["like_count"],
             comment_count=post["comment_count"],
             is_changed=post["created_at"] != post["updated_at"],
             is_bookmarked=post["is_bookmarked"],
             is_liked=post["is_liked"],
-            created_at=post["created_at"],
+            created_at=post["created_at"].astimezone(KST),
             stock_tickers=stock_information,
             user_info=user_info,
         )
@@ -191,9 +198,9 @@ class CommunityService:
         order_by = order_by.value
 
         base_query = """
-            SELECT p.id, p.title, p.content, p.image_url, p.like_count, p.comment_count, p.created_at, p.updated_at,
+            SELECT p.id, p.title, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at,
                 c.name as category_name,
-                u.id as user_id, u.nickname, u.profile_image,
+                u.id as user_id, u.nickname, u.profile_image, u.image_format,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
                         SELECT 1 FROM bookmarks b
@@ -284,19 +291,25 @@ class CommunityService:
                 content=post["content"],
                 category_name=post["category_name"],
                 image_url=post["image_url"],
+                image_format=post["image_format"],
                 like_count=post["like_count"],
                 comment_count=post["comment_count"],
                 is_changed=post["created_at"] != post["updated_at"],
                 is_bookmarked=post["is_bookmarked"],
                 is_liked=post["is_liked"],
-                created_at=post["created_at"],
+                created_at=post["created_at"].astimezone(KST),
                 stock_tickers=[
                     stock_info_map[ticker] for ticker in post_stocks.get(post["id"], []) if ticker in stock_info_map
                 ],
                 user_info=(
-                    UserInfo(id=post["user_id"], nickname=post["nickname"], profile_image=post.get("profile_image"))
+                    UserInfo(
+                        id=post["user_id"],
+                        nickname=post["nickname"],
+                        profile_image=post.get("profile_image"),
+                        image_format=post.get("image_format"),
+                    )
                     if post["nickname"]
-                    else UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None)
+                    else UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None, image_format=None)
                 ),
             )
             for post in posts
@@ -328,6 +341,7 @@ class CommunityService:
             "content": post_update.content,
             "category_id": post_update.category_id,
             "image_url": post_update.image_url,
+            "image_format": post_update.image_format,
             "updated_at": current_time,
         }
         result = self.db._update(table="posts", sets=update_date, id=post_id)
@@ -449,7 +463,7 @@ class CommunityService:
         parent_query = """
             SELECT
                 c.id, c.content, c.like_count, c.depth, c.parent_id, c.created_at, c.updated_at,
-                u.id as user_id, u.nickname, u.profile_image,
+                u.id as user_id, u.nickname, u.profile_image, u.image_format,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
                         SELECT 1 FROM comment_likes cl
@@ -481,7 +495,7 @@ class CommunityService:
         child_query = """
             SELECT
                 c.id, c.content, c.like_count, c.depth, c.parent_id, c.created_at, c.updated_at,
-                u.id as user_id, u.nickname, u.profile_image,
+                u.id as user_id, u.nickname, u.profile_image, u.image_format,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
                         SELECT 1 FROM comment_likes cl
@@ -501,12 +515,16 @@ class CommunityService:
             """사용자 정보 생성 (탈퇴한 사용자 처리)"""
             if comment["user_id"] and comment["nickname"]:
                 return UserInfo(
-                    id=comment["user_id"], nickname=comment["nickname"], profile_image=comment.get("profile_image")
+                    id=comment["user_id"],
+                    nickname=comment["nickname"],
+                    profile_image=comment.get("profile_image"),
+                    image_format=comment.get("image_format"),
                 )
             return UserInfo(
                 id=0,
                 nickname="(알 수 없는 유저)",
                 profile_image=None,
+                image_format=None,
             )
 
         # 3. 대댓글을 원댓글의 sub_comments에 매핑
@@ -522,7 +540,7 @@ class CommunityService:
                     like_count=child["like_count"],
                     depth=child["depth"],
                     parent_id=child["parent_id"],
-                    created_at=child["created_at"],
+                    created_at=child["created_at"].astimezone(KST),
                     is_changed=child["created_at"] != child["updated_at"],
                     is_liked=child["is_liked"],
                     is_mine=child["user_id"] == current_user_id if current_user_id else False,
@@ -539,7 +557,7 @@ class CommunityService:
                 like_count=comment["like_count"],
                 depth=comment["depth"],
                 parent_id=comment["parent_id"],
-                created_at=comment["created_at"],
+                created_at=comment["created_at"].astimezone(KST),
                 is_changed=comment["created_at"] != comment["updated_at"],
                 is_liked=comment["is_liked"],
                 is_mine=comment["user_id"] == current_user_id if current_user_id else False,
@@ -774,7 +792,7 @@ class CommunityService:
                 id=post["id"],
                 rank=post["rank_num"],
                 title=post["title"],
-                created_at=post["created_at"],
+                created_at=post["created_at"].astimezone(KST),
                 user_info=UserInfo(
                     id=post["user_id"] if post["user_id"] else 0,
                     nickname=post["nickname"] if post["nickname"] else "(알 수 없는 유저)",

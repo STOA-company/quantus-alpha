@@ -10,6 +10,7 @@ class PostCreate(BaseModel):
     content: str = Field(..., min_length=1)
     category_id: int
     image_url: Optional[str] = None
+    image_format: Optional[str] = None
     stock_tickers: List[str] = Field(default=[], max_items=3)
 
     class Config:
@@ -28,6 +29,7 @@ class UserInfo(BaseModel):
     id: int
     nickname: str
     profile_image: Optional[str] = None
+    image_format: Optional[str] = None
 
 
 class StockInfo(BaseModel):
@@ -42,6 +44,7 @@ class ResponsePost(BaseModel):
     content: str
     category_name: str
     image_url: Optional[str] = None
+    image_format: Optional[str] = None
     like_count: int
     comment_count: int
     is_changed: bool
@@ -64,6 +67,7 @@ class PostUpdate(BaseModel):
     content: str = Field(..., min_length=1)
     category_id: int
     image_url: Optional[str] = None
+    image_format: Optional[str] = None
     stock_tickers: List[str] = Field(default=[], max_items=3)
 
     class Config:

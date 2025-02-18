@@ -32,6 +32,7 @@ class Post(Base, BaseMixin):
     title = Column(String(100), nullable=False)
     content = Column(Text, nullable=False)
     image_url = Column(LONGTEXT, nullable=True)
+    image_format = Column(String(20), nullable=True)
     like_count = Column(Integer, default=0)
     comment_count = Column(Integer, default=0)
 

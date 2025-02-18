@@ -13,6 +13,7 @@ class AlphafinderUser(BaseMixin, Base):
     email: Mapped[String] = mapped_column(String(length=100), nullable=False)
     nickname: Mapped[String] = mapped_column(String(length=100), nullable=False)
     profile_image: Mapped[String] = mapped_column(LONGTEXT, nullable=True)
+    image_format: Mapped[String] = mapped_column(String(length=20), nullable=True)
 
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, nickname={self.nickname!r}, email={self.email!r})"
