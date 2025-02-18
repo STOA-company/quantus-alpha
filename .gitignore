@@ -43,4 +43,5 @@ dump.rdb
 ngrok.yml
 
 # parquet
+parquet/
 *.parquet
