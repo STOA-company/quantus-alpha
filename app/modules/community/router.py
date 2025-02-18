@@ -112,7 +112,7 @@ async def get_posts(
     return PostListResponse(status_code=200, message="게시글 목록을 조회하였습니다.", has_more=has_more, data=posts)
 
 
-@router.put("/posts/{post_id}", response_model=BaseResponse[bool], summary="게시글 수정")
+@router.put("/posts/{post_id}", response_model=BaseResponse[dict], summary="게시글 수정")
 async def update_post(
     post_id: int,
     post_update: PostUpdate,
