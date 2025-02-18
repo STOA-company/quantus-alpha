@@ -25,7 +25,7 @@ def run_news_batch(ctry: str = None, date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d").date()
     else:
-        check_date = now_kr(is_date=True)
+        check_date = now_utc(is_date=True)
 
     if ctry == "KR":
         ctry_news = "kor_news"
@@ -45,8 +45,9 @@ def run_news_batch(ctry: str = None, date: str = None):
     LEFT JOIN {ctry_news_analysis} as a ON n.id = a.collect_id
     RIGHT JOIN {ctry_news_analysis_translation} as t ON n.id = t.collect_id
     WHERE DATE(t.created_at) = :check_date
+    AND t.lang = 'ko-KR'
     """
-
+    # TODO :: AND t.lang = 'ko-KR' => 제거 해야 함. 필터링 로직 만들기 전까지 임시로 사용
     df_news = pd.DataFrame(
         database._execute(
             text(query),
