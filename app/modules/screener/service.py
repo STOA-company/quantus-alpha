@@ -4,7 +4,6 @@ import logging
 from app.models.models_factors import CategoryEnum
 from fastapi import HTTPException
 from app.utils.factor_utils import filter_stocks, get_stocks_data
-from app.modules.screener.schemas import FilterRequest
 
 logger = logging.getLogger(__name__)
 
@@ -93,13 +92,86 @@ class ScreenerService:
             logger.error(f"Error in get_factor: {e}")
             raise e
 
-    def get_filtered_stocks(self, filters: List[FilterRequest]) -> List[Dict]:
+    def get_filtered_stocks(self, filters: List[Dict]) -> List[Dict]:
         try:
             stocks = filter_stocks(filters)
             stocks_data = get_stocks_data(stocks)
             return stocks_data
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks: {e}")
+            raise e
+
+    def create_filter(self, user_id: id, name: str, conditions: List[Dict]) -> bool:
+        try:
+            self.database._insert(table="screener_filters", sets={"user_id": user_id, "name": name})
+            filter_id = self.database._select(table="screener_filters", user_id=user_id, name=name)[0].id
+            for condition in conditions:
+                self.database._insert(
+                    table="screener_filter_conditions",
+                    sets={
+                        "filter_id": filter_id,
+                        "factor": condition.factor,
+                        "above": condition.above,
+                        "below": condition.below,
+                    },
+                )
+            return True
+        except Exception as e:
+            logger.error(f"Error in create_filter: {e}")
+            raise e
+
+    def get_filter(self, filter_id: int) -> List[Dict]:
+        try:
+            conditions = self.database._select(table="screener_filter_conditions", filter_id=filter_id)
+            if not conditions:
+                raise HTTPException(status_code=404, detail="Filter not found")
+            return [
+                {
+                    "factor": condition.factor,
+                    "above": float(condition.above) if condition.above is not None else None,
+                    "below": float(condition.below) if condition.below is not None else None,
+                }
+                for condition in conditions
+            ]
+        except Exception as e:
+            logger.error(f"Error in get_filter: {e}")
+            raise e
+
+    def update_filter(self, filter_id: int, name: Optional[str] = None, conditions: Optional[List[Dict]] = None) -> bool:
+        try:
+            if name:
+                self.database._update(table="screener_filters", filter_id=filter_id, name=name)
+            if conditions:
+                self.database._delete(table="screener_filter_conditions", filter_id=filter_id)
+                for condition in conditions:
+                    self.database._insert(
+                        table="screener_filter_conditions",
+                        sets={
+                            "filter_id": filter_id,
+                            "factor": condition.factor,
+                            "above": condition.above,
+                            "below": condition.below,
+                        },
+                    )
+            return True
+        except Exception as e:
+            logger.error(f"Error in update_filter: {e}")
+            raise e
+
+    def delete_filter(self, filter_id: int) -> bool:
+        try:
+            self.database._delete(table="screener_filters", filter_id=filter_id)
+            return True
+        except Exception as e:
+            logger.error(f"Error in delete_filter: {e}")
+            raise e
+
+    def get_saved_filters(self, user_id: str) -> List[Dict]:
+        try:
+            filters = self.database._select(table="screener_filters", user_id=user_id)
+            return filters
+        except Exception as e:
+            logger.error(f"Error in get_saved_filters: {e}")
             raise e
 
 
