@@ -127,16 +127,20 @@ else
     while [ $attempt -le $max_attempts ]; do
         echo "Health check attempt $attempt of $max_attempts..."
 
+        # gunicorn 프로세스 상태 확인 추가
+        gunicorn_status=$(docker-compose -f $COMPOSE_FILE exec -T web ps aux | grep gunicorn | grep -v grep || echo "")
         api_status=$(curl -s -o /dev/null -w "%{http_code}" localhost:80/docs || echo "000")
 
-        if [ "$api_status" = "200" ]; then
-            echo "Deployment successful! API is running."
+        if [ "$api_status" = "200" ] && [ ! -z "$gunicorn_status" ]; then
+            echo "Deployment successful! API and Gunicorn are running."
             echo "API Status: $api_status"
+            echo "Gunicorn Status: Running"
             exit 0
         fi
 
         echo "Services not ready yet:"
         echo "- API status: $api_status"
+        echo "- Gunicorn status: ${gunicorn_status:-Not Running}"
 
         echo "Waiting 5 seconds..."
         sleep 5

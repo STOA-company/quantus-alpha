@@ -9,7 +9,7 @@ from app.common.constants import KST, UTC
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.news.schemas import LatestNewsResponse, NewsItem, TopStoriesResponse
-from quantus_aws.common.configs import s3_client
+from Aws.common.configs import s3_client
 from app.database.crud import database
 from app.core.logging.config import get_logger
 
