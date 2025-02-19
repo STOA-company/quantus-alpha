@@ -25,7 +25,7 @@ def calculate_factor_score(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame
         if config.get("range"):
             min_range, max_range = config["range"]
 
-            ranks = series.rank(method="average")
+            ranks = np.full(len(series), len(series))
 
             if min_range is not None:
                 outliers = series < min_range
