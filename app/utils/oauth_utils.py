@@ -148,7 +148,15 @@ def get_current_user(
             token_data = token_record[0]
 
             try:
-                payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+                try:
+                    payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+                except JWTError:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Access Token Expired",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
                 user_id = int(payload.get("sub"))
 
             except jwt.ExpiredSignatureError:
