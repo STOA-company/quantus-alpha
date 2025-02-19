@@ -63,7 +63,7 @@ FACTOR_CONFIGS = {
     "median_trade": {
         "direction": None,  # 중간 값이 좋음 # TODO
         "range": (0, None),  # 음수 불가
-        "optimal_percentile": 50,  # 중앙값에 가까울수록 좋음
+        "optimal_value": 50,
     },
     "disparity_5": {
         "direction": None,  # 100%에 가까울수록 좋음 # TODO
@@ -95,8 +95,15 @@ FACTOR_CONFIGS = {
         "range": (0, None),  # 음수 불가
         "optimal_value": 100,
     },
-    "momentum_6": {"direction": 1, "range": None},
-    "momentum_12": {"direction": 1, "range": None},
+    "momentum_6": {
+        "direction": 1,
+        "range": None,
+        "optimal_value": 100,
+    },
+    "momentum_12": {
+        "direction": 1,
+        "range": None,
+    },
     "rsi_9": {
         "direction": None,  # 중간값이 좋음 # TODO
         "range": (0, 100),  # 0-100 사이
@@ -142,18 +149,24 @@ FACTOR_CONFIGS = {
         "direction": -1,  # 낮을수록 좋음
         "range": (0, None),  # 음수 불가
     },
-    "abs_beta_60": {"direction": -1, "range": (0, None)},
+    "abs_beta_60": {
+        "direction": -1,
+        "range": (0, None),
+        "optimal_value": 1,
+    },
     # 펀더멘털 지표
     "deptRatio": {
         "direction": -1,  # 낮을수록 좋음
         "range": (0, 400),  # 400% 초과는 위험 # TODO
-        "warning_threshold": 200,  # 200% 초과시 주의
     },
-    "borrow_rate": {"direction": -1, "range": (0, 200)},
+    "borrow_rate": {
+        "direction": -1,
+        "range": (0, 200),
+        "optimal_value": 100,
+    },
     "current_ratio": {
         "direction": 1,  # 높을수록 좋음
         "range": (0, 500),  # 500% 초과는 비효율 # TODO
-        "warning_threshold": 50,  # 50% 미만은 위험
     },
     "reserve_ratio": {
         "direction": 1,  # 높을수록 좋음
@@ -183,22 +196,18 @@ FACTOR_CONFIGS = {
     "roa": {
         "direction": 1,  # 높을수록 좋음
         "range": (-100, 100),  # 극단값 제한 # TODO
-        "warning_threshold": -20,  # -20% 미만은 위험  # TODO
     },
     "roa_ttm": {
         "direction": 1,  # 높을수록 좋음
         "range": (-100, 100),  # 극단값 제한 # TODO
-        "warning_threshold": -20,  # -20% 미만은 위험  # TODO
     },
     "roe": {
         "direction": 1,  # 높을수록 좋음
         "range": (-100, 100),  # 극단값 제한 # TODO
-        "warning_threshold": -20,  # -20% 미만은 위험  # TODO
     },
     "roe_ttm": {
         "direction": 1,  # 높을수록 좋음
         "range": (-100, 100),  # 극단값 제한 # TODO
-        "warning_threshold": -20,  # -20% 미만은 위험  # TODO
     },
     "gpa": {
         "direction": 1,  # 높을수록 좋음
@@ -219,59 +228,54 @@ FACTOR_CONFIGS = {
     "fscore": {
         "direction": 1,  # 높을수록 좋음
         "range": (0, 9),  # 0-9점
-        "warning_threshold": 3,  # 3점 미만은 위험 # TODO
     },
     "z_score": {
         "direction": 1,  # 높을수록 좋음
         "range": None,  # 제한 없음
-        "warning_threshold": 1.81,  # 1.81 미만은 위험 # TODO
     },
     # 가치 평가 지표
     "per": {
         "direction": -1,  # 낮을수록 좋음
-        "range": (0, 100),  # 음수는 제외, 100 초과는 100으로
-        "warning_threshold": 0,  # 음수는 적자
+        "range": (0, 100),
     },
     "per_ttm": {
         "direction": -1,  # 낮을수록 좋음
-        "range": (0, 100),  # 음수는 제외, 100 초과는 100으로
-        "warning_threshold": 0,  # 음수는 적자
+        "range": (0, 100),
     },
     "pbr": {
         "direction": -1,  # 낮을수록 좋음
-        "range": (0, 10),  # 음수는 제외, 10 초과는 10으로
-        "warning_threshold": 0,  # 음수는 자본잠식
+        "range": (0, 10),
     },
     "psr": {
         "direction": -1,  # 낮을수록 좋음
-        "range": (0, 10),  # 음수는 제외, 10 초과는 10으로
+        "range": (0, 10),
     },
     "psr_ttm": {
         "direction": -1,  # 낮을수록 좋음
-        "range": (0, 10),  # 음수는 제외, 10 초과는 10으로
+        "range": (0, 10),
     },
     "por": {
         "direction": -1,  # 낮을수록 좋음
-        "range": (0, 50),  # 음수는 제외, 50 초과는 50으로
+        "range": (0, 50),
     },
     "por_ttm": {
         "direction": -1,  # 낮을수록 좋음
-        "range": (0, 50),  # 음수는 제외, 50 초과는 50으로
+        "range": (0, 50),
     },
     "pcr": {
         "direction": -1,  # 낮을수록 좋음
-        "range": (0, 20),  # 음수는 제외, 20 초과는 20으로
+        "range": (0, 20),
     },
     "pcr_ttm": {
         "direction": -1,  # 낮을수록 좋음
-        "range": (0, 20),  # 음수는 제외, 20 초과는 20으로
+        "range": (0, 20),
     },
     "pgpr": {
         "direction": -1,  # 낮을수록 좋음
-        "range": (0, 20),  # 음수는 제외, 20 초과는 20으로
+        "range": (0, 20),
     },
     "pgpr_ttm": {
         "direction": -1,  # 낮을수록 좋음
-        "range": (0, 20),  # 음수는 제외, 20 초과는 20으로
+        "range": (0, 20),
     },
 }
