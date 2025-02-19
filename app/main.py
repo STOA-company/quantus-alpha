@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Security
 from app.core.config import get_database_config, settings
 from app.api import routers
 from app.core.exception import handler
@@ -7,6 +7,7 @@ from app.database.crud import database
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.logging.config import configure_logging
+from app.middlewares.trusted_hosts import get_current_username
 
 configure_logging()
 
@@ -14,7 +15,12 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     description=f"Alphafinder API Documentation - {settings.ENV}",
     version="1.0.0",
-    swagger_ui_parameters={"persistAuthorization": True},
+    swagger_ui_parameters={
+        "persistAuthorization": True,  # 인증 정보 유지
+        "defaultModelsExpandDepth": -1,  # 모델 확장 깊이 설정 / -1은 축소
+    },
+    docs_url=None,
+    redoc_url=None,
 )
 handler.initialize(app)
 
@@ -79,3 +85,24 @@ async def health_check():
     except Exception as e:
         error_message = f"Database connection error: {str(e)}"
         raise HTTPException(status_code=503, detail={"status": "503", "database": "disconnected", "error": error_message})
+
+
+@app.get("/docs", include_in_schema=False)
+async def get_swagger_documentation(username: str = Security(get_current_username)):
+    from fastapi.openapi.docs import get_swagger_ui_html
+
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=app.title + " - Swagger UI",
+        swagger_ui_parameters=app.swagger_ui_parameters,
+    )
+
+
+@app.get("/redoc", include_in_schema=False)
+async def get_redoc_documentation(username: str = Security(get_current_username)):
+    from fastapi.openapi.docs import get_redoc_html
+
+    return get_redoc_html(
+        openapi_url=app.openapi_url,
+        title=app.title + " - ReDoc",
+    )
