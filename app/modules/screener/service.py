@@ -1,7 +1,9 @@
 from app.database.crud import database
 from typing import Optional, List, Dict
 import logging
-from app.utils.factor_utils import filter_stocks, get_filtered_stocks_data, MarketEnum
+from app.utils.factor_utils import filter_stocks, get_filtered_stocks_df, MarketEnum
+from app.utils.score_utils import calculate_factor_score
+from app.utils.pandas_utils import df_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +49,14 @@ class ScreenerService:
     ) -> List[Dict]:
         try:
             stocks = filter_stocks(market_filter, sector_filter, custom_filters)
-            stocks_data = get_filtered_stocks_data(market_filter, stocks, columns)
+            filtered_df = get_filtered_stocks_df(market_filter, stocks, columns)
+
+            scored_df = calculate_factor_score(filtered_df, columns)
+
+            sorted_df = filtered_df.merge(scored_df, on="Code", how="inner")
+
+            sorted_df = sorted_df.sort_values(by="score", ascending=False)
+            stocks_data = df_to_dict(sorted_df)
             return stocks_data
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks: {e}")
