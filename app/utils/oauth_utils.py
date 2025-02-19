@@ -2,7 +2,7 @@ import os
 import hashlib
 from datetime import datetime, timedelta, timezone
 
-from jose import jwt, JWTError
+from jose import jwt, JWTError, ExpiredSignatureError
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.models.models_users import AlphafinderUser
@@ -26,7 +26,7 @@ def create_jwt_token(user_id: int, expires_delta: timedelta = None) -> str:
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.utcnow() + timedelta(seconds=30)
 
     to_encode = {"exp": expire, "sub": str(user_id), "iat": datetime.utcnow()}
 
@@ -59,12 +59,12 @@ def refresh_access_token(access_token_hash: str):
     token_data = token_record[0]
 
     try:
-        payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        user_id = int(payload.get("sub"))
+        try:
+            jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=JWT_ALGORITHM)
+            return token_data.access_token_hash
 
-        current_time = datetime.now(timezone.utc)
-
-        if current_time > datetime.fromtimestamp(payload.get("exp"), tz=timezone.utc):
+        except ExpiredSignatureError:
+            current_time = datetime.now(timezone.utc)
             refresh_token = token_data.refresh_token
             refresh_payload = jwt.decode(refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
 
@@ -93,7 +93,12 @@ def refresh_access_token(access_token_hash: str):
 
             return new_access_token_hash
 
-        return token_data.access_token_hash
+        except JWTError:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     except JWTError:
         raise HTTPException(
