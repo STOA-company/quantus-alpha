@@ -1,9 +1,53 @@
 import pandas as pd
 from app.database.crud import database
 from typing import Dict, List
-from app.modules.screener.schemas import FilterCondition
 from Aws.logic.s3 import get_data_from_bucket
 import io
+
+
+sector_map = {
+    # 헬스케어
+    "헬스케어": "건강관리",
+    # 산업재
+    "자동차": "자동차",
+    "운송": "운송",
+    "기계": "기계",
+    "조선": "조선",
+    # 소비재
+    "소비재": "화장품,의류,완구",
+    "필수소비재": "필수소비재",
+    "유통": "소매(유통)",
+    # IT/가전
+    "IT하드웨어": "IT하드웨어",
+    "IT가전": "IT가전",
+    # 소재
+    "화학": "화학",
+    "금속/광업": "비철,목재등",
+    "철강": "철강",
+    # 건설/부동산
+    "건설": "건설,건축관련",
+    "부동산": "real_estate",
+    "건축": "construction",
+    # 금융
+    "보험": "보험",
+    "증권": "증권",
+    "은행": "은행",
+    "금융": "finance",
+    # 정보기술
+    "반도체": "반도체",
+    "디스플레이": "디스플레이",
+    "소프트웨어": "소프트웨어",
+    # 에너지/유틸리티
+    "에너지": "에너지",
+    "유틸리티": "유틸리티",
+    # 통신/미디어
+    "통신": "통신서비스",
+    "미디어/엔터": "미디어,교육",
+    # 서비스
+    "호텔/레저": "호텔,레저서비스",
+    # 종합
+    "종합상사": "상사,자본재",
+}
 
 
 def get_factors_from_db() -> Dict[str, Dict]:
@@ -58,11 +102,17 @@ def process_factor_data():
     df_result.to_parquet(output_file)
 
 
-def filter_stocks(filters: List[FilterCondition]) -> List[str]:
+def filter_stocks(market_filter: List[str], sector_filter: List[str], custom_filters: List[Dict]) -> List[str]:
     df = pd.read_parquet("parquet/stock_factors.parquet")
     filtered_df = df.copy()
 
-    for filter in filters:
+    if market_filter:
+        filtered_df = filtered_df[filtered_df["market"].isin(market_filter)]
+
+    if sector_filter:
+        filtered_df = filtered_df[filtered_df["sector"].isin(sector_filter)]
+
+    for filter in custom_filters:
         factor = filter["factor"]
 
         if factor not in filtered_df.columns:
@@ -79,9 +129,14 @@ def filter_stocks(filters: List[FilterCondition]) -> List[str]:
     return stock_codes
 
 
-def get_stocks_data(codes: List[str]) -> List[Dict]:
+DEFAULT_COLUMNS = ["Code", "name", "market", "sector", "close", "price_change_rate", "trade_volume"]
+
+
+def get_filtered_stocks_data(codes: List[str], columns: List[str]) -> List[Dict]:
+    required_columns = DEFAULT_COLUMNS + [col for col in columns if col not in DEFAULT_COLUMNS]
+
     df = pd.read_parquet("parquet/stock_factors.parquet")
-    filtered_df = df[df["Code"].isin(codes)]
+    filtered_df = df[df["Code"].isin(codes)][required_columns]
     stocks_data = filtered_df.to_dict(orient="records")
 
     return stocks_data
