@@ -18,6 +18,7 @@ from app.modules.user.service import create_user, add_favorite_stock, check_nick
 from app.utils.image_utils import convert_file_to_base64
 import json
 from typing import Optional
+from jose import JWTError
 
 router = APIRouter()
 
@@ -79,20 +80,18 @@ def user_delete(current_user: AlphafinderUser = Depends(get_current_user)):
 @router.get("/me", response_model=UserInfoResponse)
 def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
     """현재 인증된 사용자 정보 반환"""
-    if not current_user:
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
+        return UserInfoResponse(
+            id=current_user.id,
+            email=current_user.email,
+            nickname=current_user.nickname,
+            profile_image=current_user.profile_image,
+            image_format=current_user.image_format,
         )
-
-    return UserInfoResponse(
-        id=current_user.id,
-        email=current_user.email,
-        nickname=current_user.nickname,
-        profile_image=current_user.profile_image,
-        image_format=current_user.image_format,
-    )
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
 
 
 @router.get("/duplicate")
