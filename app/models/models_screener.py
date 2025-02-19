@@ -47,3 +47,24 @@ class ScreenerFilterCondition(Base):
 
     def __repr__(self):
         return f"<ScreenerFilterCondition {self.factor}>"
+
+
+class ScreenerColumnSet(Base):
+    __tablename__ = "screener_column_sets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class ScreenerColumn(Base):
+    __tablename__ = "screener_columns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    column_set_id = Column(Integer, ForeignKey("screener_column_sets.id", ondelete="CASCADE"), nullable=False)
+    factor = Column(String(50), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    column_set = relationship("ScreenerColumnSet", back_populates="columns")

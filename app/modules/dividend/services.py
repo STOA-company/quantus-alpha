@@ -1,3 +1,4 @@
+from app.common.constants import UTC
 from app.modules.common.enum import Country, FinancialCountry
 from app.modules.dividend.schemas import DividendItem, DividendDetail, DividendYearResponse
 from app.database.crud import database
@@ -165,6 +166,145 @@ class DividendService:
         latest_year = current_year - 1
         current_year_div = df[df["year"] == (latest_year)]["배당금"].sum()
         prev_year_div = df[df["year"] == (latest_year - 5)]["배당금"].sum()
+
+        result = ((current_year_div - prev_year_div) ** (1 / 5)) - 1 if prev_year_div != 0 else None
+
+        return result
+
+    # TODO :: #### 리뉴얼 배당 정보 조회 ##### 정상 작동시 위에 로직 제거
+
+    async def get_dividend_renewal(self, ctry: FinancialCountry, ticker: str) -> DividendItem:
+        """배당 정보 조회"""
+        # 현재 연도 구하기
+        current_datetime = pd.Timestamp.now(UTC)
+        current_year = current_datetime.year
+        condition = {
+            "ticker": ticker,
+            "ex_date__gte": current_datetime - pd.DateOffset(years=8),
+        }
+
+        df1 = pd.DataFrame(
+            self.db._select(
+                table="dividend_information",
+                columns=["ticker", "payment_date", "ex_date", "per_share", "yield_rate"],
+                order="ex_date",
+                ascending=False,
+                **condition,
+            )
+        )
+
+        # ticker가 없는 경우 체크
+        if df1.empty:
+            raise Exception(f"없는 ticker입니다: {ticker}")
+        # 시간 순으로 정렬
+        df1["payment_date"] = pd.to_datetime(df1["payment_date"]).dt.strftime("%Y-%m-%d")
+        df1["ex_date"] = pd.to_datetime(df1["ex_date"]).dt.strftime("%Y-%m-%d")
+
+        # 배당락일 기준으로 연도 추출
+        df1["year"] = pd.to_datetime(df1["ex_date"]).dt.year
+
+        # 6년 전 연도 계산 (현재 연도 포함 총 7년)
+        df2 = df1[df1["year"] >= (current_year - 6)].copy()
+        # 3년 전 연도 계산 (현재 연도 포함 총 4년)
+        min_year = current_year - 3
+
+        # 최근 4년 데이터만 필터링 (예: 2024~2021)
+        df1 = df1[df1["year"] >= min_year]
+        yearly_groups = df1.groupby("year")
+
+        # 연도별 상세 정보 생성 (중복 없이)
+        yearly_details = []
+        for year, group in yearly_groups:
+            dividend_details = []
+            for _, row in group.iterrows():
+                detail = DividendDetail(
+                    ex_dividend_date=row["ex_date"],
+                    dividend_payment_date=row["payment_date"],
+                    dividend_per_share=row["per_share"],
+                    dividend_yield=row["yield_rate"],
+                )
+                dividend_details.append(detail)
+
+            yearly_details.append(DividendYearResponse(year=int(year), dividend_detail=dividend_details))
+
+        # 배당지급일에서 년도와 월 추출 (YYYY-MM-DD 형식)
+        df1["payment_year"] = df1["payment_date"].str[:4].astype(int)  # YYYY
+        df1["payment_month"] = df1["payment_date"].str[5:7]  # MM
+
+        # 현재 연도 구하기
+        current_year = pd.Timestamp.now(UTC).year
+        last_year = current_year - 1
+
+        # 배당지급일 기준으로 작년 데이터 필터링
+        last_year_data = df1[df1["payment_year"] == last_year]
+
+        last_dividend_ratio = self.calculate_dividend_ratio_renewal(df1, ctry, ticker)
+        last_dividend_ratio = round(last_dividend_ratio, 2) if last_dividend_ratio is not None else None
+        last_dividend_growth_rate = self.calculate_growth_rate_renewal(df2, current_year)
+
+        if last_dividend_growth_rate is None:
+            last_dividend_growth_rate = None
+        elif np.isnan(last_dividend_growth_rate) or np.isinf(last_dividend_growth_rate):
+            last_dividend_growth_rate = None
+        else:
+            last_dividend_growth_rate = round(last_dividend_growth_rate, 2)
+
+        return DividendItem(
+            ticker=ticker,
+            name="",
+            ctry=ctry,
+            last_year_dividend_count=len(last_year_data),
+            last_year_dividend_date=last_year_data["payment_month"].sort_values().tolist(),
+            last_dividend_per_share=df1[df1["ex_date"] == df1["ex_date"].max()]["per_share"].iloc[-1],
+            last_dividend_ratio=last_dividend_ratio,
+            last_dividend_growth_rate=last_dividend_growth_rate,
+            detail=sorted(yearly_details, key=lambda x: x.year, reverse=True),
+        )
+
+    def calculate_dividend_ratio_renewal(self, df, ctry: Country, ticker: str):
+        """배당성향(Dividend Payout Ratio) 계산"""
+        reverse_mapping = {v: k for k, v in contry_mapping.items()}
+        ctry_three = reverse_mapping.get(ctry)
+
+        table_name = f"{ctry_three}_stock_factors"
+
+        if ctry_three == "USA":
+            ticker = f"{ticker}-US"
+
+        shares_data = self.db._select(table=table_name, columns=["shared_outstanding"], limit=1, **{"ticker": ticker})
+
+        income_data = self.db._select(
+            table=f"{ctry_three}_income",
+            columns=["net_income"],
+            limit=1,
+            order="StmtDt",
+            ascending=False,
+            **{"Code": ticker},
+        )
+
+        if not shares_data or not income_data:
+            return None
+
+        latest_shares = shares_data[0][0]
+        latest_net_income = income_data[0][0] * 1_000_000  # 백만 단위를 실제 금액으로 변환
+
+        # 가장 최근 1주당 배당금
+        latest_dividend_per_share = float(df["per_share"].iloc[-1])
+
+        if latest_shares == 0:
+            return 0.0
+
+        # 주당순이익(EPS) 계산
+        eps = latest_net_income / latest_shares  # 이제 단위가 맞음
+
+        # 배당성향 = (1주당 배당금 / EPS) * 100
+        return (latest_dividend_per_share / eps) * 100 if eps != 0 else None
+
+    def calculate_growth_rate_renewal(self, df, current_year):
+        """배당 성장률 계산"""
+        latest_year = current_year - 1
+        current_year_div = df[df["year"] == (latest_year)]["per_share"].sum()
+        prev_year_div = df[df["year"] == (latest_year - 5)]["per_share"].sum()
 
         result = ((current_year_div - prev_year_div) ** (1 / 5)) - 1 if prev_year_div != 0 else None
 
