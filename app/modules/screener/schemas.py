@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from app.models.models_factors import UnitEnum, CategoryEnum
 from typing import Optional, List
+from enum import Enum
 
 
 class FactorResponse(BaseModel):
@@ -37,8 +38,17 @@ class FilterInfo(BaseModel):
         from_attributes = True
 
 
+class MarketEnum(str, Enum):
+    US = "us"
+    KR = "kr"
+    SNP500 = "S&P 500"
+    NASDAQ = "NASDAQ"
+    KOSPI = "KOSPI"
+    KOSDAQ = "KOSDAQ"
+
+
 class FilteredStocks(BaseModel):
-    market_filter: Optional[List[str]] = None
+    market_filter: Optional[MarketEnum] = None
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
     columns: Optional[List[str]] = None

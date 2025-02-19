@@ -34,15 +34,15 @@ sector_map = {
     "미디어,교육": "미디어,교육",
     "real_estate": "부동산",
     "finance": "금융",
-    "construction": "건설,건축관련",
+    "construction": "건설, 건축",
     "consumer_goods": "필수소비재",
-    "hospitality": "호텔,레저서비스",
+    "hospitality": "호텔, 레저",
     "software": "소프트웨어",
-    "professional": "상사,자본재",
+    "professional": "전문 서비스",
     "energy": "에너지",
-    "electronics": "IT가전",
-    "aerospace": "상사,자본재",
-    "industrial": "상사,자본재",
+    "electronics": "전자",
+    "aerospace": "항공",
+    "industrial": "기계",
     "media": "미디어,교육",
     "other": "기타",
     None: "기타",
@@ -103,12 +103,16 @@ def process_us_factor_data():
     result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_us_active.parquet", dir="port/")
     df = pd.read_parquet(io.BytesIO(result))
 
-    stock_information = database._select("stock_information", columns=["ticker", "is_snp_500"])
-    stock_info_df = pd.DataFrame(stock_information)
-    stock_info_df = stock_info_df.rename(columns={"ticker": "Code"})
-    stock_info_df["is_snp_500"] = stock_info_df["is_snp_500"].astype(int)
+    df["merge_code"] = df["Code"].str.replace("-US", "")
 
-    df = pd.merge(df, stock_info_df, on="Code", how="left")
+    stock_information = database._select("stock_information", columns=["ticker", "is_snp_500"], ctry="us")
+    stock_info_df = pd.DataFrame(stock_information)
+    stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
+    stock_info_df["is_snp_500"] = stock_info_df["is_snp_500"].fillna(0).astype(int)
+
+    df = pd.merge(df, stock_info_df, on="merge_code", how="left")
+
+    df = df.drop("merge_code", axis=1)
 
     df["country"] = "us"
     df["is_snp_500"] = df["is_snp_500"].fillna(0).astype(int)
@@ -143,12 +147,29 @@ def process_us_factor_data():
     df_result.to_parquet(output_file)
 
 
+def get_df_from_parquet(market_filter: MarketEnum) -> pd.DataFrame:
+    df = None
+    if market_filter:
+        if market_filter in [MarketEnum.US, MarketEnum.NASDAQ, MarketEnum.SNP500]:
+            df = pd.read_parquet("parquet/us_stock_factors.parquet")
+        elif market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
+            df = pd.read_parquet("parquet/kr_stock_factors.parquet")
+    else:
+        kr_df = pd.read_parquet("parquet/kr_stock_factors.parquet")
+        us_df = pd.read_parquet("parquet/us_stock_factors.parquet")
+        kr_df["is_snp_500"] = 0
+        df = pd.concat([kr_df, us_df])
+
+    return df
+
+
 def filter_stocks(
     market_filter: Optional[MarketEnum] = None,
     sector_filter: Optional[List[str]] = None,
     custom_filters: Optional[List[Dict]] = None,
 ) -> List[str]:
-    df = pd.read_parquet("parquet/stock_factors.parquet")
+    df = get_df_from_parquet(market_filter)
+
     filtered_df = df.copy()
 
     if market_filter:
@@ -185,10 +206,14 @@ def filter_stocks(
 DEFAULT_COLUMNS = ["Code", "name", "market", "sector", "close", "price_change_rate", "trade_volume"]
 
 
-def get_filtered_stocks_data(codes: List[str], columns: List[str]) -> List[Dict]:
+def get_filtered_stocks_data(
+    market_filter: MarketEnum, codes: List[str], columns: Optional[List[str]] = None
+) -> List[Dict]:
+    if columns is None:
+        columns = []
     required_columns = DEFAULT_COLUMNS + [col for col in columns if col not in DEFAULT_COLUMNS]
 
-    df = pd.read_parquet("parquet/stock_factors.parquet")
+    df = get_df_from_parquet(market_filter)
     filtered_df = df[df["Code"].isin(codes)][required_columns]
     stocks_data = filtered_df.to_dict(orient="records")
 

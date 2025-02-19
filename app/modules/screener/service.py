@@ -1,7 +1,7 @@
 from app.database.crud import database
 from typing import Optional, List, Dict
 import logging
-from app.utils.factor_utils import filter_stocks, get_filtered_stocks_data
+from app.utils.factor_utils import filter_stocks, get_filtered_stocks_data, MarketEnum
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +39,15 @@ class ScreenerService:
             raise e
 
     def get_filtered_stocks(
-        self, market_filter: List[str], sector_filter: List[str], custom_filters: List[Dict], columns: List[str]
+        self,
+        market_filter: Optional[MarketEnum] = None,
+        sector_filter: Optional[List[str]] = None,
+        custom_filters: Optional[List[Dict]] = None,
+        columns: Optional[List[str]] = None,
     ) -> List[Dict]:
         try:
             stocks = filter_stocks(market_filter, sector_filter, custom_filters)
-            stocks_data = get_filtered_stocks_data(stocks, columns)
+            stocks_data = get_filtered_stocks_data(market_filter, stocks, columns)
             return stocks_data
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks: {e}")
