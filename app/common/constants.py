@@ -8,6 +8,14 @@ KST = pytz.timezone("Asia/Seoul")
 UTC = pytz.timezone("UTC")
 USE = pytz.timezone("America/New_York")
 
+FACTOR_RENAME_MAP = {
+    "ExchMnem": "market",
+    "WI26업종명(대)": "sector",
+    "Name": "name",
+    "거래대금": "trade_volume",
+    "수정주가수익률": "price_change_rate",
+}
+
 SECTOR_MAP = {
     "건강관리": "건강관리",
     "자동차": "자동차",
@@ -35,16 +43,16 @@ SECTOR_MAP = {
     "소프트웨어": "소프트웨어",
     "조선": "조선",
     "미디어,교육": "미디어,교육",
-    "real_estate": "부동산",
+    "real_estate": "부동산",  # TODO
     "finance": "금융",
-    "construction": "건설, 건축",
+    "construction": "건설,건축관련",
     "consumer_goods": "필수소비재",
-    "hospitality": "호텔, 레저",
+    "hospitality": "호텔,레저서비스",
     "software": "소프트웨어",
-    "professional": "전문 서비스",
+    "professional": "전문 서비스",  # TODO
     "energy": "에너지",
-    "electronics": "전자",
-    "aerospace": "항공",
+    "electronics": "전자",  # TODO
+    "aerospace": "항공",  # TODO
     "industrial": "기계",
     "media": "미디어,교육",
     "other": "기타",
@@ -192,7 +200,10 @@ FACTOR_CONFIGS = {
         "direction": 1,  # 높을수록 좋음
         "range": None,  # 음수 가능
     },
-    "operating_income_ttm": {"direction": 1, "range": None},
+    "operating_income_ttm": {
+        "direction": 1,
+        "range": None,
+    },
     "roa": {
         "direction": 1,  # 높을수록 좋음
         "range": (-100, 100),  # 극단값 제한 # TODO

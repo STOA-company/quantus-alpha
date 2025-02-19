@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-from app.common.constants import SECTOR_MAP, DEFAULT_SCREENER_COLUMNS
+from app.common.constants import SECTOR_MAP, DEFAULT_SCREENER_COLUMNS, FACTOR_RENAME_MAP
 
 
 def get_factors_from_db() -> Dict[str, Dict]:
@@ -39,15 +39,7 @@ def process_kr_factor_data():
     df_selected = df[selected_columns]
     df_filtered = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
 
-    df_result = df_filtered.rename(
-        columns={
-            "ExchMnem": "market",
-            "WI26업종명(대)": "sector",
-            "Name": "name",
-            "거래대금": "trade_volume",
-            "수정주가수익률": "price_change_rate",
-        }
-    )
+    df_result = df_filtered.rename(columns=FACTOR_RENAME_MAP)
     df_result["market"] = df_result["market"].map(market_mapping)
     df_result["sector"] = df_result["sector"].map(SECTOR_MAP)
 
