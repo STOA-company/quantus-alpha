@@ -27,7 +27,7 @@ from app.batches.run_disclosure import (
 from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
 from app.batches.check_split import check_kr_stock_splits, check_us_stock_splits
 from app.batches.check_outliers import check_and_recollect_outliers
-from app.batches.check_stock_status import check_warned_stock_us_batch
+from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_stat_cls_code_batch
 
 from app.utils.date_utils import check_market_status, is_business_day
 
@@ -413,15 +413,15 @@ def us_stock_indices_collect():
         return
 
 
-@CELERY_APP.task(name="iscd_stat_cls_code_batch", ignore_result=True)
-def iscd_stat_cls_code_batch():
-    """한국 주식 상태 코드 업데이트"""
+@CELERY_APP.task(name="check_warned_stock_kr", ignore_result=True)
+def check_warned_stock_kr():
+    """한국 주식 경고 처리"""
     try:
-        notifier.notify_info("iscd_stat_cls_code_batch process started")
+        notifier.notify_info("check_warned_stock_kr process started")
         iscd_stat_cls_code_batch()
-        notifier.notify_success("iscd_stat_cls_code_batch process completed")
+        notifier.notify_success("check_warned_stock_kr process completed")
     except Exception as e:
-        notifier.notify_error(f"iscd_stat_cls_code_batch process failed: {str(e)}")
+        notifier.notify_error(f"check_warned_stock_kr process failed: {str(e)}")
         raise
 
 

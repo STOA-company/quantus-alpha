@@ -122,8 +122,8 @@ CELERY_APP.conf.beat_schedule = {
         "task": "process_outliers_kr",
         "schedule": crontab(hour="09", minute="05"),
     },
-    "iscd_stat_cls_code_batch": {
-        "task": "iscd_stat_cls_code_batch",
+    "check_warned_stock_kr": {
+        "task": "check_warned_stock_kr",
         "schedule": crontab(hour="08", minute="00"),
     },
     "check_warned_stock_us": {
