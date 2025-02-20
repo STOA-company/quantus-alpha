@@ -2,7 +2,7 @@ import os
 import hashlib
 from datetime import datetime, timedelta, timezone
 
-from jose import jwt, JWTError
+from jose import jwt, JWTError, ExpiredSignatureError
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.models.models_users import AlphafinderUser
@@ -59,12 +59,12 @@ def refresh_access_token(access_token_hash: str):
     token_data = token_record[0]
 
     try:
-        payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        user_id = int(payload.get("sub"))
+        try:
+            jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=JWT_ALGORITHM)
+            return token_data.access_token_hash
 
-        current_time = datetime.now(timezone.utc)
-
-        if current_time > datetime.fromtimestamp(payload.get("exp"), tz=timezone.utc):
+        except ExpiredSignatureError:
+            current_time = datetime.now(timezone.utc)
             refresh_token = token_data.refresh_token
             refresh_payload = jwt.decode(refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
 
@@ -77,23 +77,23 @@ def refresh_access_token(access_token_hash: str):
 
             user_id = int(refresh_payload.get("sub"))
 
-            new_payload = {
-                "sub": user_id,
-                "exp": (current_time + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp(),
-                "iat": current_time.timestamp(),
-            }
-            new_access_token = jwt.encode(new_payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+            new_access_token = create_jwt_token(user_id)
             new_access_token_hash = hashlib.sha256(new_access_token.encode()).hexdigest()
 
             database._update(
                 table="alphafinder_oauth_token",
                 sets={"access_token": new_access_token, "access_token_hash": new_access_token_hash},
-                refresh_token=refresh_token,
+                access_token_hash=access_token_hash,
             )
 
             return new_access_token_hash
 
-        return token_data.access_token_hash
+        except JWTError:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     except JWTError:
         raise HTTPException(
@@ -133,42 +133,51 @@ def get_current_user(
 
         try:
             token_record = database._select(table="alphafinder_oauth_token", access_token_hash=hashed_token)
-            if not token_record:
-                raise HTTPException(
-                    status_code=401,
-                    detail="Invalid token",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-
-            token_data = token_record[0]
-
-            try:
-                payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-                user_id = int(payload.get("sub"))
-
-            except jwt.ExpiredSignatureError:
-                raise HTTPException(
-                    status_code=401,
-                    detail="Access Token Expired",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-
-            user = database._select(table="alphafinder_user", id=user_id)
-            if not user:
-                raise HTTPException(
-                    status_code=401,
-                    detail="User not found",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-
-            return user[0]
-
         except Exception as e:
             logger.error(f"Database error: {str(e)}")
             raise HTTPException(
                 status_code=500,
                 detail="Internal server error",
             )
+
+        if not token_record:
+            print("token_record is None")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        token_data = token_record[0]
+        print("token_data is not None : ", token_data)
+        try:
+            payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+            user_id = int(payload.get("sub"))
+        except JWTError:
+            print("JWTError")
+            raise HTTPException(
+                status_code=401,
+                detail="Access Token Expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        try:
+            user = database._select(table="alphafinder_user", id=user_id)
+        except Exception as e:
+            logger.error(f"Database error: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail="Internal server error",
+            )
+
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        return user[0]
 
     except JWTError as e:
         logger.error(f"JWT verification failed: {str(e)}")
