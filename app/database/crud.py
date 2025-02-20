@@ -1,6 +1,5 @@
 from dataclasses import asdict, dataclass, field
 import time
-
 from sqlalchemy import MetaData, bindparam
 from sqlalchemy import select, insert, update, delete, desc, asc, or_, and_
 from sqlalchemy.exc import IntegrityError
@@ -8,7 +7,7 @@ from contextlib import contextmanager
 import logging
 from sqlalchemy import func
 from app.core.config import get_database_config
-from app.database.conn import db
+from app.database.conn import db, db_service
 
 
 @dataclass
@@ -31,19 +30,22 @@ ALLOWED_AGGREGATE_FUNCTIONS = {
 }
 
 
-class Database:
-    def __init__(self):
+class BaseDatabase:
+    def __init__(self, db_connection):
+        self.db = db_connection
         c = get_database_config()
         conf_dict = asdict(c)
         self.init_db(conf_dict)
 
     def init_db(self, conf_dict: dict):
-        db.init_db(**conf_dict)
+        if not self.db:
+            raise ValueError("Database connection must be set")
+        self.db.init_db(**conf_dict)
         self.init_conn()
         self.init_meta()
 
     def init_conn(self):
-        self.conn = db.engine
+        self.conn = self.db.engine
 
     def init_meta(self):
         self.meta_data = MetaData()
@@ -219,8 +221,6 @@ class Database:
         offset: int = 0,
         **kwargs,
     ):
-        """ """
-
         try:
             obj = self.meta_data.tables[table]
 
@@ -249,17 +249,17 @@ class Database:
 
             if aggregates:
                 for alias, (col_name, func_name) in aggregates.items():
-                    if func_name not in ("count", "sum", "avg", "min", "max"):
+                    if func_name not in ALLOWED_AGGREGATE_FUNCTIONS:
                         raise ValueError(
                             f"Invalid aggregate function: {func_name}. "
-                            f"Allowed functions are: count, sum, avg, min, max"
+                            f"Allowed functions are: {', '.join(ALLOWED_AGGREGATE_FUNCTIONS.keys())}"
                         )
 
                     if not hasattr(obj.columns, col_name):
                         raise ValueError(f"Invalid column for aggregation: {col_name}")
 
                     column = getattr(obj.columns, col_name)
-                    agg_func = getattr(func, func_name)
+                    agg_func = ALLOWED_AGGREGATE_FUNCTIONS[func_name]
                     cols.append(agg_func(column).label(alias))
 
             cond = self.get_condition(obj, **kwargs)
@@ -323,19 +323,7 @@ class Database:
             raise
 
     def _count(self, table: str, join_info: JoinInfo | None = None, **kwargs) -> int:
-        """COUNT 쿼리 실행
-
-        Args:
-            table (str): 테이블 이름
-            join_info (JoinInfo, optional): 조인 정보. Defaults to None.
-            **kwargs: 검색 조건
-
-        Returns:
-            int: 조건에 맞는 레코드 수
-
-        Raises:
-            Exception: 쿼리 실행 중 오류 발생시
-        """
+        """COUNT 쿼리 실행"""
         try:
             obj = self.meta_data.tables[table]
             cond = self.get_condition(obj, **kwargs)
@@ -355,31 +343,7 @@ class Database:
             raise
 
     def _bulk_update(self, table: str, data: list[dict], key_column: str, chunk_size: int = 1000):
-        """벌크 업데이트를 수행하는 메서드입니다.
-
-        Args:
-            table (str): 업데이트할 테이블 이름
-            data (list[dict]): 업데이트할 데이터 리스트. 각 딕셔너리는 컬럼명을 키로 가지며, 업데이트할 값을 값으로 가집니다.
-            key_column (str): 업데이트 대상을 식별하기 위한 키 컬럼명
-            chunk_size (int, optional): 한 번에 처리할 레코드 수. 기본값은 1000입니다.
-
-        Raises:
-            ValueError: 다음의 경우에 발생합니다:
-                - key_column이 테이블에 존재하지 않는 경우
-                - data에 테이블에 존재하지 않는 컬럼이 포함된 경우
-            Exception: 데이터베이스 작업 중 오류가 발생한 경우
-
-        Example:
-            >>> data = [
-            ...     {"ticker": "AAPL", "price": 150.0, "volume": 1000000},
-            ...     {"ticker": "GOOGL", "price": 2800.0, "volume": 500000}
-            ... ]
-            >>> database._bulk_update(
-            ...     table="stock_prices",
-            ...     data=data,
-            ...     key_column="ticker"
-            ... )
-        """
+        """벌크 업데이트를 수행하는 메서드"""
         try:
             if not data:
                 return
@@ -420,4 +384,17 @@ class Database:
             raise
 
 
+class Database(BaseDatabase):
+    def __init__(self):
+        self.db = db
+        super().__init__(self.db)
+
+
+class DatabaseService(BaseDatabase):
+    def __init__(self):
+        self.db = db_service
+        super().__init__(self.db)
+
+
 database = Database()
+database_service = DatabaseService()
