@@ -12,3 +12,7 @@ class BaseMixin:
 
 class Base(DeclarativeBase):
     pass
+
+
+class ServiceBase(DeclarativeBase):
+    pass

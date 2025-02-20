@@ -1,3 +1,4 @@
+from typing import Optional
 from app.core.exception.base import CustomException
 
 
@@ -81,4 +82,35 @@ class AnalysisException(FinancialException):
     def __init__(self, analysis_type: str, detail: str):
         super().__init__(
             message=f"{analysis_type} 분석 중 오류가 발생했습니다: {detail}", status_code=500, error_code="ANALYSIS_ERROR"
+        )
+
+
+class CommunityException(CustomException):
+    """커뮤니티 관련 기본 예외 클래스"""
+
+    pass
+
+
+class PostException(CommunityException):
+    def __init__(self, message: str, status_code: int, post_id: Optional[int] = None):
+        super().__init__(
+            message=message,
+            status_code=status_code,
+            error_code=f"post_id : {post_id}" if post_id else "POST_ERROR",
+        )
+
+
+class CommentException(CommunityException):
+    def __init__(self, message: str, status_code: int, comment_id: Optional[int] = None):
+        super().__init__(
+            message=message,
+            status_code=status_code,
+            error_code=f"comment_id : {comment_id}" if comment_id else "COMMENT_ERROR",
+        )
+
+
+class TooManyStockTickersException(CommunityException):
+    def __init__(self):
+        super().__init__(
+            message="종목은 최대 3개까지만 등록할 수 있습니다", status_code=400, error_code="TOO_MANY_STOCK_TICKERS"
         )

@@ -11,6 +11,12 @@ class SearchItem(BaseModel):
     current_price_rate: Optional[float] = None
 
 
+class CommunitySearchItem(BaseModel):
+    ticker: str
+    name: str
+    ctry: str
+
+
 class SearchResponse(BaseModel):
     status_code: int
     message: str

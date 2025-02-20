@@ -11,7 +11,7 @@ from app.core.logging.config import get_logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.common.utils import contry_mapping
 from typing import Dict
-
+from app.utils.redis_utils import Leaderboard
 
 logger = get_logger(__name__)
 
@@ -267,6 +267,13 @@ class StockInfoService:
                 sector_metrics[metric] = 0
 
         return sector_metrics
+
+    def increment_search_score(self, ticker: str) -> None:
+        redis = Leaderboard()
+        stock_info = self.db._select(table="stock_information", columns=["kr_name", "en_name"], **{"ticker": ticker})
+        kr_name = stock_info[0].kr_name
+        en_name = stock_info[0].en_name
+        redis.increment_score(ticker, kr_name, en_name)
 
 
 def get_stock_info_service() -> StockInfoService:

@@ -40,7 +40,7 @@ COPY --from=builder /app /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 
 # uvicorn을 시스템 레벨에 설치
-RUN pip install --no-cache-dir uvicorn
+RUN pip install --no-cache-dir gunicorn uvicorn
 
 # FastAPI 실행
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["gunicorn", "--worker-class", "uvicorn.workers.UvicornWorker", "--workers", "4", "--bind", "0.0.0.0:8000", "app.main:app"]

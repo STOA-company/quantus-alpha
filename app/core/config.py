@@ -28,14 +28,18 @@ class Settings(BaseSettings):
     RDS_USER: str = os.getenv("RDS_USER", "")
     RDS_PASSWORD: str = os.getenv("RDS_PASSWORD", "")
     RDS_DB: str = os.getenv("RDS_DB", "")
+    RDS_SERVICE_DB: str = os.getenv("RDS_SERVICE_DB", "")
     RDS_PORT: int = os.getenv("RDS_PORT", 3306)
 
     RABBITMQ_USER: str = os.getenv("RABBITMQ_USER", "admin")
     RABBITMQ_PASSWORD: str = os.getenv("RABBITMQ_PASSWORD", "admin")
     RABBITMQ_PORT: int = os.getenv("RABBITMQ_PORT", 5672)
 
-    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
+    # Redis
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "redis")
     REDIS_PORT: int = os.getenv("REDIS_PORT", 6379)
+    REDIS_DB: int = os.getenv("REDIS_DB", 0)
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
 
     CELERY_CONCURRENCY: int = os.getenv("CELERY_CONCURRENCY", 7)
 
@@ -46,11 +50,15 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
     GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "")
+    TEST_GOOGLE_REDIRECT_URI: str = os.getenv("TEST_GOOGLE_REDIRECT_URI", "")
     GOOGLE_TOKEN_ENDPOINT: str = os.getenv("GOOGLE_TOKEN_ENDPOINT", "")
     GOOGLE_AUTH_URL: str = os.getenv("GOOGLE_AUTH_URL", "")
 
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "")
+
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "")
+    TEST_FRONTEND_URL: str = os.getenv("TEST_FRONTEND_URL", "")
 
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
@@ -60,6 +68,12 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         return f"mysql+pymysql://{self.RDS_USER}:{self.RDS_PASSWORD}@{self.RDS_HOST}:{self.RDS_PORT}/{self.RDS_DB}"
+
+    @property
+    def DATABASE_SERVICE_URL(self) -> str:
+        return (
+            f"mysql+pymysql://{self.RDS_USER}:{self.RDS_PASSWORD}@{self.RDS_HOST}:{self.RDS_PORT}/{self.RDS_SERVICE_DB}"
+        )
 
     class Config:
         env_file = f".env.{ENV}"
@@ -79,6 +93,7 @@ print(f"Current environment: {settings.ENV}")
 @dataclass
 class DatabaseConfig:
     DB_URL: str
+    DB_SERVICE_URL: str
     DB_POOL_RECYCLE: int = 3600
     DB_ECHO: bool = True
 
@@ -87,6 +102,7 @@ class DevConfig(DatabaseConfig):
     def __init__(self):
         super().__init__(
             DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
+            DB_SERVICE_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_SERVICE_DB}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=True,
         )
@@ -96,6 +112,7 @@ class StageConfig(DatabaseConfig):
     def __init__(self):
         super().__init__(
             DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
+            DB_SERVICE_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_SERVICE_DB}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=True,
         )
@@ -105,6 +122,7 @@ class ProdConfig(DatabaseConfig):
     def __init__(self):
         super().__init__(
             DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
+            DB_SERVICE_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_SERVICE_DB}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=False,
         )
@@ -114,6 +132,7 @@ class TestConfig(DatabaseConfig):
     def __init__(self):
         super().__init__(
             DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
+            DB_SERVICE_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_SERVICE_DB}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=True,
         )
@@ -123,6 +142,7 @@ class BatchConfig(DatabaseConfig):
     def __init__(self):
         super().__init__(
             DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_DB}",
+            DB_SERVICE_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_SERVICE_DB}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=True,  # 배치 작업의 쿼리 로그를 확인하기 위해 True로 설정
         )

@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 from kispy.base import BaseAPI
 from app.core.config import settings
 import pytz
+import json
+import time
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +28,33 @@ class KISAPI(BaseAPI):
         super().__init__(auth=auth)
 
     def _get_access_token(self) -> str:
-        """접근 토큰 발급"""
-        url = f"{self.base_url}/oauth2/tokenP"
+        max_attempts = 3
+        attempt = 0
+        wait_time = 2
 
-        data = {"grant_type": "client_credentials", "appkey": self.app_key, "appsecret": self.app_secret}
+        while attempt < max_attempts:
+            try:
+                url = f"{self.base_url}/oauth2/tokenP"
+                data = {"grant_type": "client_credentials", "appkey": self.app_key, "appsecret": self.app_secret}
+                response = requests.post(url, json=data)
+                response.raise_for_status()  # HTTP 에러 체크
 
-        response = requests.post(url, json=data)
-        response_data = response.json()
+                response_data = response.json()
+                if not response_data.get("access_token"):
+                    raise ValueError("No access token in response")
 
-        return response_data.get("access_token")
+                return response_data["access_token"]
+            except requests.exceptions.HTTPError as e:
+                logger.error(f"HTTPError on attempt {attempt + 1}: {str(e)}")
+                attempt += 1
+                if attempt < max_attempts:
+                    logger.info(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+            except Exception as e:
+                logger.error(f"Error getting access token: {str(e)}")
+                raise
+
+        raise Exception("Failed to get access token after multiple attempts")
 
     def refresh_token(self) -> bool:
         """토큰 갱신 메서드"""
@@ -415,3 +436,50 @@ class KISAPI(BaseAPI):
         last_time: datetime = last_record["stck_cntg_hour"]
         next_time = last_time - timedelta(minutes=period)
         return next_time.strftime("%H%M%S")
+
+    def iscd_stat_cls_code(self, stock_code: str, retry_count: int = 3) -> Optional[str]:
+        stock_code = stock_code[1:]
+        url = "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-price"
+
+        for attempt in range(retry_count):
+            try:
+                headers = {
+                    "Content-Type": "application/json",
+                    "authorization": f"Bearer {self.access_token}",
+                    "appkey": self.app_key,
+                    "appsecret": self.app_secret,
+                    "tr_id": "FHKST01010100",
+                }
+
+                params = {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": stock_code}
+
+                response = requests.get(url, headers=headers, params=params)
+                response.raise_for_status()  # HTTP 에러 체크
+                stock_info = json.loads(response.text)
+
+                if stock_info.get("rt_cd") == "0":  # 성공 응답
+                    output = stock_info.get("output", {})
+                    code = output.get("iscd_stat_cls_code")
+                    logger.info(f"iscd_stat_cls_code: {code}")
+                    return code
+
+                elif stock_info.get("msg_cd") == "EGW00121":  # 토큰 만료
+                    logger.warning("Token expired, refreshing token...")
+                    self.access_token = self._get_access_token()
+                    continue
+
+                elif stock_info.get("msg_cd") == "EGW00201":  # rate limit
+                    wait_time = 1 * (attempt + 1)
+                    logger.warning(f"Rate limit hit, waiting {wait_time} seconds before retry")
+                    time.sleep(wait_time)
+                    continue
+
+                else:
+                    logger.error(f"API Error: {stock_info.get('msg1')}")
+
+            except Exception as e:
+                logger.error(f"Error fetching stock status for {stock_code}: {str(e)}")
+                if attempt < retry_count - 1:
+                    time.sleep(1)
+
+        return None
