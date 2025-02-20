@@ -88,15 +88,6 @@ CommentLike.user = relationship("AlphafinderUser", back_populates="comment_likes
 Bookmark.post = relationship("Post", back_populates="bookmarks")
 Bookmark.user = relationship("AlphafinderUser", back_populates="bookmarks")
 
-# StockInformation relationships
-StockInformation.posts = relationship(
-    "Post",
-    secondary=post_stocks,
-    back_populates="stocks",
-    primaryjoin="StockInformation.ticker == post_stocks.c.stock_ticker",
-    secondaryjoin="Post.id == post_stocks.c.post_id",
-)
-
 # PostStatistics relationships
 PostStatistics.post = relationship("Post", back_populates="statistics", uselist=False)
 
