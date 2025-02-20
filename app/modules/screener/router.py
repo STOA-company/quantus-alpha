@@ -51,9 +51,9 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
         if filtered_stocks.custom_filters:
             custom_filters = [
                 {
-                    "factor": condition["factor"],
-                    "above": condition["above"],
-                    "below": condition["below"],
+                    "factor": condition.factor,
+                    "above": condition.above,
+                    "below": condition.below,
                 }
                 for condition in filtered_stocks.custom_filters
             ]
