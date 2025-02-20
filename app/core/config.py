@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     RDS_USER: str = os.getenv("RDS_USER", "")
     RDS_PASSWORD: str = os.getenv("RDS_PASSWORD", "")
     RDS_DB: str = os.getenv("RDS_DB", "")
+    RDS_SERVICE_DB: str = os.getenv("RDS_SERVICE_DB", "")
     RDS_PORT: int = os.getenv("RDS_PORT", 3306)
 
     RABBITMQ_USER: str = os.getenv("RABBITMQ_USER", "admin")
@@ -67,6 +68,12 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         return f"mysql+pymysql://{self.RDS_USER}:{self.RDS_PASSWORD}@{self.RDS_HOST}:{self.RDS_PORT}/{self.RDS_DB}"
+
+    @property
+    def SERVICE_DATABASE_URL(self) -> str:
+        return (
+            f"mysql+pymysql://{self.RDS_USER}:{self.RDS_PASSWORD}@{self.RDS_HOST}:{self.RDS_PORT}/{self.RDS_SERVICE_DB}"
+        )
 
     class Config:
         env_file = f".env.{ENV}"
@@ -135,8 +142,19 @@ class BatchConfig(DatabaseConfig):
         )
 
 
+class ServiceConfig(DatabaseConfig):
+    def __init__(self):
+        super().__init__(
+            DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_SERVICE_DB}",
+            DB_POOL_RECYCLE=3600,
+            DB_ECHO=True,
+        )
+
+
 def get_database_config():
     """Get database configuration based on environment"""
 
-    config = dict(prod=ProdConfig, dev=DevConfig, test=TestConfig, stage=StageConfig, batch=BatchConfig)
+    config = dict(
+        prod=ProdConfig, dev=DevConfig, test=TestConfig, stage=StageConfig, batch=BatchConfig, service=ServiceConfig
+    )
     return config[settings.ENV]()

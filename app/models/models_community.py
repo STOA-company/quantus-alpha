@@ -1,18 +1,18 @@
 from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Table, Text, Index, func
-from app.models.models_base import Base, BaseMixin
+from app.models.models_base import BaseMixin, ServiceBase
 from sqlalchemy.orm import validates
 from sqlalchemy.dialects.mysql import LONGTEXT
 
 post_stocks = Table(
     "post_stocks",
-    Base.metadata,
+    ServiceBase.metadata,
     Column("post_id", Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True),
     Column("stock_ticker", String(20), primary_key=True),
     Index("idx_post_stocks_stock_ticker", "stock_ticker"),
 )
 
 
-class Category(Base, BaseMixin):
+class Category(ServiceBase, BaseMixin):
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True)
@@ -25,7 +25,7 @@ class Category(Base, BaseMixin):
         return f"<Category(id={self.id}, name={self.name})>"
 
 
-class Post(Base, BaseMixin):
+class Post(ServiceBase, BaseMixin):
     __tablename__ = "posts"
 
     id = Column(Integer, primary_key=True)
@@ -60,7 +60,7 @@ class Post(Base, BaseMixin):
         return f"<Post(id={self.id}, title={self.title}, content={self.content}, image_url={self.image_url}, category_id={self.category_id}, user_id={self.user_id})>"
 
 
-class Comment(Base, BaseMixin):
+class Comment(ServiceBase, BaseMixin):
     __tablename__ = "comments"
 
     id = Column(Integer, primary_key=True)
@@ -87,7 +87,7 @@ class Comment(Base, BaseMixin):
         return f"<Comment(id={self.id}, content={self.content}, post_id={self.post_id}, user_id={self.user_id})>"
 
 
-class PostLike(Base, BaseMixin):
+class PostLike(ServiceBase, BaseMixin):
     __tablename__ = "post_likes"
 
     # Foreign keys
@@ -104,7 +104,7 @@ class PostLike(Base, BaseMixin):
         return f"<PostLike(id={self.id}, post_id={self.post_id}, user_id={self.user_id})>"
 
 
-class CommentLike(Base, BaseMixin):
+class CommentLike(ServiceBase, BaseMixin):
     __tablename__ = "comment_likes"
 
     # Foreign keys
@@ -120,7 +120,7 @@ class CommentLike(Base, BaseMixin):
         return f"<CommentLike(id={self.id}, comment_id={self.comment_id}, user_id={self.user_id})>"
 
 
-class Bookmark(Base, BaseMixin):
+class Bookmark(ServiceBase, BaseMixin):
     __tablename__ = "bookmarks"
 
     # Foreign keys
@@ -136,7 +136,7 @@ class Bookmark(Base, BaseMixin):
         return f"<Bookmark(id={self.id}, post_id={self.post_id}, user_id={self.user_id})>"
 
 
-class PostStatistics(Base, BaseMixin):
+class PostStatistics(ServiceBase, BaseMixin):
     __tablename__ = "post_statistics"
 
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True)
@@ -155,7 +155,7 @@ class PostStatistics(Base, BaseMixin):
         return self.__str__()
 
 
-class StockStatistics(Base, BaseMixin):
+class StockStatistics(ServiceBase, BaseMixin):
     __tablename__ = "stock_statistics"
 
     stock_ticker = Column(String(20), primary_key=True)
