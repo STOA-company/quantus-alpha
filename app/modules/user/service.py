@@ -396,7 +396,7 @@ class UserService:
 
         return response_comments, has_more
 
-    def store_token(access_token: str, refresh_token: str):
+    def store_token(self, access_token: str, refresh_token: str):
         try:
             access_token_hash = hashlib.sha256(access_token.encode()).hexdigest()
 
@@ -420,7 +420,7 @@ class UserService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    def delete_token(access_token_hash: str):
+    def delete_token(self, access_token_hash: str):
         try:
             database_service._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
             logger.info(f"Token deleted: {access_token_hash}")
