@@ -10,18 +10,22 @@ import pymysql
 pymysql.install_as_MySQLdb()
 
 
-class SQLAlchemy:
-    def __init__(self, app: FastAPI = None, **kwargs):
+class BaseSQLAlchemy:
+    def __init__(self, app: FastAPI = None, url_key: str = None, **kwargs):
         self._engine = None
         self._async_engine = None
         self._session = None
         self._async_session = None
+        self.url_key = url_key  # 하위 클래스에서 설정 (DB_URL 또는 DB_SERVICE_URL)
         if app is not None:
             self.init_app(app=app, **kwargs)
 
     def init_app(self, app: FastAPI, **kwargs):
         """Initialize app with FastAPI instance"""
-        database_url = kwargs.get("DB_URL")
+        database_url = kwargs.get(self.url_key)
+        if not database_url:
+            raise ValueError(f"{self.url_key} must be provided")
+
         async_database_url = database_url.replace("mysql://", "mysql+aiomysql://")
         pool_recycle = kwargs.setdefault("DB_POOL_RECYCLE", 3600)
         pool_size = kwargs.setdefault("DB_POOL_SIZE", 20)
@@ -77,7 +81,10 @@ class SQLAlchemy:
 
     def init_db(self, **kwargs):
         """Initialize DB without FastAPI instance"""
-        database_url = kwargs.get("DB_URL")
+        database_url = kwargs.get(self.url_key)
+        if not database_url:
+            raise ValueError(f"{self.url_key} must be provided")
+
         async_database_url = database_url.replace("mysql://", "mysql+aiomysql://")
         pool_recycle = kwargs.setdefault("DB_POOL_RECYCLE", 3600)
         pool_size = kwargs.setdefault("DB_POOL_SIZE", 20)
@@ -162,4 +169,17 @@ class SQLAlchemy:
         return self._async_engine
 
 
+class SQLAlchemy(BaseSQLAlchemy):
+    def __init__(self, app: FastAPI = None, **kwargs):
+        url_key = "DB_URL"
+        super().__init__(app, url_key, **kwargs)
+
+
+class SQLAlchemyService(BaseSQLAlchemy):
+    def __init__(self, app: FastAPI = None, **kwargs):
+        url_key = "DB_SERVICE_URL"
+        super().__init__(app, url_key, **kwargs)
+
+
 db = SQLAlchemy()
+db_service = SQLAlchemyService()

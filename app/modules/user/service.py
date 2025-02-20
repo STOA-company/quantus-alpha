@@ -1,5 +1,7 @@
 import json
-from app.database.crud import database
+import logging
+import hashlib
+from app.database.crud import database_service
 from typing import List, Tuple, Optional
 from fastapi import HTTPException, UploadFile
 
@@ -9,96 +11,96 @@ from app.modules.user.schemas import UserProfileResponse
 
 from sqlalchemy import text
 
-
-def get_user_by_email(email: str):
-    users = database._select(table="alphafinder_user", columns=["id", "email", "nickname"], email=email, limit=1)
-    return users[0] if users else None
+logger = logging.getLogger(__name__)
 
 
-def create_user(
-    email: str, nickname: str, provider: str, base64: Optional[str] = None, image_format: Optional[str] = None
-):
-    database._insert(
-        table="alphafinder_user",
-        sets={
-            "email": email,
-            "nickname": nickname,
-            "provider": provider,
-            "profile_image": base64,
-            "image_format": image_format,
-        },
-    )
+class UserService:
+    def __init__(self):
+        self.db = database_service
 
-    user = get_user_by_email(email)
-    return user
+    def get_user_by_email(self, email: str):
+        users = self.db._select(table="alphafinder_user", columns=["id", "email", "nickname"], email=email, limit=1)
+        return users[0] if users else None
 
-
-def delete_user(id: int):
-    database._delete(table="alphafinder_user", id=id)
-
-
-def update_user(id: int, nickname: str = None, profile_image: UploadFile = None, favorite_stock: List[str] = None):
-    database._update(
-        table="alphafinder_user",
-        sets={
-            "nickname": nickname,
-            "profile_image": profile_image,
-        },
-        id=id,
-    )
-
-    for ticker in favorite_stock:
-        add_favorite_stock(id, ticker)
-
-
-def update_profile(
-    user_id: int, nickname: Optional[str] = None, base64: Optional[str] = None, image_format: Optional[str] = None
-):
-    sets = {}
-
-    if nickname is not None:
-        sets["nickname"] = nickname
-
-    if base64 is not None:
-        sets["profile_image"] = base64
-
-    if image_format is not None:
-        sets["image_format"] = image_format
-
-    if sets:
-        database._update(
+    def create_user(
+        self, email: str, nickname: str, provider: str, base64: Optional[str] = None, image_format: Optional[str] = None
+    ):
+        self.db._insert(
             table="alphafinder_user",
-            sets=sets,
-            id=user_id,
+            sets={
+                "email": email,
+                "nickname": nickname,
+                "provider": provider,
+                "profile_image": base64,
+                "image_format": image_format,
+            },
         )
 
+        user = self.get_user_by_email(email)
+        return user
 
-def check_nickname_available(nickname: str):
-    is_exist = database._select(table="alphafinder_user", nickname=nickname)
-    if is_exist:
-        return False
-    return True
+    def delete_user(self, id: int):
+        self.db._delete(table="alphafinder_user", id=id)
 
+    def update_user(
+        self, id: int, nickname: str = None, profile_image: UploadFile = None, favorite_stock: List[str] = None
+    ):
+        self.db._update(
+            table="alphafinder_user",
+            sets={
+                "nickname": nickname,
+                "profile_image": profile_image,
+            },
+            id=id,
+        )
 
-def add_favorite_stock(id: int, ticker: str):
-    if database._select(table="user_stock_interest", user_id=id, ticker=ticker, limit=1):
-        return
-    database._insert(
-        table="user_stock_interest",
-        sets={
-            "user_id": id,
-            "ticker": ticker,
-        },
-    )
+        for ticker in favorite_stock:
+            self.add_favorite_stock(id, ticker)
 
+    def update_profile(
+        self,
+        user_id: int,
+        nickname: Optional[str] = None,
+        base64: Optional[str] = None,
+        image_format: Optional[str] = None,
+    ):
+        sets = {}
 
-def delete_favorite_stock(id: int, ticker: str):
-    database._delete(table="user_stock_interest", user_id=id, ticker=ticker)
+        if nickname is not None:
+            sets["nickname"] = nickname
 
+        if base64 is not None:
+            sets["profile_image"] = base64
 
-class UserProfileService:
-    def __init__(self):
-        self.db = database
+        if image_format is not None:
+            sets["image_format"] = image_format
+
+        if sets:
+            self.db._update(
+                table="alphafinder_user",
+                sets=sets,
+                id=user_id,
+            )
+
+    def check_nickname_available(self, nickname: str):
+        is_exist = self.db._select(table="alphafinder_user", nickname=nickname)
+        if is_exist:
+            return False
+        return True
+
+    def add_favorite_stock(self, id: int, ticker: str):
+        if self.db._select(table="user_stock_interest", user_id=id, ticker=ticker, limit=1):
+            return
+        self.db._insert(
+            table="user_stock_interest",
+            sets={
+                "user_id": id,
+                "ticker": ticker,
+            },
+        )
+
+    def delete_favorite_stock(self, id: int, ticker: str):
+        self.db._delete(table="user_stock_interest", user_id=id, ticker=ticker)
 
     def get_user_profile(self, current_user: AlphafinderUser, user_id: Optional[int]) -> UserProfileResponse:
         """
@@ -394,7 +396,38 @@ class UserProfileService:
 
         return response_comments, has_more
 
+    def store_token(access_token: str, refresh_token: str):
+        try:
+            access_token_hash = hashlib.sha256(access_token.encode()).hexdigest()
 
-def get_user_profile_service() -> UserProfileService:
-    """UserProfileService 의존성 주입을 위한 팩토리 함수"""
-    return UserProfileService()
+            existing_token = database_service._select(
+                table="alphafinder_oauth_token", access_token_hash=access_token_hash
+            )
+
+            if existing_token:
+                database_service._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
+
+            database_service._insert(
+                table="alphafinder_oauth_token",
+                sets={
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                    "access_token_hash": access_token_hash,
+                },
+            )
+            logger.info(f"Token stored: {access_token} {refresh_token}")
+            return access_token_hash
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    def delete_token(access_token_hash: str):
+        try:
+            database_service._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
+            logger.info(f"Token deleted: {access_token_hash}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+
+def get_user_service() -> UserService:
+    """UserService 의존성 주입을 위한 팩토리 함수"""
+    return UserService()

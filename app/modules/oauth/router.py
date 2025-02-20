@@ -1,14 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from google.oauth2 import id_token
 from google.auth.transport import requests
 import httpx
 import os
 import logging
-from app.utils.oauth_utils import create_email_token, create_jwt_token, create_refresh_token, store_token
+from app.utils.oauth_utils import create_email_token, create_jwt_token, create_refresh_token
 from app.modules.oauth.schemas import (
     GoogleLoginResponse,
 )
-from app.modules.user.service import get_user_by_email
+from app.modules.user.service import get_user_service, UserService
 from fastapi.responses import RedirectResponse
 from urllib.parse import urlencode
 
@@ -41,7 +41,7 @@ def google_login():
 
 
 @router.get("/google/callback")
-def google_callback(code: str):
+def google_callback(code: str, service: UserService = Depends(get_user_service)):
     """Google OAuth 콜백 처리"""
     try:
         logger.info(f"code: {code}")
@@ -69,7 +69,7 @@ def google_callback(code: str):
             )
 
             email = google_user["email"]
-            user = get_user_by_email(email)
+            user = service.get_user_by_email(email)
 
             if not user:
                 email_token = create_email_token(email)
@@ -81,7 +81,7 @@ def google_callback(code: str):
             else:
                 access_token = create_jwt_token(user.id)
                 refresh_token = create_refresh_token(user.id)
-                access_token_hash = store_token(access_token, refresh_token)
+                access_token_hash = service.store_token(access_token, refresh_token)
 
                 params = {
                     "is_login": True,
@@ -115,7 +115,7 @@ def google_login_test():
 
 
 @router.get("/google/callback/test")
-def google_callback_test(code: str):
+def google_callback_test(code: str, service: UserService = Depends(get_user_service)):
     """Google OAuth 콜백 처리"""
     try:
         logger.info(f"code: {code}")
@@ -143,7 +143,7 @@ def google_callback_test(code: str):
             )
 
             email = google_user["email"]
-            user = get_user_by_email(email)
+            user = service.get_user_by_email(email)
 
             if not user:
                 email_token = create_email_token(email)
@@ -155,7 +155,7 @@ def google_callback_test(code: str):
             else:
                 access_token = create_jwt_token(user.id)
                 refresh_token = create_refresh_token(user.id)
-                access_token_hash = store_token(access_token, refresh_token)
+                access_token_hash = service.store_token(access_token, refresh_token)
 
                 params = {
                     "is_login": True,
