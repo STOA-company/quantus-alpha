@@ -1,10 +1,10 @@
 import json
 import logging
 import hashlib
-from app.database.crud import database_service
 from typing import List, Tuple, Optional
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 
+from app.database.crud import database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.community.schemas import CommentItemWithPostInfo, PostInfo, ResponsePost, UserInfo
 from app.modules.user.schemas import UserProfileResponse
@@ -41,21 +41,6 @@ class UserService:
 
     def delete_user(self, id: int):
         self.db._delete(table="alphafinder_user", id=id)
-
-    def update_user(
-        self, id: int, nickname: str = None, profile_image: UploadFile = None, favorite_stock: List[str] = None
-    ):
-        self.db._update(
-            table="alphafinder_user",
-            sets={
-                "nickname": nickname,
-                "profile_image": profile_image,
-            },
-            id=id,
-        )
-
-        for ticker in favorite_stock:
-            self.add_favorite_stock(id, ticker)
 
     def update_profile(
         self,
@@ -396,18 +381,16 @@ class UserService:
 
         return response_comments, has_more
 
-    def store_token(access_token: str, refresh_token: str):
+    def store_token(self, access_token: str, refresh_token: str):
         try:
             access_token_hash = hashlib.sha256(access_token.encode()).hexdigest()
 
-            existing_token = database_service._select(
-                table="alphafinder_oauth_token", access_token_hash=access_token_hash
-            )
+            existing_token = self.db._select(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
 
             if existing_token:
-                database_service._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
+                self.db._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
 
-            database_service._insert(
+            self.db._insert(
                 table="alphafinder_oauth_token",
                 sets={
                     "access_token": access_token,
@@ -420,9 +403,9 @@ class UserService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    def delete_token(access_token_hash: str):
+    def delete_token(self, access_token_hash: str):
         try:
-            database_service._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
+            self.db._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
             logger.info(f"Token deleted: {access_token_hash}")
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
