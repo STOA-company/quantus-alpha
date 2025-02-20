@@ -58,7 +58,7 @@ def update_nickname(
     current_user: AlphafinderUser = Depends(get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    service.update_user(user_id=current_user.id, nickname=nickname)
+    service.update_profile(user_id=current_user.id, nickname=nickname)
 
     return BaseResponse(status_code=200, message="Nickname updated successfully")
 
@@ -71,7 +71,7 @@ def update_profile_image(
     service: UserService = Depends(get_user_service),
 ):
     base64 = convert_file_to_base64(profile_image)
-    service.update_user(user_id=current_user.id, base64=base64, image_format=image_format)
+    service.update_profile(user_id=current_user.id, base64=base64, image_format=image_format)
 
     return BaseResponse(status_code=200, message="Profile image updated successfully")
 

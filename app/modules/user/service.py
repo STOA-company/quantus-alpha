@@ -2,7 +2,7 @@ import json
 import logging
 import hashlib
 from typing import List, Tuple, Optional
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 
 from app.database.crud import database_service
 from app.models.models_users import AlphafinderUser
@@ -41,22 +41,6 @@ class UserService:
 
     def delete_user(self, id: int):
         self.db._delete(table="alphafinder_user", id=id)
-
-    def update_user(
-        self, user_id: int, nickname: str = None, profile_image: UploadFile = None, favorite_stock: List[str] = None
-    ):
-        self.db._update(
-            table="alphafinder_user",
-            sets={
-                "nickname": nickname,
-                "profile_image": profile_image,
-            },
-            id=user_id,
-        )
-
-        if favorite_stock:
-            for ticker in favorite_stock:
-                self.add_favorite_stock(id, ticker)
 
     def update_profile(
         self,
