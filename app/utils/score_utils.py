@@ -1,16 +1,19 @@
 import pandas as pd
-from typing import List
 import numpy as np
 from app.common.constants import FACTOR_CONFIGS
 
 
-def calculate_factor_score(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
     """팩터 점수 계산 후 code, score만 반환"""
     df_copy = df.copy()
-
+    columns = df.columns.tolist()
     # NaN -> 중앙값
+    non_numeric_columns = ["Code", "name", "market", "sector"]
     for col in columns:
-        df_copy[col] = df_copy[col].fillna(df_copy[col].median())
+        if col in non_numeric_columns:
+            continue
+        if not pd.api.types.is_numeric_dtype(df_copy[col]):
+            df_copy[col] = df_copy[col].fillna(df_copy[col].median())
 
     total_ranks = np.zeros(len(df_copy))
 

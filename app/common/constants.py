@@ -63,8 +63,15 @@ DEFAULT_SCREENER_COLUMNS = ["Code", "name", "market", "sector", "close", "price_
 
 
 FACTOR_CONFIGS = {
-    # 기술 분석 지표
-    "marketCap": {
+    "close": {
+        "direction": 1,  # 높을수록 좋음  # TODO
+        "range": (0, None),  # 음수 불가
+    },
+    "price_change_rate": {
+        "direction": -1,  # 높을수록 좋음  # TODO
+        "range": None,
+    },
+    "trade_volume": {
         "direction": 1,  # 높을수록 좋음  # TODO
         "range": (0, None),  # 음수 불가
     },

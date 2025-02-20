@@ -50,11 +50,8 @@ class ScreenerService:
         try:
             stocks = filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = get_filtered_stocks_df(market_filter, stocks, columns)
-
-            scored_df = calculate_factor_score(filtered_df, columns)
-
+            scored_df = calculate_factor_score(filtered_df)
             sorted_df = filtered_df.merge(scored_df, on="Code", how="inner")
-
             sorted_df = sorted_df.sort_values(by="score", ascending=False)
             stocks_data = df_to_dict(sorted_df)
             return stocks_data
