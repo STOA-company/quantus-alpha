@@ -1,10 +1,10 @@
 import json
 import logging
 import hashlib
-from app.database.crud import database_service
 from typing import List, Tuple, Optional
 from fastapi import HTTPException, UploadFile
 
+from app.database.crud import database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.community.schemas import CommentItemWithPostInfo, PostInfo, ResponsePost, UserInfo
 from app.modules.user.schemas import UserProfileResponse
@@ -400,14 +400,12 @@ class UserService:
         try:
             access_token_hash = hashlib.sha256(access_token.encode()).hexdigest()
 
-            existing_token = database_service._select(
-                table="alphafinder_oauth_token", access_token_hash=access_token_hash
-            )
+            existing_token = self.db._select(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
 
             if existing_token:
-                database_service._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
+                self.db._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
 
-            database_service._insert(
+            self.db._insert(
                 table="alphafinder_oauth_token",
                 sets={
                     "access_token": access_token,
@@ -422,7 +420,7 @@ class UserService:
 
     def delete_token(self, access_token_hash: str):
         try:
-            database_service._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
+            self.db._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
             logger.info(f"Token deleted: {access_token_hash}")
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
