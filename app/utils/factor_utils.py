@@ -4,49 +4,7 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-
-sector_map = {
-    "건강관리": "건강관리",
-    "자동차": "자동차",
-    "화장품,의류,완구": "화장품,의류,완구",
-    "화학": "화학",
-    "필수소비재": "필수소비재",
-    "운송": "운송",
-    "상사,자본재": "상사,자본재",
-    "비철,목재등": "비철,목재등",
-    "건설,건축관련": "건설,건축관련",
-    "보험": "보험",
-    "에너지": "에너지",
-    "기계": "기계",
-    "철강": "철강",
-    "반도체": "반도체",
-    "IT하드웨어": "IT하드웨어",
-    "증권": "증권",
-    "디스플레이": "디스플레이",
-    "IT가전": "IT가전",
-    "소매(유통)": "소매(유통)",
-    "유틸리티": "유틸리티",
-    "은행": "은행",
-    "통신서비스": "통신서비스",
-    "호텔,레저서비스": "호텔,레저서비스",
-    "소프트웨어": "소프트웨어",
-    "조선": "조선",
-    "미디어,교육": "미디어,교육",
-    "real_estate": "부동산",
-    "finance": "금융",
-    "construction": "건설, 건축",
-    "consumer_goods": "필수소비재",
-    "hospitality": "호텔, 레저",
-    "software": "소프트웨어",
-    "professional": "전문 서비스",
-    "energy": "에너지",
-    "electronics": "전자",
-    "aerospace": "항공",
-    "industrial": "기계",
-    "media": "미디어,교육",
-    "other": "기타",
-    None: "기타",
-}
+from app.common.constants import SECTOR_MAP, DEFAULT_SCREENER_COLUMNS, FACTOR_RENAME_MAP
 
 
 def get_factors_from_db() -> Dict[str, Dict]:
@@ -81,17 +39,9 @@ def process_kr_factor_data():
     df_selected = df[selected_columns]
     df_filtered = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
 
-    df_result = df_filtered.rename(
-        columns={
-            "ExchMnem": "market",
-            "WI26업종명(대)": "sector",
-            "Name": "name",
-            "거래대금": "trade_volume",
-            "수정주가수익률": "price_change_rate",
-        }
-    )
+    df_result = df_filtered.rename(columns=FACTOR_RENAME_MAP)
     df_result["market"] = df_result["market"].map(market_mapping)
-    df_result["sector"] = df_result["sector"].map(sector_map)
+    df_result["sector"] = df_result["sector"].map(SECTOR_MAP)
 
     df_result.to_parquet(output_file)
 
@@ -142,7 +92,7 @@ def process_us_factor_data():
         }
     )
     df_result["market"] = df_result["market"].map(market_mapping)
-    df_result["sector"] = df_result["sector"].map(sector_map)
+    df_result["sector"] = df_result["sector"].map(SECTOR_MAP)
 
     df_result.to_parquet(output_file)
 
@@ -203,18 +153,14 @@ def filter_stocks(
     return stock_codes
 
 
-DEFAULT_COLUMNS = ["Code", "name", "market", "sector", "close", "price_change_rate", "trade_volume"]
-
-
-def get_filtered_stocks_data(
+def get_filtered_stocks_df(
     market_filter: MarketEnum, codes: List[str], columns: Optional[List[str]] = None
-) -> List[Dict]:
+) -> pd.DataFrame:
     if columns is None:
         columns = []
-    required_columns = DEFAULT_COLUMNS + [col for col in columns if col not in DEFAULT_COLUMNS]
+    required_columns = DEFAULT_SCREENER_COLUMNS + [col for col in columns if col not in DEFAULT_SCREENER_COLUMNS]
 
     df = get_df_from_parquet(market_filter)
     filtered_df = df[df["Code"].isin(codes)][required_columns]
-    stocks_data = filtered_df.to_dict(orient="records")
 
-    return stocks_data
+    return filtered_df
