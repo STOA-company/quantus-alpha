@@ -6,7 +6,7 @@ from jose import jwt, JWTError, ExpiredSignatureError
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.models.models_users import AlphafinderUser
-from app.database.crud import database
+from app.database.crud import database_service
 from typing import Optional
 import logging
 
@@ -48,7 +48,7 @@ def create_email_token(email: str) -> str:
 
 
 def refresh_access_token(access_token_hash: str):
-    token_record = database._select(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
+    token_record = database_service._select(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
     if not token_record:
         raise HTTPException(
             status_code=401,
@@ -80,7 +80,7 @@ def refresh_access_token(access_token_hash: str):
             new_access_token = create_jwt_token(user_id)
             new_access_token_hash = hashlib.sha256(new_access_token.encode()).hexdigest()
 
-            database._update(
+            database_service._update(
                 table="alphafinder_oauth_token",
                 sets={"access_token": new_access_token, "access_token_hash": new_access_token_hash},
                 access_token_hash=access_token_hash,
@@ -132,7 +132,7 @@ def get_current_user(
         hashed_token = credentials.credentials
 
         try:
-            token_record = database._select(table="alphafinder_oauth_token", access_token_hash=hashed_token)
+            token_record = database_service._select(table="alphafinder_oauth_token", access_token_hash=hashed_token)
         except Exception as e:
             logger.error(f"Database error: {str(e)}")
             raise HTTPException(
@@ -162,7 +162,7 @@ def get_current_user(
             )
 
         try:
-            user = database._select(table="alphafinder_user", id=user_id)
+            user = database_service._select(table="alphafinder_user", id=user_id)
         except Exception as e:
             logger.error(f"Database error: {str(e)}")
             raise HTTPException(
@@ -186,34 +186,3 @@ def get_current_user(
             detail="Invalid token format",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-
-def store_token(access_token: str, refresh_token: str):
-    try:
-        access_token_hash = hashlib.sha256(access_token.encode()).hexdigest()
-
-        existing_token = database._select(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
-
-        if existing_token:
-            database._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
-
-        database._insert(
-            table="alphafinder_oauth_token",
-            sets={
-                "access_token": access_token,
-                "refresh_token": refresh_token,
-                "access_token_hash": access_token_hash,
-            },
-        )
-        logger.info(f"Token stored: {access_token} {refresh_token}")
-        return access_token_hash
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-def delete_token(access_token_hash: str):
-    try:
-        database._delete(table="alphafinder_oauth_token", access_token_hash=access_token_hash)
-        logger.info(f"Token deleted: {access_token_hash}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
