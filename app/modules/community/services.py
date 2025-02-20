@@ -254,6 +254,8 @@ class CommunityService:
             FROM post_stocks
             WHERE post_id IN :post_ids
         """
+        if not post_ids:
+            return []
         stock_result = self.db._execute(text(stock_query), {"post_ids": post_ids})
 
         # post_id별 stock_tickers 매핑
