@@ -43,7 +43,7 @@ class UserService:
         self.db._delete(table="alphafinder_user", id=id)
 
     def update_user(
-        self, id: int, nickname: str = None, profile_image: UploadFile = None, favorite_stock: List[str] = None
+        self, user_id: int, nickname: str = None, profile_image: UploadFile = None, favorite_stock: List[str] = None
     ):
         self.db._update(
             table="alphafinder_user",
@@ -51,11 +51,12 @@ class UserService:
                 "nickname": nickname,
                 "profile_image": profile_image,
             },
-            id=id,
+            id=user_id,
         )
 
-        for ticker in favorite_stock:
-            self.add_favorite_stock(id, ticker)
+        if favorite_stock:
+            for ticker in favorite_stock:
+                self.add_favorite_stock(id, ticker)
 
     def update_profile(
         self,
