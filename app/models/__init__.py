@@ -1,4 +1,4 @@
-from app.models.models_base import Base
+from app.models.models_base import Base, ServiceBase
 from sqlalchemy.orm import relationship
 
 from app.models.models_stock import StockInformation
@@ -8,7 +8,8 @@ from app.models.models_news import News
 from app.models.models_stock_indices import StockIndices
 from app.models.models_disclosure import Disclosure
 from app.models.models_users import AlphafinderUser, UserStockInterest
-from app.models.models_payments import AlphafinderLicense, AlphafinderMembership, AlphafinderPaymentHistory
+
+# from app.models.models_payments import AlphafinderLicense, AlphafinderMembership, AlphafinderPaymentHistory
 from app.models.models_community import (
     Category,
     Post,
@@ -25,6 +26,7 @@ from app.models.models_factors import Factors
 
 __all__ = [
     "Base",
+    "ServiceBase",
     "relationship",
     "StockInformation",
     "StockFactor",
@@ -34,9 +36,9 @@ __all__ = [
     "Disclosure",
     "AlphafinderUser",
     "UserStockInterest",
-    "AlphafinderLicense",
-    "AlphafinderMembership",
-    "AlphafinderPaymentHistory",
+    # "AlphafinderLicense",
+    # "AlphafinderMembership",
+    # "AlphafinderPaymentHistory",
     "Category",
     "Post",
     "Comment",
@@ -85,15 +87,6 @@ CommentLike.user = relationship("AlphafinderUser", back_populates="comment_likes
 # Bookmark relationships
 Bookmark.post = relationship("Post", back_populates="bookmarks")
 Bookmark.user = relationship("AlphafinderUser", back_populates="bookmarks")
-
-# StockInformation relationships
-StockInformation.posts = relationship(
-    "Post",
-    secondary=post_stocks,
-    back_populates="stocks",
-    primaryjoin="StockInformation.ticker == post_stocks.c.stock_ticker",
-    secondaryjoin="Post.id == post_stocks.c.post_id",
-)
 
 # PostStatistics relationships
 PostStatistics.post = relationship("Post", back_populates="statistics", uselist=False)

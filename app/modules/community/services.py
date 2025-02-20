@@ -19,12 +19,13 @@ from .schemas import (
     UserInfo,
 )
 from typing import List, Optional, Tuple
-from app.database.crud import database
+from app.database.crud import database, database_service
 
 
 class CommunityService:
     def __init__(self):
-        self.db = database
+        self.db = database_service
+        self.db_data = database
 
     async def create_post(self, current_user: AlphafinderUser, post_create: PostCreate) -> Tuple[bool, int]:
         """게시글 생성"""
@@ -92,7 +93,7 @@ class CommunityService:
             FROM stock_information
             WHERE ticker IN :stock_tickers AND is_activate = 1
         """
-        result = self.db._execute(text(query), {"stock_tickers": stock_tickers})
+        result = self.db_data._execute(text(query), {"stock_tickers": stock_tickers})
         count = result.scalar()
         return count == len(stock_tickers)
 
@@ -140,7 +141,7 @@ class CommunityService:
             columns.append("kr_name")
         else:
             columns.append("en_name")
-        stock_info = self.db._select(table="stock_information", columns=columns, ticker__in=stock_tickers)
+        stock_info = self.db_data._select(table="stock_information", columns=columns, ticker__in=stock_tickers)
         stock_info = [row for row in stock_info]
         stock_information = [
             StockInfo(
@@ -254,6 +255,8 @@ class CommunityService:
             FROM post_stocks
             WHERE post_id IN :post_ids
         """
+        if not post_ids:
+            return []
         stock_result = self.db._execute(text(stock_query), {"post_ids": post_ids})
 
         # post_id별 stock_tickers 매핑
@@ -275,7 +278,7 @@ class CommunityService:
         else:
             columns.append("en_name")
 
-        stock_info = self.db._select(table="stock_information", columns=columns, ticker__in=list(all_tickers))
+        stock_info = self.db_data._select(table="stock_information", columns=columns, ticker__in=list(all_tickers))
 
         # 티커를 키로 하는 딕셔너리 생성
         stock_info_map = {

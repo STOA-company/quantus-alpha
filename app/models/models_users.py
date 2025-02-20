@@ -1,10 +1,10 @@
 from sqlalchemy import ForeignKey, String, BigInteger, UniqueConstraint
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.models_base import Base, BaseMixin
+from app.models.models_base import ServiceBase, BaseMixin
 
 
-class AlphafinderUser(BaseMixin, Base):
+class AlphafinderUser(BaseMixin, ServiceBase):
     __tablename__ = "alphafinder_user"
     __table_args__ = (UniqueConstraint("nickname"), {"extend_existing": True})
 
@@ -22,7 +22,7 @@ class AlphafinderUser(BaseMixin, Base):
         return f"User(id={self.id!r}, nickname={self.nickname!r}, email={self.email!r})"
 
 
-class UserStockInterest(BaseMixin, Base):
+class UserStockInterest(BaseMixin, ServiceBase):
     __tablename__ = "user_stock_interest"
     __table_args__ = {"extend_existing": True}
 
@@ -33,7 +33,7 @@ class UserStockInterest(BaseMixin, Base):
     ticker: Mapped[String] = mapped_column(String(length=20), nullable=False)
 
 
-class AlphaFinderOAuthToken(BaseMixin, Base):
+class AlphaFinderOAuthToken(BaseMixin, ServiceBase):
     __tablename__ = "alphafinder_oauth_token"
     __table_args__ = {"extend_existing": True}
 
