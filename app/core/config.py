@@ -142,19 +142,8 @@ class BatchConfig(DatabaseConfig):
         )
 
 
-class ServiceConfig(DatabaseConfig):
-    def __init__(self):
-        super().__init__(
-            DB_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_SERVICE_DB}",
-            DB_POOL_RECYCLE=3600,
-            DB_ECHO=True,
-        )
-
-
 def get_database_config():
     """Get database configuration based on environment"""
 
-    config = dict(
-        prod=ProdConfig, dev=DevConfig, test=TestConfig, stage=StageConfig, batch=BatchConfig, service=ServiceConfig
-    )
+    config = dict(prod=ProdConfig, dev=DevConfig, test=TestConfig, stage=StageConfig, batch=BatchConfig)
     return config[settings.ENV]()
