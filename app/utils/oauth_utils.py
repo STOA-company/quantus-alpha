@@ -77,18 +77,13 @@ def refresh_access_token(access_token_hash: str):
 
             user_id = int(refresh_payload.get("sub"))
 
-            new_payload = {
-                "sub": user_id,
-                "exp": (current_time + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp(),
-                "iat": current_time.timestamp(),
-            }
-            new_access_token = jwt.encode(new_payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+            new_access_token = create_jwt_token(user_id)
             new_access_token_hash = hashlib.sha256(new_access_token.encode()).hexdigest()
 
             database._update(
                 table="alphafinder_oauth_token",
                 sets={"access_token": new_access_token, "access_token_hash": new_access_token_hash},
-                refresh_token=refresh_token,
+                access_token_hash=access_token_hash,
             )
 
             return new_access_token_hash
@@ -146,6 +141,7 @@ def get_current_user(
             )
 
         if not token_record:
+            print("token_record is None")
             raise HTTPException(
                 status_code=401,
                 detail="Invalid token",
@@ -153,11 +149,12 @@ def get_current_user(
             )
 
         token_data = token_record[0]
-
+        print("token_data is not None : ", token_data)
         try:
             payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
             user_id = int(payload.get("sub"))
         except JWTError:
+            print("JWTError")
             raise HTTPException(
                 status_code=401,
                 detail="Access Token Expired",
