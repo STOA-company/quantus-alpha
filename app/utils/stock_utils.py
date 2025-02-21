@@ -13,12 +13,27 @@ class StockUtils:
         self.kispy = CustomKisClientV2(nation=nation.upper())
         self.nation = nation
 
-    def get_top_change_stocks(self, period: Literal["rt", "1d", "1w", "1m", "6m", "1y"], limit: int = 10):
+    def get_top_gainers(self, period: Literal["rt", "1d", "1w", "1m", "6m", "1y"], limit: int = 10):
         stocks = self.db._select(
             table="stock_trend",
             columns=["ticker"],
             order=f"change_{period}",
             ascending=False,
+            ctry=self.nation,
+            is_activate=True,
+            is_trading_stopped=False,
+            is_delisted=False,
+            limit=limit,
+        )
+        tickers = [stock[0] for stock in stocks]
+        return tickers
+
+    def get_top_losers(self, period: Literal["rt", "1d", "1w", "1m", "6m", "1y"], limit: int = 10):
+        stocks = self.db._select(
+            table="stock_trend",
+            columns=["ticker"],
+            order=f"change_{period}",
+            ascending=True,
             ctry=self.nation,
             is_activate=True,
             is_trading_stopped=False,
@@ -100,12 +115,16 @@ class StockUtils:
             self.activate_stock(ticker)
             return False
 
+    def update_top_gainers(self, period: Literal["rt", "1d", "1w", "1m", "6m", "1y"]):
+        tickers = self.get_top_gainers(period)
+        for ticker in tickers:
+            self.update_stock_data(ticker)
 
-if __name__ == "__main__":
-    kr_stock_utils = StockUtils(nation="kr")
-    us_stock_utils = StockUtils(nation="us")
+    def update_top_losers(self, period: Literal["rt", "1d", "1w", "1m", "6m", "1y"]):
+        tickers = self.get_top_losers(period)
+        for ticker in tickers:
+            self.update_stock_data(ticker)
 
-    kr_tickers = kr_stock_utils.get_top_change_stocks(period="1d", limit=10)
-    us_tickers = us_stock_utils.get_top_change_stocks(period="1d", limit=10)
-    print(kr_tickers)
-    print(us_tickers)
+
+us_stock_utils = StockUtils(nation="us")
+kr_stock_utils = StockUtils(nation="kr")
