@@ -20,6 +20,9 @@ data/
 .ipynb_checkpoints/
 *.ipynb
 
+# csv
+*.csv
+
 # pytest
 .pytest_cache/
 
