@@ -45,6 +45,8 @@ class ScreenerService:
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
         columns: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> List[Dict]:
         try:
             stocks = filter_stocks(market_filter, sector_filter, custom_filters)
@@ -54,6 +56,10 @@ class ScreenerService:
             sorted_df = sorted_df.sort_values(by="score", ascending=False)
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
+
+            if limit and offset:
+                sorted_df = sorted_df.iloc[offset : offset + limit]
+
             return sorted_df
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks: {e}")
