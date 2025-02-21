@@ -524,13 +524,10 @@ def kr_run_disclosure_is_top_story(date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d").date()
     else:
-        check_date = now_kr(is_date=True)
+        check_date = now_utc()
 
-    kr_start_date = check_date - timedelta(days=1)
-    kr_end_date = check_date
-
-    utc_start_date = pd.to_datetime(kr_start_date).tz_localize("Asia/Seoul").tz_convert("UTC").tz_localize(None)
-    utc_end_date = pd.to_datetime(kr_end_date).tz_localize("Asia/Seoul").tz_convert("UTC").tz_localize(None)
+    utc_start_date = pd.to_datetime(check_date) - timedelta(days=1)
+    utc_end_date = pd.to_datetime(check_date)
 
     news_data = pd.DataFrame(
         database._select(
@@ -538,9 +535,7 @@ def kr_run_disclosure_is_top_story(date: str = None):
             columns=["ticker"],
             **dict(
                 ctry="KR",
-                date__gte=utc_start_date,
-                date__lt=utc_end_date,
-                is_exist=True,
+                is_related=True,
             ),
         )
     )
@@ -553,15 +548,7 @@ def kr_run_disclosure_is_top_story(date: str = None):
 
     unique_tickers = news_data["ticker"].unique().tolist()
 
-    df_price = pd.DataFrame(
-        database._select(
-            table="stock_trend",
-            columns=["ticker", "volume_change_1d"],
-            **dict(ticker__in=unique_tickers, ctry="kr"),  # TODO :: ctry 바뀔 가능성 존재함.
-        )
-    )
-
-    top_5_tickers = df_price.nlargest(5, "volume_change_1d")["ticker"].tolist()
+    top_5_tickers = unique_tickers
 
     try:
         # 모든 공시 데이터 중 is_top_story가 True인 데이터를 False로 초기화
@@ -602,13 +589,10 @@ def us_run_disclosure_is_top_story(date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d").date()
     else:
-        check_date = now_kr(is_date=True)
+        check_date = now_utc()
 
-    kr_start_date = check_date - timedelta(days=1)
-    kr_end_date = check_date
-
-    utc_start_date = pd.to_datetime(kr_start_date).tz_localize("Asia/Seoul").tz_convert("UTC").tz_localize(None)
-    utc_end_date = pd.to_datetime(kr_end_date).tz_localize("Asia/Seoul").tz_convert("UTC").tz_localize(None)
+    utc_start_date = pd.to_datetime(check_date) - timedelta(days=1)
+    utc_end_date = pd.to_datetime(check_date)
 
     # 주요소식 모아보기 11개를 맞추기 위해서 뉴스가 있는 종목을 조회해야 함.
     news_data = pd.DataFrame(
@@ -617,9 +601,7 @@ def us_run_disclosure_is_top_story(date: str = None):
             columns=["ticker"],
             **dict(
                 ctry="US",
-                date__gte=utc_start_date,
-                date__lt=utc_end_date,
-                is_exist=True,
+                is_related=True,
             ),
         )
     )
@@ -632,14 +614,7 @@ def us_run_disclosure_is_top_story(date: str = None):
 
     unique_tickers = news_data["ticker"].unique().tolist()
 
-    df_price = pd.DataFrame(
-        database._select(
-            table="stock_trend",
-            columns=["ticker", "volume_change_1d"],
-            **dict(ticker__in=unique_tickers, ctry="us"),
-        )
-    )
-    top_6_tickers = df_price.nlargest(6, "volume_change_1d")["ticker"].tolist()
+    top_6_tickers = unique_tickers
 
     try:
         # 해당 날짜의 모든 뉴스 데이터 is_top_story를 False로 초기화

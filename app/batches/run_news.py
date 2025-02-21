@@ -218,13 +218,10 @@ def renewal_kr_run_news_is_top_story(date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d").date()
     else:
-        check_date = now_kr(is_date=True)
+        check_date = now_utc(is_date=True)
 
-    kr_start_date = check_date - timedelta(days=1)
-    kr_end_date = check_date
-
-    utc_start_date = pd.to_datetime(kr_start_date).tz_localize("Asia/Seoul").tz_convert("UTC").tz_localize(None)
-    utc_end_date = pd.to_datetime(kr_end_date).tz_localize("Asia/Seoul").tz_convert("UTC").tz_localize(None)
+    utc_start_date = pd.to_datetime(check_date) - timedelta(days=1)
+    utc_end_date = pd.to_datetime(check_date)
 
     news_data = pd.DataFrame(
         database._select(
@@ -299,11 +296,8 @@ def renewal_us_run_news_is_top_story(date: str = None):
     else:
         check_date = now_utc(is_date=True)
 
-    kr_start_date = check_date - timedelta(days=1)
-    kr_end_date = check_date
-
-    utc_start_date = pd.to_datetime(kr_start_date).tz_localize("Asia/Seoul").tz_convert("UTC").tz_localize(None)
-    utc_end_date = pd.to_datetime(kr_end_date).tz_localize("Asia/Seoul").tz_convert("UTC").tz_localize(None)
+    utc_start_date = pd.to_datetime(check_date) - timedelta(days=1)
+    utc_end_date = pd.to_datetime(check_date)
 
     news_data = pd.DataFrame(
         database._select(
