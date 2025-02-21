@@ -45,3 +45,6 @@ ngrok.yml
 # parquet
 parquet/
 *.parquet
+
+# test
+test/
