@@ -41,6 +41,7 @@ class StockInformation(Base):
     listing_date = Column(Date, nullable=True, comment="상장일")
 
     is_activate = Column(Boolean, default=True, comment="사용 가능 여부")
+    is_pub = Column(Boolean, default=True, comment="is_publishable, 수집 가능 여부")
 
 
 class StockFactor(Base):

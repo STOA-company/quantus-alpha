@@ -91,9 +91,8 @@ def download_filtered_stocks(filtered_stocks: FilteredStocks):
         filtered_stocks.market_filter, filtered_stocks.sector_filter, custom_filters, filtered_stocks.columns
     )
 
-    # CSV 스트림 생성
     stream = io.StringIO()
-    sorted_df.to_csv(stream, index=False)
+    sorted_df.to_csv(stream, index=False, encoding="utf-8-sig")  # 한글 인코딩
 
     return Response(
         content=stream.getvalue(),
