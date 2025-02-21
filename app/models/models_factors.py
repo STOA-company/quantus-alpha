@@ -1,7 +1,7 @@
 from app.models.models_base import Base
 from sqlalchemy.schema import Index
 from enum import Enum
-from sqlalchemy import Column, String, Text, Enum as SQLAlchemyEnum
+from sqlalchemy import Column, String, Text, Numeric, Enum as SQLAlchemyEnum, Boolean
 
 
 class CategoryEnum(str, Enum):
@@ -39,6 +39,10 @@ class Factors(Base):
     unit = Column(SQLAlchemyEnum(UnitEnum), nullable=False)
     sort_direction = Column(SQLAlchemyEnum(SortDirectionEnum), nullable=False)
     category = Column(SQLAlchemyEnum(CategoryEnum), nullable=False)
+    min_value = Column(Numeric, nullable=True)
+    max_value = Column(Numeric, nullable=True)
+    is_stock = Column(Boolean, nullable=False, default=True)
+    is_etf = Column(Boolean, nullable=False, default=False)
 
     def __repr__(self):
         return f"<Factor {self.factor}>"
