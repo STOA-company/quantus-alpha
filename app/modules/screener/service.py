@@ -3,7 +3,6 @@ from typing import Optional, List, Dict
 import logging
 from app.utils.factor_utils import filter_stocks, get_filtered_stocks_df, MarketEnum
 from app.utils.score_utils import calculate_factor_score
-from app.utils.pandas_utils import df_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +52,9 @@ class ScreenerService:
             scored_df = calculate_factor_score(filtered_df)
             sorted_df = filtered_df.merge(scored_df, on="Code", how="inner")
             sorted_df = sorted_df.sort_values(by="score", ascending=False)
-            stocks_data = df_to_dict(sorted_df)
-            return stocks_data
+            if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
+                sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
+            return sorted_df
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks: {e}")
             raise e
