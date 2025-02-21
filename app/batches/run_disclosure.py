@@ -535,7 +535,7 @@ def kr_run_disclosure_is_top_story(date: str = None):
             columns=["ticker"],
             **dict(
                 ctry="KR",
-                is_related=True,
+                is_top_story=True,
             ),
         )
     )
@@ -601,7 +601,7 @@ def us_run_disclosure_is_top_story(date: str = None):
             columns=["ticker"],
             **dict(
                 ctry="US",
-                is_related=True,
+                is_top_story=True,
             ),
         )
     )
