@@ -61,6 +61,7 @@ SECTOR_MAP = {
 
 DEFAULT_SCREENER_COLUMNS = ["Code", "name", "market", "sector", "close", "price_change_rate", "trade_volume"]
 
+NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6", "momentum_12", "current_ratio"]
 
 FACTOR_CONFIGS = {
     "close": {
