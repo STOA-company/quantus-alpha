@@ -25,11 +25,10 @@ from app.batches.run_disclosure import (
     us_run_disclosure_is_top_story,
 )
 from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
-from app.batches.check_split import check_kr_stock_splits, check_us_stock_splits
-from app.batches.check_outliers import check_and_recollect_outliers
 from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_stat_cls_code_batch
 
 from app.utils.date_utils import check_market_status, is_business_day
+from app.utils.stock_utils import kr_stock_utils, us_stock_utils
 
 notifier = SlackNotifier()
 logger = logging.getLogger(__name__)
@@ -340,34 +339,6 @@ def kr_stock_minute_batch_last():
         raise
 
 
-@CELERY_APP.task(name="process_outliers_kr", ignore_result=True)
-def process_outliers_kr():
-    """한국 주식 이상치 처리"""
-    notifier.notify_info("KR_process_outliers process started")
-    try:
-        check_kr_stock_splits()
-        check_and_recollect_outliers(nation="KR")
-        run_stock_trend_by_1d_batch(ctry=TrendingCountry.KR)
-        notifier.notify_success("KR_process_outliers process completed")
-    except Exception as e:
-        notifier.notify_error(f"KR_process_outliers process failed: {str(e)}")
-        raise
-
-
-@CELERY_APP.task(name="process_outliers_us", ignore_result=True)
-def process_outliers_us():
-    """미국 주식 이상치 처리"""
-    notifier.notify_info("US_process_outliers process started")
-    try:
-        check_us_stock_splits()
-        check_and_recollect_outliers(nation="US")
-        run_stock_trend_by_1d_batch(ctry=TrendingCountry.US)
-        notifier.notify_success("US_process_outliers process completed")
-    except Exception as e:
-        notifier.notify_error(f"US_process_outliers process failed: {str(e)}")
-        raise
-
-
 @CELERY_APP.task(name="kr_stock_indices_collect", ignore_result=True)
 def kr_stock_indices_collect():
     """한국 주가지수 데이터 수집"""
@@ -464,14 +435,62 @@ def check_warned_stock_us():
 @CELERY_APP.task(name="reset_daily_leaderboard", ignore_result=True)
 def reset_daily_leaderboard():
     """일일 리더보드 초기화"""
-    notifier.notify_info("Reset_daily_leaderboard process started")
+    notifier.notify_info("reset_daily_leaderboard process started")
     try:
         from app.core.redis import redis_client
 
         redis_client().delete("daily_search_leaderboard")
-        notifier.notify_success("Reset_daily_leaderboard process completed")
+        notifier.notify_success("reset_daily_leaderboard process completed")
     except Exception as e:
-        notifier.notify_error(f"Reset_daily_leaderboard process failed: {str(e)}")
+        notifier.notify_error(f"reset_daily_leaderboard process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="update_us_top_gainers", ignore_result=True)
+def update_us_top_gainers():
+    """미국 상승 종목 업데이트"""
+    notifier.notify_info("update_us_top_gainers process started")
+    try:
+        us_stock_utils.update_top_gainers()
+        notifier.notify_success("update_us_top_gainers process completed")
+    except Exception as e:
+        notifier.notify_error(f"update_us_top_gainers process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="update_us_top_losers", ignore_result=True)
+def update_us_top_losers():
+    """미국 하락 종목 업데이트"""
+    notifier.notify_info("update_us_top_losers process started")
+    try:
+        us_stock_utils.update_top_losers()
+        notifier.notify_success("update_us_top_losers process completed")
+    except Exception as e:
+        notifier.notify_error(f"update_us_top_losers process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="update_kr_top_gainers", ignore_result=True)
+def update_kr_top_gainers():
+    """한국 상승 종목 업데이트"""
+    notifier.notify_info("update_kr_top_gainers process started")
+    try:
+        kr_stock_utils.update_top_gainers()
+        notifier.notify_success("update_kr_top_gainers process completed")
+    except Exception as e:
+        notifier.notify_error(f"update_kr_top_gainers process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="update_kr_top_losers", ignore_result=True)
+def update_kr_top_losers():
+    """한국 하락 종목 업데이트"""
+    notifier.notify_info("update_kr_top_losers process started")
+    try:
+        kr_stock_utils.update_top_losers()
+        notifier.notify_success("update_kr_top_losers process completed")
+    except Exception as e:
+        notifier.notify_error(f"update_kr_top_losers process failed: {str(e)}")
         raise
 
 
