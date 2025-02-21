@@ -7,15 +7,17 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+auth = KisAuth(
+    app_key=settings.KIS_APP_KEY,
+    secret=settings.KIS_SECRET,
+    account_no=settings.KIS_ACCOUNT_NO,
+    is_real=True,  # 실전투자: True, 모의투자: False
+)
+
 
 class CustomKisClientV2(KisClientV2):
     def __init__(self, nation: str):
-        self.auth = KisAuth(
-            app_key=settings.KIS_APP_KEY,
-            secret=settings.KIS_SECRET,
-            account_no=settings.KIS_ACCOUNT_NO,
-            is_real=True,  # 실전투자: True, 모의투자: False
-        )
+        self.auth = auth
         super().__init__(auth=self.auth, nation=nation)
 
     def fetch_ohlcv(self, symbol: str, *args, **kwargs):
