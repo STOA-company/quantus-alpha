@@ -61,10 +61,14 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
                 for condition in filtered_stocks.custom_filters
             ]
         sorted_df = screener_service.get_filtered_stocks(
-            filtered_stocks.market_filter, filtered_stocks.sector_filter, custom_filters, filtered_stocks.columns
+            filtered_stocks.market_filter,
+            filtered_stocks.sector_filter,
+            custom_filters,
+            filtered_stocks.columns,
+            filtered_stocks.limit,
+            filtered_stocks.offset,
         )
         stocks_data = df_to_dict(sorted_df)
-        logger.info(f"Filtered stocks length: {len(stocks_data)}")
         return stocks_data
     except Exception as e:
         logger.error(f"Error getting filtered stocks: {e}")
