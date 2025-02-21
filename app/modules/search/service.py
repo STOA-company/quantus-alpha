@@ -70,11 +70,10 @@ class SearchService:
 
         prices = {}
         for country, tickers in country_groups.items():
-            change_rate_column = "change_rt" if country == "us" else "change_1d"
             try:
                 price_results = self.db._select(
                     table="stock_trend",
-                    columns=["ticker", "current_price", "prev_close", change_rate_column],
+                    columns=["ticker", "current_price", "prev_close", "change_rt"],
                     ticker__in=tickers,
                     order="last_updated",
                     ascending=False,
@@ -89,7 +88,7 @@ class SearchService:
                     if ticker not in prices:
                         try:
                             current_price = float(mapping["current_price"])
-                            rate = float(mapping[change_rate_column])
+                            rate = float(mapping["change_rt"])
                             prices[ticker] = (current_price, rate)
                         except (ValueError, TypeError):
                             prices[ticker] = (None, None)
