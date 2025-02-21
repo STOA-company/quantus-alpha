@@ -451,12 +451,7 @@ def update_us_top_gainers():
     """미국 상승 종목 업데이트"""
     notifier.notify_info("update_us_top_gainers process started")
     try:
-        us_stock_utils.update_top_gainers("rt")
-        us_stock_utils.update_top_gainers("1d")
-        us_stock_utils.update_top_gainers("1w")
-        us_stock_utils.update_top_gainers("1m")
-        us_stock_utils.update_top_gainers("6m")
-        us_stock_utils.update_top_gainers("1y")
+        us_stock_utils.update_top_gainers()
         notifier.notify_success("update_us_top_gainers process completed")
     except Exception as e:
         notifier.notify_error(f"update_us_top_gainers process failed: {str(e)}")
@@ -468,12 +463,7 @@ def update_us_top_losers():
     """미국 하락 종목 업데이트"""
     notifier.notify_info("update_us_top_losers process started")
     try:
-        us_stock_utils.update_top_losers("rt")
-        us_stock_utils.update_top_losers("1d")
-        us_stock_utils.update_top_losers("1w")
-        us_stock_utils.update_top_losers("1m")
-        us_stock_utils.update_top_losers("6m")
-        us_stock_utils.update_top_losers("1y")
+        us_stock_utils.update_top_losers()
         notifier.notify_success("update_us_top_losers process completed")
     except Exception as e:
         notifier.notify_error(f"update_us_top_losers process failed: {str(e)}")
@@ -485,12 +475,7 @@ def update_kr_top_gainers():
     """한국 상승 종목 업데이트"""
     notifier.notify_info("update_kr_top_gainers process started")
     try:
-        kr_stock_utils.update_top_gainers("rt")
-        kr_stock_utils.update_top_gainers("1d")
-        kr_stock_utils.update_top_gainers("1w")
-        kr_stock_utils.update_top_gainers("1m")
-        kr_stock_utils.update_top_gainers("6m")
-        kr_stock_utils.update_top_gainers("1y")
+        kr_stock_utils.update_top_gainers()
         notifier.notify_success("update_kr_top_gainers process completed")
     except Exception as e:
         notifier.notify_error(f"update_kr_top_gainers process failed: {str(e)}")
@@ -502,12 +487,7 @@ def update_kr_top_losers():
     """한국 하락 종목 업데이트"""
     notifier.notify_info("update_kr_top_losers process started")
     try:
-        kr_stock_utils.update_top_losers("rt")
-        kr_stock_utils.update_top_losers("1d")
-        kr_stock_utils.update_top_losers("1w")
-        kr_stock_utils.update_top_losers("1m")
-        kr_stock_utils.update_top_losers("6m")
-        kr_stock_utils.update_top_losers("1y")
+        kr_stock_utils.update_top_losers()
         notifier.notify_success("update_kr_top_losers process completed")
     except Exception as e:
         notifier.notify_error(f"update_kr_top_losers process failed: {str(e)}")
