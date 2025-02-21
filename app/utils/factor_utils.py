@@ -4,7 +4,8 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-from app.common.constants import SECTOR_MAP, DEFAULT_SCREENER_COLUMNS, FACTOR_RENAME_MAP
+from app.common.constants import SECTOR_MAP, DEFAULT_SCREENER_COLUMNS, FACTOR_RENAME_MAP, NEED_TO_MULTIPLY_100
+import numpy as np
 
 
 def get_factors_from_db() -> Dict[str, Dict]:
@@ -42,6 +43,13 @@ def process_kr_factor_data():
     df_result = df_filtered.rename(columns=FACTOR_RENAME_MAP)
     df_result["market"] = df_result["market"].map(market_mapping)
     df_result["sector"] = df_result["sector"].map(SECTOR_MAP)
+
+    for column in NEED_TO_MULTIPLY_100:
+        df_result[column] = df_result[column] * 100
+
+    for column in df_result.columns:
+        if np.issubdtype(df_result[column].dtype, np.number):
+            df_result[column] = np.round(df_result[column].astype(np.float64), 2)
 
     df_result.to_parquet(output_file)
 
@@ -93,6 +101,13 @@ def process_us_factor_data():
     )
     df_result["market"] = df_result["market"].map(market_mapping)
     df_result["sector"] = df_result["sector"].map(SECTOR_MAP)
+
+    for column in NEED_TO_MULTIPLY_100:
+        df_result[column] = df_result[column] * 100
+
+    for column in df_result.columns:
+        if np.issubdtype(df_result[column].dtype, np.number):
+            df_result[column] = np.round(df_result[column].astype(np.float64), 2)
 
     df_result.to_parquet(output_file)
 
