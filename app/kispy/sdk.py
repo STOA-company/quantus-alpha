@@ -2,25 +2,25 @@ import logging
 from kispy import KisAuth, KisClientV2
 from kispy.models.market import OHLCV
 import pandas as pd
-from dotenv import load_dotenv
-import os
+from app.core.config import settings
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-load_dotenv(".env.dev")
-
-auth = KisAuth(
-    app_key=os.getenv("KIS_APP_KEY"),
-    secret=os.getenv("KIS_SECRET"),
-    account_no=os.getenv("KIS_ACCOUNT_NO"),
-    is_real=True,  # 실전투자: True, 모의투자: False
-)
-
 
 class CustomKisClientV2(KisClientV2):
+    def __init__(self, nation: str):
+        self.auth = KisAuth(
+            app_key=settings.KIS_APP_KEY,
+            secret=settings.KIS_SECRET,
+            account_no=settings.KIS_ACCOUNT_NO,
+            is_real=True,  # 실전투자: True, 모의투자: False
+        )
+        super().__init__(auth=self.auth, nation=nation)
+
     def fetch_ohlcv(self, symbol: str, *args, **kwargs):
-        if self.nation == "KR":
+        print("NATION", self.nation)
+        if self.nation == "kr":
             if kwargs.get("period") in ["d", "w", "M"]:
                 try:
                     period_map = {"d": "D", "w": "W", "M": "M"}
@@ -55,43 +55,42 @@ class CustomKisClientV2(KisClientV2):
                 except Exception as e:
                     logger.error(f"Error processing domestic stock data: {e}")
                     raise
+        else:
+            print("SYMBOL", symbol)
+            return super().fetch_ohlcv(symbol, *args, **kwargs)
 
-        return super().fetch_ohlcv(symbol, *args, **kwargs)
+    def fetch_stock_data(self, symbol: str):
+        try:
+            # 전체 기간 일봉 데이터 조회
+            # period="d": 일봉
+            # is_adjust=True: 수정주가 반영
+            print("SYMBOL", symbol)
+            ohlcv = self.fetch_ohlcv(symbol=symbol, period="d", is_adjust=True)
+            print("OHLCV", ohlcv)
+            if not ohlcv:
+                print("NO OHLCV")
+                logger.warning(f"No OHLCV data for {symbol}")
+                return None
 
+            today = datetime.now().date()
+            ohlcv = [item for item in ohlcv if item.date.date() != today]
 
-def fetch_stock_data(symbol: str, nation: str):
-    try:
-        # KisClientV2 초기화
-        client = CustomKisClientV2(auth=auth, nation=nation)
+            logger.info(f"Fetched OHLCV data for {symbol}")
 
-        # 전체 기간 일봉 데이터 조회
-        # period="d": 일봉
-        # is_adjust=True: 수정주가 반영
-        ohlcv = client.fetch_ohlcv(symbol=symbol, period="d", is_adjust=True)
+            return pd.DataFrame(
+                [
+                    {
+                        "Date": item.date,
+                        "Open": item.open,
+                        "High": item.high,
+                        "Low": item.low,
+                        "Close": item.close,
+                        "Volume": item.volume,
+                    }
+                    for item in ohlcv
+                ]
+            )
 
-        if not ohlcv:
-            logger.warning(f"No OHLCV data for {symbol}")
+        except Exception as e:
+            logger.error(f"Error fetching price data from KIS API for {symbol}: {str(e)}")
             return None
-
-        today = datetime.now().date()
-        ohlcv = [item for item in ohlcv if item.date.date() != today]
-
-        logger.info(f"Fetched OHLCV data for {symbol}")
-
-        return pd.DataFrame(
-            [
-                {
-                    "Date": item.date,
-                    "Open": item.open,
-                    "High": item.high,
-                    "Low": item.low,
-                    "Close": item.close,
-                    "Volume": item.volume,
-                }
-                for item in ohlcv
-            ]
-        )
-
-    except Exception as e:
-        logger.error(f"Error fetching price data from KIS API for {symbol}: {str(e)}")
-        return None

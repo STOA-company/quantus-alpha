@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Response
 from typing import List, Dict
+import io
 from app.modules.screener.service import screener_service
 from app.modules.screener.schemas import (
     FactorResponse,
@@ -13,6 +14,7 @@ from app.modules.screener.schemas import (
 import logging
 from app.utils.oauth_utils import get_current_user
 from app.utils.factor_utils import process_kr_factor_data, process_us_factor_data
+from app.utils.pandas_utils import df_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -58,14 +60,42 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
                 }
                 for condition in filtered_stocks.custom_filters
             ]
-        stocks_data = screener_service.get_filtered_stocks(
+        sorted_df = screener_service.get_filtered_stocks(
             filtered_stocks.market_filter, filtered_stocks.sector_filter, custom_filters, filtered_stocks.columns
         )
+        stocks_data = df_to_dict(sorted_df)
         logger.info(f"Filtered stocks length: {len(stocks_data)}")
         return stocks_data
     except Exception as e:
         logger.error(f"Error getting filtered stocks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/stocks/download")
+def download_filtered_stocks(filtered_stocks: FilteredStocks):
+    custom_filters = []
+    if filtered_stocks.custom_filters:
+        custom_filters = [
+            {
+                "factor": condition.factor,
+                "above": condition.above,
+                "below": condition.below,
+            }
+            for condition in filtered_stocks.custom_filters
+        ]
+    sorted_df = screener_service.get_filtered_stocks(
+        filtered_stocks.market_filter, filtered_stocks.sector_filter, custom_filters, filtered_stocks.columns
+    )
+
+    # CSV 스트림 생성
+    stream = io.StringIO()
+    sorted_df.to_csv(stream, index=False)
+
+    return Response(
+        content=stream.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="filtered_stocks.csv"'},
+    )
 
 
 @router.get("/filters", response_model=List[Dict])
