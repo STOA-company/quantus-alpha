@@ -10,7 +10,7 @@ def insert_dividend(ctry: str):
         raise ValueError("ctry must be US")
 
     # parquet 파일 읽기
-    df_dividend = pd.read_parquet("static/dividend.parquet")
+    df_dividend = pd.read_parquet("static/dividend1.parquet")
     df_dividend = df_dividend.rename(
         columns={
             "Ticker": "ticker",
@@ -22,6 +22,7 @@ def insert_dividend(ctry: str):
     )
     df_dividend["ex_date"] = pd.to_datetime(df_dividend["ex_date"])
     df_dividend["payment_date"] = pd.to_datetime(df_dividend["payment_date"])
+
     # 유효한 ticker 필터링
     information_tickers = database._select(
         table="stock_information",
@@ -30,9 +31,9 @@ def insert_dividend(ctry: str):
     list_information_tickers = [ticker[0] for ticker in information_tickers]
     df_dividend = df_dividend[df_dividend["ticker"].isin(list_information_tickers)]
     df_dividend = df_dividend.drop_duplicates()
+
     # Special 배당금 처리
     if "Desc_" in df_dividend.columns:
-        # 같은 날짜의 배당금 합치기 (가장 늦은 payment_date 사용)
         df_dividend = (
             df_dividend.groupby(["ticker", "payment_date", "ex_date"])
             .agg(
@@ -48,6 +49,33 @@ def insert_dividend(ctry: str):
     for ticker in df_dividend["ticker"].unique():
         df_dividend_ticker = df_dividend[df_dividend["ticker"] == ticker]
         df_dividend_ticker = df_dividend_ticker.sort_values(by="ex_date", ascending=True)
+
+        # 현재 ticker의 데이터에 대해서만 DB 조회
+        existing_records = database._select(
+            table="dividend_information",
+            columns=["ticker", "ex_date", "payment_date"],
+            ticker=ticker,
+            ex_date__in=df_dividend_ticker["ex_date"].dt.strftime("%Y-%m-%d").tolist(),
+            payment_date__in=df_dividend_ticker["payment_date"].dt.strftime("%Y-%m-%d").tolist(),
+        )
+
+        # 중복 체크를 위한 set 생성
+        existing_set = {
+            (ticker, ex_date.strftime("%Y-%m-%d"), payment_date.strftime("%Y-%m-%d"))
+            for _, ex_date, payment_date in existing_records
+        }
+
+        # 중복 제거
+        df_dividend_ticker = df_dividend_ticker[
+            ~df_dividend_ticker.apply(
+                lambda row: (row["ticker"], row["ex_date"].strftime("%Y-%m-%d"), row["payment_date"].strftime("%Y-%m-%d"))
+                in existing_set,
+                axis=1,
+            )
+        ]
+
+        if df_dividend_ticker.empty:
+            continue
 
         # ex_date 리스트 생성
         list_ex_date = df_dividend_ticker["ex_date"].dt.strftime("%Y-%m-%d").tolist()
@@ -72,6 +100,7 @@ def insert_dividend(ctry: str):
         )
         ticker_data = pd.merge(df_dividend_ticker, df_data_price, on="ex_date", how="left")
         ticker_data["yield_rate"] = round((ticker_data["per_share"] / ticker_data["price"]) * 100, 2)
+
         # bulk insert를 위한 데이터 준비
         dividend_data.extend(
             [
