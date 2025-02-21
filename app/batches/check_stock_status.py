@@ -13,7 +13,7 @@ def _collect_domestic_stock_status():
     api = KISAPIManager().get_api()
 
     try:
-        tickers = database._select(table="stock_trend", columns=["ticker"], market__in=["KOSPI", "KOSDAQ", "KONEX"])
+        tickers = database._select(table="stock_trend", columns=["ticker"], market__in=["KOSPI", "KOSDAQ"])
 
         for ticker_row in tickers:
             ticker = ticker_row[0]
