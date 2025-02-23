@@ -69,9 +69,7 @@ def process_us_factor_data():
     stock_info_df["is_snp_500"] = stock_info_df["is_snp_500"].fillna(0).astype(int)
 
     df = pd.merge(df, stock_info_df, on="merge_code", how="left")
-
     df = df.drop("merge_code", axis=1)
-
     df["country"] = "us"
     df["is_snp_500"] = df["is_snp_500"].fillna(0).astype(int)
 
@@ -87,6 +85,7 @@ def process_us_factor_data():
         "수정주가수익률",
         "is_snp_500",
     ] + list(factors_mapping.keys())
+
     df_selected = df[selected_columns]
     df_filtered = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
 
@@ -134,7 +133,6 @@ def filter_stocks(
     custom_filters: Optional[List[Dict]] = None,
 ) -> List[str]:
     df = get_df_from_parquet(market_filter)
-
     filtered_df = df.copy()
 
     if market_filter:
@@ -153,18 +151,14 @@ def filter_stocks(
     if custom_filters:
         for filter in custom_filters:
             factor = filter["factor"]
-
             if factor not in filtered_df.columns:
                 raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
-
             if filter["above"] is not None:
                 filtered_df = filtered_df[filtered_df[factor] >= filter["above"]]
-
             if filter["below"] is not None:
                 filtered_df = filtered_df[filtered_df[factor] <= filter["below"]]
 
     stock_codes = filtered_df["Code"].tolist()
-
     return stock_codes
 
 
