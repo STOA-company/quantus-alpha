@@ -8,14 +8,6 @@ KST = pytz.timezone("Asia/Seoul")
 UTC = pytz.timezone("UTC")
 USE = pytz.timezone("America/New_York")
 
-FACTOR_RENAME_MAP = {
-    "ExchMnem": "market",
-    "WI26업종명(대)": "sector",
-    "Name": "name",
-    "거래대금": "trade_volume",
-    "수정주가수익률": "price_change_rate",
-}
-
 SECTOR_MAP = {
     "건강관리": "건강관리",
     "자동차": "자동차",
@@ -59,6 +51,6 @@ SECTOR_MAP = {
     None: "기타",
 }
 
-DEFAULT_SCREENER_COLUMNS = ["Code", "name", "market", "sector", "close", "price_change_rate", "trade_volume"]
+DEFAULT_SCREENER_COLUMNS = ["Code", "Name", "ExchMnem", "WI26업종명(대)", "close", "수정주가수익률", "거래대금"]
 
 NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6", "momentum_12", "current_ratio"]
