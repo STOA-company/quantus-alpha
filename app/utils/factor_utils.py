@@ -6,26 +6,12 @@ import io
 from app.modules.screener.schemas import MarketEnum
 from app.common.constants import SECTOR_MAP, DEFAULT_SCREENER_COLUMNS, FACTOR_RENAME_MAP, NEED_TO_MULTIPLY_100
 import numpy as np
-
-
-def get_factors_from_db() -> Dict[str, Dict]:
-    factors = database._select("factors", columns=["factor", "description", "unit", "category", "sort_direction"])
-
-    factors_mapping = {}
-    for factor in factors:
-        factors_mapping[factor.factor] = {
-            "description": factor.description,
-            "unit": factor.unit,
-            "category": factor.category,
-            "sort_direction": factor.sort_direction,
-        }
-
-    return factors_mapping
+from app.cache.factors import factors_cache
 
 
 def process_kr_factor_data():
     output_file = "parquet/kr_stock_factors.parquet"
-    factors_mapping = get_factors_from_db()
+    factors_mapping = factors_cache.get_configs()
 
     result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_ko_active.parquet", dir="port/")
     df = pd.read_parquet(io.BytesIO(result))
@@ -56,7 +42,7 @@ def process_kr_factor_data():
 
 def process_us_factor_data():
     output_file = "parquet/us_stock_factors.parquet"
-    factors_mapping = get_factors_from_db()
+    factors_mapping = factors_cache.get_configs()
 
     result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_us_active.parquet", dir="port/")
     df = pd.read_parquet(io.BytesIO(result))

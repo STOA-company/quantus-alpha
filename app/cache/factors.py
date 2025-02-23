@@ -46,7 +46,8 @@ class FactorsCache:
         return configs
 
 
+factors_cache = FactorsCache()
+
 if __name__ == "__main__":
-    factors_cache = FactorsCache()
     configs = factors_cache.get_configs()
     print(len(configs))
