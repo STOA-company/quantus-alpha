@@ -79,42 +79,34 @@ FACTOR_CONFIGS = {
     "median_trade": {
         "direction": None,  # 중간 값이 좋음 # TODO
         "range": (0, None),  # 음수 불가
-        "optimal_value": 50,
     },
     "disparity_5": {
         "direction": None,  # 100%에 가까울수록 좋음 # TODO
         "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
     },
     "disparity_10": {
         "direction": None,  # 100%에 가까울수록 좋음 # TODO
         "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
     },
     "disparity_20": {
         "direction": None,  # 100%에 가까울수록 좋음 # TODO
         "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
     },
     "disparity_50": {
         "direction": None,  # 100%에 가까울수록 좋음 # TODO
         "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
     },
     "disparity_100": {
         "direction": None,  # 100%에 가까울수록 좋음 # TODO
         "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
     },
     "disparity_200": {
         "direction": None,  # 100%에 가까울수록 좋음 # TODO
         "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
     },
     "momentum_6": {
         "direction": 1,
         "range": None,
-        "optimal_value": 100,
     },
     "momentum_12": {
         "direction": 1,
@@ -123,17 +115,14 @@ FACTOR_CONFIGS = {
     "rsi_9": {
         "direction": None,  # 중간값이 좋음 # TODO
         "range": (0, 100),  # 0-100 사이
-        "optimal_range": (30, 70),
     },
     "rsi_14": {
         "direction": None,  # 중간값이 좋음 # TODO
         "range": (0, 100),  # 0-100 사이
-        "optimal_range": (30, 70),
     },
     "rsi_25": {
         "direction": None,  # 중간값이 좋음 # TODO
         "range": (0, 100),  # 0-100 사이
-        "optimal_range": (30, 70),
     },
     "sharpe": {
         "direction": 1,  # 높을수록 좋음
@@ -154,12 +143,10 @@ FACTOR_CONFIGS = {
     "beta": {
         "direction": None,  # 1에 가까울수록 좋음 # TODO
         "range": None,  # 제한 없음
-        "optimal_value": 1,
     },
     "beta_60": {
         "direction": None,  # 1에 가까울수록 좋음 # TODO
         "range": None,  # 제한 없음
-        "optimal_value": 1,
     },
     "abs_beta": {
         "direction": -1,  # 낮을수록 좋음
@@ -168,7 +155,6 @@ FACTOR_CONFIGS = {
     "abs_beta_60": {
         "direction": -1,
         "range": (0, None),
-        "optimal_value": 1,
     },
     # 펀더멘털 지표
     "deptRatio": {
@@ -178,7 +164,6 @@ FACTOR_CONFIGS = {
     "borrow_rate": {
         "direction": -1,
         "range": (0, 200),
-        "optimal_value": 100,
     },
     "current_ratio": {
         "direction": 1,  # 높을수록 좋음
