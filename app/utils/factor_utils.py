@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-from app.common.constants import SECTOR_MAP, DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100
+from app.common.constants import DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100
 import numpy as np
 from app.cache.factors import factors_cache
 from app.core.extra.SlackNotifier import SlackNotifier
@@ -19,6 +19,15 @@ def process_kr_factor_data():
     result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_ko_active.parquet", dir="port/")
     df = pd.read_parquet(io.BytesIO(result))
 
+    df["merge_code"] = df["Code"]
+
+    stock_information = database._select("stock_information", columns=["ticker", "sector_ko"], ctry="kr")
+    stock_info_df = pd.DataFrame(stock_information)
+    stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
+    stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
+
+    df = pd.merge(df, stock_info_df, on="merge_code", how="left")
+    df = df.drop("merge_code", axis=1)
     df["country"] = "kr"
 
     market_mapping = {"KRX": "KOSDAQ", "KOS": "KOSPI"}
@@ -27,7 +36,7 @@ def process_kr_factor_data():
         "Code",
         "ExchMnem",
         "country",
-        "WI26업종명(대)",
+        "sector",
         "Name",
     ] + list(factors_mapping.keys())
     df_selected = df[selected_columns]
@@ -36,7 +45,6 @@ def process_kr_factor_data():
     validate_integer_parts(df, df_result)
 
     df_result["ExchMnem"] = df_result["ExchMnem"].map(market_mapping)
-    df_result["WI26업종명(대)"] = df_result["WI26업종명(대)"].map(SECTOR_MAP)
 
     for column in NEED_TO_MULTIPLY_100:
         df_result[column] = df_result[column] * 100
@@ -57,10 +65,11 @@ def process_us_factor_data():
 
     df["merge_code"] = df["Code"].str.replace("-US", "")
 
-    stock_information = database._select("stock_information", columns=["ticker", "is_snp_500"], ctry="us")
+    stock_information = database._select("stock_information", columns=["ticker", "is_snp_500", "sector_ko"], ctry="us")
     stock_info_df = pd.DataFrame(stock_information)
     stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
     stock_info_df["is_snp_500"] = stock_info_df["is_snp_500"].fillna(0).astype(int)
+    stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
 
     df = pd.merge(df, stock_info_df, on="merge_code", how="left")
     df = df.drop("merge_code", axis=1)
@@ -73,7 +82,7 @@ def process_us_factor_data():
         "Code",
         "ExchMnem",
         "country",
-        "WI26업종명(대)",
+        "sector",
         "Name",
         "is_snp_500",
     ] + list(factors_mapping.keys())
@@ -84,7 +93,6 @@ def process_us_factor_data():
     validate_integer_parts(df, df_result)
 
     df_result["ExchMnem"] = df_result["ExchMnem"].map(market_mapping)
-    df_result["WI26업종명(대)"] = df_result["WI26업종명(대)"].map(SECTOR_MAP)
 
     for column in NEED_TO_MULTIPLY_100:
         df_result[column] = df_result[column] * 100
@@ -132,7 +140,7 @@ def filter_stocks(
             filtered_df = filtered_df[filtered_df["ExchMnem"] == market_filter.value]
 
     if sector_filter:
-        filtered_df = filtered_df[filtered_df["WI26업종명(대)"].isin(sector_filter)]
+        filtered_df = filtered_df[filtered_df["sector"].isin(sector_filter)]
 
     if custom_filters:
         for filter in custom_filters:
@@ -178,7 +186,7 @@ def validate_integer_parts(original_df: pd.DataFrame, processed_df: pd.DataFrame
 
     for col in processed_df.columns:
         if np.issubdtype(processed_df[col].dtype, np.number):
-            if col in ["Code", "ExchMnem", "WI26업종명(대)", "Name", "country"]:
+            if col in ["Code", "ExchMnem", "sector", "Name", "country"]:
                 continue
 
             original_ints = original_df[col].fillna(0).astype(float).apply(safe_int)
