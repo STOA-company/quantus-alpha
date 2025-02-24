@@ -7,7 +7,7 @@ def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
     df_copy = df.copy()
     columns = df.columns.tolist()
 
-    non_numeric_columns = ["Code", "Name", "ExchMnem", "WI26업종명(대)"]
+    non_numeric_columns = ["Code", "Name", "ExchMnem", "sector"]
     for col in columns:
         if col in non_numeric_columns:
             continue
