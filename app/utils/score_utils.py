@@ -43,6 +43,8 @@ def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
             value = series.iloc[i]
             rank = ranks.iloc[i]
 
+            rank_str = "N/A" if pd.isna(rank) else f"{int(rank)}위"
+
             if factor_range and factor_range != (None, None):
                 min_val, max_val = factor_range
                 if min_val is not None and value < min_val:
@@ -54,7 +56,8 @@ def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
             else:
                 description = "낮을수록 좋음" if ascending else "높을수록 좋음"
 
-            descriptions[i].append(f"{col}: {value} (순위: {int(rank)}위, {description})")
+            value_str = "N/A" if pd.isna(value) else str(value)
+            descriptions[i].append(f"{col}: {value_str} (순위: {rank_str}, {description})")
 
     score_df = pd.DataFrame({"Code": df["Code"], "score": np.zeros(len(df))})
 
