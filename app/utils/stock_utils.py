@@ -140,21 +140,43 @@ class StockUtils:
                 if len(ticker_data) < 2:
                     continue
 
-                current = ticker_data.iloc[0]
-                prev = ticker_data.iloc[1]
+                one_day_ago = ticker_data.iloc[0]
+                two_days_ago = ticker_data.iloc[1]
 
                 update_dict = {
                     "ticker": ticker,
-                    "last_updated": pd.to_datetime(current["Date"]),
-                    "current_price": float(current["Close"]),
-                    "prev_close": float(prev["Close"]),
-                    "change_rt": float(((current["Close"] - prev["Close"]) / prev["Close"] * 100)),
-                    "change_1d": float(((current["Close"] - prev["Close"]) / prev["Close"] * 100)),
-                    "volume_rt": float(current["Volume"]),
-                    "volume_1d": float(current["Volume"]),
-                    "volume_change_rt": float(current["volume_change"]),
-                    "volume_change_1d": float(current["volume_change"]),
+                    "last_updated": pd.to_datetime(one_day_ago["Date"]),
+                    "current_price": float(one_day_ago["Close"]),
+                    "prev_close": float(two_days_ago["Close"]),
+                    "change_rt": float(((one_day_ago["Close"] - two_days_ago["Close"]) / two_days_ago["Close"] * 100)),
+                    "change_1d": float(((one_day_ago["Close"] - two_days_ago["Close"]) / two_days_ago["Close"] * 100)),
+                    "volume_rt": float(one_day_ago["Volume"]),
+                    "volume_1d": float(two_days_ago["Volume"]),
+                    "volume_change_rt": float(one_day_ago["volume_change"]),
+                    "volume_change_1d": float(two_days_ago["volume_change"]),
                 }
+
+                periods = {
+                    "1w": 5,
+                    "1m": 20,
+                    "6m": 120,
+                    "1y": 240,
+                }
+
+                for period, days in periods.items():
+                    period_data = ticker_data.head(min(days + 1, len(ticker_data)))
+                    if len(period_data) > 1:
+                        start_price = period_data.iloc[-1]["Close"]
+                        update_dict[f"change_{period}"] = float(
+                            ((one_day_ago["Close"] - start_price) / start_price * 100)
+                        )
+                        update_dict[f"volume_{period}"] = float(period_data["Volume"].sum())
+                        update_dict[f"volume_change_{period}"] = float(period_data["volume_change"].sum())
+                    else:
+                        update_dict[f"change_{period}"] = None
+                        update_dict[f"volume_{period}"] = None
+                        update_dict[f"volume_change_{period}"] = None
+
                 update_data.append(update_dict)
 
             if update_data:
