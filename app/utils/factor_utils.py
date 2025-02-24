@@ -7,6 +7,9 @@ from app.modules.screener.schemas import MarketEnum
 from app.common.constants import SECTOR_MAP, DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100
 import numpy as np
 from app.cache.factors import factors_cache
+from app.core.extra.SlackNotifier import SlackNotifier
+
+notifier = SlackNotifier()
 
 
 def process_kr_factor_data():
@@ -24,7 +27,9 @@ def process_kr_factor_data():
         factors_mapping.keys()
     )
     df_selected = df[selected_columns]
-    df_result = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
+    df_result = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())].copy()
+
+    validate_integer_parts(df, df_result)
 
     df_result["market"] = df_result["ExchMnem"].map(market_mapping)
     df_result["sector"] = df_result["WI26업종명(대)"].map(SECTOR_MAP)
@@ -72,7 +77,9 @@ def process_us_factor_data():
     ] + list(factors_mapping.keys())
 
     df_selected = df[selected_columns]
-    df_result = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
+    df_result = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())].copy()
+
+    validate_integer_parts(df, df_result)
 
     df_result["market"] = df_result["ExchMnem"].map(market_mapping)
     df_result["sector"] = df_result["WI26업종명(대)"].map(SECTOR_MAP)
@@ -149,3 +156,49 @@ def get_filtered_stocks_df(
     filtered_df = df[df["Code"].isin(codes)][required_columns]
 
     return filtered_df
+
+
+def validate_integer_parts(original_df: pd.DataFrame, processed_df: pd.DataFrame):
+    notifier.notify_info("팩터 정수 부분 불일치 검증 시작")
+
+    def safe_int(x):
+        if pd.isna(x) or np.isinf(x):
+            return 0
+        return int(x)
+
+    original_df = original_df.sort_values("Code")
+    processed_df = processed_df.sort_values("Code")
+
+    common_codes = set(original_df["Code"]) & set(processed_df["Code"])
+    original_df = original_df[original_df["Code"].isin(common_codes)]
+    processed_df = processed_df[processed_df["Code"].isin(common_codes)]
+
+    for col in processed_df.columns:
+        if np.issubdtype(processed_df[col].dtype, np.number):
+            if col in ["Code", "ExchMnem", "WI26업종명(대)", "Name", "country"]:
+                continue
+
+            original_ints = original_df[col].fillna(0).astype(float).apply(safe_int)
+            processed_ints = processed_df[col].fillna(0).astype(float).apply(safe_int)
+
+            mismatch_mask = original_ints.values != processed_ints.values
+            mismatches = mismatch_mask.sum()
+            print(f"{col} - 불일치 건수: {mismatches}")
+
+            if mismatches > 0:
+                mismatch_indices = np.where(mismatch_mask)[0]
+                print("불일치 상세:")
+                for idx in mismatch_indices:
+                    code = original_df.iloc[idx]["Code"]
+                    original_val = original_ints.iloc[idx]
+                    processed_val = processed_ints.iloc[idx]
+                    print(f"  Code: {code}, 원본: {original_val}, 처리후: {processed_val}")
+                    notifier.notify_error(
+                        f"팩터 정수 부분 불일치 발생\n원본: {original_val}, 처리후: {processed_val}", "김광윤"
+                    )
+
+    notifier.notify_info("팩터 정수 부분 불일치 검증 완료")
+
+
+if __name__ == "__main__":
+    process_kr_factor_data()
