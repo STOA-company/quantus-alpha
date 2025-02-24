@@ -11,8 +11,7 @@ def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
     for col in columns:
         if col in non_numeric_columns:
             continue
-        if not pd.api.types.is_numeric_dtype(df_copy[col]):
-            df_copy[col] = df_copy[col].fillna(df_copy[col].median())
+        df_copy[col] = df_copy[col].fillna(df_copy[col].median())
 
     total_ranks = np.zeros(len(df_copy))
     descriptions = [[] for _ in range(len(df_copy))]
