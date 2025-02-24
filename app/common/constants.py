@@ -51,6 +51,6 @@ SECTOR_MAP = {
     None: "기타",
 }
 
-DEFAULT_SCREENER_COLUMNS = ["Code", "Name", "ExchMnem", "WI26업종명(대)", "close", "수정주가수익률", "거래대금"]
+DEFAULT_SCREENER_COLUMNS = ["Code", "Name", "ExchMnem", "WI26업종명(대)"]
 
 NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6", "momentum_12", "current_ratio"]
