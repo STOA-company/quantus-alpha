@@ -23,16 +23,20 @@ def process_kr_factor_data():
 
     market_mapping = {"KRX": "KOSDAQ", "KOS": "KOSPI"}
 
-    selected_columns = ["Code", "ExchMnem", "country", "WI26업종명(대)", "Name", "거래대금", "수정주가수익률"] + list(
-        factors_mapping.keys()
-    )
+    selected_columns = [
+        "Code",
+        "ExchMnem",
+        "country",
+        "WI26업종명(대)",
+        "Name",
+    ] + list(factors_mapping.keys())
     df_selected = df[selected_columns]
     df_result = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())].copy()
 
     validate_integer_parts(df, df_result)
 
-    df_result["market"] = df_result["ExchMnem"].map(market_mapping)
-    df_result["sector"] = df_result["WI26업종명(대)"].map(SECTOR_MAP)
+    df_result["ExchMnem"] = df_result["ExchMnem"].map(market_mapping)
+    df_result["WI26업종명(대)"] = df_result["WI26업종명(대)"].map(SECTOR_MAP)
 
     for column in NEED_TO_MULTIPLY_100:
         df_result[column] = df_result[column] * 100
@@ -71,8 +75,6 @@ def process_us_factor_data():
         "country",
         "WI26업종명(대)",
         "Name",
-        "거래대금",
-        "수정주가수익률",
         "is_snp_500",
     ] + list(factors_mapping.keys())
 
@@ -81,8 +83,8 @@ def process_us_factor_data():
 
     validate_integer_parts(df, df_result)
 
-    df_result["market"] = df_result["ExchMnem"].map(market_mapping)
-    df_result["sector"] = df_result["WI26업종명(대)"].map(SECTOR_MAP)
+    df_result["ExchMnem"] = df_result["ExchMnem"].map(market_mapping)
+    df_result["WI26업종명(대)"] = df_result["WI26업종명(대)"].map(SECTOR_MAP)
 
     for column in NEED_TO_MULTIPLY_100:
         df_result[column] = df_result[column] * 100
@@ -118,6 +120,7 @@ def filter_stocks(
     df = get_df_from_parquet(market_filter)
     filtered_df = df.copy()
 
+    # 종목 필터링
     if market_filter:
         if market_filter == MarketEnum.US:
             filtered_df = filtered_df[filtered_df["country"] == "us"]
@@ -125,11 +128,11 @@ def filter_stocks(
             filtered_df = filtered_df[filtered_df["country"] == "kr"]
         elif market_filter == MarketEnum.SNP500:
             filtered_df = filtered_df[filtered_df["is_snp_500"] == 1]
-        elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
-            filtered_df = filtered_df[filtered_df["market"] == market_filter]
+        elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSDAQ, MarketEnum.KOSPI]:
+            filtered_df = filtered_df[filtered_df["ExchMnem"] == market_filter.value]
 
     if sector_filter:
-        filtered_df = filtered_df[filtered_df["sector"].isin(sector_filter)]
+        filtered_df = filtered_df[filtered_df["WI26업종명(대)"].isin(sector_filter)]
 
     if custom_filters:
         for filter in custom_filters:
