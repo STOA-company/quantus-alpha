@@ -4,28 +4,14 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-from app.common.constants import SECTOR_MAP, DEFAULT_SCREENER_COLUMNS, FACTOR_RENAME_MAP, NEED_TO_MULTIPLY_100
+from app.common.constants import SECTOR_MAP, DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100
 import numpy as np
-
-
-def get_factors_from_db() -> Dict[str, Dict]:
-    factors = database._select("factors", columns=["factor", "description", "unit", "category", "sort_direction"])
-
-    factors_mapping = {}
-    for factor in factors:
-        factors_mapping[factor.factor] = {
-            "description": factor.description,
-            "unit": factor.unit,
-            "category": factor.category,
-            "sort_direction": factor.sort_direction,
-        }
-
-    return factors_mapping
+from app.cache.factors import factors_cache
 
 
 def process_kr_factor_data():
     output_file = "parquet/kr_stock_factors.parquet"
-    factors_mapping = get_factors_from_db()
+    factors_mapping = factors_cache.get_configs()
 
     result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_ko_active.parquet", dir="port/")
     df = pd.read_parquet(io.BytesIO(result))
@@ -38,11 +24,10 @@ def process_kr_factor_data():
         factors_mapping.keys()
     )
     df_selected = df[selected_columns]
-    df_filtered = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
+    df_result = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
 
-    df_result = df_filtered.rename(columns=FACTOR_RENAME_MAP)
-    df_result["market"] = df_result["market"].map(market_mapping)
-    df_result["sector"] = df_result["sector"].map(SECTOR_MAP)
+    df_result["market"] = df_result["ExchMnem"].map(market_mapping)
+    df_result["sector"] = df_result["WI26업종명(대)"].map(SECTOR_MAP)
 
     for column in NEED_TO_MULTIPLY_100:
         df_result[column] = df_result[column] * 100
@@ -56,7 +41,7 @@ def process_kr_factor_data():
 
 def process_us_factor_data():
     output_file = "parquet/us_stock_factors.parquet"
-    factors_mapping = get_factors_from_db()
+    factors_mapping = factors_cache.get_configs()
 
     result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_us_active.parquet", dir="port/")
     df = pd.read_parquet(io.BytesIO(result))
@@ -69,9 +54,7 @@ def process_us_factor_data():
     stock_info_df["is_snp_500"] = stock_info_df["is_snp_500"].fillna(0).astype(int)
 
     df = pd.merge(df, stock_info_df, on="merge_code", how="left")
-
     df = df.drop("merge_code", axis=1)
-
     df["country"] = "us"
     df["is_snp_500"] = df["is_snp_500"].fillna(0).astype(int)
 
@@ -87,20 +70,12 @@ def process_us_factor_data():
         "수정주가수익률",
         "is_snp_500",
     ] + list(factors_mapping.keys())
-    df_selected = df[selected_columns]
-    df_filtered = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
 
-    df_result = df_filtered.rename(
-        columns={
-            "ExchMnem": "market",
-            "WI26업종명(대)": "sector",
-            "Name": "name",
-            "거래대금": "trade_volume",
-            "수정주가수익률": "price_change_rate",
-        }
-    )
-    df_result["market"] = df_result["market"].map(market_mapping)
-    df_result["sector"] = df_result["sector"].map(SECTOR_MAP)
+    df_selected = df[selected_columns]
+    df_result = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
+
+    df_result["market"] = df_result["ExchMnem"].map(market_mapping)
+    df_result["sector"] = df_result["WI26업종명(대)"].map(SECTOR_MAP)
 
     for column in NEED_TO_MULTIPLY_100:
         df_result[column] = df_result[column] * 100
@@ -134,7 +109,6 @@ def filter_stocks(
     custom_filters: Optional[List[Dict]] = None,
 ) -> List[str]:
     df = get_df_from_parquet(market_filter)
-
     filtered_df = df.copy()
 
     if market_filter:
@@ -153,18 +127,14 @@ def filter_stocks(
     if custom_filters:
         for filter in custom_filters:
             factor = filter["factor"]
-
             if factor not in filtered_df.columns:
                 raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
-
             if filter["above"] is not None:
                 filtered_df = filtered_df[filtered_df[factor] >= filter["above"]]
-
             if filter["below"] is not None:
                 filtered_df = filtered_df[filtered_df[factor] <= filter["below"]]
 
     stock_codes = filtered_df["Code"].tolist()
-
     return stock_codes
 
 

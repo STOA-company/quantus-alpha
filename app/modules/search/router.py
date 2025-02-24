@@ -6,7 +6,7 @@ from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import InfiniteScrollResponse
 from app.modules.search.schemas import CommunitySearchItem, SearchResponse
 from app.modules.search.service import SearchService, get_search_service
-from app.utils.redis_utils import Leaderboard
+from app.cache.leaderboard import Leaderboard
 
 router = APIRouter()
 
