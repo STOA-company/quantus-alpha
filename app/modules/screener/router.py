@@ -14,7 +14,6 @@ from app.modules.screener.schemas import (
 import logging
 from app.utils.oauth_utils import get_current_user
 from app.utils.factor_utils import process_kr_factor_data, process_us_factor_data
-from app.utils.pandas_utils import df_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ def get_factors():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/stocks", response_model=List[Dict])
+@router.post("/stocks", response_model=Dict)
 def get_filtered_stocks(filtered_stocks: FilteredStocks):
     """
     필터링된 종목들 조회
@@ -60,7 +59,7 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
                 }
                 for condition in filtered_stocks.custom_filters
             ]
-        sorted_df = screener_service.get_filtered_stocks(
+        stocks_data, has_next = screener_service.get_filtered_stocks(
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
             custom_filters,
@@ -68,8 +67,9 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
             filtered_stocks.limit,
             filtered_stocks.offset,
         )
-        stocks_data = df_to_dict(sorted_df)
-        return stocks_data
+
+        result = {"has_next": has_next, "data": stocks_data}
+        return result
     except Exception as e:
         logger.error(f"Error getting filtered stocks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
