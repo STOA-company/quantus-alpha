@@ -178,10 +178,10 @@ def reorder_filters(filters: List[int]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/columns", response_model=Dict)
-def create_column(column_set: ColumnSetCreate, current_user: str = Depends(get_current_user)):
+@router.post("/column-sets", response_model=Dict)
+def create_column_set(column_set: ColumnSetCreate, current_user: str = Depends(get_current_user)):
     """
-    컬럼 생성
+    컬럼 세트 생성
     """
     try:
         is_success = screener_service.create_column_set(column_set.columns, current_user.id, column_set.name)
@@ -194,8 +194,8 @@ def create_column(column_set: ColumnSetCreate, current_user: str = Depends(get_c
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/columns", response_model=List[ColumnSet])
-def get_columns(current_user: str = Depends(get_current_user)):
+@router.get("/column-sets", response_model=List[ColumnSet])
+def get_column_sets(current_user: str = Depends(get_current_user)):
     """
     컬럼 세트 조회
     """
@@ -207,10 +207,10 @@ def get_columns(current_user: str = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.patch("/columns/{column_set_id}", response_model=Dict)
+@router.patch("/columns-sets/{column_set_id}", response_model=Dict)
 def update_column(column_update: ColumnUpdate):
     """
-    컬럼 수정
+    컬럼 세트 수정
     """
     try:
         is_success = screener_service.update_column_set(
@@ -225,10 +225,10 @@ def update_column(column_update: ColumnUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/columns/{column_set_id}", response_model=Dict)
-def delete_column(column_set_id: int):
+@router.delete("/column-sets/{column_set_id}", response_model=Dict)
+def delete_column_set(column_set_id: int):
     """
-    컬럼 삭제
+    컬럼 세트 삭제
     """
     try:
         is_success = screener_service.delete_column_set(column_set_id)
