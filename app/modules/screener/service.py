@@ -19,27 +19,8 @@ class ScreenerService:
 
     def get_factors(self):
         try:
-            factors = self.database._select(table="factors")
-
-            # SQLAlchemy -> Dict
-            if isinstance(factors, (list, tuple)):
-                return [
-                    {
-                        "factor": factor.factor,
-                        "description": factor.description,
-                        "unit": str(factor.unit).lower(),
-                        "category": str(factor.category).lower(),
-                    }
-                    for factor in factors
-                ]
-            else:
-                factor = factors
-                return {
-                    "factor": factor.factor,
-                    "description": factor.description,
-                    "unit": str(factor.unit).lower(),
-                    "category": str(factor.category).lower(),
-                }
+            factors = factor_utils.get_factors()
+            return factors
 
         except Exception as e:
             logger.error(f"Error in get_factors: {e}")
