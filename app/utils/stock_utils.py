@@ -76,7 +76,6 @@ class StockUtils:
     def update_time_series_data(self, ticker: str) -> bool:
         try:
             ticker_ = ticker[1:] if self.nation == "kr" else ticker
-            self.deactivate_stock(ticker)
 
             df = self.kispy.fetch_stock_data(ticker_)
             if df is None:
@@ -99,12 +98,10 @@ class StockUtils:
             self.db._delete(table=f"stock_{self.nation}_1d", Ticker=ticker)
 
             self.db._insert(table=f"stock_{self.nation}_1d", sets=bulk_data)
-            self.activate_stock(ticker)
             return True
 
         except Exception as e:
             logger.error(f"주가 데이터 업데이트 실패 {ticker}: {str(e)}")
-            self.activate_stock(ticker)
             return False
 
     def update_time_series_data_parallel(self, tickers: list[str], max_workers: int = 5):
@@ -219,9 +216,7 @@ kr_stock_utils = StockUtils(nation="kr")
 
 
 if __name__ == "__main__":
-    # us_stock_utils.update_top_gainers()
-    # us_stock_utils.update_top_losers()
-    # kr_stock_utils.update_top_gainers()
-    # kr_stock_utils.update_top_losers()
-    tickers = ["AAPL"]
-    us_stock_utils.update_multiple_tickers(tickers)
+    us_stock_utils.update_top_gainers()
+    us_stock_utils.update_top_losers()
+    kr_stock_utils.update_top_gainers()
+    kr_stock_utils.update_top_losers()

@@ -45,9 +45,18 @@ class FactorsCache:
 
         return configs
 
+    def force_update(self) -> dict:
+        """캐시를 강제로 업데이트하는 함수"""
+        self.clear_cache()
+        return self._update_configs()
+
+    def clear_cache(self) -> None:
+        """캐시를 삭제하는 함수"""
+        self.redis.delete(self.factors_key)
+        self.redis.delete(self.last_update_key)
+
 
 factors_cache = FactorsCache()
 
 if __name__ == "__main__":
-    configs = factors_cache.get_configs()
-    print(len(configs))
+    factors_cache.force_update()
