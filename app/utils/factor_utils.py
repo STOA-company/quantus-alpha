@@ -8,8 +8,21 @@ from app.common.constants import DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100
 import numpy as np
 from app.cache.factors import factors_cache
 from app.core.extra.SlackNotifier import SlackNotifier
+from app.models.models_factors import CategoryEnum
 
 notifier = SlackNotifier()
+
+
+class FactorUtils:
+    def __init__(self):
+        self.db = database
+
+    def get_columns(self, category: Optional[CategoryEnum] = None) -> List[str]:
+        columns = self.db._select(table="factors", columns=["factor"], category=category)
+        return [column for column in columns]
+
+
+factor_utils = FactorUtils()
 
 
 def process_kr_factor_data():
