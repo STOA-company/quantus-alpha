@@ -4,6 +4,15 @@ from typing import Optional, List
 from enum import Enum
 
 
+class MarketEnum(str, Enum):
+    US = "us"
+    KR = "kr"
+    SNP500 = "S&P 500"
+    NASDAQ = "NASDAQ"
+    KOSPI = "KOSPI"
+    KOSDAQ = "KOSDAQ"
+
+
 class FactorResponse(BaseModel):
     factor: str
     description: str
@@ -20,14 +29,15 @@ class FilterCondition(BaseModel):
     below: Optional[float] = None
 
 
-class Filter(BaseModel):
+class FilterGroup(BaseModel):
     name: Optional[str] = None
-    conditions: Optional[List[FilterCondition]] = None
+    market_filter: Optional[MarketEnum] = MarketEnum.US
+    sector_filter: Optional[List[str]] = None
+    custom_filters: Optional[List[FilterCondition]] = None
 
 
-class FilterUpdate(BaseModel):
-    filter_id: int
-    filter: Filter
+class FilterGroupUpdate(FilterGroup):
+    filter_group_id: int
 
 
 class FilterInfo(BaseModel):
@@ -36,15 +46,6 @@ class FilterInfo(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-class MarketEnum(str, Enum):
-    US = "us"
-    KR = "kr"
-    SNP500 = "S&P 500"
-    NASDAQ = "NASDAQ"
-    KOSPI = "KOSPI"
-    KOSDAQ = "KOSDAQ"
 
 
 class FilteredStocks(BaseModel):

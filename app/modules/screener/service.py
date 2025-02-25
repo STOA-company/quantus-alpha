@@ -1,4 +1,4 @@
-from app.database.crud import database
+from app.database.crud import database_service
 from typing import Optional, List, Dict, Tuple
 import logging
 from app.utils.factor_utils import filter_stocks, get_filtered_stocks_df, MarketEnum, convert_unit_and_value
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class ScreenerService:
     def __init__(self):
-        self.database = database
+        self.database = database_service
 
     def get_factors(self):
         try:
@@ -107,71 +107,129 @@ class ScreenerService:
             logger.error(f"Error in get_filtered_stocks: {e}")
             raise e
 
-    def create_filter(self, user_id: int, name: str, conditions: List[Dict]) -> bool:
+    def create_filter_group(
+        self,
+        user_id: int,
+        name: str,
+        market_filter: Optional[MarketEnum] = None,
+        sector_filter: Optional[List[str]] = None,
+        custom_filters: Optional[List[Dict]] = None,
+    ) -> bool:
         try:
-            last_filter = self.database._select(table="screener_filters", user_id=user_id, order="order", ascending=False)
+            last_filter = self.database._select(
+                table="screener_filter_groups", user_id=user_id, order="order", ascending=False
+            )
             if last_filter:
                 order = last_filter[0].order + 1
             else:
                 order = 1
-            self.database._insert(table="screener_filters", sets={"user_id": user_id, "name": name, "order": order})
-            filter_id = self.database._select(table="screener_filters", user_id=user_id, name=name)[0].id
-            for condition in conditions:
+            self.database._insert(table="screener_filter_groups", sets={"user_id": user_id, "name": name, "order": order})
+            filter_group_id = self.database._select(table="screener_filter_groups", user_id=user_id, name=name)[0].id
+            if market_filter:
                 self.database._insert(
                     table="screener_filter_conditions",
-                    sets={
-                        "filter_id": filter_id,
-                        "factor": condition.factor,
-                        "above": condition.above,
-                        "below": condition.below,
-                    },
+                    sets={"filter_group_id": filter_group_id, "factor": "market", "value": market_filter},
                 )
-            return True
-        except Exception as e:
-            logger.error(f"Error in create_filter: {e}")
-            raise e
 
-    def update_filter(self, filter_id: int, name: Optional[str] = None, conditions: Optional[List[Dict]] = None) -> bool:
-        try:
-            if name:
-                self.database._update(table="screener_filters", filter_id=filter_id, name=name)
-            if conditions:
-                self.database._delete(table="screener_filter_conditions", filter_id=filter_id)
-                for condition in conditions:
+            if sector_filter:
+                for sector in sector_filter:
+                    self.database._insert(
+                        table="screener_filter_conditions",
+                        sets={"filter_group_id": filter_group_id, "factor": "sector", "value": sector},
+                    )
+
+            if custom_filters:
+                for condition in custom_filters:
                     self.database._insert(
                         table="screener_filter_conditions",
                         sets={
-                            "filter_id": filter_id,
+                            "filter_group_id": filter_group_id,
                             "factor": condition.factor,
                             "above": condition.above,
                             "below": condition.below,
                         },
                     )
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error in create_filter: {e}")
+            raise e
+
+    def update_filter_group(
+        self,
+        filter_group_id: int,
+        name: str,
+        market_filter: Optional[MarketEnum] = None,
+        sector_filter: Optional[List[str]] = None,
+        custom_filters: Optional[List[Dict]] = None,
+    ) -> bool:
+        try:
+            if name:
+                self.database._update(table="screener_filter_groups", id=filter_group_id, sets={"name": name})
+
+            self.database._delete(table="screener_filter_conditions", filter_group_id=filter_group_id)
+
+            if custom_filters:
+                for condition in custom_filters:
+                    self.database._insert(
+                        table="screener_filter_conditions",
+                        sets={
+                            "filter_group_id": filter_group_id,
+                            "factor": condition.factor,
+                            "above": condition.above,
+                            "below": condition.below,
+                        },
+                    )
+
+            if market_filter:
+                self.database._insert(
+                    table="screener_filter_conditions",
+                    sets={
+                        "filter_group_id": filter_group_id,
+                        "factor": "market",
+                        "value": market_filter,
+                    },
+                )
+
+            if sector_filter:
+                for sector in sector_filter:
+                    self.database._insert(
+                        table="screener_filter_conditions",
+                        sets={
+                            "filter_group_id": filter_group_id,
+                            "factor": "sector",
+                            "value": sector,
+                        },
+                    )
+
             return True
         except Exception as e:
             logger.error(f"Error in update_filter: {e}")
             raise e
 
-    def delete_filter(self, filter_id: int) -> bool:
+    def delete_filter_group(self, filter_group_id: int) -> bool:
         try:
-            self.database._delete(table="screener_filters", filter_id=filter_id)
+            self.database._delete(table="screener_filter_groups", id=filter_group_id)
             return True
         except Exception as e:
             logger.error(f"Error in delete_filter: {e}")
             raise e
 
-    def get_saved_filters(self, user_id: str) -> List[Dict]:
+    def get_saved_filter_groups(self, user_id: str) -> List[Dict]:
         try:
-            filters = self.database._select(table="screener_filters", user_id=user_id, order="order", ascending=True)
+            filters = self.database._select(
+                table="screener_filter_groups", user_id=user_id, order="order", ascending=True
+            )
             return filters
         except Exception as e:
-            logger.error(f"Error in get_saved_filters: {e}")
+            logger.error(f"Error in get_saved_filter_groups: {e}")
             raise e
 
-    def reorder_filters(self, filters: List[int]) -> bool:
+    def reorder_filter_groups(self, filter_groups: List[int]) -> bool:
         try:
-            for index, filter_id in enumerate(filters):
-                self.database._update(table="screener_filters", filter_id=filter_id, order=index + 1)
+            for index, filter_group_id in enumerate(filter_groups):
+                self.database._update(table="screener_filter_groups", id=filter_group_id, order=index + 1)
             return True
         except Exception as e:
             logger.error(f"Error in reorder_filters: {e}")
