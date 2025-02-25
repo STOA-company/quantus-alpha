@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Response
-from typing import List, Dict
+from typing import List, Dict, Optional
 import io
 from app.modules.screener.service import screener_service
 from app.modules.screener.schemas import (
@@ -8,12 +8,14 @@ from app.modules.screener.schemas import (
     FilterUpdate,
     FilteredStocks,
     ColumnSetCreate,
-    ColumnUpdate,
+    ColumnSetUpdate,
     ColumnSet,
+    ColumnsResponse,
 )
 import logging
 from app.utils.oauth_utils import get_current_user
 from app.utils.factor_utils import process_kr_factor_data, process_us_factor_data
+from app.models.models_factors import CategoryEnum
 
 logger = logging.getLogger(__name__)
 
@@ -178,10 +180,10 @@ def reorder_filters(filters: List[int]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/columns", response_model=Dict)
-def create_column(column_set: ColumnSetCreate, current_user: str = Depends(get_current_user)):
+@router.post("/column-sets", response_model=Dict)
+def create_column_set(column_set: ColumnSetCreate, current_user: str = Depends(get_current_user)):
     """
-    컬럼 생성
+    컬럼 세트 생성
     """
     try:
         is_success = screener_service.create_column_set(column_set.columns, current_user.id, column_set.name)
@@ -194,8 +196,8 @@ def create_column(column_set: ColumnSetCreate, current_user: str = Depends(get_c
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/columns", response_model=List[ColumnSet])
-def get_columns(current_user: str = Depends(get_current_user)):
+@router.get("/column-sets", response_model=List[ColumnSet])
+def get_column_sets(current_user: str = Depends(get_current_user)):
     """
     컬럼 세트 조회
     """
@@ -207,14 +209,14 @@ def get_columns(current_user: str = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.patch("/columns/{column_set_id}", response_model=Dict)
-def update_column(column_update: ColumnUpdate):
+@router.patch("/column-sets/{column_set_id}", response_model=Dict)
+def update_column_set(column_set_update: ColumnSetUpdate):
     """
-    컬럼 수정
+    컬럼 세트 수정
     """
     try:
         is_success = screener_service.update_column_set(
-            column_update.column_set_id, column_update.name, column_update.columns
+            column_set_update.column_set_id, column_set_update.name, column_set_update.columns
         )
         if is_success:
             return {"message": "Column updated successfully"}
@@ -225,10 +227,10 @@ def update_column(column_update: ColumnUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/columns/{column_set_id}", response_model=Dict)
-def delete_column(column_set_id: int):
+@router.delete("/column-sets/{column_set_id}", response_model=Dict)
+def delete_column_set(column_set_id: int):
     """
-    컬럼 삭제
+    컬럼 세트 삭제
     """
     try:
         is_success = screener_service.delete_column_set(column_set_id)
@@ -238,6 +240,19 @@ def delete_column(column_set_id: int):
             raise HTTPException(status_code=500, detail="Failed to delete column")
     except Exception as e:
         logger.error(f"Error deleting column: {e}")
+
+
+@router.get("/columns", response_model=ColumnsResponse)
+def get_columns(category: Optional[CategoryEnum] = None, id: Optional[int] = None):
+    """
+    컬럼 목록 조회
+    """
+    try:
+        columns = screener_service.get_columns(category, id)
+        return ColumnsResponse(columns=columns)
+    except Exception as e:
+        logger.error(f"Error getting columns: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/parquet")

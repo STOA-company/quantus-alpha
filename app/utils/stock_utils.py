@@ -5,6 +5,7 @@ import logging
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
+from app.utils.date_utils import check_market_status
 
 logger = logging.getLogger(__name__)
 
@@ -46,32 +47,6 @@ class StockUtils:
         )
         tickers = [stock[0] for stock in stocks]
         return tickers
-
-    def activate_stock(self, ticker: str):
-        self.db._update(
-            table="stock_information",
-            sets={"is_activate": True},
-            ticker=ticker,
-        )
-
-        self.db._update(
-            table="stock_trend",
-            sets={"is_activate": True},
-            ticker=ticker,
-        )
-
-    def deactivate_stock(self, ticker: str):
-        self.db._update(
-            table="stock_information",
-            sets={"is_activate": False},
-            ticker=ticker,
-        )
-
-        self.db._update(
-            table="stock_trend",
-            sets={"is_activate": False},
-            ticker=ticker,
-        )
 
     def update_time_series_data(self, ticker: str) -> bool:
         try:
@@ -119,6 +94,10 @@ class StockUtils:
         return results
 
     def update_stock_trend(self, tickers: list[str]):
+        if not check_market_status(self.nation.upper()):
+            # 장 중에만 실행
+            return
+
         try:
             all_data = self.db._select(
                 table=f"stock_{self.nation}_1d",
