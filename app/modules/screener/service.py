@@ -1,12 +1,12 @@
 from app.database.crud import database_service
 from typing import Optional, List, Dict, Tuple
 import logging
-from app.utils.factor_utils import filter_stocks, get_filtered_stocks_df, MarketEnum, convert_unit_and_value
 from app.utils.score_utils import calculate_factor_score
 from app.cache.factors import factors_cache
 import pandas as pd
 import numpy as np
 from app.models.models_factors import CategoryEnum
+from app.modules.screener.schemas import MarketEnum
 from app.utils.factor_utils import factor_utils
 
 logger = logging.getLogger(__name__)
@@ -54,8 +54,8 @@ class ScreenerService:
         offset: Optional[int] = None,
     ) -> Tuple[List[Dict], bool]:
         try:
-            stocks = filter_stocks(market_filter, sector_filter, custom_filters)
-            filtered_df = get_filtered_stocks_df(market_filter, stocks, columns)
+            stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
+            filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
             scored_df = calculate_factor_score(filtered_df)
             sorted_df = filtered_df.merge(scored_df, on="Code", how="inner")
             sorted_df = sorted_df.sort_values(by="score", ascending=False)
@@ -76,6 +76,7 @@ class ScreenerService:
                     "ExchMnem": row["ExchMnem"],
                     "sector": row["sector"],
                     "country": row["country"],
+                    "description": row["description"],
                 }
 
                 # 숫자형 데이터 처리
@@ -87,7 +88,7 @@ class ScreenerService:
                         stock_data[col] = {"value": None, "unit": ""}
                     else:
                         is_small_price = col == "close"
-                        value, unit = convert_unit_and_value(
+                        value, unit = factor_utils.convert_unit_and_value(
                             market_filter,
                             float(row[col]),
                             factors[col].get("unit", "") if col in factors else "",
