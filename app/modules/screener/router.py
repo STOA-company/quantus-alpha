@@ -6,7 +6,6 @@ from app.modules.screener.schemas import (
     FactorResponse,
     FilterGroup,
     FilteredStocks,
-    ColumnSetCreate,
     ColumnSetUpdate,
     ColumnSet,
     ColumnsResponse,
@@ -179,16 +178,19 @@ def reorder_filter_groups(filter_groups: List[int]):
 
 
 @router.post("/column-sets", response_model=Dict)
-def create_column_set(column_set: ColumnSetCreate, current_user: str = Depends(get_current_user)):
+def create_or_update_column_set(column_set: ColumnSet, current_user: str = Depends(get_current_user)):
     """
-    컬럼 세트 생성
+    컬럼 세트 생성 또는 업데이트
     """
     try:
-        is_success = screener_service.create_column_set(column_set.columns, current_user.id, column_set.name)
-        if is_success:
-            return {"message": "Column created successfully"}
+        if column_set.id:
+            is_success = screener_service.update_column_set(column_set.id, column_set.name, column_set.columns)
+            message = "Column updated successfully"
         else:
-            raise HTTPException(status_code=500, detail="Failed to create column")
+            is_success = screener_service.create_column_set(current_user.id, column_set.name, column_set.columns)
+            message = "Column created successfully"
+        if is_success:
+            return {"message": message}
     except Exception as e:
         logger.error(f"Error creating column: {e}")
         raise HTTPException(status_code=500, detail=str(e))

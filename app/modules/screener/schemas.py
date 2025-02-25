@@ -55,20 +55,9 @@ class FilteredStocks(BaseModel):
 
 
 class ColumnSet(BaseModel):
-    id: int
-    name: str
-    columns: List[str]
-
-
-class ColumnSetCreate(BaseModel):
-    name: str
-    columns: List[str]
-
-
-class ColumnSetUpdate(BaseModel):
-    column_set_id: int
-    name: str
-    columns: List[str]
+    id: Optional[int] = None
+    name: Optional[str] = None
+    columns: Optional[List[str]] = None
 
 
 class ColumnsResponse(BaseModel):

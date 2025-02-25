@@ -70,6 +70,7 @@ class ScreenerService:
             result = []
 
             for _, row in sorted_df.iterrows():
+                # 기본으로 표시될 컬럼들
                 stock_data = {
                     "Code": row["Code"],
                     "Name": row["Name"],
@@ -253,7 +254,7 @@ class ScreenerService:
             logger.error(f"Error in get_column_sets: {e}")
             raise e
 
-    def create_column_set(self, columns: List[str], user_id: str, name: str) -> bool:
+    def create_column_set(self, user_id: str, name: str, columns: List[str]) -> bool:
         try:
             self.database._insert(table="screener_column_sets", sets={"user_id": user_id, "name": name})
             column_set_id = self.database._select(table="screener_column_sets", user_id=user_id, name=name)[0].id
@@ -266,7 +267,7 @@ class ScreenerService:
 
     def update_column_set(self, column_set_id: int, name: str, columns: List[str]) -> bool:
         try:
-            self.database._update(table="screener_column_sets", column_set_id=column_set_id, name=name)
+            self.database._update(table="screener_column_sets", id=column_set_id, sets={"name": name})
             self.database._delete(table="screener_columns", column_set_id=column_set_id)
             for column in columns:
                 self.database._insert(table="screener_columns", sets={"column_set_id": column_set_id, "factor": column})
