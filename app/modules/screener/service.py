@@ -301,7 +301,7 @@ class ScreenerService:
                 columns = self.database._select(table="screener_columns", columns=["factor"], column_set_id=column_set.id)
             else:
                 raise ValueError("Invalid category or id")
-            return [column[0] for column in columns]
+            return [column for column in columns]
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
             raise e
