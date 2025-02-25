@@ -6,7 +6,6 @@ from app.modules.screener.schemas import (
     FactorResponse,
     FilterGroup,
     FilteredStocks,
-    ColumnSetUpdate,
     ColumnSet,
     ColumnsResponse,
 )
@@ -206,24 +205,6 @@ def get_column_sets(current_user: str = Depends(get_current_user)):
         return [ColumnSet(id=column["id"], name=column["name"], columns=column["columns"]) for column in columns]
     except Exception as e:
         logger.error(f"Error getting columns: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.patch("/column-sets/{column_set_id}", response_model=Dict)
-def update_column_set(column_set_update: ColumnSetUpdate):
-    """
-    컬럼 세트 수정
-    """
-    try:
-        is_success = screener_service.update_column_set(
-            column_set_update.column_set_id, column_set_update.name, column_set_update.columns
-        )
-        if is_success:
-            return {"message": "Column updated successfully"}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to update column")
-    except Exception as e:
-        logger.error(f"Error updating column: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
