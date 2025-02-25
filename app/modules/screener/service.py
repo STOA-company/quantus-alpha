@@ -6,6 +6,7 @@ from app.utils.score_utils import calculate_factor_score
 from app.cache.factors import factors_cache
 import pandas as pd
 import numpy as np
+from app.models.models_factors import CategoryEnum
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +220,20 @@ class ScreenerService:
             return True
         except Exception as e:
             logger.error(f"Error in delete_column_set: {e}")
+            raise e
+
+    def get_columns(self, category: Optional[CategoryEnum] = None, id: Optional[int] = None) -> List[str]:
+        try:
+            if category:
+                columns = self.database._select(table="factors", columns=["factor"], category=category)
+            elif id:
+                column_set = self.database._select(table="screener_column_sets", columns=["id"], id=id)
+                columns = self.database._select(table="screener_columns", columns=["factor"], column_set_id=column_set.id)
+            else:
+                raise ValueError("Invalid category or id")
+            return [column[0] for column in columns]
+        except Exception as e:
+            logger.error(f"Error in get_columns: {e}")
             raise e
 
 
