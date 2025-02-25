@@ -1,11 +1,11 @@
-from app.models.models_base import Base
+from app.models.models_base import ServiceBase
 from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, UniqueConstraint, CheckConstraint
 from sqlalchemy.schema import Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
 
-class ScreenerFilter(Base):
+class ScreenerFilter(ServiceBase):
     __tablename__ = "screener_filters"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -26,7 +26,7 @@ class ScreenerFilter(Base):
         return f"<ScreenerFilter {self.name}>"
 
 
-class ScreenerFilterCondition(Base):
+class ScreenerFilterCondition(ServiceBase):
     __tablename__ = "screener_filter_conditions"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -49,7 +49,7 @@ class ScreenerFilterCondition(Base):
         return f"<ScreenerFilterCondition {self.factor}>"
 
 
-class ScreenerColumnSet(Base):
+class ScreenerColumnSet(ServiceBase):
     __tablename__ = "screener_column_sets"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -58,7 +58,7 @@ class ScreenerColumnSet(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
-class ScreenerColumn(Base):
+class ScreenerColumn(ServiceBase):
     __tablename__ = "screener_columns"
 
     id = Column(Integer, primary_key=True, index=True)
