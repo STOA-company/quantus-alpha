@@ -30,14 +30,11 @@ class FilterCondition(BaseModel):
 
 
 class FilterGroup(BaseModel):
+    id: Optional[int] = None
     name: Optional[str] = None
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
-
-
-class FilterGroupUpdate(FilterGroup):
-    filter_group_id: int
 
 
 class FilterInfo(BaseModel):
@@ -58,20 +55,9 @@ class FilteredStocks(BaseModel):
 
 
 class ColumnSet(BaseModel):
-    id: int
-    name: str
-    columns: List[str]
-
-
-class ColumnSetCreate(BaseModel):
-    name: str
-    columns: List[str]
-
-
-class ColumnSetUpdate(BaseModel):
-    column_set_id: int
-    name: str
-    columns: List[str]
+    id: Optional[int] = None
+    name: Optional[str] = None
+    columns: Optional[List[str]] = None
 
 
 class ColumnsResponse(BaseModel):
