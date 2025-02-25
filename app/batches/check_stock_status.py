@@ -2,6 +2,7 @@ from app.kispy.manager import KISAPIManager
 import pandas as pd
 from app.database.crud import database
 import logging
+from app.utils.activate_utils import deactivate_stock
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,6 @@ def deactivate_zero_volume():
             table="stock_trend",
             columns=[
                 "ticker",
-                "market",
                 "volume_rt",
                 "volume_1d",
                 "volume_1w",
@@ -120,7 +120,6 @@ def deactivate_zero_volume():
             df,
             columns=[
                 "ticker",
-                "market",
                 "volume_rt",
                 "volume_1d",
                 "volume_1w",
@@ -139,19 +138,9 @@ def deactivate_zero_volume():
 
         deactivate_df = df[zero_volume_mask & not_stopped_mask]
 
-        deactivate_tickers = list(zip(deactivate_df["ticker"], deactivate_df["market"]))
+        deactivate_tickers = list(zip(deactivate_df["ticker"]))
 
-        # 비활성화 처리
-        for ticker, market in deactivate_tickers:
-            try:
-                database._update(table="stock_trend", sets={"is_activate": 0}, ticker=ticker)
-
-                database._update(table="stock_information", sets={"is_activate": 0}, ticker=ticker)
-
-                logger.info(f"Deactivated zero volume ticker: {ticker}")
-
-            except Exception as e:
-                logger.error(f"Failed to deactivate ticker {ticker}: {e}")
+        deactivate_stock(deactivate_tickers)
 
         logger.info(f"Total {len(deactivate_tickers)} zero volume tickers deactivated")
 
