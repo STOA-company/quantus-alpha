@@ -8,6 +8,7 @@ from app.models.models_news import News
 from app.models.models_stock_indices import StockIndices
 from app.models.models_disclosure import Disclosure
 from app.models.models_users import AlphafinderUser, UserStockInterest
+from app.models.models_screener import ScreenerFilterGroups, ScreenerFilterCondition, ScreenerColumnSet, ScreenerColumn
 
 # from app.models.models_payments import AlphafinderLicense, AlphafinderMembership, AlphafinderPaymentHistory
 from app.models.models_community import (
@@ -49,6 +50,10 @@ __all__ = [
     "PostStatistics",
     "StockStatistics",
     "Factors",
+    "ScreenerFilterGroups",
+    "ScreenerFilterCondition",
+    "ScreenerColumnSet",
+    "ScreenerColumn",
 ]
 
 # Category relationships
