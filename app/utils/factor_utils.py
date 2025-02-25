@@ -17,6 +17,21 @@ class FactorUtils:
     def __init__(self):
         self.db = database
 
+    def get_factors(self) -> List[dict]:
+        factors = self.db._select(table="factors")
+        return [
+            {
+                "factor": FACTOR_MAP[factor.factor],
+                "description": factor.description,
+                "unit": str(factor.unit).lower(),
+                "category": str(factor.category).lower(),
+                "direction": factor.sort_direction,
+                "min_value": factor.min_value,
+                "max_value": factor.max_value,
+            }
+            for factor in factors
+        ]
+
     def get_columns(self, category: Optional[CategoryEnum] = None) -> List[str]:
         db_columns = self.db._select(table="factors", columns=["factor"], category=category)
 

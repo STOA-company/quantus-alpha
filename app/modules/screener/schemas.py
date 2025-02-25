@@ -18,6 +18,9 @@ class FactorResponse(BaseModel):
     description: str
     unit: UnitEnum
     category: CategoryEnum
+    direction: str
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
 
     class Config:
         from_attributes = True
