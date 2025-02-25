@@ -32,8 +32,8 @@ class ScreenerService:
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
         columns: Optional[List[str]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
+        limit: Optional[int] = 50,
+        offset: Optional[int] = 0,
     ) -> Tuple[List[Dict], bool]:
         try:
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
