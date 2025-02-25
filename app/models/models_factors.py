@@ -17,7 +17,6 @@ class SortDirectionEnum(str, Enum):
 
 class UnitEnum(str, Enum):
     PRICE = "price"  # 가격
-    VOLUME = "volume"  # 양
     PERCENTAGE = "percentage"  # %
     RATIO = "ratio"  # 비율
     SCORE = "score"  # 점
