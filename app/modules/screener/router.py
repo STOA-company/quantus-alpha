@@ -5,7 +5,6 @@ from app.modules.screener.service import screener_service
 from app.modules.screener.schemas import (
     FactorResponse,
     FilterGroup,
-    FilterGroupUpdate,
     FilteredStocks,
     ColumnSetCreate,
     ColumnSetUpdate,
@@ -117,44 +116,33 @@ def get_filter_groups(current_user: str = Depends(get_current_user)):
 
 
 @router.post("/filter-groups", response_model=Dict)
-def create_filter_group(filter_group: FilterGroup, current_user: str = Depends(get_current_user)):
+def create_or_update_filter_group(filter_group: FilterGroup, current_user: str = Depends(get_current_user)):
     """
-    필터 생성
+    필터 생성 또는 업데이트
     """
     try:
-        is_success = screener_service.create_filter_group(
-            current_user.id,
-            filter_group.name,
-            filter_group.market_filter,
-            filter_group.sector_filter,
-            filter_group.custom_filters,
-        )
+        if filter_group.id:
+            is_success = screener_service.update_filter_group(
+                filter_group.id,
+                filter_group.name,
+                filter_group.market_filter,
+                filter_group.sector_filter,
+                filter_group.custom_filters,
+            )
+            message = "Filter updated successfully"
+        else:
+            is_success = screener_service.create_filter_group(
+                current_user.id,
+                filter_group.name,
+                filter_group.market_filter,
+                filter_group.sector_filter,
+                filter_group.custom_filters,
+            )
+            message = "Filter created successfully"
         if is_success:
-            return {"message": "Filter created successfully"}
+            return {"message": message}
     except Exception as e:
         logger.error(f"Error creating filter: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.patch("/filter-groups/{filter_group_id}", response_model=Dict)
-def update_filter_group(filter_group_update: FilterGroupUpdate):
-    """
-    필터 수정
-    """
-    try:
-        is_success = screener_service.update_filter_group(
-            filter_group_update.filter_group_id,
-            filter_group_update.name,
-            filter_group_update.market_filter,
-            filter_group_update.sector_filter,
-            filter_group_update.custom_filters,
-        )
-        if is_success:
-            return {"message": "Filter updated successfully"}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to update filter")
-    except Exception as e:
-        logger.error(f"Error updating filter: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

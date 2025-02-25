@@ -30,14 +30,11 @@ class FilterCondition(BaseModel):
 
 
 class FilterGroup(BaseModel):
+    id: Optional[int] = None
     name: Optional[str] = None
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
-
-
-class FilterGroupUpdate(FilterGroup):
-    filter_group_id: int
 
 
 class FilterInfo(BaseModel):
