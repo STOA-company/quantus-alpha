@@ -7,6 +7,7 @@ from app.cache.factors import factors_cache
 import pandas as pd
 import numpy as np
 from app.models.models_factors import CategoryEnum
+from app.utils.factor_utils import factor_utils
 
 logger = logging.getLogger(__name__)
 
@@ -283,7 +284,7 @@ class ScreenerService:
     def get_columns(self, category: Optional[CategoryEnum] = None, id: Optional[int] = None) -> List[str]:
         try:
             if category:
-                columns = self.database._select(table="factors", columns=["factor"], category=category)
+                columns = factor_utils.get_columns(category)
             elif id:
                 column_set = self.database._select(table="screener_column_sets", columns=["id"], id=id)
                 columns = self.database._select(table="screener_columns", columns=["factor"], column_set_id=column_set.id)
