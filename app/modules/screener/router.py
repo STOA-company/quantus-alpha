@@ -13,6 +13,7 @@ import logging
 from app.utils.oauth_utils import get_current_user
 from app.utils.factor_utils import factor_utils
 from app.models.models_factors import CategoryEnum
+from app.common.constants import FACTOR_MAP, REVERSE_FACTOR_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def get_factors():
         factors = screener_service.get_factors()
         return [
             FactorResponse(
-                factor=factor["factor"],
+                factor=FACTOR_MAP[factor["factor"]],
                 description=factor["description"],
                 unit=factor["unit"],
                 category=factor["category"],
@@ -52,7 +53,7 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
         if filtered_stocks.custom_filters:
             custom_filters = [
                 {
-                    "factor": condition.factor,
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
                     "above": condition.above,
                     "below": condition.below,
                 }
@@ -62,7 +63,7 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
             custom_filters,
-            filtered_stocks.columns,
+            [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.columns],
             filtered_stocks.limit,
             filtered_stocks.offset,
         )
