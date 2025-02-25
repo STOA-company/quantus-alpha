@@ -13,7 +13,7 @@ import logging
 from app.utils.oauth_utils import get_current_user
 from app.utils.factor_utils import factor_utils
 from app.models.models_factors import CategoryEnum
-from app.common.constants import FACTOR_MAP, REVERSE_FACTOR_MAP
+from app.common.constants import REVERSE_FACTOR_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +29,13 @@ def get_factors():
         factors = screener_service.get_factors()
         return [
             FactorResponse(
-                factor=FACTOR_MAP[factor["factor"]],
+                factor=factor["factor"],
                 description=factor["description"],
                 unit=factor["unit"],
                 category=factor["category"],
+                direction=factor["direction"],
+                min_value=factor["min_value"],
+                max_value=factor["max_value"],
             )
             for factor in factors
         ]
