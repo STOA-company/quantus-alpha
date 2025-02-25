@@ -75,11 +75,12 @@ class ScreenerService:
                     "Name": row["Name"],
                     "ExchMnem": row["ExchMnem"],
                     "sector": row["sector"],
+                    "country": row["country"],
                 }
 
                 # 숫자형 데이터 처리
                 for col in sorted_df.columns:
-                    if col in ["Code", "Name", "ExchMnem", "sector", "description"]:
+                    if col in ["Code", "Name", "ExchMnem", "sector", "country", "description"]:
                         continue
 
                     if pd.isna(row[col]) or np.isinf(row[col]):
