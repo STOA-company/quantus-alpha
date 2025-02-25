@@ -47,32 +47,6 @@ class StockUtils:
         tickers = [stock[0] for stock in stocks]
         return tickers
 
-    def activate_stock(self, ticker: str):
-        self.db._update(
-            table="stock_information",
-            sets={"is_activate": True},
-            ticker=ticker,
-        )
-
-        self.db._update(
-            table="stock_trend",
-            sets={"is_activate": True},
-            ticker=ticker,
-        )
-
-    def deactivate_stock(self, ticker: str):
-        self.db._update(
-            table="stock_information",
-            sets={"is_activate": False},
-            ticker=ticker,
-        )
-
-        self.db._update(
-            table="stock_trend",
-            sets={"is_activate": False},
-            ticker=ticker,
-        )
-
     def update_time_series_data(self, ticker: str) -> bool:
         try:
             ticker_ = ticker[1:] if self.nation == "kr" else ticker
