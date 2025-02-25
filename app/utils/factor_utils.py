@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-from app.common.constants import DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100
+from app.common.constants import DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100, FACTOR_MAP
 import numpy as np
 from app.cache.factors import factors_cache
 from app.core.extra.SlackNotifier import SlackNotifier
@@ -18,8 +18,21 @@ class FactorUtils:
         self.db = database
 
     def get_columns(self, category: Optional[CategoryEnum] = None) -> List[str]:
-        columns = self.db._select(table="factors", columns=["factor"], category=category)
-        return [column for column in columns]
+        db_columns = self.db._select(table="factors", columns=["factor"], category=category)
+
+        result = []
+        for column_tuple in db_columns:
+            column_name = column_tuple[0]
+
+            print(f"Extracted column name: {column_name}")
+
+            if column_name in FACTOR_MAP:
+                mapped_name = FACTOR_MAP[column_name]
+                result.append(mapped_name)
+            else:
+                result.append(column_name)
+
+        return result
 
     def process_kr_factor_data(self):
         output_file = "parquet/kr_stock_factors.parquet"
