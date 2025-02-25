@@ -2,7 +2,7 @@ from datetime import timedelta
 import pandas as pd
 from sqlalchemy import text
 
-from app.utils.date_utils import now_kr, now_utc
+from app.utils.date_utils import now_utc
 from app.database.crud import database
 from app.core.logging.config import get_logger
 
@@ -25,7 +25,7 @@ def run_news_batch(ctry: str = None, date: str = None):
     if date:
         check_date = pd.to_datetime(date, format="%Y%m%d").date()
     else:
-        check_date = now_kr(is_date=True)
+        check_date = now_utc(is_date=True)
 
     if ctry == "KR":
         ctry_news = "kor_news"
