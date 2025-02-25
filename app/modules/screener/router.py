@@ -14,7 +14,7 @@ from app.modules.screener.schemas import (
 )
 import logging
 from app.utils.oauth_utils import get_current_user
-from app.utils.factor_utils import process_kr_factor_data, process_us_factor_data
+from app.utils.factor_utils import factor_utils
 from app.models.models_factors import CategoryEnum
 
 logger = logging.getLogger(__name__)
@@ -271,8 +271,8 @@ def update_parquet():
     파퀴 업데이트
     """
     try:
-        process_us_factor_data()
-        process_kr_factor_data()
+        factor_utils.process_us_factor_data()
+        factor_utils.process_kr_factor_data()
         return {"message": "Parquet updated successfully"}
     except Exception as e:
         logger.error(f"Error updating parquet: {e}")
