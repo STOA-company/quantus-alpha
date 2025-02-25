@@ -4,8 +4,8 @@ import io
 from app.modules.screener.service import screener_service
 from app.modules.screener.schemas import (
     FactorResponse,
-    Filter,
-    FilterUpdate,
+    FilterGroup,
+    FilterGroupUpdate,
     FilteredStocks,
     ColumnSetCreate,
     ColumnSetUpdate,
@@ -103,26 +103,32 @@ def download_filtered_stocks(filtered_stocks: FilteredStocks):
     )
 
 
-@router.get("/filters", response_model=List[Dict])
-def get_filters(current_user: str = Depends(get_current_user)):
+@router.get("/filter-groups", response_model=List[Dict])
+def get_filter_groups(current_user: str = Depends(get_current_user)):
     """
     저장된 필터 목록 조회
     """
     try:
-        filters = screener_service.get_saved_filters(current_user.id)
+        filters = screener_service.get_saved_filter_groups(current_user.id)
         return filters
     except Exception as e:
         logger.error(f"Error getting saved filters: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/filters", response_model=Dict)
-def create_filter(filter: Filter, current_user: str = Depends(get_current_user)):
+@router.post("/filter-groups", response_model=Dict)
+def create_filter_group(filter_group: FilterGroup, current_user: str = Depends(get_current_user)):
     """
     필터 생성
     """
     try:
-        is_success = screener_service.create_filter(current_user.id, filter.name, filter.conditions)
+        is_success = screener_service.create_filter_group(
+            current_user.id,
+            filter_group.name,
+            filter_group.market_filter,
+            filter_group.sector_filter,
+            filter_group.custom_filters,
+        )
         if is_success:
             return {"message": "Filter created successfully"}
     except Exception as e:
@@ -130,14 +136,18 @@ def create_filter(filter: Filter, current_user: str = Depends(get_current_user))
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.patch("/filters/{filter_id}", response_model=Dict)
-def update_filter(filter_update: FilterUpdate):
+@router.patch("/filter-groups/{filter_group_id}", response_model=Dict)
+def update_filter_group(filter_group_update: FilterGroupUpdate):
     """
     필터 수정
     """
     try:
-        is_success = screener_service.update_filter(
-            filter_update.filter_id, filter_update.filter.name, filter_update.filter.conditions
+        is_success = screener_service.update_filter_group(
+            filter_group_update.filter_group_id,
+            filter_group_update.name,
+            filter_group_update.market_filter,
+            filter_group_update.sector_filter,
+            filter_group_update.custom_filters,
         )
         if is_success:
             return {"message": "Filter updated successfully"}
@@ -148,13 +158,13 @@ def update_filter(filter_update: FilterUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/filters/{filter_id}", response_model=Dict)
-def delete_filter(filter_id: int):
+@router.delete("/filter-groups/{filter_group_id}", response_model=Dict)
+def delete_filter_group(filter_group_id: int):
     """
     필터 삭제
     """
     try:
-        is_success = screener_service.delete_filter(filter_id)
+        is_success = screener_service.delete_filter_group(filter_group_id)
         if is_success:
             return {"message": "Filter deleted successfully"}
         else:
@@ -164,13 +174,13 @@ def delete_filter(filter_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/filters/reorder", response_model=Dict)
-def reorder_filters(filters: List[int]):
+@router.post("/filter-groups/reorder", response_model=Dict)
+def reorder_filter_groups(filter_groups: List[int]):
     """
     필터 순서 업데이트
     """
     try:
-        is_success = screener_service.reorder_filters(filters)
+        is_success = screener_service.reorder_filter_groups(filter_groups)
         if is_success:
             return {"message": "Filter reordered successfully"}
         else:
