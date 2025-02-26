@@ -77,7 +77,7 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
                 for condition in filtered_stocks.custom_filters
             ]
 
-        stocks_data, has_next = screener_service.get_filtered_stocks(
+        stocks_data, total_count = screener_service.get_filtered_stocks(
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
             custom_filters,
@@ -86,7 +86,45 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
             filtered_stocks.offset,
         )
 
-        result = {"has_next": has_next, "data": stocks_data}
+        has_next = filtered_stocks.offset * filtered_stocks.limit + filtered_stocks.limit < total_count
+
+        result = {"data": stocks_data, "has_next": has_next}
+        return result
+
+    except Exception as e:
+        logger.error(f"Error getting filtered stocks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/stocks/count", response_model=Dict)
+def get_filtered_stocks_count(filtered_stocks: FilteredStocks):
+    """
+    필터링된 종목들 조회
+
+    market_filter : ["us", "kr", "S&P 500", "NASDAQ", "KOSPI", "KOSDAQ"] 중 하나
+    """
+    try:
+        custom_filters = []
+        if filtered_stocks.custom_filters:
+            custom_filters = [
+                {
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "above": condition.above,
+                    "below": condition.below,
+                }
+                for condition in filtered_stocks.custom_filters
+            ]
+
+        _, total_count = screener_service.get_filtered_stocks(
+            filtered_stocks.market_filter,
+            filtered_stocks.sector_filter,
+            custom_filters,
+            [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.columns],
+            filtered_stocks.limit,
+            filtered_stocks.offset,
+        )
+
+        result = {"count": total_count}
         return result
 
     except Exception as e:
