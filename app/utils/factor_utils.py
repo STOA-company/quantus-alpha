@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-from app.common.constants import DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100, FACTOR_MAP
+from app.common.constants import DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100, FACTOR_MAP, UNIT_MAP
 import numpy as np
 from app.cache.factors import factors_cache
 from app.core.extra.SlackNotifier import SlackNotifier
@@ -270,8 +270,7 @@ class FactorUtils:
                 # 1K = 100만원
                 return value, "$K"
 
-        unit_mapping = {"percentage": "%", "times": "회", "score": "점", "multiple": "배"}
-        return value, unit_mapping.get(unit.lower(), "")
+        return value, UNIT_MAP.get(unit.lower(), "")
 
 
 factor_utils = FactorUtils()

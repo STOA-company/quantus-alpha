@@ -39,14 +39,14 @@ class ScreenerService:
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
             scored_df = calculate_factor_score(filtered_df)
-            sorted_df = filtered_df.merge(scored_df, on="Code", how="inner")
-            sorted_df = sorted_df.sort_values(by="score", ascending=False)
-
+            merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
+            sorted_df = merged_df.sort_values(by="score", ascending=False).reset_index(drop=True)
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
 
-            if limit and offset:
-                sorted_df = sorted_df.iloc[offset : offset + limit]
+            total_count = len(sorted_df)
+            sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
+            has_next = offset * limit + limit < total_count
 
             factors = factors_cache.get_configs()
             result = []
@@ -68,7 +68,7 @@ class ScreenerService:
                         continue
 
                     if pd.isna(row[col]) or np.isinf(row[col]):
-                        stock_data[col] = {"value": None, "unit": ""}
+                        stock_data[col] = {"value": "", "unit": ""}
                     else:
                         is_small_price = col == "close"
                         value, unit = factor_utils.convert_unit_and_value(
@@ -81,6 +81,7 @@ class ScreenerService:
                         stock_data[col] = {"value": value, "unit": unit}
 
                 result.append(stock_data)
+
             mapped_result = []
             for item in result:
                 mapped_item = {}
@@ -88,11 +89,6 @@ class ScreenerService:
                     mapped_key = FACTOR_MAP.get(key, key)
                     mapped_item[mapped_key] = value
                 mapped_result.append(mapped_item)
-
-            total_count = len(sorted_df)
-            has_next = False
-            if limit and offset:
-                has_next = offset + limit < total_count
 
             return mapped_result, has_next
 

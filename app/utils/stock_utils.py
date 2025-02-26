@@ -197,5 +197,5 @@ kr_stock_utils = StockUtils(nation="kr")
 if __name__ == "__main__":
     us_stock_utils.update_top_gainers()
     us_stock_utils.update_top_losers()
-    kr_stock_utils.update_top_gainers()
-    kr_stock_utils.update_top_losers()
+    # kr_stock_utils.update_top_gainers()
+    # kr_stock_utils.update_top_losers()
