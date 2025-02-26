@@ -18,6 +18,7 @@ FACTOR_MAP = {
     "country": "국가",
     "ExchMnem": "시장",
     "sector": "산업",
+    "score": "스코어",
     "abs_beta": "절대값 베타 (52주)",
     "abs_beta_60": "절대값 베타 (60일)",
     "beta": "베타 (52주)",
