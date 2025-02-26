@@ -34,7 +34,7 @@ class ScreenerService:
         columns: Optional[List[str]] = None,
         limit: Optional[int] = 50,
         offset: Optional[int] = 0,
-    ) -> Tuple[List[Dict], bool]:
+    ) -> Tuple[List[Dict], int]:
         try:
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
@@ -46,7 +46,6 @@ class ScreenerService:
 
             total_count = len(sorted_df)
             sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
-            has_next = offset * limit + limit < total_count
 
             factors = factors_cache.get_configs()
             result = []
@@ -89,7 +88,7 @@ class ScreenerService:
                     mapped_item[mapped_key] = value
                 mapped_result.append(mapped_item)
 
-            return mapped_result, has_next
+            return mapped_result, total_count
 
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks: {e}")
@@ -103,7 +102,7 @@ class ScreenerService:
         columns: Optional[List[str]] = None,
         limit: Optional[int] = 50,
         offset: Optional[int] = 0,
-    ) -> Tuple[List[Dict], bool]:
+    ) -> Tuple[List[Dict], int]:
         try:
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
@@ -115,7 +114,6 @@ class ScreenerService:
 
             total_count = len(sorted_df)
             sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
-            has_next = offset * limit + limit < total_count
 
             factors = factors_cache.get_configs()
             result = []
@@ -159,7 +157,7 @@ class ScreenerService:
                     mapped_item[mapped_key] = value
                 mapped_result.append(mapped_item)
 
-            return mapped_result, has_next
+            return mapped_result, total_count
 
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks: {e}")
