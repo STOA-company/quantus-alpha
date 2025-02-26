@@ -53,8 +53,8 @@ class FilteredStocks(BaseModel):
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
     columns: Optional[List[str]] = None
-    limit: Optional[int] = None
-    offset: Optional[int] = None
+    limit: Optional[int] = 50
+    offset: Optional[int] = 0
 
 
 class ColumnSet(BaseModel):

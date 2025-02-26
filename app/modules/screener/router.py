@@ -62,6 +62,7 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
                 }
                 for condition in filtered_stocks.custom_filters
             ]
+
         stocks_data, has_next = screener_service.get_filtered_stocks(
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
