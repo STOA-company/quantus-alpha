@@ -67,7 +67,7 @@ class ScreenerService:
                     if col in ["Code", "Name", "ExchMnem", "sector", "country", "description"]:
                         continue
 
-                    if pd.isna(row[col]) or np.isinf(row[col]):
+                    if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
                         stock_data[col] = {"value": "", "unit": ""}
                     else:
                         is_small_price = col == "close"
