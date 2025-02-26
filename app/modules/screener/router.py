@@ -88,6 +88,43 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
 
         result = {"has_next": has_next, "data": stocks_data}
         return result
+
+    except Exception as e:
+        logger.error(f"Error getting filtered stocks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/stocks/description", response_model=Dict)
+def get_filtered_stocks_with_description(filtered_stocks: FilteredStocks):
+    """
+    필터링된 종목들 조회
+
+    market_filter : ["us", "kr", "S&P 500", "NASDAQ", "KOSPI", "KOSDAQ"] 중 하나
+    """
+    try:
+        custom_filters = []
+        if filtered_stocks.custom_filters:
+            custom_filters = [
+                {
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "above": condition.above,
+                    "below": condition.below,
+                }
+                for condition in filtered_stocks.custom_filters
+            ]
+
+        stocks_data, has_next = screener_service.get_filtered_stocks_with_description(
+            filtered_stocks.market_filter,
+            filtered_stocks.sector_filter,
+            custom_filters,
+            [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.columns],
+            filtered_stocks.limit,
+            filtered_stocks.offset,
+        )
+
+        result = {"has_next": has_next, "data": stocks_data}
+        return result
+
     except Exception as e:
         logger.error(f"Error getting filtered stocks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
