@@ -16,7 +16,8 @@ class SortDirectionEnum(str, Enum):
 
 
 class UnitEnum(str, Enum):
-    PRICE = "price"  # 가격
+    BIG_PRICE = "big_price"  # 억원/천달러
+    SMALL_PRICE = "small_price"  # 원/달러
     PERCENTAGE = "percentage"  # %
     RATIO = "ratio"  # 비율
     SCORE = "score"  # 점
