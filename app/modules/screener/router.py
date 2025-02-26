@@ -115,13 +115,11 @@ def get_filtered_stocks_count(filtered_stocks: FilteredStocks):
                 for condition in filtered_stocks.custom_filters
             ]
 
-        _, total_count = screener_service.get_filtered_stocks(
+        total_count = screener_service.get_filtered_stocks_count(
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
             custom_filters,
             [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.columns],
-            filtered_stocks.limit,
-            filtered_stocks.offset,
         )
 
         result = {"count": total_count}
