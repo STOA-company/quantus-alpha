@@ -12,6 +12,8 @@ DEFAULT_SCREENER_COLUMNS = ["Code", "Name", "country", "ExchMnem", "sector"]
 
 NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6", "momentum_12", "current_ratio"]
 
+UNIT_MAP = {"percentage": "%", "times": "회", "score": "점", "multiple": "배", "ratio": ""}
+
 FACTOR_MAP = {
     "Code": "티커",
     "Name": "종목명",

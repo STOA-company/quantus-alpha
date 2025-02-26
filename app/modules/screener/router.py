@@ -13,32 +13,46 @@ import logging
 from app.utils.oauth_utils import get_current_user
 from app.utils.factor_utils import factor_utils
 from app.models.models_factors import CategoryEnum
-from app.common.constants import REVERSE_FACTOR_MAP
+from app.common.constants import REVERSE_FACTOR_MAP, UNIT_MAP
+from app.modules.screener.schemas import MarketEnum
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-@router.get("/factors", response_model=List[FactorResponse])
-def get_factors():
+@router.get("/factors/{market}", response_model=List[FactorResponse])
+def get_factors(market: MarketEnum):
     """
     모든 팩터 조회
     """
     try:
         factors = screener_service.get_factors()
-        return [
-            FactorResponse(
-                factor=factor["factor"],
-                description=factor["description"],
-                unit=factor["unit"],
-                category=factor["category"],
-                direction=factor["direction"],
-                min_value=factor["min_value"],
-                max_value=factor["max_value"],
+        if market in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
+            nation = "us"
+        else:
+            nation = "kr"
+
+        result = []
+        for factor in factors:
+            if factor["unit"] == "small_price":
+                unit = "원" if nation == "kr" else "$"
+            elif factor["unit"] == "big_price":
+                unit = "억원" if nation == "kr" else "K$"
+            else:
+                unit = UNIT_MAP[factor["unit"]]
+            result.append(
+                FactorResponse(
+                    factor=factor["factor"],
+                    description=factor["description"],
+                    unit=unit,
+                    category=factor["category"],
+                    direction=factor["direction"],
+                    min_value=factor["min_value"],
+                    max_value=factor["max_value"],
+                )
             )
-            for factor in factors
-        ]
+        return result
     except Exception as e:
         logger.error(f"Error getting factors: {e}")
         raise HTTPException(status_code=500, detail=str(e))
