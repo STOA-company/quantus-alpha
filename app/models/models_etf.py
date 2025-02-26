@@ -17,7 +17,7 @@ class etf_us_1d(Base):
     Bid: Mapped[Float] = mapped_column(Float, nullable=True)
     Ask: Mapped[Float] = mapped_column(Float, nullable=True)
     Market: Mapped[String] = mapped_column(String(length=20), nullable=True)
-    Market_Cap: Mapped[Float] = mapped_column(Float, nullable=True)
+    MarketCap: Mapped[Float] = mapped_column(Float, nullable=True)
     NumShrs: Mapped[Float] = mapped_column(Float, nullable=True)
 
     def __repr__(self) -> str:
@@ -41,7 +41,7 @@ class etf_kr_1d(Base):
     Bid: Mapped[Float] = mapped_column(Float, nullable=True)
     Ask: Mapped[Float] = mapped_column(Float, nullable=True)
     Market: Mapped[String] = mapped_column(String(length=20), nullable=True)
-    Market_Cap: Mapped[Float] = mapped_column(Float, nullable=True)
+    MarketCap: Mapped[Float] = mapped_column(Float, nullable=True)
     NumShrs: Mapped[Float] = mapped_column(Float, nullable=True)
 
     def __repr__(self) -> str:
