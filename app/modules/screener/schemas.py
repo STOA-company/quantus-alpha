@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from app.models.models_factors import UnitEnum, CategoryEnum
+from app.models.models_factors import CategoryEnum
 from typing import Optional, List
 from enum import Enum
 
@@ -16,7 +16,7 @@ class MarketEnum(str, Enum):
 class FactorResponse(BaseModel):
     factor: str
     description: str
-    unit: UnitEnum
+    unit: str
     category: CategoryEnum
     direction: str
     min_value: Optional[float] = None
