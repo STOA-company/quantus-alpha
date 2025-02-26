@@ -94,6 +94,22 @@ class ScreenerService:
             logger.error(f"Error in get_filtered_stocks: {e}")
             raise e
 
+    def get_filtered_stocks_count(
+        self,
+        market_filter: Optional[MarketEnum] = None,
+        sector_filter: Optional[List[str]] = None,
+        custom_filters: Optional[List[Dict]] = None,
+        columns: Optional[List[str]] = None,
+    ) -> int:
+        try:
+            stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
+            filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
+
+            return len(filtered_df)
+        except Exception as e:
+            logger.error(f"Error in get_filtered_stocks_count: {e}")
+            raise e
+
     def get_filtered_stocks_with_description(
         self,
         market_filter: Optional[MarketEnum] = None,
