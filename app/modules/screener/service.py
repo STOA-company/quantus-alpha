@@ -68,7 +68,7 @@ class ScreenerService:
                         continue
 
                     if pd.isna(row[col]) or np.isinf(row[col]):
-                        stock_data[col] = {"value": None, "unit": ""}
+                        stock_data[col] = {"value": "", "unit": ""}
                     else:
                         is_small_price = col == "close"
                         value, unit = factor_utils.convert_unit_and_value(
