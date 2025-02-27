@@ -143,6 +143,13 @@ class StockTrend(Base):
     ctry = Column(String(20), nullable=True, comment="국가")
     market = Column(String(10), nullable=True, index=True, comment="시장 구분")
 
+    # TODO : 제거 예정
+    is_trading_stopped = Column(Boolean, default=False, comment="거래 정지 여부")
+    is_delisted = Column(Boolean, default=False, comment="상장 폐지 여부")
+    is_cared = Column(Boolean, default=False, comment="관리종목 여부")
+    is_warned = Column(Boolean, default=False, comment="경고종목 여부")
+    is_activate = Column(Boolean, default=True, comment="사용 가능 여부")
+
     # 현재가
     current_price = Column(Float, nullable=True, comment="현재가")
     prev_close = Column(Float, nullable=True, comment="전일종가")

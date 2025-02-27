@@ -125,20 +125,20 @@ class SearchService:
         community_service: CommunityService = Depends(get_community_service),
     ) -> List[CommunitySearchItem]:
         """커뮤니티 종목 검색 기능"""
-        if not query:
-            service = get_community_service()
-            trending_stocks = await service.get_trending_stocks(limit=limit, lang=lang)
-            print(f"Trending stocks: {trending_stocks}###")
-            return [
-                CommunitySearchItem(
-                    ticker=stock.ticker,
-                    name=stock.name,
-                    ctry=stock.ctry,
-                )
-                for stock in trending_stocks
-            ]
-        else:
-            return await self._search_result(query, lang, offset, limit)
+        # if not query:
+        #     service = get_community_service()
+        #     trending_stocks = await service.get_trending_stocks(limit=limit, lang=lang)
+        #     print(f"Trending stocks: {trending_stocks}###")
+        #     return [
+        #         CommunitySearchItem(
+        #             ticker=stock.ticker,
+        #             name=stock.name,
+        #             ctry=stock.ctry,
+        #         )
+        #         for stock in trending_stocks
+        #     ]
+        # else:
+        return await self._search_result(query, lang, offset, limit)
 
     async def _search_result(
         self, query: str, lang: TranslateCountry, offset: int, limit: int
