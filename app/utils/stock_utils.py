@@ -25,9 +25,6 @@ class StockUtils:
             order=f"change_{period}",
             ascending=False,
             ctry=self.nation,
-            is_activate=True,
-            is_trading_stopped=False,
-            is_delisted=False,
             limit=limit,
         )
         tickers = [stock[0] for stock in stocks]
@@ -40,9 +37,6 @@ class StockUtils:
             order=f"change_{period}",
             ascending=True,
             ctry=self.nation,
-            is_activate=True,
-            is_trading_stopped=False,
-            is_delisted=False,
             limit=limit,
         )
         tickers = [stock[0] for stock in stocks]
