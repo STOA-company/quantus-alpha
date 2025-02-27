@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import json
 import math
 import re
@@ -6,7 +6,7 @@ from typing import List, Tuple, Union
 
 from fastapi import Request, Response
 import pytz
-
+from sqlalchemy import text
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.enum import TranslateCountry
 from app.modules.disclosure.mapping import document_type_mapping
@@ -24,6 +24,8 @@ from app.modules.news.schemas import (
 from app.database.crud import database, JoinInfo
 from app.utils.ctry_utils import check_ticker_country_len_2
 from app.common.constants import KST, UTC
+from app.utils.date_utils import now_utc
+from app.utils.test_utils import time_it
 
 
 class NewsService:
@@ -288,6 +290,7 @@ class NewsService:
             for _, row in df.iterrows()
         ]
 
+    @time_it
     def top_stories(self, request: Request, lang: TranslateCountry | None = None):
         viewed_stories = set()
         if request.cookies.get("viewed_stories"):
@@ -300,7 +303,57 @@ class NewsService:
         if lang is None:
             lang = TranslateCountry.KO
 
-        condition = {"is_top_story": 1, "is_exist": True}
+        current_datetime = now_utc()
+        before_24_hours = current_datetime - timedelta(hours=24)
+
+        query_us = f"""
+            SELECT st.ticker, st.volume_change_rt, st.current_price, st.change_rt
+            FROM stock_trend st
+            JOIN (
+                SELECT DISTINCT ticker
+                FROM news_analysis
+                WHERE date >= '{before_24_hours}'
+            ) na ON st.ticker = na.ticker
+            WHERE ctry = 'US'
+            ORDER BY st.volume_change_rt DESC
+            LIMIT 6
+        """
+        top_stories_data_us = self.db._execute(text(query_us))
+        query_kr = f"""
+            SELECT st.ticker, st.volume_change_rt, st.current_price, st.change_rt
+            FROM stock_trend st
+            JOIN (
+                SELECT DISTINCT ticker
+                FROM news_analysis
+                WHERE date >= '{before_24_hours}'
+            ) na ON st.ticker = na.ticker
+            WHERE ctry = 'KR'
+            ORDER BY st.volume_change_rt DESC
+            LIMIT 5
+        """
+        top_stories_data_kr = self.db._execute(text(query_kr))
+
+        # 티커 및 관련 데이터 추출
+        top_stories_tickers = []
+        ticker_to_price_data = {}
+
+        for row in top_stories_data_us:
+            ticker = row[0]
+            if ticker not in top_stories_tickers:
+                top_stories_tickers.append(ticker)
+                ticker_to_price_data[ticker] = {"current_price": row[2], "change_rt": row[3]}
+
+        for row in top_stories_data_kr:
+            ticker = row[0]
+            if ticker not in top_stories_tickers:
+                top_stories_tickers.append(ticker)
+                ticker_to_price_data[ticker] = {"current_price": row[2], "change_rt": row[3]}
+
+        if not top_stories_tickers:
+            return []  # 빠른 반환
+
+        condition = {"is_exist": True, "date__gte": before_24_hours, "ticker__in": top_stories_tickers}
+
         news_condition = condition.copy()
         disclosure_condition = condition.copy()
 
@@ -395,19 +448,17 @@ class NewsService:
         elif not df_disclosure.empty:
             total_df = df_disclosure
 
-        # 종목 현재가 정보 수집
+        # 종목 현재가 정보 추가 (미리 가져온 데이터 사용)
         unique_tickers = total_df["ticker"].unique().tolist()
-        df_price = pd.DataFrame(
-            self.db._select(
-                table="stock_trend",
-                columns=["ticker", "current_price", "change_rt"],
-                **{"ticker__in": unique_tickers},
-            )
-        )
         total_df["price_impact"] = 0.0
 
-        if not df_price.empty:
-            total_df = pd.merge(total_df, df_price, on="ticker", how="left")
+        if not total_df.empty:
+            # 미리 가져온 가격 데이터 추가
+            total_df["current_price"] = total_df["ticker"].map(
+                lambda x: ticker_to_price_data.get(x, {}).get("current_price")
+            )
+            total_df["change_rt"] = total_df["ticker"].map(lambda x: ticker_to_price_data.get(x, {}).get("change_rt"))
+
             total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
             total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
 
