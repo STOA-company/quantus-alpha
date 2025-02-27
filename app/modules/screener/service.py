@@ -55,14 +55,14 @@ class ScreenerService:
                 stock_data = {
                     "Code": row["Code"],
                     "Name": row["Name"],
-                    "ExchMnem": row["ExchMnem"],
+                    "market": row["market"],
                     "sector": row["sector"],
                     "country": row["country"],
                 }
 
                 # 숫자형 데이터 처리
                 for col in sorted_df.columns:
-                    if col in ["Code", "Name", "ExchMnem", "sector", "country"]:
+                    if col in ["Code", "Name", "market", "sector", "country"]:
                         continue
 
                     if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
@@ -139,7 +139,7 @@ class ScreenerService:
                 stock_data = {
                     "Code": row["Code"],
                     "Name": row["Name"],
-                    "ExchMnem": row["ExchMnem"],
+                    "market": row["market"],
                     "sector": row["sector"],
                     "country": row["country"],
                     "description": row["description"],
@@ -147,7 +147,7 @@ class ScreenerService:
 
                 # 숫자형 데이터 처리
                 for col in sorted_df.columns:
-                    if col in ["Code", "Name", "ExchMnem", "sector", "country", "description"]:
+                    if col in ["Code", "Name", "market", "sector", "country", "description"]:
                         continue
 
                     if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
