@@ -78,7 +78,7 @@ class FactorUtils:
 
         df = df[(df["is_activate"] == 1) & (df["is_delisted"] == 0)]
 
-        market_mapping = {"KRX": "KOSDAQ", "KOS": "KOSPI"}
+        market_mapping = {"KRX": "코스닥", "KOS": "코스피"}
 
         selected_columns = [
             "Code",
@@ -138,7 +138,7 @@ class FactorUtils:
 
         df = df[(df["is_activate"] == 1) & (df["is_delisted"] == 0)]
 
-        market_mapping = {"NAS": "NASDAQ", "NYS": "NYSE"}
+        market_mapping = {"NAS": "나스닥", "NYS": "뉴욕 증권 거래소"}
 
         selected_columns = [
             "Code",
