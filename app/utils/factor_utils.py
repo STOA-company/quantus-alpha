@@ -76,6 +76,8 @@ class FactorUtils:
         df["is_activate"] = df["is_activate"].fillna(1).astype(int)
         df["is_delisted"] = df["is_delisted"].fillna(0).astype(int)
 
+        df = df[(df["is_activate"] == 1) & (df["is_delisted"] == 0)]
+
         market_mapping = {"KRX": "KOSDAQ", "KOS": "KOSPI"}
 
         selected_columns = [
@@ -87,6 +89,7 @@ class FactorUtils:
             "is_activate",
             "is_delisted",
         ] + list(factors_mapping.keys())
+
         df_selected = df[selected_columns]
         df_result = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())].copy()
 
@@ -132,6 +135,8 @@ class FactorUtils:
         df["is_snp_500"] = df["is_snp_500"].fillna(0).astype(int)
         df["is_activate"] = df["is_activate"].fillna(1).astype(int)
         df["is_delisted"] = df["is_delisted"].fillna(0).astype(int)
+
+        df = df[(df["is_activate"] == 1) & (df["is_delisted"] == 0)]
 
         market_mapping = {"NAS": "NASDAQ", "NYS": "NYSE"}
 
