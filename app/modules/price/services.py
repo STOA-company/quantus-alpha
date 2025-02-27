@@ -18,7 +18,7 @@ from app.modules.common.enum import Country, Frequency
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.price.schemas import PriceDataItem, PriceSummaryItem, RealTimePriceDataItem, ResponsePriceDataItem
-from app.database.crud import database
+from app.database.crud import database, JoinInfo
 from app.database.conn import db
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import contry_mapping
@@ -507,6 +507,13 @@ class PriceService:
             change_rate_column = "change_rt"
             query_result = self.database._select(
                 table="stock_trend",
+                join_info=JoinInfo(
+                    primary_table="stock_trend",
+                    secondary_table="stock_information",
+                    primary_column="ticker",
+                    secondary_column="ticker",
+                    columns=["is_trading_stopped", "is_cared", "is_warned"],
+                ),
                 columns=[
                     "ticker",
                     "current_price",
@@ -516,9 +523,10 @@ class PriceService:
                     "is_cared",
                     "is_warned",
                 ],
+                order=change_rate_column,
                 ascending=False,
                 limit=1,
-                **conditions,  # conditions를 언패킹하여 전달
+                **conditions,
             )
 
             if not query_result:

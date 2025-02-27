@@ -2,13 +2,12 @@ from typing import List, Tuple
 from fastapi import HTTPException
 import pandas as pd
 from sqlalchemy import select
-from app.database.crud import database
+from app.database.crud import database, JoinInfo
 from app.models.models_stock import StockInformation
 from app.modules.common.enum import StabilityStatus, StabilityType
 from app.modules.stock_info.mapping import STABILITY_INFO
 from app.modules.stock_info.schemas import Indicators, SimilarStock, StockInfo
 from app.core.logging.config import get_logger
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.common.utils import contry_mapping
 from typing import Dict
 from app.utils.redis_utils import Leaderboard
@@ -163,7 +162,7 @@ class StockInfoService:
 
         return related_sectors
 
-    async def get_similar_stocks(self, ctry: str, ticker: str, db: AsyncSession) -> List[SimilarStock]:
+    def get_similar_stocks(self, ticker: str) -> List[SimilarStock]:
         """
         연관 종목 조회
 
@@ -189,6 +188,13 @@ class StockInfoService:
         similar_stocks_data = self.db._select(
             table="stock_trend",
             columns=["ticker", "kr_name", "ctry", "current_price", "change_rt"],
+            join_info=JoinInfo(
+                primary_table="stock_trend",
+                secondary_table="stock_information",
+                primary_column="ticker",
+                secondary_column="ticker",
+                columns=["is_delisted", "is_trading_stopped"],
+            ),
             **{"ticker__in": similar_tickers, "is_delisted": 0, "is_trading_stopped": 0},
         )
 
@@ -278,3 +284,8 @@ class StockInfoService:
 
 def get_stock_info_service() -> StockInfoService:
     return StockInfoService()
+
+
+if __name__ == "__main__":
+    stock_info_service = get_stock_info_service()
+    print(stock_info_service.get_similar_stocks("AAPL"))
