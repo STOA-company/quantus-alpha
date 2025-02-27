@@ -162,6 +162,23 @@ class StockUtils:
             logger.error(f"Error in update_stock_trend: {str(e)}")
             raise e
 
+    def update_prev_close(self, tickers: list[str]):
+        latest_date = self.db._select(
+            table=f"stock_{self.nation}_1d",
+            columns=["Date"],
+            order="Date",
+            ascending=False,
+            limit=1,
+        )[0][0]
+        prev_close = self.db._select(
+            table=f"stock_{self.nation}_1d",
+            columns=["Ticker", "Close"],
+            Ticker__in=tickers,
+            Date=latest_date,
+        )
+        prev_close_data = [{"ticker": row[0], "prev_close": row[1]} for row in prev_close]
+        self.db._bulk_update(table="stock_trend", data=prev_close_data, key_column="ticker")
+
     def update_multiple_tickers(self, tickers: list[str], max_workers: int = 5):
         results = self.update_time_series_data_parallel(tickers, max_workers)
 
@@ -173,21 +190,21 @@ class StockUtils:
 
     def update_top_gainers(self):
         tickers = []
-        for period in ["rt", "1d", "1w", "1m", "6m", "1y"]:
+        for period in ["rt", "1d"]:
             tickers.extend(self.get_top_gainers(period))
         tickers = list(set(tickers))
         for ticker in tickers:
             self.update_time_series_data(ticker)
-        self.update_stock_trend(tickers)
+        self.update_prev_close(tickers)
 
     def update_top_losers(self):
         tickers = []
-        for period in ["rt", "1d", "1w", "1m", "6m", "1y"]:
+        for period in ["rt", "1d"]:
             tickers.extend(self.get_top_losers(period))
         tickers = list(set(tickers))
         for ticker in tickers:
             self.update_time_series_data(ticker)
-        self.update_stock_trend(tickers)
+        self.update_prev_close(tickers)
 
 
 us_stock_utils = StockUtils(nation="us")
