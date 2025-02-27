@@ -58,14 +58,23 @@ class FactorUtils:
 
         df["merge_code"] = df["Code"]
 
-        stock_information = self.db._select("stock_information", columns=["ticker", "sector_ko"], ctry="kr")
+        stock_information = self.db._select(
+            "stock_information", columns=["ticker", "kr_name", "sector_ko", "is_activate", "is_delisted"], ctry="kr"
+        )
         stock_info_df = pd.DataFrame(stock_information)
         stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
         stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
 
-        df = pd.merge(df, stock_info_df, on="merge_code", how="left")
-        df = df.drop("merge_code", axis=1)
+        # INNER JOIN
+        df = pd.merge(df, stock_info_df, on="merge_code", how="inner")
+        df["Name"] = df["kr_name"]
+        df = df.drop(["merge_code", "kr_name"], axis=1)
+
         df["country"] = "kr"
+
+        # NAN 값 처리
+        df["is_activate"] = df["is_activate"].fillna(1).astype(int)
+        df["is_delisted"] = df["is_delisted"].fillna(0).astype(int)
 
         market_mapping = {"KRX": "KOSDAQ", "KOS": "KOSPI"}
 
@@ -75,6 +84,8 @@ class FactorUtils:
             "country",
             "sector",
             "Name",
+            "is_activate",
+            "is_delisted",
         ] + list(factors_mapping.keys())
         df_selected = df[selected_columns]
         df_result = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())].copy()
@@ -101,16 +112,26 @@ class FactorUtils:
 
         df["merge_code"] = df["Code"].str.replace("-US", "")
 
-        stock_information = self.db._select("stock_information", columns=["ticker", "is_snp_500", "sector_ko"], ctry="us")
+        stock_information = self.db._select(
+            "stock_information",
+            columns=["ticker", "kr_name", "is_snp_500", "sector_ko", "is_activate", "is_delisted"],
+            ctry="us",
+        )
         stock_info_df = pd.DataFrame(stock_information)
         stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
-        stock_info_df["is_snp_500"] = stock_info_df["is_snp_500"].fillna(0).astype(int)
         stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
 
-        df = pd.merge(df, stock_info_df, on="merge_code", how="left")
-        df = df.drop("merge_code", axis=1)
+        # INNER JOIN
+        df = pd.merge(df, stock_info_df, on="merge_code", how="inner")
+        df["Name"] = df["kr_name"]
+        df = df.drop(["merge_code", "kr_name"], axis=1)
+
         df["country"] = "us"
+
+        # NAN 값 처리
         df["is_snp_500"] = df["is_snp_500"].fillna(0).astype(int)
+        df["is_activate"] = df["is_activate"].fillna(1).astype(int)
+        df["is_delisted"] = df["is_delisted"].fillna(0).astype(int)
 
         market_mapping = {"NAS": "NASDAQ", "NYS": "NYSE"}
 
@@ -121,6 +142,8 @@ class FactorUtils:
             "sector",
             "Name",
             "is_snp_500",
+            "is_activate",
+            "is_delisted",
         ] + list(factors_mapping.keys())
 
         df_selected = df[selected_columns]
