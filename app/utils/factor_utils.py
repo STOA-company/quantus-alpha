@@ -269,21 +269,15 @@ class FactorUtils:
 
         notifier.notify_info("팩터 정수 부분 불일치 검증 완료")
 
-    def convert_unit_and_value(
-        self, market_filter: MarketEnum, value: float, unit: str, small_price: bool = False
-    ) -> tuple[float, str]:
-        if unit.lower() == "price":
+    def convert_unit_and_value(self, market_filter: MarketEnum, value: float, unit: str) -> tuple[float, str]:
+        if unit.lower() == "big_price":
             nation = "kr" if market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ] else "us"
 
             if nation == "kr":
-                if small_price:
-                    return value, "원"
                 if value >= 10000:  # 1조원 이상
                     return value / 10000, "조원"
                 return value, "억원"
             else:  # US
-                if small_price:
-                    return value, "$"
                 # 1T = 1000B = 1000조원
                 if value >= 1000000000:  # 1000조원 이상
                     return value / 1000000000, "$T"
@@ -295,6 +289,12 @@ class FactorUtils:
                     return value / 1000, "$M"
                 # 1K = 100만원
                 return value, "$K"
+
+        if unit.lower() == "small_price":
+            if nation == "kr":
+                return value, "원"
+            else:
+                return value, "$"
 
         return value, UNIT_MAP.get(unit.lower(), "")
 

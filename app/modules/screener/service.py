@@ -68,12 +68,10 @@ class ScreenerService:
                     if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
                         stock_data[col] = {"value": "", "unit": ""}
                     else:
-                        is_small_price = col == "close"
                         value, unit = factor_utils.convert_unit_and_value(
                             market_filter,
                             float(row[col]),
                             factors[col].get("unit", "") if col in factors else "",
-                            is_small_price,
                         )
 
                         stock_data[col] = {"value": value, "unit": unit}
@@ -153,12 +151,10 @@ class ScreenerService:
                     if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
                         stock_data[col] = {"value": "", "unit": ""}
                     else:
-                        is_small_price = col == "close"
                         value, unit = factor_utils.convert_unit_and_value(
                             market_filter,
                             float(row[col]),
                             factors[col].get("unit", "") if col in factors else "",
-                            is_small_price,
                         )
 
                         stock_data[col] = {"value": value, "unit": unit}
