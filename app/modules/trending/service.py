@@ -1,5 +1,5 @@
 from typing import List
-from app.database.crud import database
+from app.database.crud import database, JoinInfo
 from app.database.conn import db
 from app.modules.trending.schemas import TrendingStockRequest, TrendingStock, TrendingType
 
@@ -47,8 +47,14 @@ class TrendingService:
             ctry=request.ctry.value,
             limit=100,
             ticker__in=activate_tickers,
-            is_trading_stopped=0,
-            is_delisted=0,
+            join_info=JoinInfo(
+                primary_table="stock_trend",
+                secondary_table="stock_information",
+                primary_column="ticker",
+                secondary_column="ticker",
+                columns=["is_trading_stopped", "is_delisted"],
+            ),
+            **{"is_trading_stopped": 0, "is_delisted": 0},
         )
 
         return [

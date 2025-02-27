@@ -104,13 +104,11 @@ async def get_combined(
 
 
 @router.get("/similar", summary="연관 종목 조회")
-async def get_similar_stocks(
+def get_similar_stocks(
     ticker: str,
     service: StockInfoService = Depends(get_stock_info_service),
-    db: AsyncSession = Depends(db.get_async_db),
 ):
-    ctry = check_ticker_country_len_2(ticker)
-    data = await service.get_similar_stocks(ctry, ticker, db)
+    data = service.get_similar_stocks(ticker)
     return BaseResponse(status_code=200, message="연관 종목을 성공적으로 조회했습니다.", data=data)
 
 
