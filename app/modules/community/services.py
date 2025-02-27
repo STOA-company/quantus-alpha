@@ -15,7 +15,6 @@ from .schemas import (
     ResponsePost,
     StockInfo,
     TrendingPostResponse,
-    TrendingStockResponse,
     UserInfo,
 )
 from typing import List, Optional, Tuple
@@ -805,39 +804,39 @@ class CommunityService:
             for post in posts
         ]
 
-    async def get_trending_stocks(
-        self, limit: int = 5, lang: TranslateCountry = TranslateCountry.KO
-    ) -> List[TrendingStockResponse]:
-        """실시간 인기 종목 조회 (24시간)"""
-        name_field = "si.kr_name" if lang == TranslateCountry.KO else "si.en_name"
+    # async def get_trending_stocks(
+    #     self, limit: int = 5, lang: TranslateCountry = TranslateCountry.KO
+    # ) -> List[TrendingStockResponse]:
+    #     """실시간 인기 종목 조회 (24시간)"""
+    #     name_field = "si.kr_name" if lang == TranslateCountry.KO else "si.en_name"
 
-        query = f"""
-            WITH recent_stock_mentions AS (
-                SELECT ps.stock_ticker, COUNT(*) as mention_count
-                FROM posts p
-                JOIN post_stocks ps ON p.id = ps.post_id
-                WHERE p.created_at >= UTC_TIMESTAMP() - INTERVAL 24 HOUR
-                GROUP BY ps.stock_ticker
-            )
-            SELECT
-                ROW_NUMBER() OVER (ORDER BY rsm.mention_count DESC) as rank_num,
-                rsm.stock_ticker as ticker,
-                {name_field} as name,
-                si.ctry as ctry,
-                rsm.mention_count
-            FROM recent_stock_mentions rsm
-            JOIN stock_information si ON rsm.stock_ticker = si.ticker
-            ORDER BY rsm.mention_count DESC, ticker ASC
-            LIMIT :limit
-        """
+    #     query = f"""
+    #         WITH recent_stock_mentions AS (
+    #             SELECT ps.stock_ticker, COUNT(*) as mentions_count
+    #             FROM posts p
+    #             JOIN post_stocks ps ON p.id = ps.post_id
+    #             WHERE p.created_at >= UTC_TIMESTAMP() - INTERVAL 24 HOUR
+    #             GROUP BY ps.stock_ticker
+    #         )
+    #         SELECT
+    #             ROW_NUMBER() OVER (ORDER BY rsm.mention_count DESC) as rank_num,
+    #             rsm.stock_ticker as ticker,
+    #             {name_field} as name,
+    #             si.ctry as ctry,
+    #             rsm.mention_count
+    #         FROM recent_stock_mentions rsm
+    #         JOIN stock_information si ON rsm.stock_ticker = si.ticker
+    #         ORDER BY rsm.mention_count DESC, ticker ASC
+    #         LIMIT :limit
+    #     """
 
-        result = self.db._execute(text(query), {"limit": limit})
-        stocks = result.mappings().all()
+    #     result = self.db._execute(text(query), {"limit": limit})
+    #     stocks = result.mappings().all()
 
-        return [
-            TrendingStockResponse(rank=stock["rank_num"], ticker=stock["ticker"], name=stock["name"], ctry=stock["ctry"])
-            for stock in stocks
-        ]
+    #     return [
+    #         TrendingStockResponse(rank=stock["rank_num"], ticker=stock["ticker"], name=stock["name"], ctry=stock["ctry"])
+    #         for stock in stocks
+    #     ]
 
     async def get_categories(self) -> List[CategoryResponse]:
         """카테고리 리스트 조회"""

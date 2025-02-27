@@ -1,7 +1,7 @@
 from app.database.crud import database_service
 from typing import Optional, List, Dict, Tuple
 import logging
-from app.utils.score_utils import calculate_factor_score
+from app.utils.score_utils import calculate_factor_score, calculate_factor_score_with_description
 from app.cache.factors import factors_cache
 import pandas as pd
 import numpy as np
@@ -34,7 +34,7 @@ class ScreenerService:
         columns: Optional[List[str]] = None,
         limit: Optional[int] = 50,
         offset: Optional[int] = 0,
-    ) -> Tuple[List[Dict], bool]:
+    ) -> Tuple[List[Dict], int]:
         try:
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
@@ -46,7 +46,6 @@ class ScreenerService:
 
             total_count = len(sorted_df)
             sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
-            has_next = offset * limit + limit < total_count
 
             factors = factors_cache.get_configs()
             result = []
@@ -59,15 +58,14 @@ class ScreenerService:
                     "ExchMnem": row["ExchMnem"],
                     "sector": row["sector"],
                     "country": row["country"],
-                    "description": row["description"],
                 }
 
                 # 숫자형 데이터 처리
                 for col in sorted_df.columns:
-                    if col in ["Code", "Name", "ExchMnem", "sector", "country", "description"]:
+                    if col in ["Code", "Name", "ExchMnem", "sector", "country"]:
                         continue
 
-                    if pd.isna(row[col]) or np.isinf(row[col]):
+                    if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
                         stock_data[col] = {"value": "", "unit": ""}
                     else:
                         is_small_price = col == "close"
@@ -90,7 +88,92 @@ class ScreenerService:
                     mapped_item[mapped_key] = value
                 mapped_result.append(mapped_item)
 
-            return mapped_result, has_next
+            return mapped_result, total_count
+
+        except Exception as e:
+            logger.error(f"Error in get_filtered_stocks: {e}")
+            raise e
+
+    def get_filtered_stocks_count(
+        self,
+        market_filter: Optional[MarketEnum] = None,
+        sector_filter: Optional[List[str]] = None,
+        custom_filters: Optional[List[Dict]] = None,
+        columns: Optional[List[str]] = None,
+    ) -> int:
+        try:
+            stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
+            filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
+
+            return len(filtered_df)
+        except Exception as e:
+            logger.error(f"Error in get_filtered_stocks_count: {e}")
+            raise e
+
+    def get_filtered_stocks_with_description(
+        self,
+        market_filter: Optional[MarketEnum] = None,
+        sector_filter: Optional[List[str]] = None,
+        custom_filters: Optional[List[Dict]] = None,
+        columns: Optional[List[str]] = None,
+        limit: Optional[int] = 50,
+        offset: Optional[int] = 0,
+    ) -> Tuple[List[Dict], int]:
+        try:
+            stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
+            filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
+            scored_df = calculate_factor_score_with_description(filtered_df)
+            merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
+            sorted_df = merged_df.sort_values(by="score", ascending=False).reset_index(drop=True)
+            if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
+                sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
+
+            total_count = len(sorted_df)
+            sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
+
+            factors = factors_cache.get_configs()
+            result = []
+
+            for _, row in sorted_df.iterrows():
+                # 기본으로 표시될 컬럼들
+                stock_data = {
+                    "Code": row["Code"],
+                    "Name": row["Name"],
+                    "ExchMnem": row["ExchMnem"],
+                    "sector": row["sector"],
+                    "country": row["country"],
+                    "description": row["description"],
+                }
+
+                # 숫자형 데이터 처리
+                for col in sorted_df.columns:
+                    if col in ["Code", "Name", "ExchMnem", "sector", "country", "description"]:
+                        continue
+
+                    if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
+                        stock_data[col] = {"value": "", "unit": ""}
+                    else:
+                        is_small_price = col == "close"
+                        value, unit = factor_utils.convert_unit_and_value(
+                            market_filter,
+                            float(row[col]),
+                            factors[col].get("unit", "") if col in factors else "",
+                            is_small_price,
+                        )
+
+                        stock_data[col] = {"value": value, "unit": unit}
+
+                result.append(stock_data)
+
+            mapped_result = []
+            for item in result:
+                mapped_item = {}
+                for key, value in item.items():
+                    mapped_key = FACTOR_MAP.get(key, key)
+                    mapped_item[mapped_key] = value
+                mapped_result.append(mapped_item)
+
+            return mapped_result, total_count
 
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks: {e}")
