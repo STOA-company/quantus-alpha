@@ -1,41 +1,7 @@
 from pydantic import BaseModel
-from app.models.models_factors import UnitEnum, CategoryEnum
+from app.models.models_factors import CategoryEnum
 from typing import Optional, List
 from enum import Enum
-
-
-class FactorResponse(BaseModel):
-    factor: str
-    description: str
-    unit: UnitEnum
-    category: CategoryEnum
-
-    class Config:
-        from_attributes = True
-
-
-class FilterCondition(BaseModel):
-    factor: str
-    above: Optional[float] = None
-    below: Optional[float] = None
-
-
-class Filter(BaseModel):
-    name: Optional[str] = None
-    conditions: Optional[List[FilterCondition]] = None
-
-
-class FilterUpdate(BaseModel):
-    filter_id: int
-    filter: Filter
-
-
-class FilterInfo(BaseModel):
-    id: int
-    name: str
-
-    class Config:
-        from_attributes = True
 
 
 class MarketEnum(str, Enum):
@@ -47,27 +13,58 @@ class MarketEnum(str, Enum):
     KOSDAQ = "KOSDAQ"
 
 
+class FactorResponse(BaseModel):
+    factor: str
+    description: str
+    unit: str
+    category: CategoryEnum
+    direction: str
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
+class FilterCondition(BaseModel):
+    factor: str
+    above: Optional[float] = None
+    below: Optional[float] = None
+
+
+class FilterGroup(BaseModel):
+    id: Optional[int] = None
+    name: Optional[str] = None
+    market_filter: Optional[MarketEnum] = MarketEnum.US
+    sector_filter: Optional[List[str]] = None
+    custom_filters: Optional[List[FilterCondition]] = None
+
+
+class FilterInfo(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
+
 class FilteredStocks(BaseModel):
-    market_filter: Optional[MarketEnum] = None
+    market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
     columns: Optional[List[str]] = None
-    limit: Optional[int] = None
-    offset: Optional[int] = None
+    limit: Optional[int] = 50
+    offset: Optional[int] = 0
 
 
 class ColumnSet(BaseModel):
-    id: int
-    name: str
+    id: Optional[int] = None
+    name: Optional[str] = None
+    columns: Optional[List[str]] = None
+
+
+class ColumnsResponse(BaseModel):
     columns: List[str]
 
-
-class ColumnSetCreate(BaseModel):
-    name: str
-    columns: List[str]
-
-
-class ColumnUpdate(BaseModel):
-    column_set_id: int
-    name: str
-    columns: List[str]
+    class Config:
+        from_attributes = True

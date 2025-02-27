@@ -11,7 +11,7 @@ from app.core.logging.config import get_logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.common.utils import contry_mapping
 from typing import Dict
-from app.utils.redis_utils import Leaderboard
+from app.cache.leaderboard import Leaderboard
 
 logger = get_logger(__name__)
 

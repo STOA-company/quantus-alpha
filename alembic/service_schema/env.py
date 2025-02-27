@@ -23,7 +23,7 @@ if config.config_file_name is not None:
 target_metadata = ServiceBase.metadata
 
 # Set database URL
-config.set_main_option("sqlalchemy.url", settings.SERVICE_DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_SERVICE_URL)
 
 
 def generate_slug(rev):
