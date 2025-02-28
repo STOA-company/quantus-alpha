@@ -24,6 +24,7 @@ from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import contry_mapping
 from app.utils.data_utils import remove_parentheses
 from app.utils.date_utils import check_market_status
+from app.common.constants import MARKET_MAP
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -730,19 +731,11 @@ class PriceService:
         종목 시장 조회
         """
         if lang == Country.KR:
-            market_map = {
-                "KOSPI": "코스피",
-                "KOSDAQ": "코스닥",
-                "NAS": "나스닥",
-                "NYS": "뉴욕 증권 거래소",
-                "KONEX": "코넥스",
-                "AMS": "아멕스",
-            }
             result = self.database._select(table="stock_information", columns=["market"], ticker=ticker)
-            return market_map[result[0].market] if result else None
+            return MARKET_MAP[result[0].market] if result else None
         else:
             result = self.database._select(table="stock_information", columns=["market"], ticker=ticker)
-            return result[0].market if result else None
+            return MARKET_MAP[result[0].market] if result else None
 
     async def _get_sector_by_ticker(self, ticker: str, lang: Country) -> str:
         """

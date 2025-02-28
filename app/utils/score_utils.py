@@ -9,7 +9,7 @@ def calculate_factor_score_with_description(df: pd.DataFrame) -> pd.DataFrame:
     df_copy = df.copy()
     columns = df.columns.tolist()
 
-    non_numeric_columns = ["Code", "Name", "country", "ExchMnem", "sector"]
+    non_numeric_columns = ["Code", "Name", "country", "market", "sector"]
     numeric_columns = [col for col in columns if col not in non_numeric_columns]
 
     for col in numeric_columns:
@@ -102,7 +102,7 @@ def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
     columns = df.columns.tolist()
 
     # 비수치 컬럼 사전 필터링
-    non_numeric_columns = ["Code", "Name", "country", "ExchMnem", "sector"]
+    non_numeric_columns = ["Code", "Name", "country", "market", "sector"]
     numeric_columns = [col for col in columns if col not in non_numeric_columns]
 
     # 한 번에 모든 NaN 값을 중앙값으로 채움

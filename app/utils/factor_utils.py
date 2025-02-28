@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-from app.common.constants import DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100, FACTOR_MAP, UNIT_MAP
+from app.common.constants import DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100, FACTOR_MAP, UNIT_MAP, MARKET_MAP
 import numpy as np
 from app.cache.factors import factors_cache
 from app.core.extra.SlackNotifier import SlackNotifier
@@ -59,7 +59,9 @@ class FactorUtils:
         df["merge_code"] = df["Code"]
 
         stock_information = self.db._select(
-            "stock_information", columns=["ticker", "kr_name", "sector_ko", "is_activate", "is_delisted"], ctry="kr"
+            "stock_information",
+            columns=["ticker", "kr_name", "market", "sector_ko", "is_activate", "is_delisted"],
+            ctry="kr",
         )
         stock_info_df = pd.DataFrame(stock_information)
         stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
@@ -78,11 +80,9 @@ class FactorUtils:
 
         df = df[(df["is_activate"] == 1) & (df["is_delisted"] == 0)]
 
-        market_mapping = {"KRX": "KOSDAQ", "KOS": "KOSPI"}
-
         selected_columns = [
             "Code",
-            "ExchMnem",
+            "market",
             "country",
             "sector",
             "Name",
@@ -91,11 +91,11 @@ class FactorUtils:
         ] + list(factors_mapping.keys())
 
         df_selected = df[selected_columns]
-        df_result = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())].copy()
+        df_result = df_selected[df_selected["market"].isin(["KOSPI", "KOSDAQ"])].copy()
 
         self.validate_integer_parts(df, df_result)
 
-        df_result["ExchMnem"] = df_result["ExchMnem"].map(market_mapping)
+        df_result["market"] = df_result["market"].map(MARKET_MAP)
 
         for column in NEED_TO_MULTIPLY_100:
             df_result[column] = df_result[column] * 100
@@ -117,7 +117,7 @@ class FactorUtils:
 
         stock_information = self.db._select(
             "stock_information",
-            columns=["ticker", "kr_name", "is_snp_500", "sector_ko", "is_activate", "is_delisted"],
+            columns=["ticker", "kr_name", "market", "is_snp_500", "sector_ko", "is_activate", "is_delisted"],
             ctry="us",
         )
         stock_info_df = pd.DataFrame(stock_information)
@@ -138,11 +138,9 @@ class FactorUtils:
 
         df = df[(df["is_activate"] == 1) & (df["is_delisted"] == 0)]
 
-        market_mapping = {"NAS": "NASDAQ", "NYS": "NYSE"}
-
         selected_columns = [
             "Code",
-            "ExchMnem",
+            "market",
             "country",
             "sector",
             "Name",
@@ -152,11 +150,11 @@ class FactorUtils:
         ] + list(factors_mapping.keys())
 
         df_selected = df[selected_columns]
-        df_result = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())].copy()
+        df_result = df_selected[df_selected["market"].isin(["NAS", "NYS"])].copy()
 
         self.validate_integer_parts(df, df_result)
 
-        df_result["ExchMnem"] = df_result["ExchMnem"].map(market_mapping)
+        df_result["market"] = df_result["market"].map(MARKET_MAP)
 
         for column in NEED_TO_MULTIPLY_100:
             df_result[column] = df_result[column] * 100
@@ -200,7 +198,7 @@ class FactorUtils:
             elif market_filter == MarketEnum.SNP500:
                 filtered_df = filtered_df[filtered_df["is_snp_500"] == 1]
             elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSDAQ, MarketEnum.KOSPI]:
-                filtered_df = filtered_df[filtered_df["ExchMnem"] == market_filter.value]
+                filtered_df = filtered_df[filtered_df["market"] == market_filter.value]
 
         if sector_filter:
             filtered_df = filtered_df[filtered_df["sector"].isin(sector_filter)]
@@ -247,7 +245,7 @@ class FactorUtils:
 
         for col in processed_df.columns:
             if np.issubdtype(processed_df[col].dtype, np.number):
-                if col in ["Code", "ExchMnem", "sector", "Name", "country"]:
+                if col in ["Code", "market", "sector", "Name", "country"]:
                     continue
 
                 original_ints = original_df[col].fillna(0).astype(float).apply(safe_int)
@@ -271,32 +269,32 @@ class FactorUtils:
 
         notifier.notify_info("팩터 정수 부분 불일치 검증 완료")
 
-    def convert_unit_and_value(
-        self, market_filter: MarketEnum, value: float, unit: str, small_price: bool = False
-    ) -> tuple[float, str]:
-        if unit.lower() == "price":
-            nation = "kr" if market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ] else "us"
+    def convert_unit_and_value(self, market_filter: MarketEnum, value: float, unit: str) -> tuple[float, str]:
+        nation = "kr" if market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ] else "us"
 
+        if unit.lower() == "big_price":
             if nation == "kr":
-                if small_price:
-                    return value, "원"
                 if value >= 10000:  # 1조원 이상
                     return value / 10000, "조원"
                 return value, "억원"
             else:  # US
-                if small_price:
-                    return value, "$"
                 # 1T = 1000B = 1000조원
                 if value >= 1000000000:  # 1000조원 이상
-                    return value / 1000000000, "$T"
+                    return value / 1000000000, "T$"
                 # 1B = 1조원
                 elif value >= 1000000:  # 1조원 이상
-                    return value / 1000000, "$B"
+                    return value / 1000000, "B$"
                 # 1M = 10억원
                 elif value >= 1000:  # 10억원 이상
-                    return value / 1000, "$M"
+                    return value / 1000, "M$"
                 # 1K = 100만원
-                return value, "$K"
+                return value, "K$"
+
+        if unit.lower() == "small_price":
+            if nation == "kr":
+                return value, "원"
+            else:
+                return value, "$"
 
         return value, UNIT_MAP.get(unit.lower(), "")
 

@@ -53,8 +53,8 @@ class TrendingService:
                 primary_column="ticker",
                 secondary_column="ticker",
                 columns=["is_trading_stopped", "is_delisted"],
+                secondary_condition={"is_trading_stopped": 0, "is_delisted": 0},
             ),
-            **{"is_trading_stopped": 0, "is_delisted": 0},
         )
 
         return [

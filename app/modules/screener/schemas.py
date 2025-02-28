@@ -8,9 +8,9 @@ class MarketEnum(str, Enum):
     US = "us"
     KR = "kr"
     SNP500 = "S&P 500"
-    NASDAQ = "NASDAQ"
-    KOSPI = "KOSPI"
-    KOSDAQ = "KOSDAQ"
+    NASDAQ = "나스닥"
+    KOSPI = "코스피"
+    KOSDAQ = "코스닥"
 
 
 class FactorResponse(BaseModel):
