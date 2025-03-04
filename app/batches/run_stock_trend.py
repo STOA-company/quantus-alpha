@@ -75,11 +75,6 @@ def run_stock_trend_by_1d_batch(ctry: TrendingCountry, chunk_size: int = 100000)
 
         latest_tickers = [row for row in latest_date_tickers if row[0] in stock_trend_set]
 
-        latest_tickers = [
-            "LICN",
-            "CLEU",
-        ]
-
         for i in range(0, len(latest_tickers), chunk_size):
             chunk_tickers = latest_tickers[i : i + chunk_size]
             daily_data = []
