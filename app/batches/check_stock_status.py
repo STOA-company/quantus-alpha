@@ -31,10 +31,11 @@ def _collect_domestic_stock_status():
 
                 if status.get("is_trading_stopped", False):
                     logging.info(f"국내 주식 {ticker} 거래 정지: {status.get('name', '')}")
+                    database._update(table="stock_information", sets={"is_trading_stopped": 1}, ticker=ticker)
 
                 if status.get("is_delisted", False):
                     logging.info(f"국내 주식 {ticker} 상장 폐지: {status.get('name', '')}")
-
+                    database._update(table="stock_information", sets={"is_delisted": 1}, ticker=ticker)
             except Exception as e:
                 logging.error(f"국내 주식 {ticker} 상태 확인 중 오류: {e}")
 
@@ -124,3 +125,7 @@ def check_warned_stock_us_batch():
     )
     tickers = [stock[0].split("-")[0] for stock in stocks]
     database._update(table="stock_information", sets={"is_warned": 1}, ticker__in=tickers)
+
+
+if __name__ == "__main__":
+    _collect_domestic_stock_status()

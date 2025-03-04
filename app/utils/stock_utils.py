@@ -5,7 +5,6 @@ import logging
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
-from app.utils.date_utils import check_market_status
 
 logger = logging.getLogger(__name__)
 
@@ -87,100 +86,41 @@ class StockUtils:
                     results[ticker] = False
         return results
 
-    def update_stock_trend(self, tickers: list[str]):
-        if not check_market_status(self.nation.upper()):
-            # 장 중에만 실행
-            return
-
-        try:
-            all_data = self.db._select(
-                table=f"stock_{self.nation}_1d",
-                columns=["Ticker", "Date", "Close", "Volume", "Open", "High", "Low"],
-                Ticker__in=tickers,
-                order="Date",
-                ascending=False,
-            )
-
-            df = pd.DataFrame(all_data, columns=["Ticker", "Date", "Close", "Volume", "Open", "High", "Low"])
-            df["volume_change"] = (df["Open"] + df["High"] + df["Low"] + df["Close"]) / 4 * df["Volume"]
-
-            update_data = []
-            for ticker in tickers:
-                ticker_data = df[df["Ticker"] == ticker].copy()
-                if len(ticker_data) < 2:
-                    continue
-
-                one_day_ago = ticker_data.iloc[0]
-                two_days_ago = ticker_data.iloc[1]
-
-                update_dict = {
-                    "ticker": ticker,
-                    "last_updated": pd.to_datetime(one_day_ago["Date"]),
-                    "current_price": float(one_day_ago["Close"]),
-                    "prev_close": float(two_days_ago["Close"]),
-                    "change_rt": float(((one_day_ago["Close"] - two_days_ago["Close"]) / two_days_ago["Close"] * 100)),
-                    "change_1d": float(((one_day_ago["Close"] - two_days_ago["Close"]) / two_days_ago["Close"] * 100)),
-                    "volume_rt": float(one_day_ago["Volume"]),
-                    "volume_1d": float(two_days_ago["Volume"]),
-                    "volume_change_rt": float(one_day_ago["volume_change"]),
-                    "volume_change_1d": float(two_days_ago["volume_change"]),
-                }
-
-                periods = {
-                    "1w": 5,
-                    "1m": 20,
-                    "6m": 120,
-                    "1y": 240,
-                }
-
-                for period, days in periods.items():
-                    period_data = ticker_data.head(min(days + 1, len(ticker_data)))
-                    if len(period_data) > 1:
-                        start_price = period_data.iloc[-1]["Close"]
-                        update_dict[f"change_{period}"] = float(
-                            ((one_day_ago["Close"] - start_price) / start_price * 100)
-                        )
-                        update_dict[f"volume_{period}"] = float(period_data["Volume"].sum())
-                        update_dict[f"volume_change_{period}"] = float(period_data["volume_change"].sum())
-                    else:
-                        update_dict[f"change_{period}"] = None
-                        update_dict[f"volume_{period}"] = None
-                        update_dict[f"volume_change_{period}"] = None
-
-                update_data.append(update_dict)
-
-            if update_data:
-                self.db._bulk_update(table="stock_trend", data=update_data, key_column="ticker")
-
-        except Exception as e:
-            logger.error(f"Error in update_stock_trend: {str(e)}")
-            raise e
-
     def update_prev_close(self, tickers: list[str]):
-        latest_date = self.db._select(
+        stock_data = self.db._select(
             table=f"stock_{self.nation}_1d",
-            columns=["Date"],
+            columns=["Date", "Ticker", "Close"],
+            Ticker__in=tickers,
             order="Date",
             ascending=False,
-            limit=1,
-        )[0][0]
-        prev_close = self.db._select(
-            table=f"stock_{self.nation}_1d",
-            columns=["Ticker", "Close"],
-            Ticker__in=tickers,
-            Date=latest_date,
         )
-        prev_close_data = [{"ticker": row[0], "prev_close": row[1]} for row in prev_close]
-        self.db._bulk_update(table="stock_trend", data=prev_close_data, key_column="ticker")
 
-    def update_multiple_tickers(self, tickers: list[str], max_workers: int = 5):
-        results = self.update_time_series_data_parallel(tickers, max_workers)
+        latest_date = stock_data[0][0] if stock_data else None
+        if not latest_date:
+            return
 
-        successful_tickers = [ticker for ticker, success in results.items() if success]
-        if successful_tickers:
-            self.update_stock_trend(successful_tickers)
+        ticker_to_close = {row[1]: row[2] for row in stock_data if row[0] == latest_date}
 
-        return results
+        current_prices = self.db._select(
+            table="stock_trend",
+            columns=["ticker", "current_price"],
+            ticker__in=tickers,
+            last_updated=latest_date,
+        )
+
+        # 티커별 현재 가격 딕셔너리
+        ticker_to_current = {row[0]: row[1] for row in current_prices}
+
+        prev_close_data = []
+        for ticker in tickers:
+            if ticker in ticker_to_close and ticker in ticker_to_current:
+                prev_close = ticker_to_close[ticker]
+                current_price = ticker_to_current[ticker]
+                change_rt = (current_price - prev_close) / prev_close * 100 if prev_close else 0
+                prev_close_data.append({"ticker": ticker, "change_rt": change_rt, "prev_close": prev_close})
+
+        if prev_close_data:
+            self.db._bulk_update(table="stock_trend", data=prev_close_data, key_column="ticker")
 
     def update_top_gainers(self):
         tickers = []
