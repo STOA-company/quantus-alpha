@@ -356,7 +356,7 @@ class ScreenerService:
                 column_set = self.database._select(table="screener_column_sets", columns=["id"], id=id)
                 columns = self.database._select(table="screener_columns", columns=["factor"], column_set_id=column_set.id)
             else:
-                columns = DEFAULT_SCREENER_COLUMNS
+                columns = [FACTOR_MAP.get(column, column) for column in DEFAULT_SCREENER_COLUMNS]
             return [column for column in columns]
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
