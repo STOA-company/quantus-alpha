@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from app.cache.factors import factors_cache
 from app.utils.test_utils import time_it
+from app.common.constants import NON_NUMERIC_COLUMNS
 
 
 @time_it
@@ -9,15 +10,13 @@ def calculate_factor_score_with_description(df: pd.DataFrame) -> pd.DataFrame:
     df_copy = df.copy()
     columns = df.columns.tolist()
 
-    non_numeric_columns = ["Code", "Name", "country", "market", "sector"]
-    numeric_columns = [col for col in columns if col not in non_numeric_columns]
+    numeric_columns = [col for col in columns if col not in NON_NUMERIC_COLUMNS]
 
     for col in numeric_columns:
         df_copy[col] = df_copy[col].fillna(df_copy[col].median())
 
     n_rows = len(df_copy)
 
-    # 각 팩터별 순위를 저장할 배열
     factor_ranks = np.ones((n_rows, 0))
     descriptions = np.empty((n_rows, len(numeric_columns)), dtype=object)
 
@@ -39,7 +38,6 @@ def calculate_factor_score_with_description(df: pd.DataFrame) -> pd.DataFrame:
             if max_val is not None:
                 ranks = ranks.mask(series > max_val, n_rows)
 
-        # 팩터별 순위를 2D 배열에 추가
         factor_ranks = np.column_stack((factor_ranks, ranks.values))
 
         for i in range(n_rows):
@@ -102,8 +100,7 @@ def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
     columns = df.columns.tolist()
 
     # 비수치 컬럼 사전 필터링
-    non_numeric_columns = ["Code", "Name", "country", "market", "sector"]
-    numeric_columns = [col for col in columns if col not in non_numeric_columns]
+    numeric_columns = [col for col in columns if col not in NON_NUMERIC_COLUMNS]
 
     # 한 번에 모든 NaN 값을 중앙값으로 채움
     for col in numeric_columns:
