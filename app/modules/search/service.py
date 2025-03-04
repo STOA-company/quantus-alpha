@@ -41,6 +41,7 @@ class SearchService:
                 {"en_name__like": search_term},
             ],
             is_activate=1,
+            is_delisted=0,
         )
 
         logger.warning(f"Initial search result for AA: {search_result}")
