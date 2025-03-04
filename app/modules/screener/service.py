@@ -8,7 +8,7 @@ import numpy as np
 from app.models.models_factors import CategoryEnum
 from app.modules.screener.schemas import MarketEnum
 from app.utils.factor_utils import factor_utils
-from app.common.constants import FACTOR_MAP
+from app.common.constants import FACTOR_MAP, DEFAULT_SCREENER_COLUMNS
 
 logger = logging.getLogger(__name__)
 
@@ -356,7 +356,7 @@ class ScreenerService:
                 column_set = self.database._select(table="screener_column_sets", columns=["id"], id=id)
                 columns = self.database._select(table="screener_columns", columns=["factor"], column_set_id=column_set.id)
             else:
-                raise ValueError("Invalid category or id")
+                columns = DEFAULT_SCREENER_COLUMNS
             return [column for column in columns]
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
