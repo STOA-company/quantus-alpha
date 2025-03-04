@@ -8,6 +8,7 @@ import numpy as np
 from app.models.models_factors import CategoryEnum
 from app.modules.screener.schemas import MarketEnum
 from app.utils.factor_utils import factor_utils
+from app.enum.type import StockType
 from app.common.constants import FACTOR_MAP, DEFAULT_SCREENER_COLUMNS
 
 logger = logging.getLogger(__name__)
@@ -175,75 +176,92 @@ class ScreenerService:
             logger.error(f"Error in get_filtered_stocks: {e}")
             raise e
 
-    def create_filter_group(
+    def create_group(
         self,
         user_id: int,
         name: str,
+        type: StockType,
         market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
+        factor_filters: Optional[List[str]] = None,
     ) -> bool:
         try:
-            last_filter = self.database._select(
-                table="screener_filter_groups", user_id=user_id, order="order", ascending=False
-            )
-            if last_filter:
-                order = last_filter[0].order + 1
+            last_group = self.database._select(table="screener_groups", user_id=user_id, order="order", ascending=False)
+            if last_group:
+                order = last_group[0].order + 1
             else:
                 order = 1
-            self.database._insert(table="screener_filter_groups", sets={"user_id": user_id, "name": name, "order": order})
-            filter_group_id = self.database._select(table="screener_filter_groups", user_id=user_id, name=name)[0].id
+
+            self.database._insert(
+                table="screener_groups", sets={"user_id": user_id, "name": name, "order": order, "type": type}
+            )
+
+            group_id = self.database._select(table="screener_groups", user_id=user_id, name=name)[0].id
+
+            # 종목 필터
             if market_filter:
                 self.database._insert(
-                    table="screener_filter_conditions",
-                    sets={"filter_group_id": filter_group_id, "factor": "market", "value": market_filter},
+                    table="screener_stock_filters",
+                    sets={"group_id": group_id, "factor": "market", "value": market_filter},
                 )
 
             if sector_filter:
                 for sector in sector_filter:
                     self.database._insert(
-                        table="screener_filter_conditions",
-                        sets={"filter_group_id": filter_group_id, "factor": "sector", "value": sector},
+                        table="screener_stock_filters",
+                        sets={"group_id": group_id, "factor": "sector", "value": sector},
                     )
 
             if custom_filters:
                 for condition in custom_filters:
                     self.database._insert(
-                        table="screener_filter_conditions",
+                        table="screener_stock_filters",
                         sets={
-                            "filter_group_id": filter_group_id,
+                            "group_id": group_id,
                             "factor": condition.factor,
                             "above": condition.above,
                             "below": condition.below,
                         },
                     )
 
+            # 팩터 필터
+            if factor_filters:
+                for idx, factor in enumerate(factor_filters):
+                    self.database._insert(
+                        table="screener_factor_filters",
+                        sets={"group_id": group_id, "factor": factor, "order": idx + 1},
+                    )
+
             return True
 
         except Exception as e:
-            logger.error(f"Error in create_filter: {e}")
+            logger.error(f"Error in create_group: {e}")
             raise e
 
-    def update_filter_group(
+    def update_group(
         self,
-        filter_group_id: int,
+        group_id: int,
         name: str,
         market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
+        factor_filters: Optional[List[str]] = None,
     ) -> bool:
         try:
             if name:
-                self.database._update(table="screener_filter_groups", id=filter_group_id, sets={"name": name})
+                self.database._update(table="screener_groups", id=group_id, sets={"name": name})
 
-            self.database._delete(table="screener_filter_conditions", filter_group_id=filter_group_id)
+            # 종목 필터
+            if custom_filters or market_filter or sector_filter:
+                self.database._delete(table="screener_stock_filters", group_id=group_id)
 
             if custom_filters:
                 for condition in custom_filters:
                     self.database._insert(
-                        table="screener_filter_conditions",
+                        table="screener_stock_filters",
                         sets={
-                            "filter_group_id": filter_group_id,
+                            "group_id": group_id,
                             "factor": condition.factor,
                             "above": condition.above,
                             "below": condition.below,
@@ -254,7 +272,7 @@ class ScreenerService:
                 self.database._insert(
                     table="screener_filter_conditions",
                     sets={
-                        "filter_group_id": filter_group_id,
+                        "group_id": group_id,
                         "factor": "market",
                         "value": market_filter,
                     },
@@ -265,87 +283,69 @@ class ScreenerService:
                     self.database._insert(
                         table="screener_filter_conditions",
                         sets={
-                            "filter_group_id": filter_group_id,
+                            "group_id": group_id,
                             "factor": "sector",
                             "value": sector,
                         },
                     )
 
+            # 팩터 필터
+            if factor_filters:
+                self.database._delete(table="screener_factor_filters", group_id=group_id)
+                for idx, factor in enumerate(factor_filters):
+                    self.database._insert(
+                        table="screener_factor_filters",
+                        sets={"group_id": group_id, "factor": factor, "order": idx + 1},
+                    )
+
             return True
         except Exception as e:
-            logger.error(f"Error in update_filter: {e}")
+            logger.error(f"Error in update_group: {e}")
             raise e
 
-    def delete_filter_group(self, filter_group_id: int) -> bool:
+    def delete_group(self, group_id: int) -> bool:
         try:
-            self.database._delete(table="screener_filter_groups", id=filter_group_id)
+            self.database._delete(table="screener_groups", id=group_id)  # CASCADE
             return True
         except Exception as e:
-            logger.error(f"Error in delete_filter: {e}")
+            logger.error(f"Error in delete_group: {e}")
             raise e
 
-    def get_saved_filter_groups(self, user_id: str) -> List[Dict]:
+    def get_groups(self, user_id: str) -> List[Dict]:
         try:
-            filters = self.database._select(
-                table="screener_filter_groups", user_id=user_id, order="order", ascending=True
-            )
-            return filters
+            groups = self.database._select(table="screener_groups", user_id=user_id, order="order", ascending=True)
+            return [{"id": group.id, "name": group.name} for group in groups]
         except Exception as e:
-            logger.error(f"Error in get_saved_filter_groups: {e}")
+            logger.error(f"Error in get_groups: {e}")
             raise e
 
-    def reorder_filter_groups(self, filter_groups: List[int]) -> bool:
+    def get_group_filters(self, group_id: int) -> Dict:
         try:
-            for index, filter_group_id in enumerate(filter_groups):
-                self.database._update(table="screener_filter_groups", id=filter_group_id, order=index + 1)
+            stock_filters = self.database._select(table="screener_stock_filters", group_id=group_id)
+            factor_filters = self.database._select(table="screener_factor_filters", group_id=group_id)
+            return {
+                "stock_filters": [
+                    {
+                        "factor": stock_filter.factor,
+                        "value": stock_filter.value if stock_filter.value else None,
+                        "above": stock_filter.above if stock_filter.above else None,
+                        "below": stock_filter.below if stock_filter.below else None,
+                    }
+                    for stock_filter in stock_filters
+                ],
+                "factor_filters": [factor_filter.factor for factor_filter in factor_filters],
+            }
+        except Exception as e:
+            logger.error(f"Error in get_group_filters: {e}")
+            raise e
+
+    def reorder_groups(self, groups: List[int]) -> bool:
+        try:
+            for index, group_id in enumerate(groups):
+                self.database._update(table="screener_groups", id=group_id, order=index + 1)
             return True
         except Exception as e:
-            logger.error(f"Error in reorder_filters: {e}")
-            raise e
-
-    def get_column_sets(self, user_id: str) -> List[Dict]:
-        try:
-            column_sets = self.database._select(table="screener_column_sets", user_id=user_id)
-            return [
-                {
-                    "id": column_set.id,
-                    "name": column_set.name,
-                    "columns": [column.factor for column in column_set.columns],
-                }
-                for column_set in column_sets
-            ]
-        except Exception as e:
-            logger.error(f"Error in get_column_sets: {e}")
-            raise e
-
-    def create_column_set(self, user_id: str, name: str, columns: List[str]) -> bool:
-        try:
-            self.database._insert(table="screener_column_sets", sets={"user_id": user_id, "name": name})
-            column_set_id = self.database._select(table="screener_column_sets", user_id=user_id, name=name)[0].id
-            for column in columns:
-                self.database._insert(table="screener_columns", sets={"column_set_id": column_set_id, "factor": column})
-            return True
-        except Exception as e:
-            logger.error(f"Error in create_column_set: {e}")
-            raise e
-
-    def update_column_set(self, column_set_id: int, name: str, columns: List[str]) -> bool:
-        try:
-            self.database._update(table="screener_column_sets", id=column_set_id, sets={"name": name})
-            self.database._delete(table="screener_columns", column_set_id=column_set_id)
-            for column in columns:
-                self.database._insert(table="screener_columns", sets={"column_set_id": column_set_id, "factor": column})
-            return True
-        except Exception as e:
-            logger.error(f"Error in update_column_set: {e}")
-            raise e
-
-    def delete_column_set(self, column_set_id: int) -> bool:
-        try:
-            self.database._delete(table="screener_column_sets", column_set_id=column_set_id)
-            return True
-        except Exception as e:
-            logger.error(f"Error in delete_column_set: {e}")
+            logger.error(f"Error in reorder_groups: {e}")
             raise e
 
     def get_columns(self, category: Optional[CategoryEnum] = None, id: Optional[int] = None) -> List[str]:
@@ -356,7 +356,7 @@ class ScreenerService:
                 column_set = self.database._select(table="screener_column_sets", columns=["id"], id=id)
                 columns = self.database._select(table="screener_columns", columns=["factor"], column_set_id=column_set.id)
             else:
-                columns = [FACTOR_MAP.get(column, column) for column in DEFAULT_SCREENER_COLUMNS]
+                columns = DEFAULT_SCREENER_COLUMNS
             return [column for column in columns]
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
