@@ -29,6 +29,7 @@ from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_sta
 
 from app.utils.date_utils import check_market_status, is_business_day
 from app.utils.stock_utils import kr_stock_utils, us_stock_utils
+from app.utils.factor_utils import factor_utils
 
 notifier = SlackNotifier()
 logger = logging.getLogger(__name__)
@@ -491,6 +492,30 @@ def update_kr_top_losers():
         notifier.notify_success("update_kr_top_losers process completed")
     except Exception as e:
         notifier.notify_error(f"update_kr_top_losers process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="update_us_stock_parquet", ignore_result=True)
+def update_us_stock_parquet():
+    """미국 주식 파일 업데이트"""
+    notifier.notify_info("update_us_stock_parquet process started")
+    try:
+        factor_utils.process_us_factor_data()
+        notifier.notify_success("update_us_stock_parquet process completed")
+    except Exception as e:
+        notifier.notify_error(f"update_us_stock_parquet process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="update_kr_stock_parquet", ignore_result=True)
+def update_kr_stock_parquet():
+    """한국 주식 파일 업데이트"""
+    notifier.notify_info("update_kr_stock_parquet process started")
+    try:
+        factor_utils.process_kr_factor_data()
+        notifier.notify_success("update_kr_stock_parquet process completed")
+    except Exception as e:
+        notifier.notify_error(f"update_kr_stock_parquet process failed: {str(e)}")
         raise
 
 
