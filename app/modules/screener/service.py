@@ -9,7 +9,7 @@ from app.models.models_factors import CategoryEnum
 from app.modules.screener.schemas import MarketEnum
 from app.utils.factor_utils import factor_utils
 from app.enum.type import StockType
-from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, DEFAULT_COLUMNS
+from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, DEFAULT_COLUMNS, REVERSE_FACTOR_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -209,14 +209,14 @@ class ScreenerService:
             if market_filter:
                 self.database._insert(
                     table="screener_stock_filters",
-                    sets={"group_id": group_id, "factor": "market", "value": market_filter},
+                    sets={"group_id": group_id, "factor": FACTOR_MAP["market"], "value": market_filter},
                 )
 
             if sector_filter:
                 for sector in sector_filter:
                     self.database._insert(
                         table="screener_stock_filters",
-                        sets={"group_id": group_id, "factor": "sector", "value": sector},
+                        sets={"group_id": group_id, "factor": FACTOR_MAP["sector"], "value": sector},
                     )
 
             if custom_filters:
@@ -225,7 +225,7 @@ class ScreenerService:
                         table="screener_stock_filters",
                         sets={
                             "group_id": group_id,
-                            "factor": condition.factor,
+                            "factor": REVERSE_FACTOR_MAP[condition.factor],
                             "above": condition.above,
                             "below": condition.below,
                         },
@@ -236,7 +236,7 @@ class ScreenerService:
                 for idx, factor in enumerate(factor_filters):
                     self.database._insert(
                         table="screener_factor_filters",
-                        sets={"group_id": group_id, "factor": factor, "order": idx + 1},
+                        sets={"group_id": group_id, "factor": REVERSE_FACTOR_MAP[factor], "order": idx + 1},
                     )
 
             return True
@@ -268,7 +268,7 @@ class ScreenerService:
                         table="screener_stock_filters",
                         sets={
                             "group_id": group_id,
-                            "factor": condition.factor,
+                            "factor": REVERSE_FACTOR_MAP[condition.factor],
                             "above": condition.above,
                             "below": condition.below,
                         },
@@ -279,7 +279,7 @@ class ScreenerService:
                     table="screener_stock_filters",
                     sets={
                         "group_id": group_id,
-                        "factor": "market",
+                        "factor": FACTOR_MAP["market"],
                         "value": market_filter,
                     },
                 )
@@ -290,7 +290,7 @@ class ScreenerService:
                         table="screener_stock_filters",
                         sets={
                             "group_id": group_id,
-                            "factor": "sector",
+                            "factor": FACTOR_MAP["sector"],
                             "value": sector,
                         },
                     )
@@ -301,7 +301,7 @@ class ScreenerService:
                 for idx, factor in enumerate(factor_filters):
                     self.database._insert(
                         table="screener_factor_filters",
-                        sets={"group_id": group_id, "factor": factor, "order": idx + 1},
+                        sets={"group_id": group_id, "factor": REVERSE_FACTOR_MAP[factor], "order": idx + 1},
                     )
 
             return True
@@ -339,14 +339,14 @@ class ScreenerService:
             return {
                 "stock_filters": [
                     {
-                        "factor": stock_filter.factor,
+                        "factor": FACTOR_MAP[stock_filter.factor],
                         "value": stock_filter.value if stock_filter.value else None,
                         "above": stock_filter.above if stock_filter.above else None,
                         "below": stock_filter.below if stock_filter.below else None,
                     }
                     for stock_filter in stock_filters
                 ],
-                "factor_filters": [factor_filter.factor for factor_filter in factor_filters],
+                "factor_filters": [FACTOR_MAP[factor_filter.factor] for factor_filter in factor_filters],
             }
         except Exception as e:
             logger.error(f"Error in get_group_filters: {e}")
@@ -361,19 +361,21 @@ class ScreenerService:
             logger.error(f"Error in reorder_groups: {e}")
             raise e
 
-    def get_columns(self, category: Optional[CategoryEnum] = None, id: Optional[int] = None) -> List[str]:
+    def get_columns(self, category: CategoryEnum, group_id: Optional[int] = None) -> List[str]:
         try:
-            if category:
-                columns = factor_utils.get_columns(category)
-            elif id:
-                group = self.database._select(table="screener_groups", columns=["id"], id=id)[0]
+            if category == CategoryEnum.CUSTOM:
+                if not group_id:
+                    raise ValueError("GroupId is required for custom category")
+                group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
                 factor_filters = self.database._select(
                     table="screener_factor_filters", columns=["factor"], group_id=group.id
                 )
+                factor_filters = [factor_filter.factor for factor_filter in factor_filters]
 
-                columns = [factor_filter[0] for factor_filter in factor_filters]
             else:
-                raise ValueError("Category or GroupId is required")
+                factor_filters = factor_utils.get_columns(category)
+
+            columns = [factor_filter for factor_filter in factor_filters]
 
             result = DEFAULT_COLUMNS + columns
             return [FACTOR_MAP[column] for column in result]

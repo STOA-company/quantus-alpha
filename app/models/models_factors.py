@@ -8,6 +8,7 @@ class CategoryEnum(str, Enum):
     TECHNICAL = "technical"
     FUNDAMENTAL = "fundamental"
     VALUATION = "valuation"
+    CUSTOM = "custom"
 
 
 class SortDirectionEnum(str, Enum):

@@ -313,12 +313,12 @@ def get_group_filters(group_id: int):
 
 
 @router.get("/columns", response_model=ColumnsResponse)
-def get_columns(category: Optional[CategoryEnum] = None, id: Optional[int] = None):
+def get_columns(category: CategoryEnum, group_id: Optional[int] = None):
     """
     컬럼 목록 조회
     """
     try:
-        columns = screener_service.get_columns(category, id)
+        columns = screener_service.get_columns(category, group_id)
         return ColumnsResponse(columns=columns)
     except Exception as e:
         logger.error(f"Error getting columns: {e}")
