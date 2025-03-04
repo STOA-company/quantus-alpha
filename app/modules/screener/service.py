@@ -180,7 +180,7 @@ class ScreenerService:
         self,
         user_id: int,
         name: str,
-        type: StockType,
+        type: Optional[StockType] = StockType.STOCK,
         market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
@@ -270,7 +270,7 @@ class ScreenerService:
 
             if market_filter:
                 self.database._insert(
-                    table="screener_filter_conditions",
+                    table="screener_stock_filters",
                     sets={
                         "group_id": group_id,
                         "factor": "market",
@@ -281,7 +281,7 @@ class ScreenerService:
             if sector_filter:
                 for sector in sector_filter:
                     self.database._insert(
-                        table="screener_filter_conditions",
+                        table="screener_stock_filters",
                         sets={
                             "group_id": group_id,
                             "factor": "sector",
@@ -314,7 +314,14 @@ class ScreenerService:
     def get_groups(self, user_id: str) -> List[Dict]:
         try:
             groups = self.database._select(table="screener_groups", user_id=user_id, order="order", ascending=True)
-            return [{"id": group.id, "name": group.name} for group in groups]
+            return [
+                {
+                    "id": group.id,
+                    "name": group.name,
+                    "type": group.type,
+                }
+                for group in groups
+            ]
         except Exception as e:
             logger.error(f"Error in get_groups: {e}")
             raise e

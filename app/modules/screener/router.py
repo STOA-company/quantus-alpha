@@ -4,10 +4,10 @@ import io
 from app.modules.screener.service import screener_service
 from app.modules.screener.schemas import (
     FactorResponse,
-    FilterGroup,
+    GroupMetaData,
     FilteredStocks,
-    ColumnSet,
     ColumnsResponse,
+    GroupFilter,
 )
 import logging
 from app.utils.oauth_utils import get_current_user
@@ -192,127 +192,82 @@ def download_filtered_stocks(filtered_stocks: FilteredStocks):
     )
 
 
-@router.get("/filter-groups", response_model=List[Dict])
-def get_filter_groups(current_user: str = Depends(get_current_user)):
+@router.get("/groups", response_model=List[GroupMetaData])
+def get_groups(current_user: str = Depends(get_current_user)):
     """
     저장된 필터 목록 조회
     """
     try:
-        filters = screener_service.get_saved_filter_groups(current_user.id)
-        return filters
+        groups = screener_service.get_groups(current_user.id)
+        return [GroupMetaData(id=group["id"], name=group["name"], type=group["type"]) for group in groups]
     except Exception as e:
-        logger.error(f"Error getting saved filters: {e}")
+        logger.error(f"Error getting groups: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/filter-groups", response_model=Dict)
-def create_or_update_filter_group(filter_group: FilterGroup, current_user: str = Depends(get_current_user)):
+@router.post("/groups", response_model=Dict)
+def create_or_update_group(group_filter: GroupFilter, current_user: str = Depends(get_current_user)):
     """
     필터 생성 또는 업데이트
     """
     try:
-        if filter_group.id:
-            is_success = screener_service.update_filter_group(
-                filter_group.id,
-                filter_group.name,
-                filter_group.market_filter,
-                filter_group.sector_filter,
-                filter_group.custom_filters,
+        if group_filter.id:
+            is_success = screener_service.update_group(
+                group_id=group_filter.id,
+                name=group_filter.name,
+                market_filter=group_filter.market_filter,
+                sector_filter=group_filter.sector_filter,
+                custom_filters=group_filter.custom_filters,
+                factor_filters=group_filter.factor_filters,
             )
             message = "Filter updated successfully"
         else:
-            is_success = screener_service.create_filter_group(
-                current_user.id,
-                filter_group.name,
-                filter_group.market_filter,
-                filter_group.sector_filter,
-                filter_group.custom_filters,
+            is_success = screener_service.create_group(
+                user_id=current_user.id,
+                name=group_filter.name,
+                market_filter=group_filter.market_filter,
+                sector_filter=group_filter.sector_filter,
+                custom_filters=group_filter.custom_filters,
+                factor_filters=group_filter.factor_filters,
             )
-            message = "Filter created successfully"
+            message = "Group created successfully"
         if is_success:
             return {"message": message}
     except Exception as e:
-        logger.error(f"Error creating filter: {e}")
+        logger.error(f"Error creating group: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/filter-groups/{filter_group_id}", response_model=Dict)
-def delete_filter_group(filter_group_id: int):
+@router.delete("/groups/{group_id}", response_model=Dict)
+def delete_group(group_id: int):
     """
     필터 삭제
     """
     try:
-        is_success = screener_service.delete_filter_group(filter_group_id)
+        is_success = screener_service.delete_group(group_id)
         if is_success:
-            return {"message": "Filter deleted successfully"}
+            return {"message": "Group deleted successfully"}
         else:
             raise HTTPException(status_code=500, detail="Failed to delete filter")
     except Exception as e:
-        logger.error(f"Error deleting filter: {e}")
+        logger.error(f"Error deleting group: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/filter-groups/reorder", response_model=Dict)
-def reorder_filter_groups(filter_groups: List[int]):
+@router.post("/groups/reorder", response_model=Dict)
+def reorder_groups(groups: List[int]):
     """
     필터 순서 업데이트
     """
     try:
-        is_success = screener_service.reorder_filter_groups(filter_groups)
+        is_success = screener_service.reorder_groups(groups)
         if is_success:
-            return {"message": "Filter reordered successfully"}
+            return {"message": "Group reordered successfully"}
         else:
-            raise HTTPException(status_code=500, detail="Failed to reorder filters")
+            raise HTTPException(status_code=500, detail="Failed to reorder groups")
     except Exception as e:
-        logger.error(f"Error reordering filters: {e}")
+        logger.error(f"Error reordering groups: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/column-sets", response_model=Dict)
-def create_or_update_column_set(column_set: ColumnSet, current_user: str = Depends(get_current_user)):
-    """
-    컬럼 세트 생성 또는 업데이트
-    """
-    try:
-        if column_set.id:
-            is_success = screener_service.update_column_set(column_set.id, column_set.name, column_set.columns)
-            message = "Column updated successfully"
-        else:
-            is_success = screener_service.create_column_set(current_user.id, column_set.name, column_set.columns)
-            message = "Column created successfully"
-        if is_success:
-            return {"message": message}
-    except Exception as e:
-        logger.error(f"Error creating column: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/column-sets", response_model=List[ColumnSet])
-def get_column_sets(current_user: str = Depends(get_current_user)):
-    """
-    컬럼 세트 조회
-    """
-    try:
-        columns = screener_service.get_column_sets(current_user.id)
-        return [ColumnSet(id=column["id"], name=column["name"], columns=column["columns"]) for column in columns]
-    except Exception as e:
-        logger.error(f"Error getting columns: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.delete("/column-sets/{column_set_id}", response_model=Dict)
-def delete_column_set(column_set_id: int):
-    """
-    컬럼 세트 삭제
-    """
-    try:
-        is_success = screener_service.delete_column_set(column_set_id)
-        if is_success:
-            return {"message": "Column deleted successfully"}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to delete column")
-    except Exception as e:
-        logger.error(f"Error deleting column: {e}")
 
 
 @router.get("/columns", response_model=ColumnsResponse)
