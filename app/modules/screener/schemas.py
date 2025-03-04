@@ -36,12 +36,13 @@ class FilterCondition(BaseModel):
 class GroupMetaData(BaseModel):
     id: int
     name: str
-    type: StockType
+    type: Optional[StockType] = StockType.STOCK
 
 
 class GroupFilter(BaseModel):
     id: Optional[int] = None
     name: Optional[str] = None
+    type: Optional[StockType] = StockType.STOCK
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
