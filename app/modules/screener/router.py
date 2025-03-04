@@ -286,16 +286,14 @@ def get_group_filters(group_id: int):
         stock_filters = group_filters["stock_filters"]
 
         market_filter = None
-        sector_filter = None
-
+        sector_filter = []
         custom_filters = []
+
         for stock_filter in stock_filters:
             if stock_filter["factor"] == "시장":
                 market_filter = stock_filter["value"]
-                stock_filters.remove(stock_filter)
             elif stock_filter["factor"] == "산업":
-                sector_filter = stock_filter["value"]
-                stock_filters.remove(stock_filter)
+                sector_filter.append(stock_filter["value"])
             else:
                 custom_filters.append(stock_filter)
 
