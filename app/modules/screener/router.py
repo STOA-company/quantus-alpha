@@ -234,6 +234,7 @@ def create_or_update_group(group_filter: GroupFilter, current_user: str = Depend
                 sector_filter=group_filter.sector_filter,
                 custom_filters=group_filter.custom_filters,
                 factor_filters=group_filter.factor_filters,
+                type=group_filter.type,
             )
             message = "Group created successfully"
         if is_success:
@@ -272,6 +273,42 @@ def reorder_groups(groups: List[int]):
             raise HTTPException(status_code=500, detail="Failed to reorder groups")
     except Exception as e:
         logger.error(f"Error reordering groups: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/groups/{group_id}", response_model=GroupFilter)
+def get_group_filters(group_id: int):
+    """
+    필터 목록 조회
+    """
+    try:
+        group_filters = screener_service.get_group_filters(group_id)
+        stock_filters = group_filters["stock_filters"]
+
+        market_filter = None
+        sector_filter = None
+
+        custom_filters = []
+        for stock_filter in stock_filters:
+            if stock_filter["factor"] == "시장":
+                market_filter = stock_filter["value"]
+                stock_filters.remove(stock_filter)
+            elif stock_filter["factor"] == "산업":
+                sector_filter = stock_filter["value"]
+                stock_filters.remove(stock_filter)
+            else:
+                custom_filters.append(stock_filter)
+
+        factor_filters = group_filters["factor_filters"]
+        return GroupFilter(
+            id=group_id,
+            market_filter=market_filter,
+            sector_filter=sector_filter,
+            custom_filters=custom_filters,
+            factor_filters=factor_filters,
+        )
+    except Exception as e:
+        logger.error(f"Error getting group filters: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
