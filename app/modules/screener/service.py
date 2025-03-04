@@ -371,15 +371,14 @@ class ScreenerService:
                     table="screener_factor_filters", columns=["factor"], group_id=group.id
                 )
 
-                # 튜플에서 값 추출하여 리스트로 만들기
                 columns = [factor_filter[0] for factor_filter in factor_filters]
             else:
                 raise ValueError("Category or GroupId is required")
 
-            result = [FACTOR_MAP[column] for column in DEFAULT_COLUMNS] + columns
-            return result
+            result = DEFAULT_COLUMNS + columns
+            return [FACTOR_MAP[column] for column in result]
         except Exception as e:
-            logger.error(f"Error in get_columns: {e}", exc_info=True)  # 전체 스택 트레이스 기록
+            logger.error(f"Error in get_columns: {e}")
             raise e
 
 
