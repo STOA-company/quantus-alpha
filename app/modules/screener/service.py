@@ -209,14 +209,14 @@ class ScreenerService:
             if market_filter:
                 self.database._insert(
                     table="screener_stock_filters",
-                    sets={"group_id": group_id, "factor": FACTOR_MAP["market"], "value": market_filter},
+                    sets={"group_id": group_id, "factor": "market", "value": market_filter},
                 )
 
             if sector_filter:
                 for sector in sector_filter:
                     self.database._insert(
                         table="screener_stock_filters",
-                        sets={"group_id": group_id, "factor": FACTOR_MAP["sector"], "value": sector},
+                        sets={"group_id": group_id, "factor": "sector", "value": sector},
                     )
 
             if custom_filters:
@@ -262,24 +262,12 @@ class ScreenerService:
             if custom_filters or market_filter or sector_filter:
                 self.database._delete(table="screener_stock_filters", group_id=group_id)
 
-            if custom_filters:
-                for condition in custom_filters:
-                    self.database._insert(
-                        table="screener_stock_filters",
-                        sets={
-                            "group_id": group_id,
-                            "factor": REVERSE_FACTOR_MAP[condition.factor],
-                            "above": condition.above,
-                            "below": condition.below,
-                        },
-                    )
-
             if market_filter:
                 self.database._insert(
                     table="screener_stock_filters",
                     sets={
                         "group_id": group_id,
-                        "factor": FACTOR_MAP["market"],
+                        "factor": "market",
                         "value": market_filter,
                     },
                 )
@@ -290,8 +278,20 @@ class ScreenerService:
                         table="screener_stock_filters",
                         sets={
                             "group_id": group_id,
-                            "factor": FACTOR_MAP["sector"],
+                            "factor": "sector",
                             "value": sector,
+                        },
+                    )
+
+            if custom_filters:
+                for condition in custom_filters:
+                    self.database._insert(
+                        table="screener_stock_filters",
+                        sets={
+                            "group_id": group_id,
+                            "factor": REVERSE_FACTOR_MAP[condition.factor],
+                            "above": condition.above,
+                            "below": condition.below,
                         },
                     )
 
