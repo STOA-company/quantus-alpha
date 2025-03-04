@@ -8,7 +8,7 @@ class etf_us_1d(Base):
     __table_args__ = (PrimaryKeyConstraint("Ticker", "Date"),)
 
     Ticker: Mapped[String] = mapped_column(String(length=20), nullable=False)
-    Date: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    Date: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
     Open: Mapped[Float] = mapped_column(Float, nullable=True)
     High: Mapped[Float] = mapped_column(Float, nullable=True)
     Low: Mapped[Float] = mapped_column(Float, nullable=True)
