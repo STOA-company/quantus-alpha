@@ -141,11 +141,11 @@ CELERY_APP.conf.beat_schedule = {
     },
     "update_us_top_gainers": {
         "task": "update_us_top_gainers",
-        "schedule": crontab(hour="22, 23", minute="31"),
+        "schedule": crontab(hour="22, 23", minute="50"),
     },
     "update_us_top_losers": {
         "task": "update_us_top_losers",
-        "schedule": crontab(hour="22, 23", minute="31"),
+        "schedule": crontab(hour="22, 23", minute="50"),
     },
     "update_kr_top_gainers": {
         "task": "update_kr_top_gainers",
