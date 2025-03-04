@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-from app.common.constants import DEFAULT_SCREENER_COLUMNS, NEED_TO_MULTIPLY_100, FACTOR_MAP, UNIT_MAP, MARKET_MAP
+from app.common.constants import NEED_TO_MULTIPLY_100, FACTOR_MAP, UNIT_MAP, MARKET_MAP
 import numpy as np
 from app.cache.factors import factors_cache
 from app.core.extra.SlackNotifier import SlackNotifier
@@ -35,17 +35,11 @@ class FactorUtils:
     def get_columns(self, category: Optional[CategoryEnum] = None) -> List[str]:
         db_columns = self.db._select(table="factors", columns=["factor"], category=category)
 
-        result = []
+        result = ["market", "sector", "score"]
         for column_tuple in db_columns:
             column_name = column_tuple[0]
 
-            print(f"Extracted column name: {column_name}")
-
-            if column_name in FACTOR_MAP:
-                mapped_name = FACTOR_MAP[column_name]
-                result.append(mapped_name)
-            else:
-                result.append(column_name)
+            result.append(column_name)
 
         return result
 
@@ -221,7 +215,9 @@ class FactorUtils:
     ) -> pd.DataFrame:
         if columns is None:
             columns = []
-        required_columns = DEFAULT_SCREENER_COLUMNS + [col for col in columns if col not in DEFAULT_SCREENER_COLUMNS]
+        required_columns = columns.copy()
+        if "score" in required_columns:
+            required_columns.remove("score")
 
         df = self.get_df_from_parquet(market_filter)
         filtered_df = df[df["Code"].isin(codes)][required_columns]

@@ -9,7 +9,7 @@ from app.models.models_factors import CategoryEnum
 from app.modules.screener.schemas import MarketEnum
 from app.utils.factor_utils import factor_utils
 from app.enum.type import StockType
-from app.common.constants import FACTOR_MAP, DEFAULT_SCREENER_COLUMNS
+from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, DEFAULT_COLUMNS
 
 logger = logging.getLogger(__name__)
 
@@ -51,40 +51,46 @@ class ScreenerService:
             factors = factors_cache.get_configs()
             result = []
 
-            for _, row in sorted_df.iterrows():
-                # 기본으로 표시될 컬럼들
-                stock_data = {
-                    "Code": row["Code"],
-                    "Name": row["Name"],
-                    "market": row["market"],
-                    "sector": row["sector"],
-                    "country": row["country"],
-                }
-
-                # 숫자형 데이터 처리
+            ordered_columns = []
+            if columns:
+                for col in columns:
+                    mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
+                    if mapped_col not in ordered_columns:
+                        ordered_columns.append(mapped_col)
+            else:
                 for col in sorted_df.columns:
-                    if col in ["Code", "Name", "market", "sector", "country"]:
-                        continue
+                    if col not in ordered_columns and col != "score":
+                        ordered_columns.append(col)
 
-                    if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
-                        stock_data[col] = {"value": "", "unit": ""}
-                    else:
-                        value, unit = factor_utils.convert_unit_and_value(
-                            market_filter,
-                            float(row[col]),
-                            factors[col].get("unit", "") if col in factors else "",
-                        )
+            for _, row in sorted_df.iterrows():
+                stock_data = {}
 
-                        stock_data[col] = {"value": value, "unit": unit}
+                for col in ordered_columns:
+                    if col in NON_NUMERIC_COLUMNS:
+                        if col in row:
+                            stock_data[col] = row[col]
+                    elif col == "score":
+                        stock_data[col] = {"value": float(row[col]), "unit": ""}
+                    elif col in row:
+                        if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
+                            stock_data[col] = {"value": "", "unit": ""}
+                        else:
+                            value, unit = factor_utils.convert_unit_and_value(
+                                market_filter,
+                                float(row[col]),
+                                factors[col].get("unit", "") if col in factors else "",
+                            )
+                            stock_data[col] = {"value": value, "unit": unit}
 
                 result.append(stock_data)
 
             mapped_result = []
             for item in result:
                 mapped_item = {}
-                for key, value in item.items():
-                    mapped_key = FACTOR_MAP.get(key, key)
-                    mapped_item[mapped_key] = value
+                for key in ordered_columns:
+                    if key in item:
+                        mapped_key = FACTOR_MAP.get(key, key)
+                        mapped_item[mapped_key] = item[key]
                 mapped_result.append(mapped_item)
 
             return mapped_result, total_count
@@ -366,8 +372,10 @@ class ScreenerService:
                 )
                 columns = [factor_filter.factor for factor_filter in factor_filters]
             else:
-                columns = [FACTOR_MAP.get(column, column) for column in DEFAULT_SCREENER_COLUMNS]
-            return columns
+                raise ValueError("Category or GroupId is required")
+
+            result = DEFAULT_COLUMNS + columns
+            return [FACTOR_MAP[column] for column in result]
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
             raise e

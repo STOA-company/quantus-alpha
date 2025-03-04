@@ -13,7 +13,7 @@ import logging
 from app.utils.oauth_utils import get_current_user
 from app.utils.factor_utils import factor_utils
 from app.models.models_factors import CategoryEnum
-from app.common.constants import REVERSE_FACTOR_MAP, UNIT_MAP
+from app.common.constants import REVERSE_FACTOR_MAP, UNIT_MAP, DEFAULT_COLUMNS
 from app.modules.screener.schemas import MarketEnum
 
 logger = logging.getLogger(__name__)
@@ -77,11 +77,16 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
                 for condition in filtered_stocks.custom_filters
             ]
 
+        request_columns = DEFAULT_COLUMNS
+        for column in [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.columns]:
+            if column not in request_columns:
+                request_columns.append(column)
+
         stocks_data, total_count = screener_service.get_filtered_stocks(
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
             custom_filters,
-            [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.columns],
+            request_columns,
             filtered_stocks.limit,
             filtered_stocks.offset,
         )
