@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Response
 from typing import List, Dict, Optional
 import io
-from app.modules.screener.service import screener_service
+from app.modules.screener.service import get_screener_service, ScreenerService
 from app.modules.screener.schemas import (
     FactorResponse,
     GroupMetaData,
@@ -21,7 +21,7 @@ router = APIRouter()
 
 
 @router.get("/factors/{market}", response_model=List[FactorResponse])
-def get_factors(market: MarketEnum):
+def get_factors(market: MarketEnum, screener_service: ScreenerService = Depends(get_screener_service)):
     """
     모든 팩터 조회
     """
@@ -58,7 +58,9 @@ def get_factors(market: MarketEnum):
 
 
 @router.post("/stocks", response_model=Dict)
-def get_filtered_stocks(filtered_stocks: FilteredStocks):
+def get_filtered_stocks(
+    filtered_stocks: FilteredStocks, screener_service: ScreenerService = Depends(get_screener_service)
+):
     """
     필터링된 종목들 조회
 
@@ -101,7 +103,9 @@ def get_filtered_stocks(filtered_stocks: FilteredStocks):
 
 
 @router.post("/stocks/count", response_model=Dict)
-def get_filtered_stocks_count(filtered_stocks: FilteredStocks):
+def get_filtered_stocks_count(
+    filtered_stocks: FilteredStocks, screener_service: ScreenerService = Depends(get_screener_service)
+):
     """
     필터링된 종목들 조회
 
@@ -135,7 +139,9 @@ def get_filtered_stocks_count(filtered_stocks: FilteredStocks):
 
 
 @router.post("/stocks/description", response_model=Dict)
-def get_filtered_stocks_with_description(filtered_stocks: FilteredStocks):
+def get_filtered_stocks_with_description(
+    filtered_stocks: FilteredStocks, screener_service: ScreenerService = Depends(get_screener_service)
+):
     """
     필터링된 종목들 조회
 
@@ -171,7 +177,9 @@ def get_filtered_stocks_with_description(filtered_stocks: FilteredStocks):
 
 
 @router.post("/stocks/download")
-def download_filtered_stocks(filtered_stocks: FilteredStocks):
+def download_filtered_stocks(
+    filtered_stocks: FilteredStocks, screener_service: ScreenerService = Depends(get_screener_service)
+):
     custom_filters = []
     if filtered_stocks.custom_filters:
         custom_filters = [
@@ -197,7 +205,9 @@ def download_filtered_stocks(filtered_stocks: FilteredStocks):
 
 
 @router.get("/groups", response_model=List[GroupMetaData])
-def get_groups(current_user: str = Depends(get_current_user)):
+def get_groups(
+    current_user: str = Depends(get_current_user), screener_service: ScreenerService = Depends(get_screener_service)
+):
     """
     저장된 필터 목록 조회
     """
@@ -210,7 +220,11 @@ def get_groups(current_user: str = Depends(get_current_user)):
 
 
 @router.post("/groups", response_model=Dict)
-def create_or_update_group(group_filter: GroupFilter, current_user: str = Depends(get_current_user)):
+def create_or_update_group(
+    group_filter: GroupFilter,
+    current_user: str = Depends(get_current_user),
+    screener_service: ScreenerService = Depends(get_screener_service),
+):
     """
     필터 생성 또는 업데이트
     """
@@ -244,7 +258,7 @@ def create_or_update_group(group_filter: GroupFilter, current_user: str = Depend
 
 
 @router.delete("/groups/{group_id}", response_model=Dict)
-def delete_group(group_id: int):
+def delete_group(group_id: int, screener_service: ScreenerService = Depends(get_screener_service)):
     """
     필터 삭제
     """
@@ -260,7 +274,7 @@ def delete_group(group_id: int):
 
 
 @router.post("/groups/reorder", response_model=Dict)
-def reorder_groups(groups: List[int]):
+def reorder_groups(groups: List[int], screener_service: ScreenerService = Depends(get_screener_service)):
     """
     필터 순서 업데이트
     """
@@ -276,7 +290,7 @@ def reorder_groups(groups: List[int]):
 
 
 @router.get("/groups/{group_id}", response_model=GroupFilter)
-def get_group_filters(group_id: int):
+def get_group_filters(group_id: int, screener_service: ScreenerService = Depends(get_screener_service)):
     """
     필터 목록 조회
     """
@@ -310,7 +324,11 @@ def get_group_filters(group_id: int):
 
 
 @router.get("/columns", response_model=dict)
-def get_columns(category: CategoryEnum, group_id: Optional[int] = None):
+def get_columns(
+    category: CategoryEnum,
+    group_id: Optional[int] = None,
+    screener_service: ScreenerService = Depends(get_screener_service),
+):
     """
     컬럼 목록 조회
     """
@@ -325,7 +343,7 @@ def get_columns(category: CategoryEnum, group_id: Optional[int] = None):
 
 
 @router.get("/parquet")
-def update_parquet():
+def update_parquet(screener_service: ScreenerService = Depends(get_screener_service)):
     """
     파퀴 업데이트
     """

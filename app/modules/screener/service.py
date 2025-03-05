@@ -387,4 +387,5 @@ class ScreenerService:
             raise e
 
 
-screener_service = ScreenerService()
+def get_screener_service():
+    return ScreenerService()
