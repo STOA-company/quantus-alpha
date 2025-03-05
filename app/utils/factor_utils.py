@@ -215,6 +215,7 @@ class FactorUtils:
                     filtered_df = filtered_df[filtered_df[factor] <= filter["below"]]
 
         stock_codes = filtered_df["Code"].tolist()
+        print("111111111111111")
         return stock_codes
 
     def get_filtered_stocks_df(
@@ -225,9 +226,13 @@ class FactorUtils:
         required_columns = columns.copy()
         if "score" in required_columns:
             required_columns.remove("score")
+        if "ticker" in required_columns:
+            required_columns.remove("ticker")
 
         df = self.get_df_from_parquet(market_filter)
         filtered_df = df[df["Code"].isin(codes)][required_columns]
+
+        print("222222222222222")
 
         return filtered_df
 
