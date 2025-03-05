@@ -308,6 +308,7 @@ class ETFFactorExtractor:
 
         return df
 
+
     def cal_downside(self, returns):
         """하방 표준편차 계산 함수"""
         return np.sqrt((returns[returns < 0] ** 2).sum() / len(returns))
@@ -330,6 +331,7 @@ class ETFFactorExtractor:
 
         # 무한값 처리
         df.replace([np.inf, -np.inf], np.nan, inplace=True)
+
 
         return df
 
@@ -639,7 +641,6 @@ class ETFDataLoader:  # TODO :: parquet 파일로 변경
         else:
             raise ValueError(f"Invalid market: {market_filter}")
         return df
-
 
 class ETFDividendFactorExtractor:
     """
@@ -1203,7 +1204,6 @@ class ETFDataMerger:
             df_factors = self.loader.load_factor(ctry)
             # 데이터 전처리
             df_factors = self.preprocessor.factor_data_preprocess(df_factors, ctry)
-            print(f"df_factors: {df_factors}#1")
             # 데이터 합치기
             df_merged = df_factors if df_merged is None else pd.merge(df_merged, df_factors, on="ticker", how="left")
         if price:
@@ -1219,7 +1219,6 @@ class ETFDataMerger:
             df_dividend_factor = self.loader.load_etf_dividend_factor(ctry)
             # 데이터 전처리
             df_dividend_factor = self.preprocessor.dividend_factor_data_preprocess(df_dividend_factor, ctry)
-            print(f"df_dividend_factor: {df_dividend_factor}#2")
             # 데이터 합치기
             df_merged = (
                 df_dividend_factor
@@ -1233,7 +1232,6 @@ class ETFDataMerger:
             # 데이터 전처리
             if ctry == "US":
                 df_info = self.preprocessor.etf_info_data_preprocess(df_info, ctry)
-            print(f"df_info: {df_info}#3")
             # 데이터 합치기
             df_merged = df_info if df_merged is None else pd.merge(df_merged, df_info, on="ticker", how="left")
         if krx:
@@ -1241,7 +1239,6 @@ class ETFDataMerger:
             df_krx = self.loader.load_krx(base=True, detail=True)
             # 데이터 전처리
             df_krx = self.preprocessor.krx_data_preprocess(df_krx)
-            print(f"df_krx: {df_krx}#4")
             # 데이터 합치기
             df_merged = df_krx if df_merged is None else pd.merge(df_merged, df_krx, on="ticker", how="left")
 
@@ -1322,10 +1319,5 @@ def get_etf_price_from_kis():
     return output_file if result_data else None
 
 
-if __name__ == "__main__":
-    etf_extractor = ETFFactorExtractor()
-    df = etf_extractor.calculate_all_factors(ctry="US")
-    df.to_csv("/Users/kyungmin/git_repo/alpha-finder/check_data/etf/us_etf_factor.csv", index=False)
-    merger = ETFDataMerger()
-    df = merger.merge_data(ctry="US", factor=True, dividend_factor=True, info=True)
-    df.to_parquet("static/us_etf_factors.parquet")
+# if __name__ == "__main__":
+
