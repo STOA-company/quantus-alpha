@@ -5,11 +5,10 @@ from app.utils.score_utils import calculate_factor_score, calculate_factor_score
 from app.cache.factors import factors_cache
 import pandas as pd
 import numpy as np
-from app.models.models_factors import CategoryEnum
 from app.modules.screener.schemas import MarketEnum
 from app.utils.factor_utils import factor_utils
 from app.enum.type import StockType
-from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, DEFAULT_COLUMNS, REVERSE_FACTOR_MAP
+from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, REVERSE_FACTOR_MAP
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -393,31 +392,15 @@ class ScreenerService:
             logger.error(f"Error in reorder_groups: {e}")
             raise e
 
-    def get_columns(self, category: CategoryEnum, group_id: Optional[int] = None) -> List[str]:
+    def get_columns(self, group_id: Optional[int] = None) -> List[str]:
         try:
-            if category == CategoryEnum.CUSTOM:
-                print(f"GROUP_ID: {group_id}")
-                if not group_id:
-                    return []
-                group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
-                factor_filters = self.database._select(
-                    table="screener_factor_filters", columns=["factor"], group_id=group.id
-                )
-                factor_filters = [factor_filter.factor for factor_filter in factor_filters]
-                print(f"FACTOR_FILTERS: {factor_filters}")
+            if not group_id:
+                return []
+            group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
+            factor_filters = self.database._select(table="screener_factor_filters", columns=["factor"], group_id=group.id)
+            print(f"FACTOR_FILTERS: {factor_filters}")
+            return [FACTOR_MAP[factor_filter.factor] for factor_filter in factor_filters]
 
-            else:
-                print(f"CATEGORY: {category}")
-                factor_filters = factor_utils.get_columns(category)
-                print(f"FACTOR_FILTERS: {factor_filters}")
-
-            columns = [factor_filter for factor_filter in factor_filters]
-            print(f"COLUMNS: {columns}")
-            print(f"DEFAULT_COLUMNS: {DEFAULT_COLUMNS}")
-            result = DEFAULT_COLUMNS + columns
-            print(f"DEFAULT_COLUMNS: {DEFAULT_COLUMNS}")
-            print(f"RESULT: {result}")
-            return [FACTOR_MAP[column] for column in result]
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
             raise e
