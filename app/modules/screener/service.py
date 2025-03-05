@@ -9,7 +9,7 @@ from app.modules.screener.schemas import MarketEnum
 from app.utils.factor_utils import factor_utils
 from app.enum.type import StockType
 from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, REVERSE_FACTOR_MAP
-from fastapi import HTTPException
+from app.core.exception.custom import CustomException
 
 logger = logging.getLogger(__name__)
 
@@ -192,11 +192,11 @@ class ScreenerService:
         custom_filters: Optional[List[Dict]] = None,
         factor_filters: Optional[List[str]] = None,
     ) -> bool:
-        try:
-            existing_groups = self.database._select(table="screener_groups", user_id=user_id, name=name, type=type)
-            if existing_groups:
-                raise HTTPException(status_code=409, detail="Group name already exists for this type")
+        existing_groups = self.database._select(table="screener_groups", user_id=user_id, name=name, type=type)
+        if existing_groups:
+            raise CustomException(status_code=409, message="Group name already exists for this type")
 
+        try:
             groups = self.database._select(table="screener_groups", user_id=user_id, order="order", ascending=False)
             if groups:
                 order = groups[0].order + 1
@@ -245,13 +245,9 @@ class ScreenerService:
 
             return True
 
-        except HTTPException as he:
-            raise he
         except Exception as e:
-            if isinstance(e, Exception) and hasattr(e, "orig") and isinstance(getattr(e, "orig", None), Exception):
-                orig_error = e.orig
-                if hasattr(orig_error, "args") and len(orig_error.args) > 0 and "1062" in str(orig_error.args):
-                    raise HTTPException(status_code=409, detail="Group name already exists for this type")
+            if hasattr(e, "orig") and "1062" in str(getattr(e, "orig", "")):
+                raise CustomException(status_code=409, message="Group name already exists for this type")
 
             logger.error(f"Error in create_group: {e}")
             raise e
@@ -273,9 +269,11 @@ class ScreenerService:
 
                 current_type = current_group[0].type
 
-                existing_groups = self.database._select(table="screener_groups", name=name, type=current_type)
+                existing_groups = self.database._select(
+                    table="screener_groups", user_id=current_group[0].user_id, name=name, type=current_type
+                )
                 if existing_groups and any(group.id != group_id for group in existing_groups):
-                    raise HTTPException(status_code=409, detail="Group name already exists for this type")
+                    raise CustomException(status_code=409, message="Group name already exists for this type")
 
                 self.database._update(table="screener_groups", id=group_id, sets={"name": name})
 
@@ -326,13 +324,9 @@ class ScreenerService:
                     )
 
             return True
-        except HTTPException as he:
-            raise he
         except Exception as e:
-            if isinstance(e, Exception) and hasattr(e, "orig") and isinstance(getattr(e, "orig", None), Exception):
-                orig_error = e.orig
-                if hasattr(orig_error, "args") and len(orig_error.args) > 0 and "1062" in str(orig_error.args):
-                    raise HTTPException(status_code=409, detail="Group name already exists for this type")
+            if hasattr(e, "orig") and "1062" in str(getattr(e, "orig", "")):
+                raise CustomException(status_code=409, message="Group name already exists for this type")
 
             logger.error(f"Error in update_group: {e}")
             raise e
