@@ -1,0 +1,12 @@
+from pydantic import BaseModel
+from app.modules.screener.schemas import FilterCondition
+from .enum import ETFMarketEnum
+from typing import Optional, List
+
+
+class FilteredETF(BaseModel):
+    market_filter: Optional[ETFMarketEnum] = ETFMarketEnum.US
+    custom_filters: Optional[List[FilterCondition]] = None
+    columns: Optional[List[str]] = None
+    limit: Optional[int] = 50
+    offset: Optional[int] = 0

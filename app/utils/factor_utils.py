@@ -17,8 +17,15 @@ class FactorUtils:
     def __init__(self):
         self.db = database
 
-    def get_factors(self) -> List[dict]:
-        factors = self.db._select(table="factors")
+    def get_factors(self, is_stock: bool = True, is_etf: bool = False) -> List[dict]:
+        columns = ["factor", "description", "unit", "category", "sort_direction", "min_value", "max_value"]
+        conditions = {}
+        if is_stock:
+            conditions["is_stock"] = 1
+        if is_etf:
+            conditions["is_etf"] = 1
+
+        factors = self.db._select(table="factors", columns=columns, **conditions)
         return [
             {
                 "factor": FACTOR_MAP[factor.factor],

@@ -16,7 +16,7 @@ from app.common.mapping import (
     etf_risk_map,
 )
 from app.core.config import settings
-from app.kispy.manager import get_kis_api_manager
+from app.modules.screener_etf.enum import ETFMarketEnum
 
 
 class ETFFactorExtractor:
@@ -308,52 +308,37 @@ class ETFFactorExtractor:
 
         return df
 
+
+    def cal_downside(self, returns):
+        """하방 표준편차 계산 함수"""
+        return np.sqrt((returns[returns < 0] ** 2).sum() / len(returns))
+
     def _calculate_sharpe_sortino(self, df):
         """Sharpe 및 Sortino 비율 계산"""
-        # 연간 무위험 수익률 가정
-        risk_free_rate = 0.02 / 252  # 일별 환산 # TODO :: 무위험 수익률 가져오기
-
-        # 일별 초과 수익률
-        df["excess_return"] = df["수정주가수익률"] - risk_free_rate
-
-        # Sharpe 비율 계산 (252일 롤링)
-        df["return_mean"] = df.groupby(["Ticker"])["excess_return"].transform(lambda x: x.rolling(252).mean())
-        df["return_std"] = df.groupby(["Ticker"])["excess_return"].transform(lambda x: x.rolling(252).std())
-        # NaN 방지
-        df["sharpe"] = df.apply(
-            lambda row: row["return_mean"] / row["return_std"] * np.sqrt(252) if row["return_std"] > 0 else np.nan, axis=1
+        # 수익률 통계 계산
+        df["profit_mean"] = df.groupby(["Ticker"])["수정주가수익률"].transform(
+            lambda x: x.rolling(252, min_periods=1).mean()
+        )
+        df["profit_std"] = df.groupby(["Ticker"])["수정주가수익률"].transform(
+            lambda x: x.rolling(252, min_periods=1).std()
+        )
+        df["profit_downside"] = df.groupby(["Ticker"])["수정주가수익률"].transform(
+            lambda x: x.rolling(252, min_periods=1).apply(self.cal_downside)
         )
 
-        # Sortino 비율을 위한 하방 표준편차 계산
-        def downside_risk(series, threshold=0):
-            if len(series) == 0:
-                return np.nan
-            downside_returns = np.where(series < threshold, series, 0)
-            square_sum = np.sum(np.square(downside_returns))
-            if square_sum == 0:
-                return np.nan
-            return np.sqrt(square_sum / len(series))
+        df["sharpe"] = df["profit_mean"] / df["profit_std"]
+        df["sortino"] = df["profit_mean"] / df["profit_downside"]
 
-        # apply 대신 transform을 사용하여 인덱스 일관성 유지
-        df["downside_risk"] = df.groupby(["Ticker"])["excess_return"].transform(
-            lambda x: x.rolling(252).apply(lambda y: downside_risk(y), raw=True)
-        )
+        # 무한값 처리
+        df.replace([np.inf, -np.inf], np.nan, inplace=True)
 
-        # NaN 방지
-        df["sortino"] = df.apply(
-            lambda row: row["return_mean"] / row["downside_risk"] * np.sqrt(252) if row["downside_risk"] > 0 else np.nan,
-            axis=1,
-        )
-
-        # 중간 계산 컬럼 제거
-        df.drop(columns=["excess_return", "return_mean", "return_std", "downside_risk"], inplace=True)
 
         return df
 
     def _calculate_52week_high_low(self, df):
         # 52주 최고가, 최저가 대비 현재가
-        df["week_52_high"] = df.groupby(["Ticker"])["high"].transform(lambda x: x.rolling(252).max())
-        df["week_52_low"] = df.groupby(["Ticker"])["low"].transform(lambda x: x.rolling(252).min())
+        df["week_52_high"] = df.groupby(["Ticker"])["High"].transform(lambda x: x.rolling(252).max())
+        df["week_52_low"] = df.groupby(["Ticker"])["Low"].transform(lambda x: x.rolling(252).min())
 
         return df
 
@@ -423,7 +408,6 @@ class ETFDataDownloader:
         self.refinitiv_database = settings.REFINITIV_DATABASE
         self.refinitiv_username = settings.REFINITIV_USERNAME
         self.refinitiv_password = settings.REFINITIV_PASSWORD
-        self.kis_api = get_kis_api_manager()
 
     def _get_refinitiv_data(self, query):
         """
@@ -648,6 +632,15 @@ class ETFDataLoader:  # TODO :: parquet 파일로 변경
         df_krx.to_csv("/Users/kyungmin/git_repo/alpha-finder/check_data/etf_krx/data_merged.csv", index=False)
         return df_krx
 
+    def load_etf_factors(self, market_filter: ETFMarketEnum):
+        df = pd.DataFrame()
+        if market_filter in [ETFMarketEnum.US, ETFMarketEnum.NYSE, ETFMarketEnum.NASDAQ, ETFMarketEnum.BATS]:
+            df = pd.read_parquet("static/us_etf_factors.parquet")
+        elif market_filter == ETFMarketEnum.KR:
+            df = pd.read_parquet("static/kr_etf_factors.parquet")
+        else:
+            raise ValueError(f"Invalid market: {market_filter}")
+        return df
 
 class ETFDividendFactorExtractor:
     """
@@ -1032,12 +1025,7 @@ class ETFDataPreprocessor:
         """
         all_columns = [
             "Ticker",
-            "MarketDate",
-            "Open_",
-            "High",
-            "Low",
             "Close_",
-            "Volume",
             "Bid",
             "Ask",
             "NumShrs",
@@ -1242,8 +1230,8 @@ class ETFDataMerger:
             df_info = self.loader.load_etf_info(ctry)
 
             # 데이터 전처리
-            df_info = self.preprocessor.etf_info_data_preprocess(df_info, ctry)
-
+            if ctry == "US":
+                df_info = self.preprocessor.etf_info_data_preprocess(df_info, ctry)
             # 데이터 합치기
             df_merged = df_info if df_merged is None else pd.merge(df_merged, df_info, on="ticker", how="left")
         if krx:
@@ -1331,30 +1319,5 @@ def get_etf_price_from_kis():
     return output_file if result_data else None
 
 
-if __name__ == "__main__":
-    # extractor = ETFFactorExtractor()
-    # factor_data = extractor.calculate_all_factors(ctry="US")
-    # factor_data.to_csv(f"/Users/kyungmin/git_repo/alpha-finder/check_data/etf/us_etf_factor.csv", index=False)
-    # print(factor_data.head())
+# if __name__ == "__main__":
 
-    # downloader = ETFDataDownloader()
-    # df_price = downloader.dwonload_etf_price(ctry="US", download=True)
-
-    # print(df_price.head())
-    # merger = ETFDataMerger()
-    # df_merged = merger.merge_data(ctry="US", info=True)
-
-    # merger = ETFDataMerger()
-    # df_merged = merger.merge_data(ctry="KR",factor=True, dividend_factor=True, info=True, krx=True)
-    # df_merged.to_parquet(f"/Users/kyungmin/git_repo/alpha-finder/parquet/kr_etf_factors.parquet")
-    # print(df_merged.head())
-
-    # downloader = ETFDataDownloader()
-    # df_dividend = downloader.download_etf_dividend(ctry="US", download=True)
-
-    # print(df_dividend.head())
-
-    # 배당 팩터 추출
-    # dividend_extractor = ETFDividendFactor
-
-    get_etf_price_from_kis()
