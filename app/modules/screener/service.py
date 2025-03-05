@@ -5,11 +5,11 @@ from app.utils.score_utils import calculate_factor_score, calculate_factor_score
 from app.cache.factors import factors_cache
 import pandas as pd
 import numpy as np
-from app.models.models_factors import CategoryEnum
 from app.modules.screener.schemas import MarketEnum
 from app.utils.factor_utils import factor_utils
 from app.enum.type import StockType
-from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, DEFAULT_COLUMNS, REVERSE_FACTOR_MAP
+from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, REVERSE_FACTOR_MAP
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -193,9 +193,13 @@ class ScreenerService:
         factor_filters: Optional[List[str]] = None,
     ) -> bool:
         try:
-            last_group = self.database._select(table="screener_groups", user_id=user_id, order="order", ascending=False)
-            if last_group:
-                order = last_group[0].order + 1
+            existing_groups = self.database._select(table="screener_groups", user_id=user_id, name=name, type=type)
+            if existing_groups:
+                raise HTTPException(status_code=409, detail="Group name already exists for this type")
+
+            groups = self.database._select(table="screener_groups", user_id=user_id, order="order", ascending=False)
+            if groups:
+                order = groups[0].order + 1
             else:
                 order = 1
 
@@ -241,7 +245,14 @@ class ScreenerService:
 
             return True
 
+        except HTTPException as he:
+            raise he
         except Exception as e:
+            if isinstance(e, Exception) and hasattr(e, "orig") and isinstance(getattr(e, "orig", None), Exception):
+                orig_error = e.orig
+                if hasattr(orig_error, "args") and len(orig_error.args) > 0 and "1062" in str(orig_error.args):
+                    raise HTTPException(status_code=409, detail="Group name already exists for this type")
+
             logger.error(f"Error in create_group: {e}")
             raise e
 
@@ -256,6 +267,16 @@ class ScreenerService:
     ) -> bool:
         try:
             if name:
+                current_group = self.database._select(table="screener_groups", id=group_id)
+                if not current_group:
+                    raise ValueError(f"Group with id {group_id} not found")
+
+                current_type = current_group[0].type
+
+                existing_groups = self.database._select(table="screener_groups", name=name, type=current_type)
+                if existing_groups and any(group.id != group_id for group in existing_groups):
+                    raise HTTPException(status_code=409, detail="Group name already exists for this type")
+
                 self.database._update(table="screener_groups", id=group_id, sets={"name": name})
 
             # 종목 필터
@@ -305,7 +326,14 @@ class ScreenerService:
                     )
 
             return True
+        except HTTPException as he:
+            raise he
         except Exception as e:
+            if isinstance(e, Exception) and hasattr(e, "orig") and isinstance(getattr(e, "orig", None), Exception):
+                orig_error = e.orig
+                if hasattr(orig_error, "args") and len(orig_error.args) > 0 and "1062" in str(orig_error.args):
+                    raise HTTPException(status_code=409, detail="Group name already exists for this type")
+
             logger.error(f"Error in update_group: {e}")
             raise e
 
@@ -364,31 +392,15 @@ class ScreenerService:
             logger.error(f"Error in reorder_groups: {e}")
             raise e
 
-    def get_columns(self, category: CategoryEnum, group_id: Optional[int] = None) -> List[str]:
+    def get_columns(self, group_id: Optional[int] = None) -> List[str]:
         try:
-            if category == CategoryEnum.CUSTOM:
-                print(f"GROUP_ID: {group_id}")
-                if not group_id:
-                    return []
-                group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
-                factor_filters = self.database._select(
-                    table="screener_factor_filters", columns=["factor"], group_id=group.id
-                )
-                factor_filters = [factor_filter.factor for factor_filter in factor_filters]
-                print(f"FACTOR_FILTERS: {factor_filters}")
+            if not group_id:
+                return []
+            group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
+            factor_filters = self.database._select(table="screener_factor_filters", columns=["factor"], group_id=group.id)
+            print(f"FACTOR_FILTERS: {factor_filters}")
+            return [FACTOR_MAP[factor_filter.factor] for factor_filter in factor_filters]
 
-            else:
-                print(f"CATEGORY: {category}")
-                factor_filters = factor_utils.get_columns(category)
-                print(f"FACTOR_FILTERS: {factor_filters}")
-
-            columns = [factor_filter for factor_filter in factor_filters]
-            print(f"COLUMNS: {columns}")
-            print(f"DEFAULT_COLUMNS: {DEFAULT_COLUMNS}")
-            result = DEFAULT_COLUMNS + columns
-            print(f"DEFAULT_COLUMNS: {DEFAULT_COLUMNS}")
-            print(f"RESULT: {result}")
-            return [FACTOR_MAP[column] for column in result]
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
             raise e

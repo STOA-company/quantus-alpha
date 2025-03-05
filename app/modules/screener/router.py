@@ -333,9 +333,18 @@ def get_columns(
     컬럼 목록 조회
     """
     try:
-        columns = screener_service.get_columns(category, group_id)
+        columns = []
+        if category == CategoryEnum.CUSTOM:
+            columns = screener_service.get_columns(group_id)
+        elif category == CategoryEnum.TECHNICAL:
+            columns = ["베타 (52주)", "RSI (14일)", "샤프 비율 (52주)", "모멘텀 (6개월)", "변동성 (52주)"]
+        elif category == CategoryEnum.FUNDAMENTAL:
+            columns = ["ROE", "F-score", "부채 비율", "영업 이익", "Altman Z-score"]
+        elif category == CategoryEnum.VALUATION:
+            columns = ["PBR", "PCR", "PER", "POR", "PSR"]
+
         print(f"COLUMNS: {columns}")
-        result = list(dict.fromkeys(columns))
+        result = ["티커", "종목명", "국가", "시장", "산업", "스코어"] + columns
         print(f"RESULT: {result}")
         return {"columns": result}
     except Exception as e:
