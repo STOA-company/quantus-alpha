@@ -354,8 +354,11 @@ class ScreenerService:
 
     def reorder_groups(self, groups: List[int]) -> bool:
         try:
-            for index, group_id in enumerate(groups):
-                self.database._update(table="screener_groups", id=group_id, order=index + 1)
+            # 각 그룹 ID에 대해 새로운 순서를 포함하는 데이터 리스트 생성
+            update_data = [{"id": group_id, "order": index + 1} for index, group_id in enumerate(groups)]
+
+            # bulk update 실행
+            self.database._bulk_update(table="screener_groups", data=update_data, key_column="id")
             return True
         except Exception as e:
             logger.error(f"Error in reorder_groups: {e}")

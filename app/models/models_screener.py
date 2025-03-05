@@ -17,10 +17,7 @@ class ScreenerGroup(ServiceBase, BaseMixin):
     stock_filters = relationship("ScreenerStockFilter", back_populates="group", cascade="all, delete-orphan")
     factor_filters = relationship("ScreenerFactorFilter", back_populates="group", cascade="all, delete-orphan")
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uix_user_group_name"),
-        UniqueConstraint("user_id", "order", name="uix_user_group_order"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "name", "type", name="uix_user_group_name_type"),)
 
     def __repr__(self):
         return f"<ScreenerGroup {self.name}>"
