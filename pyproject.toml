@@ -42,6 +42,7 @@ google-auth-oauthlib = "^1.2.1"
 google-auth = "^2.38.0"
 python-multipart = "^0.0.20"
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+pyodbc = "^5.2.0"
 
 
 

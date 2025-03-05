@@ -315,37 +315,49 @@ class KISAPI(BaseAPI):
                 'day_data': 일봉 데이터 DataFrame
             }
         """
-        try:
-            url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-index-daily-price"
-            headers = {
-                "content-type": "application/json; charset=utf-8",
-                "authorization": f"Bearer {self.access_token}",
-                "appkey": self.app_key,
-                "appsecret": self.app_secret,
-                "tr_id": "FHPUP02120000",
-                "custtype": "P",
-            }
+        for attempt in range(3):
+            try:
+                url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-index-daily-price"
+                headers = {
+                    "content-type": "application/json; charset=utf-8",
+                    "authorization": f"Bearer {self.access_token}",
+                    "appkey": self.app_key,
+                    "appsecret": self.app_secret,
+                    "tr_id": "FHPUP02120000",
+                    "custtype": "P",
+                }
 
-            params = {
-                "fid_cond_mrkt_div_code": "U",
-                "fid_input_iscd": self.INDEX_MARKET_CODES[index_code],
-                "fid_input_date_1": date,
-                "fid_period_div_code": "D",
-            }
-            response = requests.get(url, headers=headers, params=params)
+                params = {
+                    "fid_cond_mrkt_div_code": "U",
+                    "fid_input_iscd": self.INDEX_MARKET_CODES[index_code],
+                    "fid_input_date_1": date,
+                    "fid_period_div_code": "D",
+                }
+                response = requests.get(url, headers=headers, params=params)
 
-            if response.status_code != 200:
-                raise Exception(f"API request failed with status {response.status_code}")
+                if response.status_code != 200:
+                    raise Exception(f"API request failed with status {response.status_code}")
+                elif response.get("msg_cd") == "EGW00121":  # 토큰 만료
+                    logger.warning("Token expired, refreshing token...")
+                    self.access_token = self._get_access_token()
+                    continue
+                elif response.get("msg_cd") == "EGW00201":  # rate limit
+                    wait_time = 1 * (attempt + 1)
+                    logger.warning(f"Rate limit hit, waiting {wait_time} seconds before retry")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"API Error: {response.get('msg1')}")
 
-            data = response.json()
+                data = response.json()
 
-            if data["rt_cd"] != "0":
-                raise Exception(f"API error: {data['msg1']}")
+                if data["rt_cd"] != "0":
+                    raise Exception(f"API error: {data['msg1']}")
 
-            return data
-        except Exception as e:
-            print(f"Error fetching domestic index data for {index_code}: {str(e)}")
-            return {"error": str(e)}
+                return data
+            except Exception as e:
+                print(f"Error fetching domestic index data for {index_code}: {str(e)}")
+                return {"error": str(e)}
 
     def get_stock_price_history_by_minute(
         self,
@@ -479,6 +491,46 @@ class KISAPI(BaseAPI):
 
             except Exception as e:
                 logger.error(f"Error fetching stock status for {stock_code}: {str(e)}")
+                if attempt < retry_count - 1:
+                    time.sleep(1)
+
+        return None
+
+    def etf_price(self, symbol: str, retry_count: int = 3) -> dict:
+        api_url = "/uapi/etfetn/v1/quotations/inquire-price"
+        url = f"{self.base_url}{api_url}"
+
+        headers = self._auth.get_header()
+        headers["tr_id"] = "FHPST02400000"
+        headers["custtype"] = "P"
+
+        params = {
+            "fid_cond_mrkt_div_code": "J",
+            "fid_input_iscd": symbol,
+        }
+        for attempt in range(retry_count):
+            try:
+                res = requests.get(url, headers=headers, params=params)
+                res.raise_for_status()  # HTTP 에러 체크
+                stock_info = json.loads(res.text)
+
+                if stock_info.get("rt_cd") == "0":  # 성공 응답
+                    output = stock_info.get("output", {})
+                    return output
+                elif stock_info.get("msg_cd") == "EGW00121":  # 토큰 만료
+                    logger.warning("Token expired, refreshing token...")
+                    self.access_token = self._get_access_token()
+                    continue
+                elif stock_info.get("msg_cd") == "EGW00201":  # rate limit
+                    wait_time = 1 * (attempt + 1)
+                    logger.warning(f"Rate limit hit, waiting {wait_time} seconds before retry")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"API Error: {stock_info.get('msg1')}")
+
+            except Exception as e:
+                logger.error(f"Error fetching etf price for {symbol}: {str(e)}")
                 if attempt < retry_count - 1:
                     time.sleep(1)
 
