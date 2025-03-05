@@ -66,6 +66,3 @@ class ColumnSet(BaseModel):
 
 class ColumnsResponse(BaseModel):
     columns: List[str]
-
-    class Config:
-        from_attributes = True
