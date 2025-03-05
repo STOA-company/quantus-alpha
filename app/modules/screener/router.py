@@ -334,8 +334,9 @@ def get_columns(
     """
     try:
         columns = screener_service.get_columns(category, group_id)
+        print(f"COLUMNS: {columns}")
         result = list(dict.fromkeys(columns))
-
+        print(f"RESULT: {result}")
         return {"columns": result}
     except Exception as e:
         logger.error(f"Error getting columns: {e}")

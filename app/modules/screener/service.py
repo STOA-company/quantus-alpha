@@ -367,6 +367,7 @@ class ScreenerService:
     def get_columns(self, category: CategoryEnum, group_id: Optional[int] = None) -> List[str]:
         try:
             if category == CategoryEnum.CUSTOM:
+                print(f"GROUP_ID: {group_id}")
                 if not group_id:
                     return []
                 group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
@@ -374,13 +375,19 @@ class ScreenerService:
                     table="screener_factor_filters", columns=["factor"], group_id=group.id
                 )
                 factor_filters = [factor_filter.factor for factor_filter in factor_filters]
+                print(f"FACTOR_FILTERS: {factor_filters}")
 
             else:
-                factor_filters = factor_utils.get_columns(category)
+                print(f"CATEGORY: {category}")
+                configs = factors_cache.get_configs()
+                factor_filters = [configs[factor].get("factor") for factor in configs]
+                print(f"FACTOR_FILTERS: {factor_filters}")
 
             columns = [factor_filter for factor_filter in factor_filters]
+            print(f"COLUMNS: {columns}")
 
             result = DEFAULT_COLUMNS + columns
+            print(f"RESULT: {result}")
             return [FACTOR_MAP[column] for column in result]
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
