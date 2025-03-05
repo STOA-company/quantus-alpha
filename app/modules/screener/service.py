@@ -379,8 +379,7 @@ class ScreenerService:
 
             else:
                 print(f"CATEGORY: {category}")
-                configs = factors_cache.get_configs()
-                factor_filters = [configs[factor].get("factor") for factor in configs]
+                factor_filters = factor_utils.get_columns(category)
                 print(f"FACTOR_FILTERS: {factor_filters}")
 
             columns = [factor_filter for factor_filter in factor_filters]
