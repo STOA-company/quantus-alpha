@@ -374,7 +374,7 @@ class ScreenerService:
         try:
             if category == CategoryEnum.CUSTOM:
                 if not group_id:
-                    raise ValueError("GroupId is required for custom category")
+                    return []
                 group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
                 factor_filters = self.database._select(
                     table="screener_factor_filters", columns=["factor"], group_id=group.id
