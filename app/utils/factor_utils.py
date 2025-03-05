@@ -271,26 +271,26 @@ class FactorUtils:
         if unit.lower() == "big_price":
             if nation == "kr":
                 if value >= 10000:  # 1조원 이상
-                    return value / 10000, "조원"
-                return value, "억원"
+                    return round(value / 10000, 2), "조원"
+                return int(value), "억원"
             else:  # US
                 # 1T = 1000B = 1000조원
                 if value >= 1000000000:  # 1000조원 이상
-                    return value / 1000000000, "T$"
+                    return round(value / 1000000000, 2), "T$"
                 # 1B = 1조원
                 elif value >= 1000000:  # 1조원 이상
-                    return value / 1000000, "B$"
+                    return round(value / 1000000, 2), "B$"
                 # 1M = 10억원
                 elif value >= 1000:  # 10억원 이상
-                    return value / 1000, "M$"
+                    return round(value / 1000, 2), "M$"
                 # 1K = 100만원
-                return value, "K$"
+                return round(value, 2), "K$"
 
         if unit.lower() == "small_price":
             if nation == "kr":
-                return value, "원"
+                return int(value), "원"
             else:
-                return value, "$"
+                return round(value, 2), "$"
 
         return value, UNIT_MAP.get(unit.lower(), "")
 
