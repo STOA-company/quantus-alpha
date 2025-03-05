@@ -384,8 +384,9 @@ class ScreenerService:
 
             columns = [factor_filter for factor_filter in factor_filters]
             print(f"COLUMNS: {columns}")
-
+            print(f"DEFAULT_COLUMNS: {DEFAULT_COLUMNS}")
             result = DEFAULT_COLUMNS + columns
+            print(f"DEFAULT_COLUMNS: {DEFAULT_COLUMNS}")
             print(f"RESULT: {result}")
             return [FACTOR_MAP[column] for column in result]
         except Exception as e:
