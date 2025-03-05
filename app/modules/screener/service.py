@@ -1,5 +1,6 @@
+from fastapi import HTTPException
 from app.database.crud import database_service
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Union
 import logging
 from app.utils.score_utils import calculate_factor_score, calculate_factor_score_with_description
 from app.cache.factors import factors_cache
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 class ScreenerService:
     def __init__(self):
         self.database = database_service
+        self.MAX_GROUPS = 5
 
     def get_factors(self):
         try:
@@ -82,7 +84,7 @@ class ScreenerService:
                             )
                             stock_data[col] = {"value": value, "unit": unit}
 
-                result.append(stock_data)
+            result.append(stock_data)
 
             mapped_result = []
             for item in result:
@@ -317,9 +319,13 @@ class ScreenerService:
             logger.error(f"Error in delete_group: {e}")
             raise e
 
-    def get_groups(self, user_id: str) -> List[Dict]:
+    def get_groups(self, user_id: str, type: str = None) -> List[Dict]:
         try:
-            groups = self.database._select(table="screener_groups", user_id=user_id, order="order", ascending=True)
+            if type is None:
+                type = "STOCK"
+            groups = self.database._select(
+                table="screener_groups", user_id=user_id, order="order", ascending=True, type=type
+            )
             return [
                 {
                     "id": group.id,
@@ -354,8 +360,11 @@ class ScreenerService:
 
     def reorder_groups(self, groups: List[int]) -> bool:
         try:
-            for index, group_id in enumerate(groups):
-                self.database._update(table="screener_groups", id=group_id, order=index + 1)
+            # 각 그룹 ID에 대해 새로운 순서를 포함하는 데이터 리스트 생성
+            update_data = [{"id": group_id, "order": index + 1} for index, group_id in enumerate(groups)]
+
+            # bulk update 실행
+            self.database._bulk_update(table="screener_groups", data=update_data, key_column="id")
             return True
         except Exception as e:
             logger.error(f"Error in reorder_groups: {e}")
@@ -382,6 +391,31 @@ class ScreenerService:
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
             raise e
+
+    def check_owner(self, group_id: Union[int, List[int]], user_id: int) -> bool:
+        if isinstance(group_id, int):
+            groups = self.database._select(table="screener_groups", columns=["user_id"], id=group_id)
+            group_user_id = int(groups[0].user_id)
+            return group_user_id == user_id
+
+        else:
+            groups = self.database._select(table="screener_groups", columns=["user_id"], id__in=group_id)
+            if len(set([group.user_id for group in groups])) > 1:
+                return False
+            group_user_id = int(groups[0].user_id)
+            return group_user_id == user_id
+
+    def validate_group(self, group_ids: List[int]) -> bool:
+        if len(group_ids) > self.MAX_GROUPS:
+            raise HTTPException(status_code=400, detail="Groups is too long")
+        if len(set(group_ids)) != len(group_ids):
+            raise HTTPException(status_code=400, detail="Groups has duplicate values")
+        if any(group_id <= 0 for group_id in group_ids):
+            raise HTTPException(status_code=400, detail="Groups has negative values")
+
+    def get_group_length(self, user_id: int) -> int:
+        groups = self.database._select(table="screener_groups", columns=["id"], user_id=user_id)
+        return len(groups)
 
 
 screener_service = ScreenerService()

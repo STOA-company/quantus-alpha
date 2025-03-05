@@ -95,12 +95,38 @@ def calculate_factor_score_with_description(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @time_it
-def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_factor_score(df: pd.DataFrame, is_etf: bool = False) -> pd.DataFrame:
     df_copy = df.copy()
-    columns = df.columns.tolist()
+    if is_etf:
+        df_copy.rename(columns={"ticker": "Code", "kr_name": "Name"}, inplace=True)
+    columns = df_copy.columns.tolist()
 
     # 비수치 컬럼 사전 필터링
-    numeric_columns = [col for col in columns if col not in NON_NUMERIC_COLUMNS]
+    non_numeric_columns = ["Code", "Name", "country", "market", "sector"]
+    if is_etf:
+        non_numeric_columns.extend(
+            [
+                "kr_name",
+                "en_name",
+                "manager",
+                "date",
+                "listing_date",
+                "base_index_name",
+                "replication_method",
+                "last_dividend_date",
+                "base_asset_classification",
+                "tax_type",
+                "is_hedge",
+                "ctry",
+                "listing_date",
+                "base_index_name",
+                "replication_method",
+                "base_asset_classification",
+                "tax_type",
+                "is_hedge",
+            ]
+        )
+    numeric_columns = [col for col in columns if col not in non_numeric_columns]
 
     # 한 번에 모든 NaN 값을 중앙값으로 채움
     for col in numeric_columns:
@@ -131,7 +157,7 @@ def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
 
         factor_ranks = np.column_stack((factor_ranks, ranks.values))
 
-    score_df = pd.DataFrame({"Code": df["Code"].values, "score": np.zeros(n_rows)})
+    score_df = pd.DataFrame({"Code": df_copy["Code"].values, "score": np.zeros(n_rows)})
 
     if factor_ranks.shape[1] > 0:
         avg_ranks = np.mean(factor_ranks, axis=1)
@@ -149,5 +175,8 @@ def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
         scores[~all_first] = np.minimum(scores[~all_first], 99.99)
 
         score_df["score"] = np.round(scores, 2)
+
+    if is_etf:
+        score_df.rename(columns={"Code": "ticker", "Name": "kr_name"}, inplace=True)
 
     return score_df.sort_values("score", ascending=False)
