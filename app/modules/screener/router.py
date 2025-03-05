@@ -62,7 +62,6 @@ def get_factors(market: MarketEnum):
 def get_filtered_stocks(filtered_stocks: FilteredStocks):
     """
     필터링된 종목들 조회
-
     market_filter : ["us", "kr", "S&P 500", "NASDAQ", "KOSPI", "KOSDAQ"] 중 하나
     """
     try:

@@ -84,7 +84,7 @@ class ScreenerService:
                             )
                             stock_data[col] = {"value": value, "unit": unit}
 
-            result.append(stock_data)
+                result.append(stock_data)
 
             mapped_result = []
             for item in result:
