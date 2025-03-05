@@ -14,6 +14,7 @@ from app.utils.factor_utils import factor_utils
 from app.models.models_factors import CategoryEnum
 from app.common.constants import REVERSE_FACTOR_MAP, UNIT_MAP, DEFAULT_COLUMNS
 from app.modules.screener.schemas import MarketEnum
+from app.core.exception.custom import CustomException
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +253,9 @@ def create_or_update_group(
             message = "Group created successfully"
         if is_success:
             return {"message": message}
+    except CustomException as e:
+        logger.error(f"Error creating group: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
         logger.error(f"Error creating group: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -343,9 +347,7 @@ def get_columns(
         elif category == CategoryEnum.VALUATION:
             columns = ["PBR", "PCR", "PER", "POR", "PSR"]
 
-        print(f"COLUMNS: {columns}")
         result = ["티커", "종목명", "국가", "시장", "산업", "스코어"] + columns
-        print(f"RESULT: {result}")
         return {"columns": result}
     except Exception as e:
         logger.error(f"Error getting columns: {e}")
