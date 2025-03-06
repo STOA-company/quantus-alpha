@@ -483,3 +483,60 @@ class KISAPI(BaseAPI):
                     time.sleep(1)
 
         return None
+
+    def get_exchange_rates(self) -> dict:
+        """
+        원화 -> 달러 환율 정보를 가져옵니다 (전일 환율 및 당일 환율)
+
+        장 마감 시에는 today_rate가 전일 종가 환율이 됩니다.
+
+        Returns:
+            dict: {
+                'yesterday_rate': float,  # 전일 환율
+                'today_rate': float,      # 당일 환율
+                'date': str               # 기준 일자 (YYYYMMDD)
+            }
+        """
+        try:
+            url = f"{self.base_url}/uapi/overseas-price/v1/quotations/price"
+
+            headers = {
+                "content-type": "application/json; charset=utf-8",
+                "authorization": f"Bearer {self.access_token}",
+                "appkey": self.app_key,
+                "appsecret": self.app_secret,
+                "tr_id": "HHDFS76200200",
+                "custtype": "P",
+            }
+
+            params = {"AUTH": "", "EXCD": "NAS", "SYMB": "AAPL"}
+
+            response = requests.get(url, headers=headers, params=params)
+
+            if response.status_code != 200:
+                raise Exception(f"API request failed with status {response.status_code}")
+
+            data = response.json()
+
+            if data.get("rt_cd") != "0":
+                raise Exception(f"API error: {data.get('msg1')}")
+
+            output = data.get("output", {})
+
+            today_rate_str = output.get("t_rate", "0")
+            yesterday_rate_str = output.get("p_rate", "0")
+
+            today_rate_str = today_rate_str.replace(",", "") if today_rate_str else "0"
+            yesterday_rate_str = yesterday_rate_str.replace(",", "") if yesterday_rate_str else "0"
+
+            today_rate = float(today_rate_str)
+            yesterday_rate = float(yesterday_rate_str) if yesterday_rate_str else 0
+
+            if yesterday_rate == 0:
+                logger.warning("No yesterday's exchange rate found.")
+
+            return {"yesterday_rate": yesterday_rate, "today_rate": today_rate, "date": datetime.now().strftime("%Y%m%d")}
+
+        except Exception as e:
+            logger.error(f"Error fetching exchange rates: {str(e)}")
+            return {"yesterday_rate": 0, "today_rate": 0, "date": datetime.now().strftime("%Y%m%d")}
