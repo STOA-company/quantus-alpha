@@ -35,13 +35,18 @@ class ScreenerService:
         columns: Optional[List[str]] = None,
         limit: Optional[int] = 50,
         offset: Optional[int] = 0,
+        sort_by: Optional[str] = "score",
+        ascending: Optional[bool] = False,
     ) -> Tuple[List[Dict], int]:
         try:
+            if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
+                raise CustomException(status_code=400, message="sort_by must be in columns")
+
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
             scored_df = calculate_factor_score(filtered_df)
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
-            sorted_df = merged_df.sort_values(by="score", ascending=False).reset_index(drop=True)
+            sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
 
@@ -392,7 +397,6 @@ class ScreenerService:
                 return []
             group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
             factor_filters = self.database._select(table="screener_factor_filters", columns=["factor"], group_id=group.id)
-            print(f"FACTOR_FILTERS: {factor_filters}")
             return [FACTOR_MAP[factor_filter.factor] for factor_filter in factor_filters]
 
         except Exception as e:
