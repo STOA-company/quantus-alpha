@@ -34,7 +34,7 @@ data/
 Thumbs.db
 
 
-check_data/
+_check_data/
 .vscode/
 
 # Celery
@@ -47,7 +47,6 @@ ngrok.yml
 
 # parquet
 parquet/
-*.parquet
 
 # test
 test/

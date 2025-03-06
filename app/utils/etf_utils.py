@@ -21,6 +21,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException,
 from webdriver_manager.chrome import ChromeDriverManager
 
 # Local imports
+from app.common.constants import ETF_DATA_DIR, KRX_DIR
 from app.core.config import settings
 from app.database.crud import database
 from app.common.mapping import (
@@ -420,6 +421,7 @@ class ETFDataDownloader:
         self.refinitiv_database = settings.REFINITIV_DATABASE
         self.refinitiv_username = settings.REFINITIV_USERNAME
         self.refinitiv_password = settings.REFINITIV_PASSWORD
+        self.DATA_DIR = ETF_DATA_DIR
 
     def _get_refinitiv_data(self, query):
         """
@@ -434,8 +436,8 @@ class ETFDataDownloader:
         conn_str = f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={self.refinitiv_server};DATABASE={self.refinitiv_database};UID={self.refinitiv_username};PWD={self.refinitiv_password};TrustServerCertificate=Yes"
         conn = pyodbc.connect(conn_str)
 
-        cursor = conn.cursor()
-        cursor.execute(query)
+        # cursor = conn.cursor()
+        # cursor.execute(query)
 
         df = pd.read_sql(query, conn)
         conn.close()
@@ -514,9 +516,9 @@ class ETFDataDownloader:
         df = self._get_refinitiv_data(query)
         if download:
             if ctry == "KR":
-                df.to_parquet("check_data/etf/kr_etf_dividend.parquet", index=False)
+                df.to_parquet(os.path.join(self.DATA_DIR, "kr_etf_dividend.parquet"), index=False)
             elif ctry == "US":
-                df.to_parquet("check_data/etf/us_etf_dividend.parquet", index=False)
+                df.to_parquet(os.path.join(self.DATA_DIR, "us_etf_dividend.parquet"), index=False)
         return df
 
     def dwonload_etf_price(self, ctry: str, download: bool = False):
@@ -606,9 +608,9 @@ class ETFDataDownloader:
         df = self._get_refinitiv_data(query)
         if download:
             if ctry == "KR":
-                df.to_parquet("check_data/etf/kr_etf_price.parquet", index=False)
+                df.to_parquet(os.path.join(self.DATA_DIR, "kr_etf_price.parquet"), index=False)
             elif ctry == "US":
-                df.to_parquet("check_data/etf/us_etf_price.parquet", index=False)
+                df.to_parquet(os.path.join(self.DATA_DIR, "us_etf_price.parquet"), index=False)
         return df
 
     def get_etf_price_from_kis(self, ticker: str):
@@ -777,15 +779,18 @@ class KRXDownloader:
             driver.quit()
 
 
-class ETFDataLoader:  # TODO :: parquet 파일로 변경
+class ETFDataLoader:
+    """ETF 데이터를 로드하는 클래스"""
+
     def __init__(self):
         self.db = database
+        self.base_dir = ETF_DATA_DIR
+        self.krx_dir = KRX_DIR
 
     def load_factor(self, ctry):
         country = "kr" if ctry == "KR" else "us"
-        file_name = f"{country}_etf_factor.csv"
-        base_dir = "/Users/kyungmin/git_repo/alpha-finder/check_data/etf"
-        df = pd.read_csv(os.path.join(base_dir, file_name))
+        file_name = f"{country}_etf_factor.parquet"
+        df = pd.read_parquet(os.path.join(self.base_dir, file_name))
         return df
 
     def load_etf_info(self, ctry):
@@ -801,42 +806,38 @@ class ETFDataLoader:  # TODO :: parquet 파일로 변경
 
     def load_etf_price(self, ctry):
         country = "kr" if ctry == "KR" else "us"
-        file_name = f"{country}_etf_price.csv"
-        base_dir = "/Users/kyungmin/git_repo/alpha-finder/check_data/etf"
-        df = pd.read_csv(os.path.join(base_dir, file_name))
+        file_name = f"{country}_etf_price.parquet"
+        df = pd.read_parquet(os.path.join(self.base_dir, file_name))
         return df
 
     def load_etf_dividend(self, ctry):
         country = "kr" if ctry == "KR" else "us"
-        file_name = f"{country}_etf_dividend.csv"
-        base_dir = "/Users/kyungmin/git_repo/alpha-finder/check_data/etf"
-        df = pd.read_csv(os.path.join(base_dir, file_name))
+        file_name = f"{country}_etf_dividend.parquet"
+        df = pd.read_parquet(os.path.join(self.base_dir, file_name))
         return df
 
     def load_etf_dividend_factor(self, ctry):
         country = "kr" if ctry == "KR" else "us"
-        file_name = f"{country}_etf_dividend_factor.csv"
-        base_dir = "/Users/kyungmin/git_repo/alpha-finder/check_data/etf"
-        df = pd.read_csv(os.path.join(base_dir, file_name))
+        file_name = f"{country}_etf_dividend_factor.parquet"
+        df = pd.read_parquet(os.path.join(self.base_dir, file_name))
         return df
 
     def load_krx(self, base=False, detail=False):
         if not base and not detail:
             raise ValueError("base or detail must be True")
+
         if base:
-            df_base = pd.read_csv(
-                "/Users/kyungmin/git_repo/alpha-finder/check_data/etf_krx/data_base.csv", encoding="euc-kr"
-            )
+            df_base = pd.read_parquet(os.path.join(self.krx_dir, "data_base.parquet"))
         if detail:
-            df_detail = pd.read_csv(
-                "/Users/kyungmin/git_repo/alpha-finder/check_data/etf_krx/data_detail.csv", encoding="euc-kr"
-            )
+            df_detail = pd.read_parquet(os.path.join(self.krx_dir, "data_detail.parquet"))
 
         if base and detail:
             df_krx = pd.merge(df_base, df_detail, left_on="단축코드", right_on="종목코드", how="left")
-        elif base or detail:
-            df_krx = df_base if base else df_detail
-        df_krx.to_csv("/Users/kyungmin/git_repo/alpha-finder/check_data/etf_krx/data_merged.csv", index=False)
+        elif base:
+            df_krx = df_base
+        else:
+            df_krx = df_detail
+
         return df_krx
 
     def load_etf_factors(self, market_filter: ETFMarketEnum):
@@ -847,6 +848,16 @@ class ETFDataLoader:  # TODO :: parquet 파일로 변경
             df = pd.read_parquet("static/kr_etf_factors.parquet")
         else:
             raise ValueError(f"Invalid market: {market_filter}")
+        return df
+
+    def load_morningstar(self, is_expense: bool = True, is_rating: bool = True):
+        df = pd.DataFrame()
+        if is_expense:
+            df_expense = pd.read_parquet("static/kr_etf_morningstar_expense.parquet")
+            df = df_expense if df.empty else pd.merge(df, df_expense, on="ticker", how="left")
+        if is_rating:
+            df_rating = pd.read_parquet("static/kr_etf_morningstar_rating.parquet")
+            df = df_rating if df.empty else pd.merge(df, df_rating, on="ticker", how="left")
         return df
 
 
@@ -1217,6 +1228,40 @@ class ETFDataPreprocessor:
 
         # 환헤지 여부
         df_select["is_hedge"] = df_select["kr_name"].str.contains("\(H\)$", regex=True)
+
+        return df_select
+
+    def morningstar_data_preprocess(self, df: pd.DataFrame, ctry: str):
+        """
+        모닝스타 데이터 전처리
+        """
+        all_columns = ["ticker", "expense_ratio", "star_rating", "company_name"]
+        select_columns = [col for col in all_columns if col in df.columns]
+        if "ticker" not in df.columns:
+            select_columns.append("ticker_x")
+        if "expense_ratio" not in df.columns:
+            select_columns.append("expense_ratio_x")
+        if "star_rating" not in df.columns:
+            select_columns.append("star_rating_x")
+        if "company_name" not in df.columns:
+            select_columns.append("company_name_x")
+        df_select = df[select_columns]
+
+        df_select = df_select.rename(
+            columns={
+                "ticker_x": "ticker",
+                "expense_ratio_x": "expense_ratio",
+                "star_rating_x": "star_rating",
+                "company_name_x": "company_name",
+            }
+        )
+        df_select = df_select.rename(
+            columns={
+                "expense_ratio": "total_fee",
+                "star_rating": "volatility",
+                "company_name": "manager",
+            }
+        )
 
         return df_select
 
@@ -1943,6 +1988,81 @@ class MorningstarETFCrawler:
         """브라우저 종료"""
         if self.driver:
             self.driver.quit()
+
+
+class ETFDataMerger:
+    """
+    데이터 합치는 클래스
+    """
+
+    def __init__(self):
+        self.loader = ETFDataLoader()
+        self.preprocessor = ETFDataPreprocessor()
+
+    def merge_data(
+        self, ctry, factor=False, price=False, dividend_factor=False, info=False, krx=False, morningstar=False
+    ):
+        """
+        데이터 합치기
+        Args:
+            ctry (str): 국가코드 (KR, US)
+            factor (bool): 팩터 데이터 합치기 여부
+        """
+        df_merged = None
+        if factor:
+            # 데이터 가져오기
+            df_factors = self.loader.load_factor(ctry)
+            # 데이터 전처리
+            df_factors = self.preprocessor.factor_data_preprocess(df_factors, ctry)
+            # 데이터 합치기
+            df_merged = df_factors if df_merged is None else pd.merge(df_merged, df_factors, on="ticker", how="left")
+        if price:
+            # 데이터 가져오기
+            df_price = self.loader.load_etf_price(ctry)
+            # 데이터 전처리
+            #
+
+            # 데이터 합치기
+            df_merged = df_price if df_merged is None else pd.merge(df_merged, df_price, on="ticker", how="left")
+        if dividend_factor:
+            # 데이터 가져오기
+            df_dividend_factor = self.loader.load_etf_dividend_factor(ctry)
+            # 데이터 전처리
+            df_dividend_factor = self.preprocessor.dividend_factor_data_preprocess(df_dividend_factor, ctry)
+            # 데이터 합치기
+            df_merged = (
+                df_dividend_factor
+                if df_merged is None
+                else pd.merge(df_merged, df_dividend_factor, on="ticker", how="left")
+            )
+        if info:
+            # 데이터 가져오기
+            df_info = self.loader.load_etf_info(ctry)
+
+            # 데이터 전처리
+            df_info = self.preprocessor.etf_info_data_preprocess(df_info, ctry)
+
+            # 데이터 합치기
+            if df_info is not None:
+                df_merged = df_info if df_merged is None else pd.merge(df_merged, df_info, on="ticker", how="left")
+        if krx:
+            # 데이터 가져오기
+            df_krx = self.loader.load_krx(base=True, detail=True)
+            # 데이터 전처리
+            df_krx = self.preprocessor.krx_data_preprocess(df_krx)
+            # 데이터 합치기
+            df_merged = df_krx if df_merged is None else pd.merge(df_merged, df_krx, on="ticker", how="left")
+        if morningstar:
+            # 데이터 가져오기
+            df_morningstar = self.loader.load_morningstar(ctry)
+            # 데이터 전처리
+            df_morningstar = self.preprocessor.morningstar_data_preprocess(df_morningstar, ctry)
+            # 데이터 합치기
+            df_merged = (
+                df_morningstar if df_merged is None else pd.merge(df_merged, df_morningstar, on="ticker", how="left")
+            )
+
+        return df_merged
 
 
 # 사용 예시

@@ -10,8 +10,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Git 설치 추가
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# Git 설치 및 ODBC 라이브러리 설치 추가
+RUN apt-get update && apt-get install -y git unixodbc unixodbc-dev && rm -rf /var/lib/apt/lists/*
 
 RUN pip install "poetry==$POETRY_VERSION"
 
@@ -34,6 +34,9 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/usr/local/bin:/root/.local/bin:$PATH"
 
 WORKDIR /app
+
+# 런타임 스테이지에도 ODBC 라이브러리 설치 추가
+RUN apt-get update && apt-get install -y unixodbc && rm -rf /var/lib/apt/lists/*
 
 # 빌더 스테이지에서 설치된 패키지들과 소스 코드를 복사
 COPY --from=builder /app /app

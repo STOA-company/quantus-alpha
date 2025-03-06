@@ -45,6 +45,7 @@ passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 selenium = "^4.29.0"
 webdriver-manager = "^4.0.2"
 requests-html = "^0.10.0"
+pyodbc = "^5.2.0"
 
 
 
