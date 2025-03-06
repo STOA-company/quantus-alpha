@@ -28,9 +28,9 @@ class KISAPI(BaseAPI):
         super().__init__(auth=auth)
 
     def _get_access_token(self) -> str:
-        max_attempts = 3
+        max_attempts = 6
         attempt = 0
-        wait_time = 2
+        wait_time = 20
 
         while attempt < max_attempts:
             try:
