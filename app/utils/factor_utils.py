@@ -54,17 +54,19 @@ class FactorUtils:
 
         stock_information = self.db._select(
             "stock_information",
-            columns=["ticker", "kr_name", "market", "sector_ko", "is_activate", "is_delisted"],
+            columns=["ticker", "kr_name", "en_name", "market", "sector_ko", "sector_2", "is_activate", "is_delisted"],
             ctry="kr",
         )
         stock_info_df = pd.DataFrame(stock_information)
         stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
         stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
+        stock_info_df["sector_en"] = stock_info_df["sector_2"].fillna("Other")
 
         # INNER JOIN
         df = pd.merge(df, stock_info_df, on="merge_code", how="inner")
         df["Name"] = df["kr_name"]
-        df = df.drop(["merge_code", "kr_name"], axis=1)
+        df["Name_en"] = df["en_name"]
+        df = df.drop(["merge_code", "kr_name", "en_name"], axis=1)
 
         df["country"] = "kr"
 
@@ -79,7 +81,9 @@ class FactorUtils:
             "market",
             "country",
             "sector",
+            "sector_en",
             "Name",
+            "Name_en",
             "is_activate",
             "is_delisted",
         ] + list(factors_mapping.keys())
@@ -111,17 +115,29 @@ class FactorUtils:
 
         stock_information = self.db._select(
             "stock_information",
-            columns=["ticker", "kr_name", "market", "is_snp_500", "sector_ko", "is_activate", "is_delisted"],
+            columns=[
+                "ticker",
+                "kr_name",
+                "en_name",
+                "market",
+                "is_snp_500",
+                "sector_ko",
+                "sector_2",
+                "is_activate",
+                "is_delisted",
+            ],
             ctry="us",
         )
         stock_info_df = pd.DataFrame(stock_information)
         stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
         stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
+        stock_info_df["sector_en"] = stock_info_df["sector_2"].fillna("Other")
 
         # INNER JOIN
         df = pd.merge(df, stock_info_df, on="merge_code", how="inner")
         df["Name"] = df["kr_name"]
-        df = df.drop(["merge_code", "kr_name"], axis=1)
+        df["Name_en"] = df["en_name"]
+        df = df.drop(["merge_code", "kr_name", "en_name"], axis=1)
 
         df["country"] = "us"
 
@@ -137,7 +153,9 @@ class FactorUtils:
             "market",
             "country",
             "sector",
+            "sector_en",
             "Name",
+            "Name_en",
             "is_snp_500",
             "is_activate",
             "is_delisted",

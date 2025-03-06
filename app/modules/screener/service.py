@@ -8,7 +8,7 @@ import numpy as np
 from app.modules.screener.schemas import MarketEnum
 from app.utils.factor_utils import factor_utils
 from app.enum.type import StockType
-from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, REVERSE_FACTOR_MAP
+from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, REVERSE_FACTOR_MAP, FACTOR_MAP_EN
 from app.core.exception.custom import CustomException
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ class ScreenerService:
         offset: Optional[int] = 0,
         sort_by: Optional[str] = "score",
         ascending: Optional[bool] = False,
+        lang: Optional[str] = "kr",
     ) -> Tuple[List[Dict], int]:
         try:
             if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
@@ -89,12 +90,16 @@ class ScreenerService:
 
                 result.append(stock_data)
 
+            factor_map = FACTOR_MAP
+            if lang == "en":
+                factor_map = FACTOR_MAP_EN
+
             mapped_result = []
             for item in result:
                 mapped_item = {}
                 for key in ordered_columns:
                     if key in item:
-                        mapped_key = FACTOR_MAP.get(key, key)
+                        mapped_key = factor_map.get(key, key)
                         mapped_item[mapped_key] = item[key]
                 mapped_result.append(mapped_item)
 

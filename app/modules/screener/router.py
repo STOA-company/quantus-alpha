@@ -12,7 +12,13 @@ import logging
 from app.utils.oauth_utils import get_current_user
 from app.utils.factor_utils import factor_utils
 from app.models.models_factors import CategoryEnum
-from app.common.constants import REVERSE_FACTOR_MAP, UNIT_MAP, DEFAULT_COLUMNS, KR_TO_EN_MAP
+from app.common.constants import (
+    REVERSE_FACTOR_MAP,
+    REVERSE_FACTOR_MAP_EN,
+    UNIT_MAP,
+    DEFAULT_COLUMNS,
+    FACTOR_KOREAN_TO_ENGLISH_MAP,
+)
 from app.modules.screener.schemas import MarketEnum
 from app.core.exception.custom import CustomException
 
@@ -80,12 +86,19 @@ def get_filtered_stocks(
             ]
 
         request_columns = DEFAULT_COLUMNS
-        for column in [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.columns]:
+        reverse_factor_map = REVERSE_FACTOR_MAP
+        if filtered_stocks.lang == "en":
+            reverse_factor_map = REVERSE_FACTOR_MAP_EN
+
+        for column in [reverse_factor_map[column] for column in filtered_stocks.columns]:
             if column not in request_columns:
                 request_columns.append(column)
 
-        sort_by = REVERSE_FACTOR_MAP[filtered_stocks.sort_by]
+        sort_by = "score"
+        if filtered_stocks.sort_by:
+            sort_by = reverse_factor_map[filtered_stocks.sort_by]
 
+        # 언어에 따른 결과값 리턴
         stocks_data, total_count = screener_service.get_filtered_stocks(
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
@@ -95,14 +108,8 @@ def get_filtered_stocks(
             filtered_stocks.offset,
             sort_by,
             filtered_stocks.ascending,
+            filtered_stocks.lang,
         )
-
-        if filtered_stocks.lang == "en":
-            for stock in stocks_data:
-                for key in list(stock.keys()):
-                    if key in KR_TO_EN_MAP:
-                        english_column = KR_TO_EN_MAP[key]
-                        stock[english_column] = stock.pop(key)
 
         has_next = filtered_stocks.offset * filtered_stocks.limit + filtered_stocks.limit < total_count
 
@@ -346,6 +353,7 @@ def get_group_filters(group_id: int, screener_service: ScreenerService = Depends
 def get_columns(
     category: CategoryEnum,
     group_id: Optional[int] = None,
+    lang: Optional[str] = "kr",
     screener_service: ScreenerService = Depends(get_screener_service),
 ):
     """
@@ -363,6 +371,8 @@ def get_columns(
             columns = ["PBR", "PCR", "PER", "POR", "PSR"]
 
         result = ["티커", "종목명", "국가", "시장", "산업", "스코어"] + columns
+        if lang == "en":
+            result = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in result]
         return {"columns": result}
     except Exception as e:
         logger.error(f"Error getting columns: {e}")

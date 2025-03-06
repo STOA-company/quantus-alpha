@@ -56,7 +56,7 @@ class FilteredStocks(BaseModel):
     columns: Optional[List[str]] = None
     limit: Optional[int] = 50
     offset: Optional[int] = 0
-    sort_by: Optional[str] = "스코어"
+    sort_by: Optional[str] = None
     ascending: Optional[bool] = False
     lang: Optional[str] = "kr"
 
