@@ -12,7 +12,7 @@ import logging
 from app.utils.oauth_utils import get_current_user
 from app.utils.factor_utils import factor_utils
 from app.models.models_factors import CategoryEnum
-from app.common.constants import REVERSE_FACTOR_MAP, UNIT_MAP, DEFAULT_COLUMNS
+from app.common.constants import REVERSE_FACTOR_MAP, UNIT_MAP, DEFAULT_COLUMNS, KR_TO_EN_MAP
 from app.modules.screener.schemas import MarketEnum
 from app.core.exception.custom import CustomException
 
@@ -96,6 +96,13 @@ def get_filtered_stocks(
             sort_by,
             filtered_stocks.ascending,
         )
+
+        if filtered_stocks.lang == "en":
+            for stock in stocks_data:
+                for key in list(stock.keys()):
+                    if key in KR_TO_EN_MAP:
+                        english_column = KR_TO_EN_MAP[key]
+                        stock[english_column] = stock.pop(key)
 
         has_next = filtered_stocks.offset * filtered_stocks.limit + filtered_stocks.limit < total_count
 
