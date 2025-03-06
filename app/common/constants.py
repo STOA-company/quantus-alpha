@@ -12,7 +12,7 @@ NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6
 
 DEFAULT_COLUMNS = ["Code", "Name", "country", "score"]
 
-NON_NUMERIC_COLUMNS = ["Code", "Name", "market", "sector", "country", "score"]
+NON_NUMERIC_COLUMNS = ["Code", "Name", "market", "sector", "country", "score", "Name_en", "sector_en"]
 
 UNIT_MAP = {"percentage": "%", "times": "회", "score": "점", "multiple": "배", "ratio": ""}
 UNIT_MAP_EN = {"percentage": "%", "times": "", "score": "", "multiple": "", "ratio": ""}
@@ -25,12 +25,12 @@ MARKET_MAP = {
     "AMS": "아멕스",
 }
 
-MARKET_MAP_EN = {
-    "KOSPI": "KOSPI",
-    "KOSDAQ": "KOSDAQ",
-    "NAS": "NASDAQ",
-    "NYS": "NYSE",
-    "AMS": "AMS",
+MARKET_KOREAN_TO_ENGLISH_MAP = {
+    "코스피": "KOSPI",
+    "코스닥": "KOSDAQ",
+    "나스닥": "NASDAQ",
+    "뉴욕 증권 거래소": "NYSE",
+    "아멕스": "AMS",
 }
 
 FACTOR_MAP = {
@@ -99,10 +99,10 @@ FACTOR_MAP = {
 
 FACTOR_MAP_EN = {
     "Code": "Ticker",
-    "Name": "Name",
+    "Name_en": "Name",
     "country": "Country",
     "market": "Market",
-    "sector": "Sector",
+    "sector_en": "Sector",
     "score": "Score",
     "abs_beta": "Absolute Beta (52-week)",
     "abs_beta_60": "Absolute Beta (60-day)",

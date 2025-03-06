@@ -18,6 +18,7 @@ from app.common.constants import (
     UNIT_MAP,
     DEFAULT_COLUMNS,
     FACTOR_KOREAN_TO_ENGLISH_MAP,
+    MARKET_KOREAN_TO_ENGLISH_MAP,
 )
 from app.modules.screener.schemas import MarketEnum
 from app.core.exception.custom import CustomException
@@ -112,6 +113,10 @@ def get_filtered_stocks(
         )
 
         has_next = filtered_stocks.offset * filtered_stocks.limit + filtered_stocks.limit < total_count
+
+        if filtered_stocks.lang == "en":
+            for stock in stocks_data:
+                stock["Market"] = MARKET_KOREAN_TO_ENGLISH_MAP[stock["Market"]]
 
         result = {"data": stocks_data, "has_next": has_next}
         return result

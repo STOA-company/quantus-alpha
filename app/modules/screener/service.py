@@ -85,6 +85,7 @@ class ScreenerService:
                                 market_filter,
                                 float(row[col]),
                                 factors[col].get("unit", "") if col in factors else "",
+                                lang,
                             )
                             stock_data[col] = {"value": value, "unit": unit}
 

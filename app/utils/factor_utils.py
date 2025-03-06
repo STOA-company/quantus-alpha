@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-from app.common.constants import NEED_TO_MULTIPLY_100, FACTOR_MAP, UNIT_MAP, MARKET_MAP
+from app.common.constants import NEED_TO_MULTIPLY_100, FACTOR_MAP, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
 import numpy as np
 from app.cache.factors import factors_cache
 from app.core.extra.SlackNotifier import SlackNotifier
@@ -16,6 +16,7 @@ notifier = SlackNotifier()
 class FactorUtils:
     def __init__(self):
         self.db = database
+        self.lang = "kr"
 
     def get_factors(self) -> List[dict]:
         factors = self.db._select(table="factors")
@@ -283,7 +284,9 @@ class FactorUtils:
 
         notifier.notify_info("팩터 정수 부분 불일치 검증 완료")
 
-    def convert_unit_and_value(self, market_filter: MarketEnum, value: float, unit: str) -> tuple[float, str]:
+    def convert_unit_and_value(
+        self, market_filter: MarketEnum, value: float, unit: str, lang: str = "kr"
+    ) -> tuple[float, str]:
         nation = "kr" if market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ] else "us"
 
         if unit.lower() == "big_price":
@@ -310,7 +313,10 @@ class FactorUtils:
             else:
                 return round(value, 2), "$"
 
-        return value, UNIT_MAP.get(unit.lower(), "")
+        unit_map = UNIT_MAP
+        if lang == "en":
+            unit_map = UNIT_MAP_EN
+        return value, unit_map.get(unit.lower(), "")
 
 
 factor_utils = FactorUtils()
