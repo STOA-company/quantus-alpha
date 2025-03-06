@@ -84,6 +84,8 @@ def get_filtered_stocks(
             if column not in request_columns:
                 request_columns.append(column)
 
+        sort_by = REVERSE_FACTOR_MAP[filtered_stocks.sort_by]
+
         stocks_data, total_count = screener_service.get_filtered_stocks(
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
@@ -91,12 +93,18 @@ def get_filtered_stocks(
             request_columns,
             filtered_stocks.limit,
             filtered_stocks.offset,
+            sort_by,
+            filtered_stocks.ascending,
         )
 
         has_next = filtered_stocks.offset * filtered_stocks.limit + filtered_stocks.limit < total_count
 
         result = {"data": stocks_data, "has_next": has_next}
         return result
+
+    except CustomException as e:
+        logger.error(f"Error getting filtered stocks: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
 
     except Exception as e:
         logger.error(f"Error getting filtered stocks: {e}")
