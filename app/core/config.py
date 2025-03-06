@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "")
     TEST_FRONTEND_URL: str = os.getenv("TEST_FRONTEND_URL", "")
 
+    REFINITIV_SERVER: str = os.getenv("REFINITIV_SERVER", "")
+    REFINITIV_DATABASE: str = os.getenv("REFINITIV_DATABASE", "")
+    REFINITIV_USERNAME: str = os.getenv("REFINITIV_USERNAME", "")
+    REFINITIV_PASSWORD: str = os.getenv("REFINITIV_PASSWORD", "")
+
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
     else:
