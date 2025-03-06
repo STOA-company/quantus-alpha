@@ -409,6 +409,22 @@ class ScreenerService:
             logger.error(f"Error in get_columns: {e}")
             raise e
 
+    def update_group_name(self, group_id: int, name: str) -> str:
+        try:
+            existing_groups = self.database._select(table="screener_groups", name=name)
+            if existing_groups and any(group.id != group_id for group in existing_groups):
+                raise CustomException(status_code=409, message="Group name already exists for this type")
+
+            self.database._update(table="screener_groups", id=group_id, sets={"name": name})
+            updated_group_name = self.database._select(table="screener_groups", id=group_id)[0].name
+            if name == updated_group_name:
+                return updated_group_name
+            else:
+                raise CustomException(status_code=500, message="Failed to update group name")
+        except Exception as e:
+            logger.error(f"Error in update_group_name: {e}")
+            raise e
+
 
 def get_screener_service():
     return ScreenerService()

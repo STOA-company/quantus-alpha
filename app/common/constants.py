@@ -227,3 +227,81 @@ FACTOR_KOREAN_TO_ENGLISH_MAP = {
 
 REVERSE_FACTOR_MAP = {v: k for k, v in FACTOR_MAP.items()}
 REVERSE_FACTOR_MAP_EN = {v: k for k, v in FACTOR_MAP_EN.items()}
+
+########################################################
+# ETF
+########################################################
+
+ETF_DATA_DIR = "check_data/etf"
+KRX_DIR = "check_data/etf_krx"
+PARQUET_DIR = "parquet"
+
+
+ETF_FACTOR_LIST = [
+    "ticker",
+    "date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "bid",
+    "ask",
+    "num_shrs",
+    "trade_amount",
+    "market_cap",
+    "momentum_1",
+    "momentum_3",
+    "momentum_6",
+    "momentum_12",
+    "ba_absolute_spread",
+    "ba_relative_spread",
+    "ba_spread_20d_avg",
+    "ba_spread_20d_std",
+    "ba_spread_1d_change",
+    "ba_spread_20d_change",
+    "disparity_5",
+    "disparity_10",
+    "disparity_20",
+    "disparity_50",
+    "disparity_100",
+    "disparity_200",
+    "vol_60",
+    "vol",
+    "rsi_9",
+    "rsi_14",
+    "rsi_25",
+    "sharpe",
+    "sortino",
+    "return_1m",
+    "return_3m",
+    "return_6m",
+    "return_1y",
+    "week_52_high",
+    "week_52_low",
+    "drawdown_1y",
+    "median_trade",
+    "dividend_count",
+    "last_dividend_date",
+    "last_dividend_per_share",
+    "recent_dividend_yield",
+    "dividend_growth_rate_3y",
+    "dividend_growth_rate_5y",
+    "ctry",
+    "market",
+    "kr_name",
+    "en_name",
+    "listing_date",
+    "base_index_name",
+    "tracking_multiplier",
+    "replication_method",
+    "base_asset_classification",
+    "manager",
+    "total_fee",
+    "tax_type",
+    "tracking_error",
+    "disparity",
+    "volatility",
+    "is_hedge",
+]
+FACTOR_MAP_ETF = {v: k for k, v in FACTOR_MAP.items() if k in ETF_FACTOR_LIST}

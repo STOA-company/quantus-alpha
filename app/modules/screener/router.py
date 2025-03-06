@@ -320,6 +320,22 @@ def reorder_groups(groups: List[int], screener_service: ScreenerService = Depend
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/groups/name")
+def update_group_name(group_id: int, name: str, screener_service: ScreenerService = Depends(get_screener_service)):
+    """
+    그룹 이름 수정
+    """
+    try:
+        updated_group_name = screener_service.update_group_name(group_id, name)
+        return {"message": f"Group name updated to {updated_group_name}"}
+    except CustomException as e:
+        logger.error(f"Error updating group name: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        logger.error(f"Error updating group name: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/groups/{group_id}", response_model=GroupFilter)
 def get_group_filters(group_id: int, screener_service: ScreenerService = Depends(get_screener_service)):
     """
