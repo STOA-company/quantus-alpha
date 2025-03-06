@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-from app.common.constants import NEED_TO_MULTIPLY_100, FACTOR_MAP, UNIT_MAP, MARKET_MAP
+from app.common.constants import NEED_TO_MULTIPLY_100, FACTOR_MAP, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
 import numpy as np
 from app.cache.factors import factors_cache
 from app.core.extra.SlackNotifier import SlackNotifier
@@ -16,6 +16,7 @@ notifier = SlackNotifier()
 class FactorUtils:
     def __init__(self):
         self.db = database
+        self.lang = "kr"
 
     def get_factors(self) -> List[dict]:
         factors = self.db._select(table="factors")
@@ -54,17 +55,19 @@ class FactorUtils:
 
         stock_information = self.db._select(
             "stock_information",
-            columns=["ticker", "kr_name", "market", "sector_ko", "is_activate", "is_delisted"],
+            columns=["ticker", "kr_name", "en_name", "market", "sector_ko", "sector_2", "is_activate", "is_delisted"],
             ctry="kr",
         )
         stock_info_df = pd.DataFrame(stock_information)
         stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
         stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
+        stock_info_df["sector_en"] = stock_info_df["sector_2"].fillna("Other")
 
         # INNER JOIN
         df = pd.merge(df, stock_info_df, on="merge_code", how="inner")
         df["Name"] = df["kr_name"]
-        df = df.drop(["merge_code", "kr_name"], axis=1)
+        df["Name_en"] = df["en_name"]
+        df = df.drop(["merge_code", "kr_name", "en_name"], axis=1)
 
         df["country"] = "kr"
 
@@ -79,7 +82,9 @@ class FactorUtils:
             "market",
             "country",
             "sector",
+            "sector_en",
             "Name",
+            "Name_en",
             "is_activate",
             "is_delisted",
         ] + list(factors_mapping.keys())
@@ -111,17 +116,29 @@ class FactorUtils:
 
         stock_information = self.db._select(
             "stock_information",
-            columns=["ticker", "kr_name", "market", "is_snp_500", "sector_ko", "is_activate", "is_delisted"],
+            columns=[
+                "ticker",
+                "kr_name",
+                "en_name",
+                "market",
+                "is_snp_500",
+                "sector_ko",
+                "sector_2",
+                "is_activate",
+                "is_delisted",
+            ],
             ctry="us",
         )
         stock_info_df = pd.DataFrame(stock_information)
         stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
         stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
+        stock_info_df["sector_en"] = stock_info_df["sector_2"].fillna("Other")
 
         # INNER JOIN
         df = pd.merge(df, stock_info_df, on="merge_code", how="inner")
         df["Name"] = df["kr_name"]
-        df = df.drop(["merge_code", "kr_name"], axis=1)
+        df["Name_en"] = df["en_name"]
+        df = df.drop(["merge_code", "kr_name", "en_name"], axis=1)
 
         df["country"] = "us"
 
@@ -137,7 +154,9 @@ class FactorUtils:
             "market",
             "country",
             "sector",
+            "sector_en",
             "Name",
+            "Name_en",
             "is_snp_500",
             "is_activate",
             "is_delisted",
@@ -265,7 +284,9 @@ class FactorUtils:
 
         notifier.notify_info("팩터 정수 부분 불일치 검증 완료")
 
-    def convert_unit_and_value(self, market_filter: MarketEnum, value: float, unit: str) -> tuple[float, str]:
+    def convert_unit_and_value(
+        self, market_filter: MarketEnum, value: float, unit: str, lang: str = "kr"
+    ) -> tuple[float, str]:
         nation = "kr" if market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ] else "us"
 
         if unit.lower() == "big_price":
@@ -292,7 +313,10 @@ class FactorUtils:
             else:
                 return round(value, 2), "$"
 
-        return value, UNIT_MAP.get(unit.lower(), "")
+        unit_map = UNIT_MAP
+        if lang == "en":
+            unit_map = UNIT_MAP_EN
+        return value, unit_map.get(unit.lower(), "")
 
 
 factor_utils = FactorUtils()
