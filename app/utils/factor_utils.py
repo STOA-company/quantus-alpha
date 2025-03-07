@@ -10,6 +10,7 @@ from app.cache.factors import factors_cache
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.models.models_factors import CategoryEnum
 import logging
+from app.utils.data_utils import ceil_to_integer, floor_to_integer
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,8 @@ class FactorUtils:
                             "unit": str(factor.unit).lower(),
                             "category": str(factor.category).lower(),
                             "direction": factor.sort_direction,
-                            "min_value": min_value,
-                            "max_value": max_value,
+                            "min_value": floor_to_integer(min_value),
+                            "max_value": ceil_to_integer(max_value),
                         }
                     )
 
