@@ -40,6 +40,7 @@ class ScreenerService:
         lang: Optional[str] = "kr",
     ) -> Tuple[List[Dict], int]:
         try:
+            print("SERVICE COLUMNS", columns)
             if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
 
@@ -57,21 +58,24 @@ class ScreenerService:
             factors = factors_cache.get_configs()
             result = []
 
-            ordered_columns = []
             if columns:
+                ordered_columns = []
                 for col in columns:
                     mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
                     if mapped_col not in ordered_columns:
                         ordered_columns.append(mapped_col)
             else:
-                for col in sorted_df.columns:
-                    if col not in ordered_columns and col != "score":
-                        ordered_columns.append(col)
+                ordered_columns = ["Code", "Name", "score", "country"]
+
+            selected_columns = ordered_columns.copy()
+            print("SERVICE SELECTED COLUMNS", selected_columns)
+
+            sorted_df = sorted_df[selected_columns]
 
             for _, row in sorted_df.iterrows():
                 stock_data = {}
 
-                for col in ordered_columns:
+                for col in selected_columns:
                     if col in NON_NUMERIC_COLUMNS:
                         if col in row:
                             stock_data[col] = row[col]
@@ -91,6 +95,8 @@ class ScreenerService:
 
                 result.append(stock_data)
 
+            print("SERVICE RESULT COLUMNS", result[0].keys())
+
             factor_map = FACTOR_MAP
             if lang == "en":
                 factor_map = FACTOR_MAP_EN
@@ -103,6 +109,8 @@ class ScreenerService:
                         mapped_key = factor_map.get(key, key)
                         mapped_item[mapped_key] = item[key]
                 mapped_result.append(mapped_item)
+
+            print("SERVICE MAPPED RESULT COLUMNS", mapped_result[0].keys())
 
             return mapped_result, total_count
 

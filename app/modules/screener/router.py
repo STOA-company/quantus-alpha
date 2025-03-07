@@ -16,7 +16,6 @@ from app.common.constants import (
     REVERSE_FACTOR_MAP,
     REVERSE_FACTOR_MAP_EN,
     UNIT_MAP,
-    DEFAULT_COLUMNS,
     FACTOR_KOREAN_TO_ENGLISH_MAP,
     MARKET_KOREAN_TO_ENGLISH_MAP,
 )
@@ -86,14 +85,18 @@ def get_filtered_stocks(
                 for condition in filtered_stocks.custom_filters
             ]
 
-        request_columns = DEFAULT_COLUMNS
+        request_columns = ["Code", "Name", "country", "score"]
         reverse_factor_map = REVERSE_FACTOR_MAP
         if filtered_stocks.lang == "en":
             reverse_factor_map = REVERSE_FACTOR_MAP_EN
 
+        print("ROUTER REQUEST COLUMNS", request_columns)
+        print("ROUTER FILTERED STOCKS COLUMNS", filtered_stocks.columns)
         for column in [reverse_factor_map[column] for column in filtered_stocks.columns]:
             if column not in request_columns:
                 request_columns.append(column)
+
+        print("ROUTER FINAL REQUEST COLUMNS", request_columns)
 
         sort_by = "score"
         if filtered_stocks.sort_by:
