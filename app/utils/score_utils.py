@@ -2,11 +2,11 @@ import pandas as pd
 import numpy as np
 from app.cache.factors import factors_cache
 from app.utils.test_utils import time_it
-from app.common.constants import NON_NUMERIC_COLUMNS
+from app.common.constants import NON_NUMERIC_COLUMNS, NON_NUMERIC_COLUMNS_ETF
 
 
 @time_it
-def calculate_factor_score_with_description(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_factor_score_with_description(df: pd.DataFrame, country: str, asset_type: str) -> pd.DataFrame:
     df_copy = df.copy()
     columns = df.columns.tolist()
 
@@ -21,7 +21,7 @@ def calculate_factor_score_with_description(df: pd.DataFrame) -> pd.DataFrame:
     descriptions = np.empty((n_rows, len(numeric_columns)), dtype=object)
 
     for col_idx, col in enumerate(numeric_columns):
-        config = factors_cache.get_configs().get(col)
+        config = factors_cache.get_configs(country=country, asset_type=asset_type).get(col)
         if not config:
             continue
 
@@ -95,12 +95,20 @@ def calculate_factor_score_with_description(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @time_it
-def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_factor_score(df: pd.DataFrame, country: str, asset_type: str) -> pd.DataFrame:
+    if asset_type == "etf":
+        df = df.rename(
+            columns={
+                "ticker": "Code",
+            }
+        )
     df_copy = df.copy()
-    columns = df.columns.tolist()
+    columns = df_copy.columns.tolist()
+
+    non_numeric_columns = NON_NUMERIC_COLUMNS_ETF if asset_type == "etf" else NON_NUMERIC_COLUMNS
 
     # 비수치 컬럼 사전 필터링
-    numeric_columns = [col for col in columns if col not in NON_NUMERIC_COLUMNS]
+    numeric_columns = [col for col in columns if col not in non_numeric_columns]
 
     # 한 번에 모든 NaN 값을 중앙값으로 채움
     for col in numeric_columns:
@@ -112,7 +120,7 @@ def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
     factor_ranks = np.ones((n_rows, 0))
 
     for col in numeric_columns:
-        config = factors_cache.get_configs().get(col)
+        config = factors_cache.get_configs(country=country, asset_type=asset_type).get(col)
         if not config:
             continue
 
@@ -149,5 +157,12 @@ def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
         scores[~all_first] = np.minimum(scores[~all_first], 99.99)
 
         score_df["score"] = np.round(scores, 2)
+
+    if asset_type == "etf":
+        score_df = score_df.rename(
+            columns={
+                "Code": "ticker",
+            }
+        )
 
     return score_df.sort_values("score", ascending=False)

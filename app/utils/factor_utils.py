@@ -68,7 +68,7 @@ class FactorUtils:
 
     def process_kr_factor_data(self):
         output_file = "parquet/kr_stock_factors.parquet"
-        factors_mapping = factors_cache.get_configs()
+        factors_mapping = factors_cache.get_configs(country="kr", asset_type="stock")
 
         result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_ko_active.parquet", dir="port/")
         df = pd.read_parquet(io.BytesIO(result))
@@ -133,7 +133,7 @@ class FactorUtils:
 
     def process_us_factor_data(self):
         output_file = "parquet/us_stock_factors.parquet"
-        factors_mapping = factors_cache.get_configs()
+        factors_mapping = factors_cache.get_configs(country="us", asset_type="stock")
 
         result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_us_active.parquet", dir="port/")
         df = pd.read_parquet(io.BytesIO(result))

@@ -146,15 +146,13 @@ def run_etf_screener_data():
         "ETFDividendFactorExtractor": dividend_factor_extractor,
     }
 
-    # # 1. 데이터 다운로드
-    # print("\n1. 데이터 다운로드 시작")
+    # 1. 데이터 다운로드
+    print("\n1. 데이터 다운로드 시작")
 
-    # # 한국과 미국 ETF 데이터 다운로드
-    # downloaded_data = execute_selected_method(  # noqa
-    #     ["가격_한국", "가격_미국", "배당_한국", "배당_미국"], class_instances
-    # )
+    # 한국과 미국 ETF 데이터 다운로드
+    execute_selected_method(["가격_한국", "가격_미국", "배당_한국", "배당_미국"], class_instances)
 
-    # print("데이터 다운로드 완료")
+    print("데이터 다운로드 완료")
 
     # 2. 팩터 데이터 추출
     print("\n2. 팩터 데이터 추출 시작")
