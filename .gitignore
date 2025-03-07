@@ -50,3 +50,6 @@ parquet/
 
 # test
 test/
+
+# check_data
+check_data/etf/*.parquet

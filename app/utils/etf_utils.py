@@ -21,7 +21,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException,
 from webdriver_manager.chrome import ChromeDriverManager
 
 # Local imports
-from app.common.constants import ETF_DATA_DIR, KRX_DIR
+from app.common.constants import ETF_DATA_DIR, KRX_DIR, MORNINGSTAR_DIR, PARQUET_DIR
 from app.core.config import settings
 from app.database.crud import database
 from app.common.mapping import (
@@ -422,6 +422,8 @@ class ETFDataDownloader:
         self.refinitiv_username = settings.REFINITIV_USERNAME
         self.refinitiv_password = settings.REFINITIV_PASSWORD
         self.DATA_DIR = ETF_DATA_DIR
+        self.db = database
+        self.kr_pattern = re.compile(r"^A")
 
     def _get_refinitiv_data(self, query):
         """
@@ -514,6 +516,13 @@ class ETFDataDownloader:
             order by b.DsLocalCode, a.PayDate
             """
         df = self._get_refinitiv_data(query)
+
+        list_db_tickers = self._get_db_tickers_list(ctry)
+
+        if ctry == "KR":
+            list_db_tickers = [self.kr_pattern.sub("K", ticker) for ticker in list_db_tickers]
+        df = df[df["ticker"].isin(list_db_tickers)]
+
         if download:
             if ctry == "KR":
                 df.to_parquet(os.path.join(self.DATA_DIR, "kr_etf_dividend.parquet"), index=False)
@@ -606,6 +615,10 @@ class ETFDataDownloader:
             """
 
         df = self._get_refinitiv_data(query)
+        list_db_tickers = self._get_db_tickers_list(ctry)
+        if ctry == "KR":
+            list_db_tickers = [self.kr_pattern.sub("A", ticker) for ticker in list_db_tickers]
+        df = df[df["Ticker"].isin(list_db_tickers)]
         if download:
             if ctry == "KR":
                 df.to_parquet(os.path.join(self.DATA_DIR, "kr_etf_price.parquet"), index=False)
@@ -613,8 +626,10 @@ class ETFDataDownloader:
                 df.to_parquet(os.path.join(self.DATA_DIR, "us_etf_price.parquet"), index=False)
         return df
 
-    def get_etf_price_from_kis(self, ticker: str):
-        return self.kis_api.etf_price(ticker)
+    def _get_db_tickers_list(self, ctry: str, type: str = "etf"):
+        tickers = self.db._select(table="stock_information", columns=["ticker"], ctry=ctry, type=type)
+        tickers = [ticker[0] for ticker in tickers]
+        return tickers
 
 
 class KRXDownloader:
@@ -786,6 +801,8 @@ class ETFDataLoader:
         self.db = database
         self.base_dir = ETF_DATA_DIR
         self.krx_dir = KRX_DIR
+        self.parquet_dir = PARQUET_DIR
+        self.morningstar_dir = MORNINGSTAR_DIR
 
     def load_factor(self, ctry):
         country = "kr" if ctry == "KR" else "us"
@@ -843,9 +860,9 @@ class ETFDataLoader:
     def load_etf_factors(self, market_filter: ETFMarketEnum):
         df = pd.DataFrame()
         if market_filter in [ETFMarketEnum.US, ETFMarketEnum.NYSE, ETFMarketEnum.NASDAQ, ETFMarketEnum.BATS]:
-            df = pd.read_parquet("static/us_etf_factors.parquet")
+            df = pd.read_parquet(os.path.join(self.parquet_dir, "us_etf_factors.parquet"))
         elif market_filter == ETFMarketEnum.KR:
-            df = pd.read_parquet("static/kr_etf_factors.parquet")
+            df = pd.read_parquet(os.path.join(self.parquet_dir, "kr_etf_factors.parquet"))
         else:
             raise ValueError(f"Invalid market: {market_filter}")
         return df
@@ -853,10 +870,10 @@ class ETFDataLoader:
     def load_morningstar(self, is_expense: bool = True, is_rating: bool = True):
         df = pd.DataFrame()
         if is_expense:
-            df_expense = pd.read_parquet("static/kr_etf_morningstar_expense.parquet")
+            df_expense = pd.read_parquet(os.path.join(self.morningstar_dir, "us_etf_morningstar_expense.parquet"))
             df = df_expense if df.empty else pd.merge(df, df_expense, on="ticker", how="left")
         if is_rating:
-            df_rating = pd.read_parquet("static/kr_etf_morningstar_rating.parquet")
+            df_rating = pd.read_parquet(os.path.join(self.morningstar_dir, "us_etf_morningstar_rating.parquet"))
             df = df_rating if df.empty else pd.merge(df, df_rating, on="ticker", how="left")
         return df
 
@@ -1227,7 +1244,7 @@ class ETFDataPreprocessor:
         df_select["risk_rating"] = df_select["risk_rating"].map(etf_risk_map)
 
         # 환헤지 여부
-        df_select["is_hedge"] = df_select["kr_name"].str.contains("\(H\)$", regex=True)
+        df_select["is_hedge"] = df_select["kr_name"].str.contains(r"\(H\)$", regex=True)
 
         return df_select
 
@@ -2067,20 +2084,23 @@ class ETFDataMerger:
 
 # 사용 예시
 if __name__ == "__main__":
-    try:
-        # 크롤러 초기화 (데이터베이스 연결 없이)
-        # headless=False로 설정하면 브라우저 창이 표시됨 (디버깅에 유용)
-        crawler = MorningstarETFCrawler(headless=False)
+    downloader = ETFDataDownloader()
+    downloader.dwonload_etf_price(ctry="KR", download=True)
 
-        # 선택 1: ETF 별점 및 운용사 정보 수집
-        results, filename = crawler.get_etf_info("US", max_tickers=None)
+    # try:
+    #     # 크롤러 초기화 (데이터베이스 연결 없이)
+    #     # headless=False로 설정하면 브라우저 창이 표시됨 (디버깅에 유용)
+    #     crawler = MorningstarETFCrawler(headless=False)
 
-        # 선택 2: ETF 비용 비율 정보 수집
-        # results, filename = crawler.get_etf_expense_ratios("US", max_tickers=None)
+    #     # 선택 1: ETF 별점 및 운용사 정보 수집
+    #     results, filename = crawler.get_etf_info("US", max_tickers=None)
 
-        print(f"크롤링 완료! 결과가 {filename}에 저장되었습니다.")
+    #     # 선택 2: ETF 비용 비율 정보 수집
+    #     # results, filename = crawler.get_etf_expense_ratios("US", max_tickers=None)
 
-    finally:
-        # 예외 발생 여부와 관계없이 브라우저 종료
-        if "crawler" in locals():
-            crawler.close()
+    #     print(f"크롤링 완료! 결과가 {filename}에 저장되었습니다.")
+
+    # finally:
+    #     # 예외 발생 여부와 관계없이 브라우저 종료
+    #     if "crawler" in locals():
+    #         crawler.close()
