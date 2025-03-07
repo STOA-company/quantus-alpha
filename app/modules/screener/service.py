@@ -230,12 +230,12 @@ class ScreenerService:
     def create_group(
         self,
         user_id: int,
-        name: str,
+        name: str = "기본",
         type: Optional[StockType] = StockType.STOCK,
-        market_filter: Optional[MarketEnum] = None,
-        sector_filter: Optional[List[str]] = None,
-        custom_filters: Optional[List[Dict]] = None,
-        factor_filters: Optional[List[str]] = None,
+        market_filter: Optional[MarketEnum] = MarketEnum.US,
+        sector_filter: Optional[List[str]] = [],
+        custom_filters: Optional[List[Dict]] = [],
+        factor_filters: Optional[List[str]] = [],
     ) -> bool:
         existing_groups = self.database._select(table="screener_groups", user_id=user_id, name=name, type=type)
         if existing_groups:
