@@ -26,9 +26,7 @@ class FactorsCache:
         return configs
 
     def _update_configs(self) -> dict:
-        factors = database._select(
-            "factors", columns=["factor", "description", "unit", "category", "sort_direction", "min_value", "max_value"]
-        )
+        factors = database._select("factors", columns=["factor", "description", "unit", "category", "sort_direction"])
 
         configs = {}
         for factor in factors:
@@ -37,7 +35,6 @@ class FactorsCache:
                 "unit": factor.unit,
                 "category": factor.category,
                 "direction": factor.sort_direction,
-                "range": (factor.min_value, factor.max_value),
             }
 
         self.redis.set(self.factors_key, json.dumps(configs))
