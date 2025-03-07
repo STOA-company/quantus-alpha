@@ -25,6 +25,11 @@ CELERY_APP.conf.worker_prefetch_multiplier = 1  # 작업 분배 최적화
 
 # Celery Beat Schedule
 CELERY_APP.conf.beat_schedule = {
+    # 메모리 상태 체크
+    "memory-status": {
+        "task": "memory-status",
+        "schedule": crontab(minute="1,11,21,31,41,51"),
+    },
     # 한국 주식 분봉 스케줄
     "kr-stock-minute-batch": {
         "task": "kr_stock_minute_batch",
@@ -130,13 +135,24 @@ CELERY_APP.conf.beat_schedule = {
         "task": "check_warned_stock_us",
         "schedule": crontab(hour="22", minute="00"),
     },
-    # 메모리 상태 체크
-    "memory-status": {
-        "task": "memory-status",
-        "schedule": crontab(minute="1,11,21,31,41,51"),
-    },
     "reset-daily-leaderboard": {
         "task": "reset_daily_leaderboard",
         "schedule": crontab(hour="0", minute="0"),
+    },
+    "update_us_top_gainers": {
+        "task": "update_us_top_gainers",
+        "schedule": crontab(hour="22, 23", minute="50"),
+    },
+    "update_us_top_losers": {
+        "task": "update_us_top_losers",
+        "schedule": crontab(hour="22, 23", minute="50"),
+    },
+    "update_kr_top_gainers": {
+        "task": "update_kr_top_gainers",
+        "schedule": crontab(hour="9", minute="1"),
+    },
+    "update_kr_top_losers": {
+        "task": "update_kr_top_losers",
+        "schedule": crontab(hour="9", minute="1"),
     },
 }

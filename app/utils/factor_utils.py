@@ -4,163 +4,352 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.schemas import MarketEnum
-from app.common.constants import SECTOR_MAP, DEFAULT_SCREENER_COLUMNS, FACTOR_RENAME_MAP
+from app.common.constants import NEED_TO_MULTIPLY_100, FACTOR_MAP, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
+import numpy as np
+from app.cache.factors import factors_cache
+from app.core.extra.SlackNotifier import SlackNotifier
+from app.models.models_factors import CategoryEnum
+import logging
+from app.utils.data_utils import ceil_to_integer, floor_to_integer
+
+logger = logging.getLogger(__name__)
+
+notifier = SlackNotifier()
 
 
-def get_factors_from_db() -> Dict[str, Dict]:
-    factors = database._select("factors", columns=["factor", "description", "unit", "category", "sort_direction"])
+class FactorUtils:
+    def __init__(self):
+        self.db = database
+        self.lang = "kr"
 
-    factors_mapping = {}
-    for factor in factors:
-        factors_mapping[factor.factor] = {
-            "description": factor.description,
-            "unit": factor.unit,
-            "category": factor.category,
-            "sort_direction": factor.sort_direction,
-        }
+    def get_factors(self, market: MarketEnum, is_stock: Optional[bool] = True) -> List[dict]:
+        factors = self.db._select(table="factors", is_stock=is_stock)
+        # 시장별 팩터 최소/최대값 계산
+        market_data = self.get_df_from_parquet(market)
 
-    return factors_mapping
+        result = []
+        for factor in factors:
+            factor_name = factor.factor
+
+            if factor_name in market_data.columns:
+                min_value = market_data[factor_name].min()
+                max_value = market_data[factor_name].max()
+
+                result.append(
+                    {
+                        "factor": FACTOR_MAP[factor_name],
+                        "description": factor.description,
+                        "unit": str(factor.unit).lower(),
+                        "category": str(factor.category).lower(),
+                        "direction": factor.sort_direction,
+                        "min_value": floor_to_integer(min_value),
+                        "max_value": ceil_to_integer(max_value),
+                    }
+                )
+
+            else:
+                raise ValueError(f"팩터 '{factor_name}'가 데이터에 존재하지 않습니다.")
+
+        return result
+
+    def get_columns(self, category: Optional[CategoryEnum] = None, is_stock: Optional[bool] = True) -> List[str]:
+        db_columns = self.db._select(table="factors", columns=["factor"], category=category, is_stock=is_stock)
+
+        result = ["market", "sector", "score"]
+        for column_tuple in db_columns:
+            column_name = column_tuple[0]
+
+            result.append(column_name)
+
+        return result
+
+    def process_kr_factor_data(self):
+        output_file = "parquet/kr_stock_factors.parquet"
+        factors_mapping = factors_cache.get_configs()
+
+        result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_ko_active.parquet", dir="port/")
+        df = pd.read_parquet(io.BytesIO(result))
+
+        df["merge_code"] = df["Code"]
+
+        stock_information = self.db._select(
+            "stock_information",
+            columns=["ticker", "kr_name", "en_name", "market", "sector_ko", "sector_2", "is_activate", "is_delisted"],
+            ctry="kr",
+        )
+        stock_info_df = pd.DataFrame(stock_information)
+        stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
+        stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
+        stock_info_df["sector_en"] = stock_info_df["sector_2"].fillna("Other")
+
+        # INNER JOIN
+        df = pd.merge(df, stock_info_df, on="merge_code", how="inner")
+        df["Name"] = df["kr_name"]
+        df["Name_en"] = df["en_name"]
+        df = df.drop(["merge_code", "kr_name", "en_name"], axis=1)
+
+        df["country"] = "kr"
+
+        # NAN 값 처리
+        df["is_activate"] = df["is_activate"].fillna(1).astype(int)
+        df["is_delisted"] = df["is_delisted"].fillna(0).astype(int)
+
+        df = df[(df["is_activate"] == 1) & (df["is_delisted"] == 0)]
+
+        selected_columns = [
+            "Code",
+            "market",
+            "country",
+            "sector",
+            "sector_en",
+            "Name",
+            "Name_en",
+            "is_activate",
+            "is_delisted",
+        ] + list(factors_mapping.keys())
+
+        df_selected = df[selected_columns]
+        df_result = df_selected[df_selected["market"].isin(["KOSPI", "KOSDAQ"])].copy()
+
+        for column in df_result.columns:
+            if np.issubdtype(df_result[column].dtype, np.number):
+                df_result[column] = df_result[column].replace([np.inf, -np.inf], np.nan)
+
+        self.validate_integer_parts(df, df_result)
+
+        df_result["market"] = df_result["market"].map(MARKET_MAP)
+
+        for column in NEED_TO_MULTIPLY_100:
+            df_result[column] = df_result[column] * 100
+
+        for column in df_result.columns:
+            if np.issubdtype(df_result[column].dtype, np.number):
+                df_result[column] = np.round(df_result[column].astype(np.float64), 2)
+
+        df_result.to_parquet(output_file)
+
+    def process_us_factor_data(self):
+        output_file = "parquet/us_stock_factors.parquet"
+        factors_mapping = factors_cache.get_configs()
+
+        result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_us_active.parquet", dir="port/")
+        df = pd.read_parquet(io.BytesIO(result))
+
+        df["merge_code"] = df["Code"].str.replace("-US", "")
+
+        stock_information = self.db._select(
+            "stock_information",
+            columns=[
+                "ticker",
+                "kr_name",
+                "en_name",
+                "market",
+                "is_snp_500",
+                "sector_ko",
+                "sector_2",
+                "is_activate",
+                "is_delisted",
+            ],
+            ctry="us",
+        )
+        stock_info_df = pd.DataFrame(stock_information)
+        stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
+        stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
+        stock_info_df["sector_en"] = stock_info_df["sector_2"].fillna("Other")
+
+        # INNER JOIN
+        df = pd.merge(df, stock_info_df, on="merge_code", how="inner")
+        df["Name"] = df["kr_name"]
+        df["Name_en"] = df["en_name"]
+        df = df.drop(["merge_code", "kr_name", "en_name"], axis=1)
+
+        df["country"] = "us"
+
+        # NAN 값 처리
+        df["is_snp_500"] = df["is_snp_500"].fillna(0).astype(int)
+        df["is_activate"] = df["is_activate"].fillna(1).astype(int)
+        df["is_delisted"] = df["is_delisted"].fillna(0).astype(int)
+
+        df = df[(df["is_activate"] == 1) & (df["is_delisted"] == 0)]
+
+        selected_columns = [
+            "Code",
+            "market",
+            "country",
+            "sector",
+            "sector_en",
+            "Name",
+            "Name_en",
+            "is_snp_500",
+            "is_activate",
+            "is_delisted",
+        ] + list(factors_mapping.keys())
+
+        df_selected = df[selected_columns]
+        df_result = df_selected[df_selected["market"].isin(["NAS", "NYS"])].copy()
+
+        for column in df_result.columns:
+            if np.issubdtype(df_result[column].dtype, np.number):
+                df_result[column] = df_result[column].replace([np.inf, -np.inf], np.nan)
+
+        self.validate_integer_parts(df, df_result)
+
+        df_result["market"] = df_result["market"].map(MARKET_MAP)
+
+        for column in NEED_TO_MULTIPLY_100:
+            df_result[column] = df_result[column] * 100
+
+        for column in df_result.columns:
+            if np.issubdtype(df_result[column].dtype, np.number):
+                df_result[column] = np.round(df_result[column].astype(np.float64), 2)
+
+        df_result.to_parquet(output_file)
+
+    def get_df_from_parquet(self, market_filter: MarketEnum) -> pd.DataFrame:
+        df = None
+        if market_filter:
+            if market_filter in [MarketEnum.US, MarketEnum.NASDAQ, MarketEnum.SNP500]:
+                df = pd.read_parquet("parquet/us_stock_factors.parquet")
+            elif market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
+                df = pd.read_parquet("parquet/kr_stock_factors.parquet")
+
+            if market_filter in [MarketEnum.KOSPI, MarketEnum.KOSDAQ, MarketEnum.NASDAQ]:
+                df = df[df["market"] == market_filter.value]
+
+            if market_filter == MarketEnum.SNP500:
+                df = df[df["is_snp_500"] == 1]
+        else:
+            kr_df = pd.read_parquet("parquet/kr_stock_factors.parquet")
+            us_df = pd.read_parquet("parquet/us_stock_factors.parquet")
+            kr_df["is_snp_500"] = 0
+            df = pd.concat([kr_df, us_df])
+
+        return df
+
+    def filter_stocks(
+        self,
+        market_filter: Optional[MarketEnum] = None,
+        sector_filter: Optional[List[str]] = None,
+        custom_filters: Optional[List[Dict]] = None,
+    ) -> List[str]:
+        df = self.get_df_from_parquet(market_filter)
+        filtered_df = df.copy()
+
+        # 종목 필터링
+        if market_filter:
+            if market_filter == MarketEnum.US:
+                filtered_df = filtered_df[filtered_df["country"] == "us"]
+            elif market_filter == MarketEnum.KR:
+                filtered_df = filtered_df[filtered_df["country"] == "kr"]
+            elif market_filter == MarketEnum.SNP500:
+                filtered_df = filtered_df[filtered_df["is_snp_500"] == 1]
+            elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSDAQ, MarketEnum.KOSPI]:
+                filtered_df = filtered_df[filtered_df["market"] == market_filter.value]
+
+        if sector_filter:
+            filtered_df = filtered_df[filtered_df["sector"].isin(sector_filter)]
+
+        if custom_filters:
+            for filter in custom_filters:
+                factor = filter["factor"]
+                if factor not in filtered_df.columns:
+                    raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
+                if filter["above"] is not None:
+                    filtered_df = filtered_df[filtered_df[factor] >= filter["above"]]
+                if filter["below"] is not None:
+                    filtered_df = filtered_df[filtered_df[factor] <= filter["below"]]
+
+        stock_codes = filtered_df["Code"].tolist()
+        return stock_codes
+
+    def get_filtered_stocks_df(
+        self, market_filter: MarketEnum, codes: List[str], columns: Optional[List[str]] = None
+    ) -> pd.DataFrame:
+        if columns is None:
+            columns = []
+        required_columns = columns.copy()
+        if "score" in required_columns:
+            required_columns.remove("score")
+
+        df = self.get_df_from_parquet(market_filter)
+        filtered_df = df[df["Code"].isin(codes)][required_columns]
+
+        return filtered_df
+
+    def validate_integer_parts(self, original_df: pd.DataFrame, processed_df: pd.DataFrame):
+        notifier.notify_info("팩터 정수 부분 불일치 검증 시작")
+
+        def safe_int(x):
+            if pd.isna(x) or np.isinf(x):
+                return 0
+            return int(x)
+
+        original_df = original_df.sort_values("Code")
+        processed_df = processed_df.sort_values("Code")
+
+        common_codes = set(original_df["Code"]) & set(processed_df["Code"])
+        original_df = original_df[original_df["Code"].isin(common_codes)]
+        processed_df = processed_df[processed_df["Code"].isin(common_codes)]
+
+        for col in processed_df.columns:
+            if np.issubdtype(processed_df[col].dtype, np.number):
+                if col in ["Code", "market", "sector", "Name", "country"]:
+                    continue
+
+                original_ints = original_df[col].fillna(0).astype(float).apply(safe_int)
+                processed_ints = processed_df[col].fillna(0).astype(float).apply(safe_int)
+
+                mismatch_mask = original_ints.values != processed_ints.values
+                mismatches = mismatch_mask.sum()
+                print(f"{col} - 불일치 건수: {mismatches}")
+
+                if mismatches > 0:
+                    mismatch_indices = np.where(mismatch_mask)[0]
+                    print("불일치 상세:")
+                    for idx in mismatch_indices:
+                        code = original_df.iloc[idx]["Code"]
+                        original_val = original_ints.iloc[idx]
+                        processed_val = processed_ints.iloc[idx]
+                        print(f"  Code: {code}, 원본: {original_val}, 처리후: {processed_val}")
+                        notifier.notify_error(
+                            f"팩터 정수 부분 불일치 발생\n원본: {original_val}, 처리후: {processed_val}", "김광윤"
+                        )
+
+        notifier.notify_info("팩터 정수 부분 불일치 검증 완료")
+
+    def convert_unit_and_value(
+        self, market_filter: MarketEnum, value: float, unit: str, lang: str = "kr"
+    ) -> tuple[float, str]:
+        nation = "kr" if market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ] else "us"
+
+        if unit.lower() == "big_price":
+            if nation == "kr":
+                if value >= 10000:  # 1조원 이상
+                    return round(value / 10000, 2), "조원"
+                return int(value), "억원"
+            else:  # US
+                # 1T = 1000B = 1000조원
+                if value >= 1000000000:  # 1000조원 이상
+                    return round(value / 1000000000, 2), "T$"
+                # 1B = 1조원
+                elif value >= 1000000:  # 1조원 이상
+                    return round(value / 1000000, 2), "B$"
+                # 1M = 10억원
+                elif value >= 1000:  # 10억원 이상
+                    return round(value / 1000, 2), "M$"
+                # 1K = 100만원
+                return round(value, 2), "K$"
+
+        if unit.lower() == "small_price":
+            if nation == "kr":
+                return int(value), "원"
+            else:
+                return round(value, 2), "$"
+
+        unit_map = UNIT_MAP
+        if lang == "en":
+            unit_map = UNIT_MAP_EN
+        return value, unit_map.get(unit.lower(), "")
 
 
-def process_kr_factor_data():
-    output_file = "parquet/kr_stock_factors.parquet"
-    factors_mapping = get_factors_from_db()
-
-    result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_ko_active.parquet", dir="port/")
-    df = pd.read_parquet(io.BytesIO(result))
-
-    df["country"] = "kr"
-
-    market_mapping = {"KRX": "KOSDAQ", "KOS": "KOSPI"}
-
-    selected_columns = ["Code", "ExchMnem", "country", "WI26업종명(대)", "Name", "거래대금", "수정주가수익률"] + list(
-        factors_mapping.keys()
-    )
-    df_selected = df[selected_columns]
-    df_filtered = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
-
-    df_result = df_filtered.rename(columns=FACTOR_RENAME_MAP)
-    df_result["market"] = df_result["market"].map(market_mapping)
-    df_result["sector"] = df_result["sector"].map(SECTOR_MAP)
-
-    df_result.to_parquet(output_file)
-
-
-def process_us_factor_data():
-    output_file = "parquet/us_stock_factors.parquet"
-    factors_mapping = get_factors_from_db()
-
-    result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_us_active.parquet", dir="port/")
-    df = pd.read_parquet(io.BytesIO(result))
-
-    df["merge_code"] = df["Code"].str.replace("-US", "")
-
-    stock_information = database._select("stock_information", columns=["ticker", "is_snp_500"], ctry="us")
-    stock_info_df = pd.DataFrame(stock_information)
-    stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
-    stock_info_df["is_snp_500"] = stock_info_df["is_snp_500"].fillna(0).astype(int)
-
-    df = pd.merge(df, stock_info_df, on="merge_code", how="left")
-
-    df = df.drop("merge_code", axis=1)
-
-    df["country"] = "us"
-    df["is_snp_500"] = df["is_snp_500"].fillna(0).astype(int)
-
-    market_mapping = {"NAS": "NASDAQ", "NYS": "NYSE"}
-
-    selected_columns = [
-        "Code",
-        "ExchMnem",
-        "country",
-        "WI26업종명(대)",
-        "Name",
-        "거래대금",
-        "수정주가수익률",
-        "is_snp_500",
-    ] + list(factors_mapping.keys())
-    df_selected = df[selected_columns]
-    df_filtered = df_selected[df_selected["ExchMnem"].isin(market_mapping.keys())]
-
-    df_result = df_filtered.rename(
-        columns={
-            "ExchMnem": "market",
-            "WI26업종명(대)": "sector",
-            "Name": "name",
-            "거래대금": "trade_volume",
-            "수정주가수익률": "price_change_rate",
-        }
-    )
-    df_result["market"] = df_result["market"].map(market_mapping)
-    df_result["sector"] = df_result["sector"].map(SECTOR_MAP)
-
-    df_result.to_parquet(output_file)
-
-
-def get_df_from_parquet(market_filter: MarketEnum) -> pd.DataFrame:
-    df = None
-    if market_filter:
-        if market_filter in [MarketEnum.US, MarketEnum.NASDAQ, MarketEnum.SNP500]:
-            df = pd.read_parquet("parquet/us_stock_factors.parquet")
-        elif market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
-            df = pd.read_parquet("parquet/kr_stock_factors.parquet")
-    else:
-        kr_df = pd.read_parquet("parquet/kr_stock_factors.parquet")
-        us_df = pd.read_parquet("parquet/us_stock_factors.parquet")
-        kr_df["is_snp_500"] = 0
-        df = pd.concat([kr_df, us_df])
-
-    return df
-
-
-def filter_stocks(
-    market_filter: Optional[MarketEnum] = None,
-    sector_filter: Optional[List[str]] = None,
-    custom_filters: Optional[List[Dict]] = None,
-) -> List[str]:
-    df = get_df_from_parquet(market_filter)
-
-    filtered_df = df.copy()
-
-    if market_filter:
-        if market_filter == MarketEnum.US:
-            filtered_df = filtered_df[filtered_df["country"] == "us"]
-        elif market_filter == MarketEnum.KR:
-            filtered_df = filtered_df[filtered_df["country"] == "kr"]
-        elif market_filter == MarketEnum.SNP500:
-            filtered_df = filtered_df[filtered_df["is_snp_500"] == 1]
-        elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
-            filtered_df = filtered_df[filtered_df["market"] == market_filter]
-
-    if sector_filter:
-        filtered_df = filtered_df[filtered_df["sector"].isin(sector_filter)]
-
-    if custom_filters:
-        for filter in custom_filters:
-            factor = filter["factor"]
-
-            if factor not in filtered_df.columns:
-                raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
-
-            if filter["above"] is not None:
-                filtered_df = filtered_df[filtered_df[factor] >= filter["above"]]
-
-            if filter["below"] is not None:
-                filtered_df = filtered_df[filtered_df[factor] <= filter["below"]]
-
-    stock_codes = filtered_df["Code"].tolist()
-
-    return stock_codes
-
-
-def get_filtered_stocks_df(
-    market_filter: MarketEnum, codes: List[str], columns: Optional[List[str]] = None
-) -> pd.DataFrame:
-    if columns is None:
-        columns = []
-    required_columns = DEFAULT_SCREENER_COLUMNS + [col for col in columns if col not in DEFAULT_SCREENER_COLUMNS]
-
-    df = get_df_from_parquet(market_filter)
-    filtered_df = df[df["Code"].isin(codes)][required_columns]
-
-    return filtered_df
+factor_utils = FactorUtils()

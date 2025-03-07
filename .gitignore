@@ -20,6 +20,9 @@ data/
 .ipynb_checkpoints/
 *.ipynb
 
+# csv
+*.csv
+
 # pytest
 .pytest_cache/
 
@@ -31,7 +34,7 @@ data/
 Thumbs.db
 
 
-check_data/
+_check_data/
 .vscode/
 
 # Celery
@@ -44,4 +47,9 @@ ngrok.yml
 
 # parquet
 parquet/
-*.parquet
+
+# test
+test/
+
+# check_data
+check_data/etf/*.parquet

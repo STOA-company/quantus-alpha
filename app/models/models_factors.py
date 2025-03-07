@@ -1,13 +1,14 @@
 from app.models.models_base import Base
 from sqlalchemy.schema import Index
 from enum import Enum
-from sqlalchemy import Column, String, Text, Enum as SQLAlchemyEnum
+from sqlalchemy import Column, String, Text, Integer, Enum as SQLAlchemyEnum, Boolean
 
 
 class CategoryEnum(str, Enum):
     TECHNICAL = "technical"
     FUNDAMENTAL = "fundamental"
     VALUATION = "valuation"
+    CUSTOM = "custom"
 
 
 class SortDirectionEnum(str, Enum):
@@ -16,8 +17,8 @@ class SortDirectionEnum(str, Enum):
 
 
 class UnitEnum(str, Enum):
-    PRICE = "price"  # 가격
-    VOLUME = "volume"  # 양
+    BIG_PRICE = "big_price"  # 억원/천달러
+    SMALL_PRICE = "small_price"  # 원/달러
     PERCENTAGE = "percentage"  # %
     RATIO = "ratio"  # 비율
     SCORE = "score"  # 점
@@ -39,6 +40,10 @@ class Factors(Base):
     unit = Column(SQLAlchemyEnum(UnitEnum), nullable=False)
     sort_direction = Column(SQLAlchemyEnum(SortDirectionEnum), nullable=False)
     category = Column(SQLAlchemyEnum(CategoryEnum), nullable=False)
+    min_value = Column(Integer, nullable=True)
+    max_value = Column(Integer, nullable=True)
+    is_stock = Column(Boolean, nullable=False, default=True)
+    is_etf = Column(Boolean, nullable=False, default=False)
 
     def __repr__(self):
         return f"<Factor {self.factor}>"

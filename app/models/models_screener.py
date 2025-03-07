@@ -1,70 +1,50 @@
-from app.models.models_base import Base
-from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, UniqueConstraint, CheckConstraint
+from app.models.models_base import ServiceBase, BaseMixin
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Enum
 from sqlalchemy.schema import Index
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from app.enum.type import StockType
 
 
-class ScreenerFilter(Base):
-    __tablename__ = "screener_filters"
+class ScreenerGroup(ServiceBase, BaseMixin):
+    __tablename__ = "screener_groups"
 
     id = Column(Integer, primary_key=True, index=True)
     order = Column(Integer, nullable=False)
     user_id = Column(String(50), nullable=True, index=True)  # 추천 필터의 경우 None
     name = Column(String(100), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    type = Column(Enum(StockType), nullable=False, default=StockType.STOCK)
 
-    conditions = relationship("ScreenerFilterCondition", back_populates="filter", cascade="all, delete-orphan")
+    stock_filters = relationship("ScreenerStockFilter", back_populates="group", cascade="all, delete-orphan")
+    factor_filters = relationship("ScreenerFactorFilter", back_populates="group", cascade="all, delete-orphan")
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uix_user_filter_name"),
-        UniqueConstraint("user_id", "order", name="uix_user_filter_order"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "name", "type", name="uix_user_group_name_type"),)
 
     def __repr__(self):
-        return f"<ScreenerFilter {self.name}>"
+        return f"<ScreenerGroup {self.name}>"
 
 
-class ScreenerFilterCondition(Base):
-    __tablename__ = "screener_filter_conditions"
+class ScreenerStockFilter(ServiceBase, BaseMixin):
+    __tablename__ = "screener_stock_filters"
 
     id = Column(Integer, primary_key=True, index=True)
-    filter_id = Column(Integer, ForeignKey("screener_filters.id", ondelete="CASCADE"), nullable=False)
+    group_id = Column(Integer, ForeignKey("screener_groups.id", ondelete="CASCADE"), nullable=False)
     factor = Column(String(50), nullable=False)
-    above = Column(Numeric)
-    below = Column(Numeric)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    above = Column(Integer, nullable=True)
+    below = Column(Integer, nullable=True)
+    value = Column(String(50), nullable=True)
 
-    filter = relationship("ScreenerFilter", back_populates="conditions")
-    factor_info = relationship("Factors")
-
-    __table_args__ = (
-        CheckConstraint("above IS NOT NULL OR below IS NOT NULL", name="check_at_least_one_condition"),
-        Index("idx_filter_factor", "filter_id", "factor"),
-    )
+    __table_args__ = (Index("idx_group_factor", "group_id", "factor"),)
 
     def __repr__(self):
-        return f"<ScreenerFilterCondition {self.factor}>"
+        return f"<ScreenerStockFilter {self.factor}>"
 
 
-class ScreenerColumnSet(Base):
-    __tablename__ = "screener_column_sets"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-
-class ScreenerColumn(Base):
-    __tablename__ = "screener_columns"
+class ScreenerFactorFilter(ServiceBase, BaseMixin):
+    __tablename__ = "screener_factor_filters"
 
     id = Column(Integer, primary_key=True, index=True)
-    column_set_id = Column(Integer, ForeignKey("screener_column_sets.id", ondelete="CASCADE"), nullable=False)
+    group_id = Column(Integer, ForeignKey("screener_groups.id", ondelete="CASCADE"), nullable=False)
     factor = Column(String(50), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    order = Column(Integer, nullable=False)
 
-    column_set = relationship("ScreenerColumnSet", back_populates="columns")
+    group = relationship("ScreenerGroup", back_populates="factor_filters")

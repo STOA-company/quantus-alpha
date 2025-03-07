@@ -8,292 +8,298 @@ KST = pytz.timezone("Asia/Seoul")
 UTC = pytz.timezone("UTC")
 USE = pytz.timezone("America/New_York")
 
-FACTOR_RENAME_MAP = {
-    "ExchMnem": "market",
-    "WI26업종명(대)": "sector",
-    "Name": "name",
-    "거래대금": "trade_volume",
-    "수정주가수익률": "price_change_rate",
+NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6", "momentum_12", "current_ratio"]
+
+NON_NUMERIC_COLUMNS = ["Code", "Name", "market", "sector", "country", "score", "Name_en", "sector_en"]
+
+UNIT_MAP = {"percentage": "%", "times": "회", "score": "점", "multiple": "배", "ratio": ""}
+UNIT_MAP_EN = {"percentage": "%", "times": "", "score": "", "multiple": "", "ratio": ""}
+
+MARKET_MAP = {
+    "KOSPI": "코스피",
+    "KOSDAQ": "코스닥",
+    "NAS": "나스닥",
+    "NYS": "뉴욕 증권 거래소",
+    "AMS": "아멕스",
 }
 
-SECTOR_MAP = {
-    "건강관리": "건강관리",
-    "자동차": "자동차",
-    "화장품,의류,완구": "화장품,의류,완구",
-    "화학": "화학",
-    "필수소비재": "필수소비재",
-    "운송": "운송",
-    "상사,자본재": "상사,자본재",
-    "비철,목재등": "비철,목재등",
-    "건설,건축관련": "건설,건축관련",
-    "보험": "보험",
-    "에너지": "에너지",
-    "기계": "기계",
-    "철강": "철강",
-    "반도체": "반도체",
-    "IT하드웨어": "IT하드웨어",
-    "증권": "증권",
-    "디스플레이": "디스플레이",
-    "IT가전": "IT가전",
-    "소매(유통)": "소매(유통)",
-    "유틸리티": "유틸리티",
-    "은행": "은행",
-    "통신서비스": "통신서비스",
-    "호텔,레저서비스": "호텔,레저서비스",
-    "소프트웨어": "소프트웨어",
-    "조선": "조선",
-    "미디어,교육": "미디어,교육",
-    "real_estate": "부동산",  # TODO
-    "finance": "금융",
-    "construction": "건설,건축관련",
-    "consumer_goods": "필수소비재",
-    "hospitality": "호텔,레저서비스",
-    "software": "소프트웨어",
-    "professional": "전문 서비스",  # TODO
-    "energy": "에너지",
-    "electronics": "전자",  # TODO
-    "aerospace": "항공",  # TODO
-    "industrial": "기계",
-    "media": "미디어,교육",
-    "other": "기타",
-    None: "기타",
+MARKET_KOREAN_TO_ENGLISH_MAP = {
+    "코스피": "KOSPI",
+    "코스닥": "KOSDAQ",
+    "나스닥": "NASDAQ",
+    "뉴욕 증권 거래소": "NYSE",
+    "아멕스": "AMS",
 }
 
-DEFAULT_SCREENER_COLUMNS = ["Code", "name", "market", "sector", "close", "price_change_rate", "trade_volume"]
-
-
-FACTOR_CONFIGS = {
-    "close": {
-        "direction": 1,  # 높을수록 좋음  # TODO
-        "range": (0, None),  # 음수 불가
-    },
-    "price_change_rate": {
-        "direction": -1,  # 높을수록 좋음  # TODO
-        "range": None,
-    },
-    "trade_volume": {
-        "direction": 1,  # 높을수록 좋음  # TODO
-        "range": (0, None),  # 음수 불가
-    },
-    "median_trade": {
-        "direction": None,  # 중간 값이 좋음 # TODO
-        "range": (0, None),  # 음수 불가
-        "optimal_value": 50,
-    },
-    "disparity_5": {
-        "direction": None,  # 100%에 가까울수록 좋음 # TODO
-        "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
-    },
-    "disparity_10": {
-        "direction": None,  # 100%에 가까울수록 좋음 # TODO
-        "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
-    },
-    "disparity_20": {
-        "direction": None,  # 100%에 가까울수록 좋음 # TODO
-        "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
-    },
-    "disparity_50": {
-        "direction": None,  # 100%에 가까울수록 좋음 # TODO
-        "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
-    },
-    "disparity_100": {
-        "direction": None,  # 100%에 가까울수록 좋음 # TODO
-        "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
-    },
-    "disparity_200": {
-        "direction": None,  # 100%에 가까울수록 좋음 # TODO
-        "range": (0, None),  # 음수 불가
-        "optimal_value": 100,
-    },
-    "momentum_6": {
-        "direction": 1,
-        "range": None,
-        "optimal_value": 100,
-    },
-    "momentum_12": {
-        "direction": 1,
-        "range": None,
-    },
-    "rsi_9": {
-        "direction": None,  # 중간값이 좋음 # TODO
-        "range": (0, 100),  # 0-100 사이
-        "optimal_range": (30, 70),
-    },
-    "rsi_14": {
-        "direction": None,  # 중간값이 좋음 # TODO
-        "range": (0, 100),  # 0-100 사이
-        "optimal_range": (30, 70),
-    },
-    "rsi_25": {
-        "direction": None,  # 중간값이 좋음 # TODO
-        "range": (0, 100),  # 0-100 사이
-        "optimal_range": (30, 70),
-    },
-    "sharpe": {
-        "direction": 1,  # 높을수록 좋음
-        "range": None,  # 제한 없음
-    },
-    "sortino": {
-        "direction": 1,  # 높을수록 좋음
-        "range": None,  # 제한 없음
-    },
-    "vol": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, None),  # 음수 불가
-    },
-    "vol_60": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, None),  # 음수 불가
-    },
-    "beta": {
-        "direction": None,  # 1에 가까울수록 좋음 # TODO
-        "range": None,  # 제한 없음
-        "optimal_value": 1,
-    },
-    "beta_60": {
-        "direction": None,  # 1에 가까울수록 좋음 # TODO
-        "range": None,  # 제한 없음
-        "optimal_value": 1,
-    },
-    "abs_beta": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, None),  # 음수 불가
-    },
-    "abs_beta_60": {
-        "direction": -1,
-        "range": (0, None),
-        "optimal_value": 1,
-    },
-    # 펀더멘털 지표
-    "deptRatio": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 400),  # 400% 초과는 위험 # TODO
-    },
-    "borrow_rate": {
-        "direction": -1,
-        "range": (0, 200),
-        "optimal_value": 100,
-    },
-    "current_ratio": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (0, 500),  # 500% 초과는 비효율 # TODO
-    },
-    "reserve_ratio": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (0, None),  # 음수 불가
-    },
-    "rev": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (0, None),  # 음수 불가
-    },
-    "rev_ttm": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (0, None),  # 음수 불가
-    },
-    "gross_profit": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (0, None),  # 음수 불가
-    },
-    "gross_profit_ttm": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (0, None),  # 음수 불가
-    },
-    "operating_income": {
-        "direction": 1,  # 높을수록 좋음
-        "range": None,  # 음수 가능
-    },
-    "operating_income_ttm": {
-        "direction": 1,
-        "range": None,
-    },
-    "roa": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (-100, 100),  # 극단값 제한 # TODO
-    },
-    "roa_ttm": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (-100, 100),  # 극단값 제한 # TODO
-    },
-    "roe": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (-100, 100),  # 극단값 제한 # TODO
-    },
-    "roe_ttm": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (-100, 100),  # 극단값 제한 # TODO
-    },
-    "gpa": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (-100, 100),  # 극단값 제한 # TODO
-    },
-    "gpa_ttm": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (-100, 100),  # 극단값 제한 # TODO
-    },
-    "assetturnover": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (0, None),  # 음수 가능
-    },
-    "assetturnover_ttm": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (0, None),  # 음수 가능
-    },
-    "fscore": {
-        "direction": 1,  # 높을수록 좋음
-        "range": (0, 9),  # 0-9점
-    },
-    "z_score": {
-        "direction": 1,  # 높을수록 좋음
-        "range": None,  # 제한 없음
-    },
-    # 가치 평가 지표
-    "per": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 100),
-    },
-    "per_ttm": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 100),
-    },
-    "pbr": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 10),
-    },
-    "psr": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 10),
-    },
-    "psr_ttm": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 10),
-    },
-    "por": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 50),
-    },
-    "por_ttm": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 50),
-    },
-    "pcr": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 20),
-    },
-    "pcr_ttm": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 20),
-    },
-    "pgpr": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 20),
-    },
-    "pgpr_ttm": {
-        "direction": -1,  # 낮을수록 좋음
-        "range": (0, 20),
-    },
+FACTOR_MAP = {
+    "Code": "티커",
+    "Name": "종목명",
+    "country": "국가",
+    "market": "시장",
+    "sector": "산업",
+    "score": "스코어",
+    "abs_beta": "절대값 베타 (52주)",
+    "abs_beta_60": "절대값 베타 (60일)",
+    "beta": "베타 (52주)",
+    "beta_60": "베타 (60일)",
+    "close": "종가 (수정 전)",
+    "disparity_10": "이격도 (10일)",
+    "disparity_100": "이격도 (100일)",
+    "disparity_20": "이격도 (20일)",
+    "disparity_200": "이격도 (200일)",
+    "disparity_5": "이격도 (5일)",
+    "disparity_50": "이격도 (50일)",
+    "marketCap": "시가총액",
+    "median_trade": "중위 월간 거래량",
+    "momentum_1": "모멘텀 (1개월)",
+    "momentum_12": "모멘텀 (12개월)",
+    "momentum_3": "모멘텀 (3개월)",
+    "momentum_6": "모멘텀 (6개월)",
+    "rsi_14": "RSI (14일)",
+    "rsi_25": "RSI (25일)",
+    "rsi_9": "RSI (9일)",
+    "sharpe": "샤프 비율 (52주)",
+    "sortino": "Sortino 비율 (52주)",
+    "vol": "변동성 (52주)",
+    "vol_60": "변동성 (60일)",
+    "assetturnover": "Asset Turnover",
+    "assetturnover_ttm": "Asset Turnover (TTM)",
+    "borrow_rate": "차입 비율",
+    "current_ratio": "유동 비율",
+    "deptRatio": "부채 비율",
+    "fscore": "F-score",
+    "gpa": "GP/A",
+    "gpa_ttm": "GP/A (TTM)",
+    "gross_profit": "매출 총 이익",
+    "gross_profit_ttm": "매출 총 이익 (TTM)",
+    "operating_income": "영업 이익",
+    "operating_income_ttm": "영업 이익 (TTM)",
+    "reserve_ratio": "유보율",
+    "rev": "매출액",
+    "rev_ttm": "매출액 (TTM)",
+    "roa": "ROA",
+    "roa_ttm": "ROA (TTM)",
+    "roe": "ROE",
+    "roe_ttm": "ROE (TTM)",
+    "z_score": "Altman Z-score",
+    "pbr": "PBR",
+    "pcr": "PCR",
+    "pcr_ttm": "PCR (TTM)",
+    "per": "PER",
+    "per_ttm": "PER (TTM)",
+    "pgpr": "PGPR",
+    "pgpr_ttm": "PGPR (TTM)",
+    "por": "POR",
+    "por_ttm": "POR (TTM)",
+    "psr": "PSR",
+    "psr_ttm": "PSR (TTM)",
 }
+
+FACTOR_MAP_EN = {
+    "Code": "Ticker",
+    "Name_en": "Name",
+    "country": "Country",
+    "market": "Market",
+    "sector_en": "Sector",
+    "score": "Score",
+    "abs_beta": "Absolute Beta (52-week)",
+    "abs_beta_60": "Absolute Beta (60-day)",
+    "beta": "Beta (52-week)",
+    "beta_60": "Beta (60-day)",
+    "close": "Close Price (Pre-adjustment)",
+    "disparity_10": "Disparity (10-day)",
+    "disparity_100": "Disparity (100-day)",
+    "disparity_20": "Disparity (20-day)",
+    "disparity_200": "Disparity (200-day)",
+    "disparity_5": "Disparity (5-day)",
+    "disparity_50": "Disparity (50-day)",
+    "marketCap": "Market Capitalization",
+    "median_trade": "Median Monthly Trading Volume",
+    "momentum_1": "Momentum (1-month)",
+    "momentum_12": "Momentum (12-month)",
+    "momentum_3": "Momentum (3-month)",
+    "momentum_6": "Momentum (6-month)",
+    "rsi_14": "RSI (14-day)",
+    "rsi_25": "RSI (25-day)",
+    "rsi_9": "RSI (9-day)",
+    "sharpe": "Sharpe Ratio (52-week)",
+    "sortino": "Sortino Ratio (52-week)",
+    "vol": "Volatility (52-week)",
+    "vol_60": "Volatility (60-day)",
+    "assetturnover": "Asset Turnover",
+    "assetturnover_ttm": "Asset Turnover (TTM)",
+    "borrow_rate": "Borrowing Ratio",
+    "current_ratio": "Current Ratio",
+    "deptRatio": "Debt Ratio",
+    "fscore": "F-score",
+    "gpa": "GP/A",
+    "gpa_ttm": "GP/A (TTM)",
+    "gross_profit": "Gross Profit",
+    "gross_profit_ttm": "Gross Profit (TTM)",
+    "operating_income": "Operating Income",
+    "operating_income_ttm": "Operating Income (TTM)",
+    "reserve_ratio": "Reserve Ratio",
+    "rev": "Revenue",
+    "rev_ttm": "Revenue (TTM)",
+    "roa": "ROA",
+    "roa_ttm": "ROA (TTM)",
+    "roe": "ROE",
+    "roe_ttm": "ROE (TTM)",
+    "z_score": "Altman Z-score",
+    "pbr": "PBR",
+    "pcr": "PCR",
+    "pcr_ttm": "PCR (TTM)",
+    "per": "PER",
+    "per_ttm": "PER (TTM)",
+    "pgpr": "PGPR",
+    "pgpr_ttm": "PGPR (TTM)",
+    "por": "POR",
+    "por_ttm": "POR (TTM)",
+    "psr": "PSR",
+    "psr_ttm": "PSR (TTM)",
+}
+
+FACTOR_KOREAN_TO_ENGLISH_MAP = {
+    "티커": "Ticker",
+    "종목명": "Name",
+    "국가": "Country",
+    "시장": "Market",
+    "산업": "Sector",
+    "스코어": "Score",
+    "절대값 베타 (52주)": "Absolute Beta (52-week)",
+    "절대값 베타 (60일)": "Absolute Beta (60-day)",
+    "베타 (52주)": "Beta (52-week)",
+    "베타 (60일)": "Beta (60-day)",
+    "종가 (수정 전)": "Close Price (Pre-adjustment)",
+    "이격도 (10일)": "Disparity (10-day)",
+    "이격도 (100일)": "Disparity (100-day)",
+    "이격도 (20일)": "Disparity (20-day)",
+    "이격도 (200일)": "Disparity (200-day)",
+    "이격도 (5일)": "Disparity (5-day)",
+    "이격도 (50일)": "Disparity (50-day)",
+    "시가총액": "Market Capitalization",
+    "중위 월간 거래량": "Median Monthly Trading Volume",
+    "모멘텀 (1개월)": "Momentum (1-month)",
+    "모멘텀 (12개월)": "Momentum (12-month)",
+    "모멘텀 (3개월)": "Momentum (3-month)",
+    "모멘텀 (6개월)": "Momentum (6-month)",
+    "RSI (14일)": "RSI (14-day)",
+    "RSI (25일)": "RSI (25-day)",
+    "RSI (9일)": "RSI (9-day)",
+    "샤프 비율 (52주)": "Sharpe Ratio (52-week)",
+    "Sortino 비율 (52주)": "Sortino Ratio (52-week)",
+    "변동성 (52주)": "Volatility (52-week)",
+    "변동성 (60일)": "Volatility (60-day)",
+    "Asset Turnover": "Asset Turnover",
+    "Asset Turnover (TTM)": "Asset Turnover (TTM)",
+    "차입 비율": "Borrowing Ratio",
+    "유동 비율": "Current Ratio",
+    "부채 비율": "Debt Ratio",
+    "F-score": "F-score",
+    "GP/A": "GP/A",
+    "GP/A (TTM)": "GP/A (TTM)",
+    "매출 총 이익": "Gross Profit",
+    "매출 총 이익 (TTM)": "Gross Profit (TTM)",
+    "영업 이익": "Operating Income",
+    "영업 이익 (TTM)": "Operating Income (TTM)",
+    "유보율": "Reserve Ratio",
+    "매출액": "Revenue",
+    "매출액 (TTM)": "Revenue (TTM)",
+    "ROA": "ROA",
+    "ROA (TTM)": "ROA (TTM)",
+    "ROE": "ROE",
+    "ROE (TTM)": "ROE (TTM)",
+    "Altman Z-score": "Altman Z-score",
+    "PBR": "PBR",
+    "PCR": "PCR",
+    "PCR (TTM)": "PCR (TTM)",
+    "PER": "PER",
+    "PER (TTM)": "PER (TTM)",
+    "PGPR": "PGPR",
+    "PGPR (TTM)": "PGPR (TTM)",
+    "POR": "POR",
+    "POR (TTM)": "POR (TTM)",
+    "PSR": "PSR",
+    "PSR (TTM)": "PSR (TTM)",
+}
+
+REVERSE_FACTOR_MAP = {v: k for k, v in FACTOR_MAP.items()}
+REVERSE_FACTOR_MAP_EN = {v: k for k, v in FACTOR_MAP_EN.items()}
+
+########################################################
+# ETF
+########################################################
+
+ETF_DATA_DIR = "check_data/etf"
+KRX_DIR = "check_data/etf_krx"
+PARQUET_DIR = "parquet"
+MORNINGSTAR_DIR = "check_data/etf_morningstar"
+
+ETF_FACTOR_LIST = [
+    "ticker",
+    "date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "bid",
+    "ask",
+    "num_shrs",
+    "trade_amount",
+    "market_cap",
+    "momentum_1",
+    "momentum_3",
+    "momentum_6",
+    "momentum_12",
+    "ba_absolute_spread",
+    "ba_relative_spread",
+    "ba_spread_20d_avg",
+    "ba_spread_20d_std",
+    "ba_spread_1d_change",
+    "ba_spread_20d_change",
+    "disparity_5",
+    "disparity_10",
+    "disparity_20",
+    "disparity_50",
+    "disparity_100",
+    "disparity_200",
+    "vol_60",
+    "vol",
+    "rsi_9",
+    "rsi_14",
+    "rsi_25",
+    "sharpe",
+    "sortino",
+    "return_1m",
+    "return_3m",
+    "return_6m",
+    "return_1y",
+    "week_52_high",
+    "week_52_low",
+    "drawdown_1y",
+    "median_trade",
+    "dividend_count",
+    "last_dividend_date",
+    "last_dividend_per_share",
+    "recent_dividend_yield",
+    "dividend_growth_rate_3y",
+    "dividend_growth_rate_5y",
+    "ctry",
+    "market",
+    "kr_name",
+    "en_name",
+    "listing_date",
+    "base_index_name",
+    "tracking_multiplier",
+    "replication_method",
+    "base_asset_classification",
+    "manager",
+    "total_fee",
+    "tax_type",
+    "tracking_error",
+    "disparity",
+    "volatility",
+    "is_hedge",
+]
+FACTOR_MAP_ETF = {v: k for k, v in FACTOR_MAP.items() if k in ETF_FACTOR_LIST}

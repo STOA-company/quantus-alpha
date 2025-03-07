@@ -1,14 +1,28 @@
 from pydantic import BaseModel
-from app.models.models_factors import UnitEnum, CategoryEnum
+from app.models.models_factors import CategoryEnum
+from app.models.models_screener import StockType
 from typing import Optional, List
 from enum import Enum
+
+
+class MarketEnum(str, Enum):
+    US = "us"
+    KR = "kr"
+    SNP500 = "S&P 500"
+    NASDAQ = "나스닥"
+    KOSPI = "코스피"
+    KOSDAQ = "코스닥"
 
 
 class FactorResponse(BaseModel):
     factor: str
     description: str
-    unit: UnitEnum
+    unit: str
     category: CategoryEnum
+    direction: str
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    type: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -20,52 +34,39 @@ class FilterCondition(BaseModel):
     below: Optional[float] = None
 
 
-class Filter(BaseModel):
-    name: Optional[str] = None
-    conditions: Optional[List[FilterCondition]] = None
-
-
-class FilterUpdate(BaseModel):
-    filter_id: int
-    filter: Filter
-
-
-class FilterInfo(BaseModel):
+class GroupMetaData(BaseModel):
     id: int
     name: str
-
-    class Config:
-        from_attributes = True
+    type: Optional[StockType] = StockType.STOCK
 
 
-class MarketEnum(str, Enum):
-    US = "us"
-    KR = "kr"
-    SNP500 = "S&P 500"
-    NASDAQ = "NASDAQ"
-    KOSPI = "KOSPI"
-    KOSDAQ = "KOSDAQ"
+class GroupFilter(BaseModel):
+    id: Optional[int] = None
+    name: Optional[str] = None
+    type: Optional[StockType] = StockType.STOCK
+    market_filter: Optional[MarketEnum] = MarketEnum.US
+    sector_filter: Optional[List[str]] = None
+    custom_filters: Optional[List[FilterCondition]] = None
+    factor_filters: Optional[List[str]] = None
 
 
 class FilteredStocks(BaseModel):
-    market_filter: Optional[MarketEnum] = None
+    market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
     columns: Optional[List[str]] = None
+    limit: Optional[int] = 50
+    offset: Optional[int] = 0
+    sort_by: Optional[str] = None
+    ascending: Optional[bool] = False
+    lang: Optional[str] = "kr"
 
 
 class ColumnSet(BaseModel):
-    id: int
-    name: str
-    columns: List[str]
+    id: Optional[int] = None
+    name: Optional[str] = None
+    columns: Optional[List[str]] = None
 
 
-class ColumnSetCreate(BaseModel):
-    name: str
-    columns: List[str]
-
-
-class ColumnUpdate(BaseModel):
-    column_set_id: int
-    name: str
+class ColumnsResponse(BaseModel):
     columns: List[str]
