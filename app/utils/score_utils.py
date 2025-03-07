@@ -96,6 +96,9 @@ def calculate_factor_score_with_description(df: pd.DataFrame) -> pd.DataFrame:
 
 @time_it
 def calculate_factor_score(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame()
+
     df_copy = df.copy()
     columns = df.columns.tolist()
 

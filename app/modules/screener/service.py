@@ -41,13 +41,19 @@ class ScreenerService:
         lang: Optional[str] = "kr",
     ) -> Tuple[List[Dict], int]:
         try:
-            print("SERVICE COLUMNS", columns)
             if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
+
+            if sector_filter:
+                for sector in sector_filter:
+                    if sector not in self.get_available_sectors():
+                        raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
 
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
             scored_df = calculate_factor_score(filtered_df)
+            if scored_df.empty:
+                return [], 0
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
@@ -69,7 +75,6 @@ class ScreenerService:
                 ordered_columns = ["Code", "Name", "score", "country"]
 
             selected_columns = ordered_columns.copy()
-            print("SERVICE SELECTED COLUMNS", selected_columns)
 
             sorted_df = sorted_df[selected_columns]
 
@@ -96,8 +101,6 @@ class ScreenerService:
 
                 result.append(stock_data)
 
-            print("SERVICE RESULT COLUMNS", result[0].keys())
-
             factor_map = FACTOR_MAP
             if lang == "en":
                 factor_map = FACTOR_MAP_EN
@@ -110,8 +113,6 @@ class ScreenerService:
                         mapped_key = factor_map.get(key, key)
                         mapped_item[mapped_key] = item[key]
                 mapped_result.append(mapped_item)
-
-            print("SERVICE MAPPED RESULT COLUMNS", mapped_result[0].keys())
 
             return mapped_result, total_count
 
@@ -238,6 +239,8 @@ class ScreenerService:
 
             if sector_filter:
                 for sector in sector_filter:
+                    if sector not in self.get_available_sectors():
+                        raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
                     self.database._insert(
                         table="screener_stock_filters",
                         sets={"group_id": group_id, "factor": "sector", "value": sector},
@@ -433,6 +436,17 @@ class ScreenerService:
         except Exception as e:
             logger.error(f"Error in update_group_name: {e}")
             raise e
+
+    def get_available_sectors(self, lang: str = "kr") -> List[str]:
+        kr_df = pd.read_parquet("parquet/kr_stock_factors.parquet")
+        us_df = pd.read_parquet("parquet/us_stock_factors.parquet")
+        sector_lang = "sector" if lang == "kr" else "sector_en"
+        kr_sectors = kr_df[sector_lang].unique().tolist()
+        us_sectors = us_df[sector_lang].unique().tolist()
+
+        sectors = list(set(kr_sectors + us_sectors))
+
+        return sectors
 
 
 def get_screener_service():
