@@ -349,6 +349,8 @@ def get_group_filters(group_id: int, screener_service: ScreenerService = Depends
     필터 목록 조회
     """
     try:
+        if group_id == -1:
+            return {}
         group_filters = screener_service.get_group_filters(group_id)
         stock_filters = group_filters["stock_filters"]
 
