@@ -18,6 +18,7 @@ app = FastAPI(
     swagger_ui_parameters={
         "persistAuthorization": True,  # 인증 정보 유지
         "defaultModelsExpandDepth": -1,  # 모델 확장 깊이 설정 / -1은 축소
+        "docExpansion": "none",
     },
     docs_url=None,
     redoc_url=None,
