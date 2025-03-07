@@ -350,7 +350,14 @@ def get_group_filters(group_id: int, screener_service: ScreenerService = Depends
     """
     try:
         if group_id == -1:
-            return {}
+            return GroupFilter(
+                id=-1,
+                name="기본",
+                market_filter=MarketEnum.US,
+                sector_filter=[],
+                custom_filters=[],
+                factor_filters=[],
+            )
         group_filters = screener_service.get_group_filters(group_id)
         stock_filters = group_filters["stock_filters"]
 
