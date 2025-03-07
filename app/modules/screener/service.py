@@ -144,13 +144,21 @@ class ScreenerService:
         columns: Optional[List[str]] = None,
         limit: Optional[int] = 50,
         offset: Optional[int] = 0,
+        sort_by: Optional[str] = "score",
+        ascending: Optional[bool] = False,
+        lang: Optional[str] = "kr",
     ) -> Tuple[List[Dict], int]:
         try:
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
+
             scored_df = calculate_factor_score_with_description(filtered_df)
+            if scored_df.empty:
+                return [], 0
+
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
-            sorted_df = merged_df.sort_values(by="score", ascending=False).reset_index(drop=True)
+            sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
+
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
 
@@ -160,47 +168,63 @@ class ScreenerService:
             factors = factors_cache.get_configs()
             result = []
 
+            if columns:
+                ordered_columns = []
+                for col in columns:
+                    mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
+                    if mapped_col not in ordered_columns:
+                        ordered_columns.append(mapped_col)
+            else:
+                ordered_columns = ["Code", "Name", "score", "country"]
+
+            if "description" not in ordered_columns and "description" in sorted_df.columns:
+                ordered_columns.append("description")
+
+            selected_columns = ordered_columns.copy()
+
+            available_columns = [col for col in selected_columns if col in sorted_df.columns]
+            sorted_df = sorted_df[available_columns]
+
             for _, row in sorted_df.iterrows():
-                # 기본으로 표시될 컬럼들
-                stock_data = {
-                    "Code": row["Code"],
-                    "Name": row["Name"],
-                    "market": row["market"],
-                    "sector": row["sector"],
-                    "country": row["country"],
-                    "description": row["description"],
-                }
+                stock_data = {}
 
-                # 숫자형 데이터 처리
-                for col in sorted_df.columns:
-                    if col in ["Code", "Name", "market", "sector", "country", "description"]:
-                        continue
-
-                    if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
-                        stock_data[col] = {"value": "", "unit": ""}
-                    else:
-                        value, unit = factor_utils.convert_unit_and_value(
-                            market_filter,
-                            float(row[col]),
-                            factors[col].get("unit", "") if col in factors else "",
-                        )
-
-                        stock_data[col] = {"value": value, "unit": unit}
+                for col in available_columns:
+                    if col in NON_NUMERIC_COLUMNS or col == "description":
+                        if col in row:
+                            stock_data[col] = row[col]
+                    elif col == "score":
+                        stock_data[col] = {"value": float(row[col]), "unit": ""}
+                    elif col in row:
+                        if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
+                            stock_data[col] = {"value": "", "unit": ""}
+                        else:
+                            value, unit = factor_utils.convert_unit_and_value(
+                                market_filter,
+                                float(row[col]),
+                                factors[col].get("unit", "") if col in factors else "",
+                                lang,
+                            )
+                            stock_data[col] = {"value": value, "unit": unit}
 
                 result.append(stock_data)
+
+            factor_map = FACTOR_MAP
+            if lang == "en":
+                factor_map = FACTOR_MAP_EN
 
             mapped_result = []
             for item in result:
                 mapped_item = {}
-                for key, value in item.items():
-                    mapped_key = FACTOR_MAP.get(key, key)
-                    mapped_item[mapped_key] = value
+                for key in ordered_columns:
+                    if key in item:
+                        mapped_key = factor_map.get(key, key)
+                        mapped_item[mapped_key] = item[key]
                 mapped_result.append(mapped_item)
 
             return mapped_result, total_count
 
         except Exception as e:
-            logger.error(f"Error in get_filtered_stocks: {e}")
+            logger.error(f"Error in get_filtered_stocks_with_description: {e}")
             raise e
 
     def create_group(
