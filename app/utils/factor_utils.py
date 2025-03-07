@@ -22,36 +22,33 @@ class FactorUtils:
         self.db = database
         self.lang = "kr"
 
-    def get_factors(self, market: Optional[MarketEnum] = None, is_stock: Optional[bool] = True) -> List[dict]:
+    def get_factors(self, market: MarketEnum, is_stock: Optional[bool] = True) -> List[dict]:
         factors = self.db._select(table="factors", is_stock=is_stock)
-        if market:
-            # 시장별 팩터 최소/최대값 계산
-            market_data = self.get_df_from_parquet(market)
+        # 시장별 팩터 최소/최대값 계산
+        market_data = self.get_df_from_parquet(market)
 
-            print("DATA LENGTH", len(market_data))
+        result = []
+        for factor in factors:
+            factor_name = factor.factor
 
-            result = []
-            for factor in factors:
-                factor_name = factor.factor
+            if factor_name in market_data.columns:
+                min_value = market_data[factor_name].min()
+                max_value = market_data[factor_name].max()
 
-                if factor_name in market_data.columns:
-                    min_value = market_data[factor_name].min()
-                    max_value = market_data[factor_name].max()
+                result.append(
+                    {
+                        "factor": FACTOR_MAP[factor_name],
+                        "description": factor.description,
+                        "unit": str(factor.unit).lower(),
+                        "category": str(factor.category).lower(),
+                        "direction": factor.sort_direction,
+                        "min_value": floor_to_integer(min_value),
+                        "max_value": ceil_to_integer(max_value),
+                    }
+                )
 
-                    result.append(
-                        {
-                            "factor": FACTOR_MAP[factor_name],
-                            "description": factor.description,
-                            "unit": str(factor.unit).lower(),
-                            "category": str(factor.category).lower(),
-                            "direction": factor.sort_direction,
-                            "min_value": floor_to_integer(min_value),
-                            "max_value": ceil_to_integer(max_value),
-                        }
-                    )
-
-                else:
-                    raise ValueError(f"팩터 '{factor_name}'가 데이터에 존재하지 않습니다.")
+            else:
+                raise ValueError(f"팩터 '{factor_name}'가 데이터에 존재하지 않습니다.")
 
         return result
 

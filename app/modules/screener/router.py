@@ -94,19 +94,14 @@ def get_filtered_stocks(
         if filtered_stocks.lang == "en":
             reverse_factor_map = REVERSE_FACTOR_MAP_EN
 
-        print("ROUTER REQUEST COLUMNS", request_columns)
-        print("ROUTER FILTERED STOCKS COLUMNS", filtered_stocks.columns)
         for column in [reverse_factor_map[column] for column in filtered_stocks.columns]:
             if column not in request_columns:
                 request_columns.append(column)
-
-        print("ROUTER FINAL REQUEST COLUMNS", request_columns)
 
         sort_by = "score"
         if filtered_stocks.sort_by:
             sort_by = reverse_factor_map[filtered_stocks.sort_by]
 
-        # 언어에 따른 결과값 리턴
         stocks_data, total_count = screener_service.get_filtered_stocks(
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
@@ -178,7 +173,7 @@ def get_filtered_stocks_with_description(
     filtered_stocks: FilteredStocks, screener_service: ScreenerService = Depends(get_screener_service)
 ):
     """
-    필터링된 종목들 조회
+    필터링된 종목들 조회 (설명 포함)
 
     market_filter : ["us", "kr", "S&P 500", "NASDAQ", "KOSPI", "KOSDAQ"] 중 하나
     """
@@ -194,20 +189,47 @@ def get_filtered_stocks_with_description(
                 for condition in filtered_stocks.custom_filters
             ]
 
-        stocks_data, has_next = screener_service.get_filtered_stocks_with_description(
+        request_columns = ["Code", "Name", "country", "score"]
+        reverse_factor_map = REVERSE_FACTOR_MAP
+        if filtered_stocks.lang == "en":
+            reverse_factor_map = REVERSE_FACTOR_MAP_EN
+
+        for column in [reverse_factor_map[column] for column in filtered_stocks.columns]:
+            if column not in request_columns:
+                request_columns.append(column)
+
+        sort_by = "score"
+        if filtered_stocks.sort_by:
+            sort_by = reverse_factor_map[filtered_stocks.sort_by]
+
+        stocks_data, total_count = screener_service.get_filtered_stocks_with_description(
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
             custom_filters,
-            [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.columns],
+            request_columns,
             filtered_stocks.limit,
             filtered_stocks.offset,
+            sort_by,
+            filtered_stocks.ascending,
+            filtered_stocks.lang,
         )
 
-        result = {"has_next": has_next, "data": stocks_data}
+        has_next = filtered_stocks.offset * filtered_stocks.limit + filtered_stocks.limit < total_count
+
+        if filtered_stocks.lang == "en":
+            for stock in stocks_data:
+                if "Market" in stock:
+                    stock["Market"] = MARKET_KOREAN_TO_ENGLISH_MAP[stock["Market"]]
+
+        result = {"data": stocks_data, "has_next": has_next}
         return result
 
+    except CustomException as e:
+        logger.error(f"Error getting filtered stocks with description: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
     except Exception as e:
-        logger.error(f"Error getting filtered stocks: {e}")
+        logger.error(f"Error getting filtered stocks with description: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -349,6 +371,15 @@ def get_group_filters(group_id: int, screener_service: ScreenerService = Depends
     필터 목록 조회
     """
     try:
+        if group_id == -1:
+            return GroupFilter(
+                id=-1,
+                name="기본",
+                market_filter=MarketEnum.US,
+                sector_filter=[],
+                custom_filters=[],
+                factor_filters=[],
+            )
         group_filters = screener_service.get_group_filters(group_id)
         stock_filters = group_filters["stock_filters"]
 
@@ -367,6 +398,7 @@ def get_group_filters(group_id: int, screener_service: ScreenerService = Depends
         factor_filters = group_filters["factor_filters"]
         return GroupFilter(
             id=group_id,
+            name=group_filters["name"],
             market_filter=market_filter,
             sector_filter=sector_filter,
             custom_filters=custom_filters,

@@ -51,9 +51,16 @@ class ScreenerService:
             if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
 
+            if sector_filter:
+                for sector in sector_filter:
+                    if sector not in self.get_available_sectors():
+                        raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
+
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
             scored_df = calculate_factor_score(filtered_df, country, "stock")
+            if scored_df.empty:
+                return [], 0
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
@@ -75,7 +82,6 @@ class ScreenerService:
                 ordered_columns = ["Code", "Name", "score", "country"]
 
             selected_columns = ordered_columns.copy()
-            print("SERVICE SELECTED COLUMNS", selected_columns)
 
             sorted_df = sorted_df[selected_columns]
 
@@ -102,8 +108,6 @@ class ScreenerService:
 
                 result.append(stock_data)
 
-            print("SERVICE RESULT COLUMNS", result[0].keys())
-
             factor_map = FACTOR_MAP
             if lang == "en":
                 factor_map = FACTOR_MAP_EN
@@ -116,8 +120,6 @@ class ScreenerService:
                         mapped_key = factor_map.get(key, key)
                         mapped_item[mapped_key] = item[key]
                 mapped_result.append(mapped_item)
-
-            print("SERVICE MAPPED RESULT COLUMNS", mapped_result[0].keys())
 
             return mapped_result, total_count
 
@@ -149,6 +151,9 @@ class ScreenerService:
         columns: Optional[List[str]] = None,
         limit: Optional[int] = 50,
         offset: Optional[int] = 0,
+        sort_by: Optional[str] = "score",
+        ascending: Optional[bool] = False,
+        lang: Optional[str] = "kr",
     ) -> Tuple[List[Dict], int]:
         try:
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
@@ -159,8 +164,12 @@ class ScreenerService:
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
             scored_df = calculate_factor_score_with_description(filtered_df, country, "stock")
+            if scored_df.empty:
+                return [], 0
+
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
-            sorted_df = merged_df.sort_values(by="score", ascending=False).reset_index(drop=True)
+            sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
+
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
 
@@ -170,58 +179,74 @@ class ScreenerService:
             factors = factors_cache.get_configs(country=country, asset_type="stock")
             result = []
 
+            if columns:
+                ordered_columns = []
+                for col in columns:
+                    mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
+                    if mapped_col not in ordered_columns:
+                        ordered_columns.append(mapped_col)
+            else:
+                ordered_columns = ["Code", "Name", "score", "country"]
+
+            if "description" not in ordered_columns and "description" in sorted_df.columns:
+                ordered_columns.append("description")
+
+            selected_columns = ordered_columns.copy()
+
+            available_columns = [col for col in selected_columns if col in sorted_df.columns]
+            sorted_df = sorted_df[available_columns]
+
             for _, row in sorted_df.iterrows():
-                # 기본으로 표시될 컬럼들
-                stock_data = {
-                    "Code": row["Code"],
-                    "Name": row["Name"],
-                    "market": row["market"],
-                    "sector": row["sector"],
-                    "country": row["country"],
-                    "description": row["description"],
-                }
+                stock_data = {}
 
-                # 숫자형 데이터 처리
-                for col in sorted_df.columns:
-                    if col in ["Code", "Name", "market", "sector", "country", "description"]:
-                        continue
-
-                    if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
-                        stock_data[col] = {"value": "", "unit": ""}
-                    else:
-                        value, unit = factor_utils.convert_unit_and_value(
-                            market_filter,
-                            float(row[col]),
-                            factors[col].get("unit", "") if col in factors else "",
-                        )
-
-                        stock_data[col] = {"value": value, "unit": unit}
+                for col in available_columns:
+                    if col in NON_NUMERIC_COLUMNS or col == "description":
+                        if col in row:
+                            stock_data[col] = row[col]
+                    elif col == "score":
+                        stock_data[col] = {"value": float(row[col]), "unit": ""}
+                    elif col in row:
+                        if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
+                            stock_data[col] = {"value": "", "unit": ""}
+                        else:
+                            value, unit = factor_utils.convert_unit_and_value(
+                                market_filter,
+                                float(row[col]),
+                                factors[col].get("unit", "") if col in factors else "",
+                                lang,
+                            )
+                            stock_data[col] = {"value": value, "unit": unit}
 
                 result.append(stock_data)
+
+            factor_map = FACTOR_MAP
+            if lang == "en":
+                factor_map = FACTOR_MAP_EN
 
             mapped_result = []
             for item in result:
                 mapped_item = {}
-                for key, value in item.items():
-                    mapped_key = FACTOR_MAP.get(key, key)
-                    mapped_item[mapped_key] = value
+                for key in ordered_columns:
+                    if key in item:
+                        mapped_key = factor_map.get(key, key)
+                        mapped_item[mapped_key] = item[key]
                 mapped_result.append(mapped_item)
 
             return mapped_result, total_count
 
         except Exception as e:
-            logger.error(f"Error in get_filtered_stocks: {e}")
+            logger.error(f"Error in get_filtered_stocks_with_description: {e}")
             raise e
 
     def create_group(
         self,
         user_id: int,
-        name: str,
+        name: str = "기본",
         type: Optional[StockType] = StockType.STOCK,
-        market_filter: Optional[MarketEnum] = None,
-        sector_filter: Optional[List[str]] = None,
-        custom_filters: Optional[List[Dict]] = None,
-        factor_filters: Optional[List[str]] = None,
+        market_filter: Optional[MarketEnum] = MarketEnum.US,
+        sector_filter: Optional[List[str]] = [],
+        custom_filters: Optional[List[Dict]] = [],
+        factor_filters: Optional[List[str]] = [],
     ) -> bool:
         existing_groups = self.database._select(table="screener_groups", user_id=user_id, name=name, type=type)
         if existing_groups:
@@ -249,6 +274,8 @@ class ScreenerService:
 
             if sector_filter:
                 for sector in sector_filter:
+                    if sector not in self.get_available_sectors():
+                        raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
                     self.database._insert(
                         table="screener_stock_filters",
                         sets={"group_id": group_id, "factor": "sector", "value": sector},
@@ -389,9 +416,11 @@ class ScreenerService:
 
     def get_group_filters(self, group_id: int) -> Dict:
         try:
+            group = self.database._select(table="screener_groups", id=group_id)
             stock_filters = self.database._select(table="screener_stock_filters", group_id=group_id)
             factor_filters = self.database._select(table="screener_factor_filters", group_id=group_id)
             return {
+                "name": group[0].name,
                 "stock_filters": [
                     {
                         "factor": FACTOR_MAP[stock_filter.factor],
@@ -472,6 +501,24 @@ class ScreenerService:
             group_user_id = int(groups[0].user_id)
             return group_user_id == user_id
 
+    def get_available_sectors(self, lang: str = "kr") -> List[str]:
+        kr_df = pd.read_parquet("parquet/kr_stock_factors.parquet")
+        us_df = pd.read_parquet("parquet/us_stock_factors.parquet")
+        sector_lang = "sector" if lang == "kr" else "sector_en"
+        kr_sectors = kr_df[sector_lang].unique().tolist()
+        us_sectors = us_df[sector_lang].unique().tolist()
+
+        sectors = list(set(kr_sectors + us_sectors))
+
+        return sectors
+
 
 def get_screener_service():
     return ScreenerService()
+
+
+if __name__ == "__main__":
+    screener_service = ScreenerService()
+    users = [155, 156, 159, 160, 161, 164, 165, 166, 168, 170, 171]
+    for user in users:
+        screener_service.create_group(user)
