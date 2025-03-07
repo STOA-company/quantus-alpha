@@ -97,7 +97,7 @@ REVERSE_FACTOR_MAP = {v: k for k, v in FACTOR_MAP.items()}
 ETF_DATA_DIR = "check_data/etf"
 KRX_DIR = "check_data/etf_krx"
 PARQUET_DIR = "parquet"
-
+MORNINGSTAR_DIR = "check_data/etf_morningstar"
 
 ETF_FACTOR_LIST = [
     "ticker",
