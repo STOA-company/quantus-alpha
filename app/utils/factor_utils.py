@@ -9,6 +9,9 @@ import numpy as np
 from app.cache.factors import factors_cache
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.models.models_factors import CategoryEnum
+import logging
+
+logger = logging.getLogger(__name__)
 
 notifier = SlackNotifier()
 
@@ -18,23 +21,41 @@ class FactorUtils:
         self.db = database
         self.lang = "kr"
 
-    def get_factors(self) -> List[dict]:
-        factors = self.db._select(table="factors")
-        return [
-            {
-                "factor": FACTOR_MAP[factor.factor],
-                "description": factor.description,
-                "unit": str(factor.unit).lower(),
-                "category": str(factor.category).lower(),
-                "direction": factor.sort_direction,
-                "min_value": factor.min_value,
-                "max_value": factor.max_value,
-            }
-            for factor in factors
-        ]
+    def get_factors(self, market: Optional[MarketEnum] = None, is_stock: Optional[bool] = True) -> List[dict]:
+        factors = self.db._select(table="factors", is_stock=is_stock)
+        if market:
+            # 시장별 팩터 최소/최대값 계산
+            market_data = self.get_df_from_parquet(market)
 
-    def get_columns(self, category: Optional[CategoryEnum] = None) -> List[str]:
-        db_columns = self.db._select(table="factors", columns=["factor"], category=category)
+            print("DATA LENGTH", len(market_data))
+
+            result = []
+            for factor in factors:
+                factor_name = factor.factor
+
+                if factor_name in market_data.columns:
+                    min_value = market_data[factor_name].min()
+                    max_value = market_data[factor_name].max()
+
+                    result.append(
+                        {
+                            "factor": FACTOR_MAP[factor_name],
+                            "description": factor.description,
+                            "unit": str(factor.unit).lower(),
+                            "category": str(factor.category).lower(),
+                            "direction": factor.sort_direction,
+                            "min_value": min_value,
+                            "max_value": max_value,
+                        }
+                    )
+
+                else:
+                    raise ValueError(f"팩터 '{factor_name}'가 데이터에 존재하지 않습니다.")
+
+        return result
+
+    def get_columns(self, category: Optional[CategoryEnum] = None, is_stock: Optional[bool] = True) -> List[str]:
+        db_columns = self.db._select(table="factors", columns=["factor"], category=category, is_stock=is_stock)
 
         result = ["market", "sector", "score"]
         for column_tuple in db_columns:
@@ -91,6 +112,10 @@ class FactorUtils:
 
         df_selected = df[selected_columns]
         df_result = df_selected[df_selected["market"].isin(["KOSPI", "KOSDAQ"])].copy()
+
+        for column in df_result.columns:
+            if np.issubdtype(df_result[column].dtype, np.number):
+                df_result[column] = df_result[column].replace([np.inf, -np.inf], np.nan)
 
         self.validate_integer_parts(df, df_result)
 
@@ -165,6 +190,10 @@ class FactorUtils:
         df_selected = df[selected_columns]
         df_result = df_selected[df_selected["market"].isin(["NAS", "NYS"])].copy()
 
+        for column in df_result.columns:
+            if np.issubdtype(df_result[column].dtype, np.number):
+                df_result[column] = df_result[column].replace([np.inf, -np.inf], np.nan)
+
         self.validate_integer_parts(df, df_result)
 
         df_result["market"] = df_result["market"].map(MARKET_MAP)
@@ -185,6 +214,12 @@ class FactorUtils:
                 df = pd.read_parquet("parquet/us_stock_factors.parquet")
             elif market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
                 df = pd.read_parquet("parquet/kr_stock_factors.parquet")
+
+            if market_filter in [MarketEnum.KOSPI, MarketEnum.KOSDAQ, MarketEnum.NASDAQ]:
+                df = df[df["market"] == market_filter.value]
+
+            if market_filter == MarketEnum.SNP500:
+                df = df[df["is_snp_500"] == 1]
         else:
             kr_df = pd.read_parquet("parquet/kr_stock_factors.parquet")
             us_df = pd.read_parquet("parquet/us_stock_factors.parquet")
@@ -320,7 +355,3 @@ class FactorUtils:
 
 
 factor_utils = FactorUtils()
-
-if __name__ == "__main__":
-    factor_utils.process_kr_factor_data()
-    factor_utils.process_us_factor_data()

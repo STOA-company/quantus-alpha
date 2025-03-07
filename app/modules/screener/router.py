@@ -33,7 +33,7 @@ def get_factors(market: MarketEnum, screener_service: ScreenerService = Depends(
     모든 팩터 조회
     """
     try:
-        factors = screener_service.get_factors()
+        factors = screener_service.get_factors(market)
         if market in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
             nation = "us"
         else:
@@ -43,10 +43,13 @@ def get_factors(market: MarketEnum, screener_service: ScreenerService = Depends(
         for factor in factors:
             if factor["unit"] == "small_price":
                 unit = "원" if nation == "kr" else "$"
+                type = "input"
             elif factor["unit"] == "big_price":
                 unit = "억원" if nation == "kr" else "K$"
+                type = "input"
             else:
                 unit = UNIT_MAP[factor["unit"]]
+                type = "slider"
             result.append(
                 FactorResponse(
                     factor=factor["factor"],
@@ -56,6 +59,7 @@ def get_factors(market: MarketEnum, screener_service: ScreenerService = Depends(
                     direction=factor["direction"],
                     min_value=factor["min_value"],
                     max_value=factor["max_value"],
+                    type=type,
                 )
             )
         return result

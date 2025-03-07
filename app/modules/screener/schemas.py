@@ -22,6 +22,7 @@ class FactorResponse(BaseModel):
     direction: str
     min_value: Optional[float] = None
     max_value: Optional[float] = None
+    type: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -18,9 +18,10 @@ class ScreenerService:
     def __init__(self):
         self.database = database_service
 
-    def get_factors(self):
+    def get_factors(self, market: Optional[MarketEnum] = None):
         try:
-            factors = factor_utils.get_factors()
+            factors = factor_utils.get_factors(market)
+
             return factors
 
         except Exception as e:
