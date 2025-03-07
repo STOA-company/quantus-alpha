@@ -8,7 +8,7 @@ import numpy as np
 from app.modules.screener.schemas import MarketEnum
 from app.utils.factor_utils import factor_utils
 from app.enum.type import StockType
-from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, REVERSE_FACTOR_MAP
+from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, REVERSE_FACTOR_MAP, FACTOR_MAP_EN
 from app.core.exception.custom import CustomException
 
 logger = logging.getLogger(__name__)
@@ -35,13 +35,20 @@ class ScreenerService:
         columns: Optional[List[str]] = None,
         limit: Optional[int] = 50,
         offset: Optional[int] = 0,
+        sort_by: Optional[str] = "score",
+        ascending: Optional[bool] = False,
+        lang: Optional[str] = "kr",
     ) -> Tuple[List[Dict], int]:
         try:
+            print("SERVICE COLUMNS", columns)
+            if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
+                raise CustomException(status_code=400, message="sort_by must be in columns")
+
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
             scored_df = calculate_factor_score(filtered_df)
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
-            sorted_df = merged_df.sort_values(by="score", ascending=False).reset_index(drop=True)
+            sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
 
@@ -51,21 +58,24 @@ class ScreenerService:
             factors = factors_cache.get_configs()
             result = []
 
-            ordered_columns = []
             if columns:
+                ordered_columns = []
                 for col in columns:
                     mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
                     if mapped_col not in ordered_columns:
                         ordered_columns.append(mapped_col)
             else:
-                for col in sorted_df.columns:
-                    if col not in ordered_columns and col != "score":
-                        ordered_columns.append(col)
+                ordered_columns = ["Code", "Name", "score", "country"]
+
+            selected_columns = ordered_columns.copy()
+            print("SERVICE SELECTED COLUMNS", selected_columns)
+
+            sorted_df = sorted_df[selected_columns]
 
             for _, row in sorted_df.iterrows():
                 stock_data = {}
 
-                for col in ordered_columns:
+                for col in selected_columns:
                     if col in NON_NUMERIC_COLUMNS:
                         if col in row:
                             stock_data[col] = row[col]
@@ -79,19 +89,28 @@ class ScreenerService:
                                 market_filter,
                                 float(row[col]),
                                 factors[col].get("unit", "") if col in factors else "",
+                                lang,
                             )
                             stock_data[col] = {"value": value, "unit": unit}
 
                 result.append(stock_data)
+
+            print("SERVICE RESULT COLUMNS", result[0].keys())
+
+            factor_map = FACTOR_MAP
+            if lang == "en":
+                factor_map = FACTOR_MAP_EN
 
             mapped_result = []
             for item in result:
                 mapped_item = {}
                 for key in ordered_columns:
                     if key in item:
-                        mapped_key = FACTOR_MAP.get(key, key)
+                        mapped_key = factor_map.get(key, key)
                         mapped_item[mapped_key] = item[key]
                 mapped_result.append(mapped_item)
+
+            print("SERVICE MAPPED RESULT COLUMNS", mapped_result[0].keys())
 
             return mapped_result, total_count
 
@@ -392,11 +411,26 @@ class ScreenerService:
                 return []
             group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
             factor_filters = self.database._select(table="screener_factor_filters", columns=["factor"], group_id=group.id)
-            print(f"FACTOR_FILTERS: {factor_filters}")
             return [FACTOR_MAP[factor_filter.factor] for factor_filter in factor_filters]
 
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
+            raise e
+
+    def update_group_name(self, group_id: int, name: str) -> str:
+        try:
+            existing_groups = self.database._select(table="screener_groups", name=name)
+            if existing_groups and any(group.id != group_id for group in existing_groups):
+                raise CustomException(status_code=409, message="Group name already exists for this type")
+
+            self.database._update(table="screener_groups", id=group_id, sets={"name": name})
+            updated_group_name = self.database._select(table="screener_groups", id=group_id)[0].name
+            if name == updated_group_name:
+                return updated_group_name
+            else:
+                raise CustomException(status_code=500, message="Failed to update group name")
+        except Exception as e:
+            logger.error(f"Error in update_group_name: {e}")
             raise e
 
 

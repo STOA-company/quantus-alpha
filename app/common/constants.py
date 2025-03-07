@@ -10,11 +10,10 @@ USE = pytz.timezone("America/New_York")
 
 NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6", "momentum_12", "current_ratio"]
 
-DEFAULT_COLUMNS = ["Code", "Name", "country"]
-
-NON_NUMERIC_COLUMNS = ["Code", "Name", "market", "sector", "country", "score"]
+NON_NUMERIC_COLUMNS = ["Code", "Name", "market", "sector", "country", "score", "Name_en", "sector_en"]
 
 UNIT_MAP = {"percentage": "%", "times": "회", "score": "점", "multiple": "배", "ratio": ""}
+UNIT_MAP_EN = {"percentage": "%", "times": "", "score": "", "multiple": "", "ratio": ""}
 
 MARKET_MAP = {
     "KOSPI": "코스피",
@@ -22,6 +21,14 @@ MARKET_MAP = {
     "NAS": "나스닥",
     "NYS": "뉴욕 증권 거래소",
     "AMS": "아멕스",
+}
+
+MARKET_KOREAN_TO_ENGLISH_MAP = {
+    "코스피": "KOSPI",
+    "코스닥": "KOSDAQ",
+    "나스닥": "NASDAQ",
+    "뉴욕 증권 거래소": "NYSE",
+    "아멕스": "AMS",
 }
 
 FACTOR_MAP = {
@@ -88,7 +95,136 @@ FACTOR_MAP = {
     "psr_ttm": "PSR (TTM)",
 }
 
+FACTOR_MAP_EN = {
+    "Code": "Ticker",
+    "Name_en": "Name",
+    "country": "Country",
+    "market": "Market",
+    "sector_en": "Sector",
+    "score": "Score",
+    "abs_beta": "Absolute Beta (52-week)",
+    "abs_beta_60": "Absolute Beta (60-day)",
+    "beta": "Beta (52-week)",
+    "beta_60": "Beta (60-day)",
+    "close": "Close Price (Pre-adjustment)",
+    "disparity_10": "Disparity (10-day)",
+    "disparity_100": "Disparity (100-day)",
+    "disparity_20": "Disparity (20-day)",
+    "disparity_200": "Disparity (200-day)",
+    "disparity_5": "Disparity (5-day)",
+    "disparity_50": "Disparity (50-day)",
+    "marketCap": "Market Capitalization",
+    "median_trade": "Median Monthly Trading Volume",
+    "momentum_1": "Momentum (1-month)",
+    "momentum_12": "Momentum (12-month)",
+    "momentum_3": "Momentum (3-month)",
+    "momentum_6": "Momentum (6-month)",
+    "rsi_14": "RSI (14-day)",
+    "rsi_25": "RSI (25-day)",
+    "rsi_9": "RSI (9-day)",
+    "sharpe": "Sharpe Ratio (52-week)",
+    "sortino": "Sortino Ratio (52-week)",
+    "vol": "Volatility (52-week)",
+    "vol_60": "Volatility (60-day)",
+    "assetturnover": "Asset Turnover",
+    "assetturnover_ttm": "Asset Turnover (TTM)",
+    "borrow_rate": "Borrowing Ratio",
+    "current_ratio": "Current Ratio",
+    "deptRatio": "Debt Ratio",
+    "fscore": "F-score",
+    "gpa": "GP/A",
+    "gpa_ttm": "GP/A (TTM)",
+    "gross_profit": "Gross Profit",
+    "gross_profit_ttm": "Gross Profit (TTM)",
+    "operating_income": "Operating Income",
+    "operating_income_ttm": "Operating Income (TTM)",
+    "reserve_ratio": "Reserve Ratio",
+    "rev": "Revenue",
+    "rev_ttm": "Revenue (TTM)",
+    "roa": "ROA",
+    "roa_ttm": "ROA (TTM)",
+    "roe": "ROE",
+    "roe_ttm": "ROE (TTM)",
+    "z_score": "Altman Z-score",
+    "pbr": "PBR",
+    "pcr": "PCR",
+    "pcr_ttm": "PCR (TTM)",
+    "per": "PER",
+    "per_ttm": "PER (TTM)",
+    "pgpr": "PGPR",
+    "pgpr_ttm": "PGPR (TTM)",
+    "por": "POR",
+    "por_ttm": "POR (TTM)",
+    "psr": "PSR",
+    "psr_ttm": "PSR (TTM)",
+}
+
+FACTOR_KOREAN_TO_ENGLISH_MAP = {
+    "티커": "Ticker",
+    "종목명": "Name",
+    "국가": "Country",
+    "시장": "Market",
+    "산업": "Sector",
+    "스코어": "Score",
+    "절대값 베타 (52주)": "Absolute Beta (52-week)",
+    "절대값 베타 (60일)": "Absolute Beta (60-day)",
+    "베타 (52주)": "Beta (52-week)",
+    "베타 (60일)": "Beta (60-day)",
+    "종가 (수정 전)": "Close Price (Pre-adjustment)",
+    "이격도 (10일)": "Disparity (10-day)",
+    "이격도 (100일)": "Disparity (100-day)",
+    "이격도 (20일)": "Disparity (20-day)",
+    "이격도 (200일)": "Disparity (200-day)",
+    "이격도 (5일)": "Disparity (5-day)",
+    "이격도 (50일)": "Disparity (50-day)",
+    "시가총액": "Market Capitalization",
+    "중위 월간 거래량": "Median Monthly Trading Volume",
+    "모멘텀 (1개월)": "Momentum (1-month)",
+    "모멘텀 (12개월)": "Momentum (12-month)",
+    "모멘텀 (3개월)": "Momentum (3-month)",
+    "모멘텀 (6개월)": "Momentum (6-month)",
+    "RSI (14일)": "RSI (14-day)",
+    "RSI (25일)": "RSI (25-day)",
+    "RSI (9일)": "RSI (9-day)",
+    "샤프 비율 (52주)": "Sharpe Ratio (52-week)",
+    "Sortino 비율 (52주)": "Sortino Ratio (52-week)",
+    "변동성 (52주)": "Volatility (52-week)",
+    "변동성 (60일)": "Volatility (60-day)",
+    "Asset Turnover": "Asset Turnover",
+    "Asset Turnover (TTM)": "Asset Turnover (TTM)",
+    "차입 비율": "Borrowing Ratio",
+    "유동 비율": "Current Ratio",
+    "부채 비율": "Debt Ratio",
+    "F-score": "F-score",
+    "GP/A": "GP/A",
+    "GP/A (TTM)": "GP/A (TTM)",
+    "매출 총 이익": "Gross Profit",
+    "매출 총 이익 (TTM)": "Gross Profit (TTM)",
+    "영업 이익": "Operating Income",
+    "영업 이익 (TTM)": "Operating Income (TTM)",
+    "유보율": "Reserve Ratio",
+    "매출액": "Revenue",
+    "매출액 (TTM)": "Revenue (TTM)",
+    "ROA": "ROA",
+    "ROA (TTM)": "ROA (TTM)",
+    "ROE": "ROE",
+    "ROE (TTM)": "ROE (TTM)",
+    "Altman Z-score": "Altman Z-score",
+    "PBR": "PBR",
+    "PCR": "PCR",
+    "PCR (TTM)": "PCR (TTM)",
+    "PER": "PER",
+    "PER (TTM)": "PER (TTM)",
+    "PGPR": "PGPR",
+    "PGPR (TTM)": "PGPR (TTM)",
+    "POR": "POR",
+    "POR (TTM)": "POR (TTM)",
+    "PSR": "PSR",
+    "PSR (TTM)": "PSR (TTM)",
+}
+
 REVERSE_FACTOR_MAP = {v: k for k, v in FACTOR_MAP.items()}
+REVERSE_FACTOR_MAP_EN = {v: k for k, v in FACTOR_MAP_EN.items()}
 
 ########################################################
 # ETF

@@ -516,15 +516,13 @@ class ETFDataDownloader:
             order by b.DsLocalCode, a.PayDate
             """
         df = self._get_refinitiv_data(query)
-        print(f"df.columns: {df.columns}###1")
-        print(df)
+
         list_db_tickers = self._get_db_tickers_list(ctry)
-        print(f"list_db_tickers: {list_db_tickers}###2")
+
         if ctry == "KR":
             list_db_tickers = [self.kr_pattern.sub("K", ticker) for ticker in list_db_tickers]
-        print(f"list_db_tickers: {list_db_tickers}###3")
         df = df[df["ticker"].isin(list_db_tickers)]
-        print(f"df.columns: {df.columns}###4")
+
         if download:
             if ctry == "KR":
                 df.to_parquet(os.path.join(self.DATA_DIR, "kr_etf_dividend.parquet"), index=False)
@@ -618,8 +616,6 @@ class ETFDataDownloader:
 
         df = self._get_refinitiv_data(query)
         list_db_tickers = self._get_db_tickers_list(ctry)
-        print(f"df.columns: {df.columns}")
-        print(df)
         if ctry == "KR":
             list_db_tickers = [self.kr_pattern.sub("A", ticker) for ticker in list_db_tickers]
         df = df[df["Ticker"].isin(list_db_tickers)]
@@ -1414,12 +1410,8 @@ class ETFDataPreprocessor:
             "dividend_growth_rate_3y",
             "dividend_growth_rate_5y",
         ]
-        print(f"df.columns: {df.columns}")
-        print(df)
         select_columns = [col for col in all_columns if col in df.columns]
         df_select = df[select_columns]
-        print(f"df_select.columns: {df_select.columns}")
-        print(df_select)
 
         if ctry == "KR":
             df_select["ticker"] = df_select["ticker"].str.replace("^K", "A", regex=True)
@@ -2052,7 +2044,6 @@ class ETFDataMerger:
         if dividend_factor:
             # 데이터 가져오기
             df_dividend_factor = self.loader.load_etf_dividend_factor(ctry)
-            print(f"df_dividend_factor.columns: {df_dividend_factor.columns}####1")
             # 데이터 전처리
             df_dividend_factor = self.preprocessor.dividend_factor_data_preprocess(df_dividend_factor, ctry)
             # 데이터 합치기
