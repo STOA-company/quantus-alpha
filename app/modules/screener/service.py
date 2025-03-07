@@ -379,9 +379,11 @@ class ScreenerService:
 
     def get_group_filters(self, group_id: int) -> Dict:
         try:
+            group = self.database._select(table="screener_groups", id=group_id)
             stock_filters = self.database._select(table="screener_stock_filters", group_id=group_id)
             factor_filters = self.database._select(table="screener_factor_filters", group_id=group_id)
             return {
+                "name": group[0].name,
                 "stock_filters": [
                     {
                         "factor": FACTOR_MAP[stock_filter.factor],

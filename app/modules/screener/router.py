@@ -367,6 +367,7 @@ def get_group_filters(group_id: int, screener_service: ScreenerService = Depends
         factor_filters = group_filters["factor_filters"]
         return GroupFilter(
             id=group_id,
+            name=group_filters["name"],
             market_filter=market_filter,
             sector_filter=sector_filter,
             custom_filters=custom_filters,
