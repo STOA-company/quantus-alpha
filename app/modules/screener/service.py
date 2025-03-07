@@ -477,3 +477,10 @@ class ScreenerService:
 
 def get_screener_service():
     return ScreenerService()
+
+
+if __name__ == "__main__":
+    screener_service = ScreenerService()
+    users = [155, 156, 159, 160, 161, 164, 165, 166, 168, 170, 171]
+    for user in users:
+        screener_service.create_group(user)

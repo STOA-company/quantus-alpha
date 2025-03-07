@@ -51,7 +51,8 @@ def signup(
     refresh_token = create_refresh_token(user.id)
     access_token_hash = service.store_token(access_token, refresh_token)
 
-    screener_group_created = screener_service.create_group(user.id)
+    all_sectors = screener_service.get_available_sectors()
+    screener_group_created = screener_service.create_group(user.id, all_sectors)
 
     return {
         "message": "Signup successful",
