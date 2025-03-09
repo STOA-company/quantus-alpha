@@ -51,7 +51,7 @@ class FactorsCache:
 
         factors = database._select(
             "factors",
-            columns=["factor", "description", "unit", "category", "sort_direction", "min_value", "max_value"],
+            columns=["factor", "description", "unit", "category", "sort_direction"],
             **condition,
         )
 
