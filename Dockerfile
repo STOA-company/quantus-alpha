@@ -35,15 +35,16 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# 런타임 스테이지에도 ODBC 라이브러리 설치 추가
-RUN apt-get update && apt-get install -y unixodbc && rm -rf /var/lib/apt/lists/*
+# 런타임 스테이지에도 ODBC 라이브러리와 curl 설치 추가
+RUN apt-get update && apt-get install -y unixodbc curl && rm -rf /var/lib/apt/lists/*
 
 # 빌더 스테이지에서 설치된 패키지들과 소스 코드를 복사
 COPY --from=builder /app /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 
-# uvicorn을 시스템 레벨에 설치
 RUN pip install --no-cache-dir gunicorn uvicorn
 
-# FastAPI 실행
-CMD ["gunicorn", "--worker-class", "uvicorn.workers.UvicornWorker", "--workers", "4", "--bind", "0.0.0.0:8000", "app.main:app"]
+# 환경 변수로 PORT 설정 가능하도록 수정
+ENV PORT=8000
+
+CMD ["sh", "-c", "gunicorn --worker-class uvicorn.workers.UvicornWorker --workers 4 --bind 0.0.0.0:${PORT} app.main:app"]
