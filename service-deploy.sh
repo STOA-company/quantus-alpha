@@ -95,7 +95,6 @@ server {
 }
 EOF
 
-    # NGINX 재로드
     docker-compose exec -T nginx nginx -s reload || {
         echo "Failed to reload NGINX. Attempting to restart..."
         docker-compose restart nginx
@@ -107,6 +106,9 @@ echo "Preparing deployment for $target_service..."
 echo "Building and starting new $target_service container..."
 ENV=$ENV docker-compose -f docker-compose.yml --env-file $ENV_FILE up -d --no-deps --build $target_service
 
+echo "Waiting for container to initialize..."
+sleep 10
+
 echo "Performing health check on $target_service..."
 max_attempts=12
 attempt=1
@@ -114,7 +116,8 @@ attempt=1
 while [ $attempt -le $max_attempts ]; do
     echo "Health check attempt $attempt of $max_attempts..."
 
-    health_status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/health-check" || echo "000")
+    # 컨테이너 내부에서 직접 헬스 체크
+    health_status=$(docker-compose exec -T $target_service curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/health-check" 2>/dev/null || echo "000")
 
     if [ "$health_status" = "200" ]; then
         echo "$target_service is healthy and ready!"
@@ -131,13 +134,11 @@ if [ $attempt -gt $max_attempts ]; then
     exit 1
 fi
 
-# NGINX upstream 업데이트로 트래픽 전환
 update_nginx_upstream $target_service
 
 echo "Traffic switched to $target_service. Waiting 10 seconds to ensure stability..."
 sleep 10
 
-# 구 서비스 중지 (optional)
 echo "Stopping old $idle_service container..."
 docker-compose stop $idle_service
 
