@@ -122,3 +122,38 @@ def check_market_status(country: Literal["KR", "US"]) -> bool:
     except Exception as e:
         logging.error(f"Error checking market status: {str(e)}")
         return False
+
+
+def is_holiday(country: Literal["KR", "US"], date_str: str) -> bool:
+    """
+    주어진 날짜가 휴장일인지 확인합니다.
+
+    Args:
+        country (Literal["KR", "US"]): 국가 코드
+        date_str (str): "YYYYMMDD" 형식의 날짜 문자열
+
+    Returns:
+        bool: 휴장일이면 True, 거래일이면 False 반환
+    """
+    try:
+        calendar_map = {
+            "KR": "XKRX",  # 한국 거래소
+            "US": "XNYS",  # 뉴욕 증권거래소
+        }
+
+        # 날짜 문자열 파싱
+        year = int(date_str[:4])
+        month = int(date_str[4:6])
+        day = int(date_str[6:8])
+
+        check_date = datetime(year, month, day)
+
+        calendar = ecals.get_calendar(calendar_map[country])
+
+        is_trading_day = calendar.is_session(check_date)
+
+        return not is_trading_day
+
+    except Exception as e:
+        logging.error(f"Error in is_holiday: {str(e)}")
+        return False
