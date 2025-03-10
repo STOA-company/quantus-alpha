@@ -64,3 +64,6 @@ class Leaderboard:
     def reset_daily_leaderboard(self):
         """일일 리더보드 초기화"""
         self.redis.delete(self.DAILY_SEARCH_LEADERBOARD)
+
+
+leaderboard_cache = Leaderboard()

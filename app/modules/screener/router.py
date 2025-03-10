@@ -437,31 +437,3 @@ def get_columns(
     except Exception as e:
         logger.error(f"Error getting columns: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/parquet/kr")
-def update_kr_parquet():
-    """
-    파퀴 업데이트
-    """
-    try:
-        factor_utils.process_kr_factor_data()
-        factor_utils.archive_parquet("kr")
-        return {"message": "Parquet updated successfully"}
-    except Exception as e:
-        logger.error(f"Error updating parquet: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/parquet/us")
-def update_us_parquet():
-    """
-    파퀴 업데이트
-    """
-    try:
-        factor_utils.process_us_factor_data()
-        factor_utils.archive_parquet("us")
-        return {"message": "Parquet updated successfully"}
-    except Exception as e:
-        logger.error(f"Error updating parquet: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
