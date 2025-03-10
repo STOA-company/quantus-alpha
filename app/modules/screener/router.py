@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Response
 from typing import List, Dict, Optional
 import io
+import time
 from app.modules.screener.service import get_screener_service, ScreenerService
 from app.modules.screener.schemas import (
     FactorResponse,
@@ -439,14 +440,44 @@ def get_columns(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/parquet")
-def update_parquet(screener_service: ScreenerService = Depends(get_screener_service)):
-    """
-    파퀴 업데이트
-    """
+@router.get("/parquet/kr")
+def update_kr_parquet():
+    try:
+        factor_utils.process_kr_factor_data()
+        time.sleep(10)
+
+        from datetime import datetime
+        from Aws.logic.s3 import upload_file_to_bucket
+
+        file_path = "parquet/kr_stock_factors.parquet"
+        bucket_name = "alpha-finder-factors"
+        date = datetime.now().strftime("%Y%m%d")
+        obj_path = f"stock/kr_stock_factors_{date}.parquet"
+
+        upload_file_to_bucket(file_path, bucket_name, obj_path)
+
+        return {"message": "Parquet updated successfully"}
+    except Exception as e:
+        logger.error(f"Error updating parquet: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/parquet/us")
+def update_us_parquet():
     try:
         factor_utils.process_us_factor_data()
-        factor_utils.process_kr_factor_data()
+        time.sleep(10)
+
+        from datetime import datetime
+        from Aws.logic.s3 import upload_file_to_bucket
+
+        file_path = "parquet/us_stock_factors.parquet"
+        bucket_name = "alpha-finder-factors"
+        date = datetime.now().strftime("%Y%m%d")
+        obj_path = f"stock/us_stock_factors_{date}.parquet"
+
+        upload_file_to_bucket(file_path, bucket_name, obj_path)
+
         return {"message": "Parquet updated successfully"}
     except Exception as e:
         logger.error(f"Error updating parquet: {e}")

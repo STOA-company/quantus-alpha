@@ -8,6 +8,7 @@ class CategoryEnum(str, Enum):
     TECHNICAL = "technical"
     FUNDAMENTAL = "fundamental"
     VALUATION = "valuation"
+    DIVIDEND = "dividend"
     CUSTOM = "custom"
 
 

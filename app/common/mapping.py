@@ -59,5 +59,4 @@ etf_column_mapping = {
     "Ask": "ask",
     "NumShrs": "num_shrs",
     "거래대금": "trade_amount",
-    "marketCap": "market_cap",
 }

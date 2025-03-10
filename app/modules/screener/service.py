@@ -1,5 +1,5 @@
 from app.database.crud import database_service
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Union
 import logging
 from app.utils.score_utils import calculate_factor_score, calculate_factor_score_with_description
 from app.cache.factors import factors_cache
@@ -41,6 +41,13 @@ class ScreenerService:
         lang: Optional[str] = "kr",
     ) -> Tuple[List[Dict], int]:
         try:
+            if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
+                country = "us"
+            else:
+                country = "kr"
+
+            print("SERVICE COLUMNS", columns)
+
             if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
 
@@ -51,7 +58,7 @@ class ScreenerService:
 
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
-            scored_df = calculate_factor_score(filtered_df)
+            scored_df = calculate_factor_score(filtered_df, country, "stock")
             if scored_df.empty:
                 return [], 0
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
@@ -62,7 +69,7 @@ class ScreenerService:
             total_count = len(sorted_df)
             sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
 
-            factors = factors_cache.get_configs()
+            factors = factors_cache.get_configs(country=country, asset_type="stock")
             result = []
 
             if columns:
@@ -149,10 +156,14 @@ class ScreenerService:
         lang: Optional[str] = "kr",
     ) -> Tuple[List[Dict], int]:
         try:
+            if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
+                country = "us"
+            else:
+                country = "kr"
+
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
-
-            scored_df = calculate_factor_score_with_description(filtered_df)
+            scored_df = calculate_factor_score_with_description(filtered_df, country, "stock")
             if scored_df.empty:
                 return [], 0
 
@@ -165,7 +176,7 @@ class ScreenerService:
             total_count = len(sorted_df)
             sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
 
-            factors = factors_cache.get_configs()
+            factors = factors_cache.get_configs(country=country, asset_type="stock")
             result = []
 
             if columns:
@@ -386,9 +397,11 @@ class ScreenerService:
             logger.error(f"Error in delete_group: {e}")
             raise e
 
-    def get_groups(self, user_id: str) -> List[Dict]:
+    def get_groups(self, user_id: str, type: str = "STOCK") -> List[Dict]:
         try:
-            groups = self.database._select(table="screener_groups", user_id=user_id, order="order", ascending=True)
+            groups = self.database._select(
+                table="screener_groups", user_id=user_id, order="order", ascending=True, type=type
+            )
             return [
                 {
                     "id": group.id,
@@ -462,6 +475,31 @@ class ScreenerService:
         except Exception as e:
             logger.error(f"Error in update_group_name: {e}")
             raise e
+
+    def validate_group(self, group_ids: List[int]) -> bool:
+        if len(group_ids) > self.MAX_GROUPS:
+            raise CustomException(status_code=400, detail="Groups is too long")
+        if len(set(group_ids)) != len(group_ids):
+            raise CustomException(status_code=400, detail="Groups has duplicate values")
+        if any(group_id <= 0 for group_id in group_ids):
+            raise CustomException(status_code=400, detail="Groups has negative values")
+
+    def get_group_length(self, user_id: int) -> int:
+        groups = self.database._select(table="screener_groups", columns=["id"], user_id=user_id)
+        return len(groups)
+
+    def check_owner(self, group_id: Union[int, List[int]], user_id: int) -> bool:
+        if isinstance(group_id, int):
+            groups = self.database._select(table="screener_groups", columns=["user_id"], id=group_id)
+            group_user_id = int(groups[0].user_id)
+            return group_user_id == user_id
+
+        else:
+            groups = self.database._select(table="screener_groups", columns=["user_id"], id__in=group_id)
+            if len(set([group.user_id for group in groups])) > 1:
+                return False
+            group_user_id = int(groups[0].user_id)
+            return group_user_id == user_id
 
     def get_available_sectors(self, lang: str = "kr") -> List[str]:
         kr_df = pd.read_parquet("parquet/kr_stock_factors.parquet")
