@@ -352,6 +352,8 @@ class FactorUtils:
         unit_map = UNIT_MAP
         if lang == "en":
             unit_map = UNIT_MAP_EN
+
+        value = np.round(value, 2)
         return value, unit_map.get(unit.lower(), "")
 
     def archive_parquet(self, nation: str, type: str = "stock"):
