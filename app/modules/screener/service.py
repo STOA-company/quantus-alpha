@@ -41,11 +41,6 @@ class ScreenerService:
         lang: Optional[str] = "kr",
     ) -> Tuple[List[Dict], int]:
         try:
-            if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
-                country = "us"
-            else:
-                country = "kr"
-
             if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
 
@@ -154,11 +149,6 @@ class ScreenerService:
         lang: Optional[str] = "kr",
     ) -> Tuple[List[Dict], int]:
         try:
-            if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
-                country = "us"
-            else:
-                country = "kr"
-
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
             scored_df = score_utils.calculate_factor_score_with_description(filtered_df)
