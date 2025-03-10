@@ -1,16 +1,24 @@
+import os
 import time
 import pandas as pd
+from app.common.constants import ETF_DATA_DIR
 from app.database.crud import database
 
 
-def insert_dividend(ctry: str):
-    if ctry == "US":
+def insert_dividend(ctry: str, type: str):
+    if ctry == "KR":
+        contry = "kr"
+    elif ctry == "US":
         contry = "us"
     else:
-        raise ValueError("ctry must be US")
+        raise ValueError("ctry must be US or KR")
 
+    if type not in ["stock", "etf"]:
+        raise ValueError("type must be stock or etf")
     # parquet 파일 읽기
-    df_dividend = pd.read_parquet("static/dividend1.parquet")
+    df_dividend = pd.read_parquet(os.path.join(ETF_DATA_DIR, f"{contry}_{type}_dividend.parquet"))
+
+    # 과거 배당금 데이터 전처리
     df_dividend = df_dividend.rename(
         columns={
             "Ticker": "ticker",
@@ -27,6 +35,7 @@ def insert_dividend(ctry: str):
     information_tickers = database._select(
         table="stock_information",
         columns=["ticker"],
+        type=type,
     )
     list_information_tickers = [ticker[0] for ticker in information_tickers]
     df_dividend = df_dividend[df_dividend["ticker"].isin(list_information_tickers)]
