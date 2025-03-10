@@ -53,3 +53,4 @@ test/
 
 # check_data
 check_data/etf/*.parquet
+nginx/conf.d/default.conf
