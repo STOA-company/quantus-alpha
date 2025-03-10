@@ -67,7 +67,7 @@ class ScreenerService:
             total_count = len(sorted_df)
             sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
 
-            factors = factors_cache.get_configs(asset_type="stock")
+            factors = factors_cache.get_configs()
             result = []
 
             if columns:
@@ -174,7 +174,7 @@ class ScreenerService:
             total_count = len(sorted_df)
             sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
 
-            factors = factors_cache.get_configs(asset_type="stock")
+            factors = factors_cache.get_configs()
             result = []
 
             if columns:

@@ -129,7 +129,6 @@ class ScoreUtils:
 
         for col in numeric_columns:
             config = self.factors_cache.get_configs().get(col)
-            print(f"col: {col}, config: {config}")
             if not config:
                 continue
 
