@@ -124,12 +124,27 @@ def calculate_factor_score(df: pd.DataFrame, country: str, asset_type: str) -> p
 
     for col in numeric_columns:
         config = factors_cache.get_configs(country=country, asset_type=asset_type).get(col)
+        print(f"col: {col}, config: {config}")
         if not config:
             continue
 
         series = df_copy[col]
         ascending = config.get("direction") == "ASC"
+        min_value = config.get("min_value")
+        max_value = config.get("max_value")
 
+        outlier_mask = pd.Series(False, index=series.index)
+        if min_value is not None:
+            outlier_mask = series < min_value
+        if max_value is not None:
+            outlier_mask = series > max_value
+        
+        if outlier_mask.any():
+            if ascending:
+                series.loc[outlier_mask] = float('inf')
+            else:
+                series.loc[outlier_mask] = float('-inf')
+            
         ranks = series.rank(method="min", ascending=ascending)
         max_ranks_per_factor.append(ranks.max())  # 해당 팩터의 최대 순위(꼴등) 저장
 
