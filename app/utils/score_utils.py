@@ -129,6 +129,17 @@ def calculate_factor_score(df: pd.DataFrame, country: str, asset_type: str) -> p
 
         series = df_copy[col]
         ascending = config.get("direction") == "ASC"
+        min_value = config.get("min_value")
+
+        if min_value is not None:
+            # min_value보다 작은 값
+            below_min_mask = series < min_value
+                
+            if below_min_mask.any():
+                if ascending:
+                    series.loc[below_min_mask] = float("inf")
+                else:
+                    series.loc[below_min_mask] = float("-inf")
 
         ranks = series.rank(method="min", ascending=ascending)
         max_ranks_per_factor.append(ranks.max())  # 해당 팩터의 최대 순위(꼴등) 저장
