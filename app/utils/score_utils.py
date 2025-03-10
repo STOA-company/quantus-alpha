@@ -22,6 +22,7 @@ def calculate_factor_score_with_description(df: pd.DataFrame, country: str, asse
     descriptions = np.empty((n_rows, len(numeric_columns)), dtype=object)
 
     for col_idx, col in enumerate(numeric_columns):
+        factors_cache.force_update(country=country, asset_type=asset_type)
         config = factors_cache.get_configs(country=country, asset_type=asset_type).get(col)
         if not config:
             continue
@@ -129,6 +130,20 @@ def calculate_factor_score(df: pd.DataFrame, country: str, asset_type: str) -> p
 
         series = df_copy[col]
         ascending = config.get("direction") == "ASC"
+        min_value = config.get("min_value")
+        if min_value is not None:
+            print(f"{col} has min_value: {min_value}")
+            # min_value 미만은 모두 꼴등으로 처리
+            below_min_mask = series < min_value
+
+            if below_min_mask.any():
+                # 정렬 방향에 따라 최저/최고 값 설정 (min_value 미만은 모두 꼴등으로 처리)
+                if ascending:
+                    # ASC인 경우 큰 값이 꼴등이므로 매우 큰 값으로 설정
+                    series.loc[below_min_mask] = float("inf")
+                else:
+                    # DESC인 경우 작은 값이 꼴등이므로 매우 작은 값으로 설정
+                    series.loc[below_min_mask] = float("-inf")
 
         ranks = series.rank(method="min", ascending=ascending)
         max_ranks_per_factor.append(ranks.max())  # 해당 팩터의 최대 순위(꼴등) 저장
@@ -168,7 +183,7 @@ def calculate_factor_score(df: pd.DataFrame, country: str, asset_type: str) -> p
         # 모든 팩터에서 꼴등인 종목은 0점
         scores[all_last] = 0.0
 
-        score_df["score"] = np.round(scores, 2)
+        score_df["score"] = scores
 
     if asset_type == "etf":
         score_df = score_df.rename(

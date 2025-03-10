@@ -51,7 +51,7 @@ class FactorsCache:
 
         factors = database._select(
             "factors",
-            columns=["factor", "description", "unit", "category", "sort_direction"],
+            columns=["factor", "description", "unit", "category", "sort_direction", "min_value"],
             **condition,
         )
 
@@ -62,6 +62,7 @@ class FactorsCache:
                 "unit": factor.unit,
                 "category": factor.category,
                 "direction": factor.sort_direction,
+                "min_value": factor.min_value,
             }
 
         factors_key = self.factors_key_format.format(country=country, asset_type=asset_type)
