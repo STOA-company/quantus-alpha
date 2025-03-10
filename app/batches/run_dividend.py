@@ -3,6 +3,7 @@ import time
 import pandas as pd
 from app.common.constants import ETF_DATA_DIR
 from app.database.crud import database
+from app.utils.etf_utils import ETFDataDownloader
 
 
 def insert_dividend(ctry: str, type: str):
@@ -133,6 +134,99 @@ def insert_dividend(ctry: str, type: str):
     # 남은 데이터 처리
     if dividend_data:
         database._insert(table="dividend_information", sets=dividend_data)
+
+
+class StockDividendDataDownloader(ETFDataDownloader):
+    def __init__(self):
+        super().__init__()
+
+    def download_stock_dividend(self, ctry: str, download: bool = False):
+        """
+        배당 데이터 다운로드
+
+        Args:
+            ctry (str): 국가코드 (US, KR)
+
+        Returns:
+            pd.DataFrame: 데이터프레임
+        """
+        if ctry not in ["US", "KR"]:
+            raise ValueError("ctry must be 'US' or 'KR'")
+        if ctry == "US":
+            country = "us"
+            query = """
+            SELECT
+                c.Ticker as 'ticker',
+                d.Desc_,
+                a.DivRate as 'per_share', a.PayDate as 'payment_date', a.EffectiveDate as 'ex_date'
+            from DS2Div a
+            join DS2CtryQtInfo b
+                on b.InfoCode = a.InfoCode
+            JOIN
+                Ds2MnemChg c
+                ON c.InfoCode  = a.InfoCode
+                AND c.EndDate = (
+                    SELECT MAX(EndDate)
+                    FROM Ds2MnemChg
+                    WHERE InfoCode = a.InfoCode
+                )
+            JOIN
+                DS2XRef d ON a.DivTypeCode = d.Code AND d.Type_ = 8
+            where b.Region = 'us'
+                and b.TypeCode ='EQ'
+                and b.StatusCode != 'D'
+                and c.EndDate >= '2025-01-01'
+                and (a.LicFlag = 1 or a.LicFlag = 128)
+                and a.ISOCurrCode = 'USD'
+            order by Ticker,PayDate
+            ;
+            """
+
+        if ctry == "KR":
+            country = "kr"
+            query = """
+            SELECT
+                d.Desc_,
+                a.DivRate as 'per_share', a.PayDate as 'payment_date', a.EffectiveDate as 'ex_date',
+                b.DsLocalCode as 'ticker', b.DsQtName, b.Region,
+                e.Close_ as 'price',
+                f.PrimExchIntCode
+            from DS2Div a
+            join DS2CtryQtInfo b
+                on b.InfoCode = a.InfoCode
+            JOIN
+                DS2XRef d
+                ON a.DivTypeCode = d.Code AND d.Type_ = 8
+            JOIN
+                vw_Ds2Pricing e
+                ON e.InfoCode = b.InfoCode
+                AND e.MarketDate = a.EffectiveDate
+            JOIN
+                vw_Ds2SecInfo f
+                ON f.InfoCode = b.InfoCode
+            where b.Region = 'KR'
+                and b.TypeCode ='ET'
+                and b.StatusCode != 'D'
+                and a.LicFlag = 8
+                and a.ISOCurrCode = 'KRW'
+                and e.MarketDate >='2020-01-01'
+                and e.AdjType = 2
+            order by b.DsLocalCode, a.PayDate
+            """
+        df = self._get_refinitiv_data(query)
+
+        list_db_tickers = self._get_db_tickers_list(ctry=country, type="stock")
+
+        if ctry == "KR":
+            list_db_tickers = [self.kr_pattern.sub("K", ticker) for ticker in list_db_tickers]
+        df = df[df["ticker"].isin(list_db_tickers)]
+
+        if download:
+            if ctry == "KR":
+                df.to_parquet(os.path.join(self.DATA_DIR, "kr_stock_dividend.parquet"), index=False)
+            elif ctry == "US":
+                df.to_parquet(os.path.join(self.DATA_DIR, "us_stock_dividend.parquet"), index=False)
+        return df
 
 
 if __name__ == "__main__":
