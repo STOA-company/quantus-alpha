@@ -11,6 +11,9 @@ from app.core.extra.SlackNotifier import SlackNotifier
 from app.models.models_factors import CategoryEnum
 import logging
 from app.utils.data_utils import ceil_to_integer, floor_to_integer
+from app.utils.date_utils import is_holiday
+from datetime import datetime, timedelta
+from Aws.logic.s3 import upload_file_to_bucket
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +127,7 @@ class FactorUtils:
 
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtype, np.number):
-                df_result[column] = np.round(df_result[column].astype(np.float64), 2)
+                df_result[column] = df_result[column].astype(np.float64)
 
         df_result.to_parquet(output_file)
 
@@ -201,7 +204,7 @@ class FactorUtils:
 
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtype, np.number):
-                df_result[column] = np.round(df_result[column].astype(np.float64), 2)
+                df_result[column] = df_result[column].astype(np.float64)
 
         df_result.to_parquet(output_file)
 
@@ -349,7 +352,29 @@ class FactorUtils:
         unit_map = UNIT_MAP
         if lang == "en":
             unit_map = UNIT_MAP_EN
+
+        value = np.round(value, 2)
         return value, unit_map.get(unit.lower(), "")
+
+    def archive_parquet(self, nation: str, type: str = "stock"):
+        date = (
+            datetime.now().strftime("%Y%m%d")
+            if nation == "kr"
+            else (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+        )
+        if is_holiday(nation.upper(), date):
+            logger.info(f"Not archiving {date} stock factors")
+            print(f"Not archiving {date} stock factors")
+            return
+
+        if nation == "kr":
+            file_path = f"parquet/kr_{type}_factors.parquet"
+            obj_path = f"{type}/kr/kr_{type}_factors_{date}.parquet"
+        else:
+            file_path = f"parquet/us_{type}_factors.parquet"
+            obj_path = f"{type}/us/us_{type}_factors_{date}.parquet"
+
+        upload_file_to_bucket(file_path, "alpha-finder-factors", obj_path)
 
 
 factor_utils = FactorUtils()
