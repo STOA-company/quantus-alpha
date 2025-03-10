@@ -11,7 +11,14 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Git 설치 및 ODBC 라이브러리 설치 추가
-RUN apt-get update && apt-get install -y git unixodbc unixodbc-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git unixodbc unixodbc-dev curl gnupg && rm -rf /var/lib/apt/lists/*
+
+# Microsoft SQL Server ODBC 드라이버 설치 (GPG 키 문제 해결)
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-archive-keyring.gpg && \
+    echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/microsoft-archive-keyring.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update && \
+    ACCEPT_EULA=Y apt-get install -y msodbcsql18 && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN pip install "poetry==$POETRY_VERSION"
 
@@ -36,7 +43,14 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # 런타임 스테이지에도 ODBC 라이브러리와 curl 설치 추가
-RUN apt-get update && apt-get install -y unixodbc curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y unixodbc curl gnupg && rm -rf /var/lib/apt/lists/*
+
+# Microsoft SQL Server ODBC 드라이버 설치
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-archive-keyring.gpg && \
+    echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/microsoft-archive-keyring.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update && \
+    ACCEPT_EULA=Y apt-get install -y msodbcsql18 && \
+    rm -rf /var/lib/apt/lists/*
 
 # 빌더 스테이지에서 설치된 패키지들과 소스 코드를 복사
 COPY --from=builder /app /app
