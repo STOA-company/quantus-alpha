@@ -127,7 +127,7 @@ class FactorUtils:
 
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtype, np.number):
-                df_result[column] = np.round(df_result[column].astype(np.float64), 2)
+                df_result[column] = df_result[column].astype(np.float64)
 
         df_result.to_parquet(output_file)
 
@@ -204,7 +204,7 @@ class FactorUtils:
 
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtype, np.number):
-                df_result[column] = np.round(df_result[column].astype(np.float64), 2)
+                df_result[column] = df_result[column].astype(np.float64)
 
         df_result.to_parquet(output_file)
 
