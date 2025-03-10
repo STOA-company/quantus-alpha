@@ -104,16 +104,12 @@ class ScreenerETFService(ScreenerService):
 
         # 필터링
         df_etfs = self._filter_etfs(df_etfs=df_etfs, filtered_etf=filtered_etf)
-
         # 점수 계산
         df_scored = calculate_factor_score(df_etfs, country=ctry, asset_type="etf")
-
         # 병합
         df_etfs = df_etfs.merge(df_scored, on="ticker", how="inner")
-
         # 정렬
         df_etfs = df_etfs.sort_values(reverse_sort_by, ascending=filtered_etf.ascending).reset_index(drop=True)
-
         # 페이징
         df_etfs = df_etfs.iloc[
             filtered_etf.offset * filtered_etf.limit : filtered_etf.offset * filtered_etf.limit + filtered_etf.limit + 1
@@ -223,8 +219,11 @@ class ScreenerETFService(ScreenerService):
 
         # 컬럼 필터
         required_columns = [col for col in ETF_DEFAULT_SCREENER_COLUMNS if col in df_etfs.columns]
+
         if filtered_etf.columns is not None:
-            required_columns = required_columns + [col["factor"] for col in custom_filters if col not in required_columns]
+            reversed_factors = [REVERSE_FACTOR_MAP[col] for col in filtered_etf.columns]
+            reversed_factors = [col for col in reversed_factors if col in df_etfs.columns]
+            required_columns = required_columns + [col for col in reversed_factors if col not in required_columns]
 
         df_etfs = df_etfs[required_columns]
 
@@ -286,3 +285,89 @@ class ScreenerETFService(ScreenerService):
 
         result = ETF_DEFAULT_SCREENER_COLUMNS + columns
         return [FACTOR_MAP[column] for column in result]
+
+    def get_filtered_etfs_description(self, filtered_etf: FilteredETF):
+        non_numaric_columns = [FACTOR_MAP[col] for col in NON_NUMERIC_COLUMNS_ETF]
+        reverse_factor_map = REVERSE_FACTOR_MAP if filtered_etf.lang == "kr" else REVERSE_FACTOR_MAP_EN
+        reverse_sort_by = reverse_factor_map[filtered_etf.sort_by] if filtered_etf.sort_by is not None else "score"
+        if filtered_etf.sort_by is None:
+            filtered_etf.sort_by = "score"
+        else:
+            if filtered_etf.sort_by not in filtered_etf.columns and filtered_etf.sort_by not in non_numaric_columns:
+                raise CustomException(status_code=400, message="sort_by must be in columns")
+
+        if filtered_etf.market_filter == ETFMarketEnum.KR:
+            ctry = "kr"
+        else:
+            ctry = "us"
+
+        # 데이터 로드
+        df_etfs = self.factor_loader.load_etf_factors(filtered_etf.market_filter.value)
+
+        # 필터링
+        df_etfs = self._filter_etfs(df_etfs=df_etfs, filtered_etf=filtered_etf)
+
+        # 점수 계산
+        df_scored = calculate_factor_score(df_etfs, country=ctry, asset_type="etf")
+
+        # 병합
+        df_etfs = df_etfs.merge(df_scored, on="ticker", how="inner")
+
+        # 정렬
+        df_etfs = df_etfs.sort_values(reverse_sort_by, ascending=filtered_etf.ascending).reset_index(drop=True)
+
+        # 페이징
+        df_etfs = df_etfs.iloc[
+            filtered_etf.offset * filtered_etf.limit : filtered_etf.offset * filtered_etf.limit + filtered_etf.limit + 1
+        ]
+        need_count = filtered_etf.limit
+
+        if len(df_etfs) <= need_count:
+            has_next = False
+        else:
+            df_etfs = df_etfs.iloc[:-1]
+            has_next = True
+        factors = factors_cache.get_configs(country=ctry, asset_type="etf")
+
+        # 컬럼 정렬
+        if filtered_etf.columns:
+            df_etfs = self.sort_columns(df=df_etfs, columns=filtered_etf.columns, lang=filtered_etf.lang, ctry=ctry)
+
+        if "description" not in df_etfs.columns and "description" in df_etfs.columns:
+            df_etfs["description"] = ""
+
+        result = []
+        for _, row in df_etfs.iterrows():
+            # 기본으로 표시될 컬럼들
+            etf_data = {}
+
+            # 숫자형 데이터 처리
+            for col in df_etfs.columns:
+                if col in NON_NUMERIC_COLUMNS_ETF or col == "description":
+                    if col in row:
+                        etf_data[col] = row[col]
+                elif col == "score":
+                    etf_data[col] = {"value": float(row[col]), "unit": ""}
+                elif col in row:
+                    if pd.isna(row[col]) or np.isinf(row[col]):
+                        etf_data[col] = {"value": "", "unit": ""}
+                    else:
+                        value, unit = self.factor_utils.convert_unit_and_value(
+                            filtered_etf.market_filter,
+                            float(row[col]),
+                            factors[col].get("unit", "") if col in factors else "",
+                        )
+                        etf_data[col] = {"value": value, "unit": unit}
+
+            result.append(etf_data)
+
+        mapped_result = []
+        factor_map = FACTOR_MAP if filtered_etf.lang == "kr" else FACTOR_MAP_EN
+        for item in result:
+            mapped_item = {}
+            for key, value in item.items():
+                mapped_key = factor_map.get(key, key)
+                mapped_item[mapped_key] = value
+            mapped_result.append(mapped_item)
+
+        return mapped_result, has_next

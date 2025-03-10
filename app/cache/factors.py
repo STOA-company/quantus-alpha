@@ -62,7 +62,6 @@ class FactorsCache:
                 "unit": factor.unit,
                 "category": factor.category,
                 "direction": factor.sort_direction,
-                "range": (factor.min_value, factor.max_value),
             }
 
         factors_key = self.factors_key_format.format(country=country, asset_type=asset_type)
