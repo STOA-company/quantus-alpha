@@ -131,18 +131,15 @@ def calculate_factor_score(df: pd.DataFrame, country: str, asset_type: str) -> p
         series = df_copy[col]
         ascending = config.get("direction") == "ASC"
         min_value = config.get("min_value")
+
         if min_value is not None:
-            print(f"{col} has min_value: {min_value}")
-            # min_value 미만은 모두 꼴등으로 처리
+            # min_value보다 작은 값
             below_min_mask = series < min_value
 
             if below_min_mask.any():
-                # 정렬 방향에 따라 최저/최고 값 설정 (min_value 미만은 모두 꼴등으로 처리)
                 if ascending:
-                    # ASC인 경우 큰 값이 꼴등이므로 매우 큰 값으로 설정
                     series.loc[below_min_mask] = float("inf")
                 else:
-                    # DESC인 경우 작은 값이 꼴등이므로 매우 작은 값으로 설정
                     series.loc[below_min_mask] = float("-inf")
 
         ranks = series.rank(method="min", ascending=ascending)
