@@ -617,7 +617,7 @@ class ETFDataDownloader:
         df = self._get_refinitiv_data(query)
         list_db_tickers = self._get_db_tickers_list(ctry)
         if ctry == "KR":
-            list_db_tickers = [self.kr_pattern.sub("A", ticker) for ticker in list_db_tickers]
+            list_db_tickers = [self.kr_pattern.sub("K", ticker) for ticker in list_db_tickers]
         df = df[df["Ticker"].isin(list_db_tickers)]
         if download:
             if ctry == "KR":

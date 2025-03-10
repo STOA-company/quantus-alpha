@@ -14,6 +14,7 @@ from app.modules.oauth.router import router as oauth_router
 from app.modules.user.router import router as user_router
 from app.modules.community.router import router as community_router
 from app.modules.screener.router import router as screener_router
+from app.modules.screener_etf.router import router as screener_etf_router
 
 api_router = APIRouter()
 
@@ -32,3 +33,4 @@ api_router.include_router(oauth_router, prefix="/oauth", tags=["oauth"])
 api_router.include_router(user_router, prefix="/user", tags=["user"])
 api_router.include_router(community_router, prefix="/community", tags=["community"])
 api_router.include_router(screener_router, prefix="/screener", tags=["screener"])
+api_router.include_router(screener_etf_router, prefix="/screener/etf", tags=["screener-etf"])
