@@ -1,7 +1,7 @@
 from app.database.crud import database_service
 from typing import Optional, List, Dict, Tuple, Union
 import logging
-from app.utils.score_utils import calculate_factor_score, calculate_factor_score_with_description
+from app.utils.score_utils import score_utils
 from app.cache.factors import factors_cache
 import pandas as pd
 import numpy as np
@@ -46,8 +46,6 @@ class ScreenerService:
             else:
                 country = "kr"
 
-            print("SERVICE COLUMNS", columns)
-
             if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
 
@@ -58,7 +56,7 @@ class ScreenerService:
 
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
-            scored_df = calculate_factor_score(filtered_df, country, "stock")
+            scored_df = score_utils.calculate_factor_score(filtered_df)
             if scored_df.empty:
                 return [], 0
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
@@ -69,7 +67,7 @@ class ScreenerService:
             total_count = len(sorted_df)
             sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
 
-            factors = factors_cache.get_configs(country=country, asset_type="stock")
+            factors = factors_cache.get_configs()
             result = []
 
             if columns:
@@ -163,7 +161,7 @@ class ScreenerService:
 
             stocks = factor_utils.filter_stocks(market_filter, sector_filter, custom_filters)
             filtered_df = factor_utils.get_filtered_stocks_df(market_filter, stocks, columns)
-            scored_df = calculate_factor_score_with_description(filtered_df, country, "stock")
+            scored_df = score_utils.calculate_factor_score_with_description(filtered_df)
             if scored_df.empty:
                 return [], 0
 
@@ -176,7 +174,7 @@ class ScreenerService:
             total_count = len(sorted_df)
             sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
 
-            factors = factors_cache.get_configs(country=country, asset_type="stock")
+            factors = factors_cache.get_configs()
             result = []
 
             if columns:

@@ -450,7 +450,7 @@ def update_parquet(country: str):
         else:
             raise HTTPException(status_code=400, detail="Invalid country")
         factor_utils.archive_parquet(country)
-        factors_cache.force_update(country=country)
+        factors_cache.force_update()
         return {"message": "Parquet updated successfully"}
     except Exception as e:
         logger.error(f"Error updating parquet: {e}")
