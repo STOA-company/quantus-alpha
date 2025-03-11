@@ -16,7 +16,7 @@ from app.batches.run_stock_trend import (
     run_stock_trend_reset_batch,
 )
 from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_stock_indices_batch, get_stock_indices_data
-from app.utils.date_utils import get_session_checker, now_kr, now_us
+from app.utils.date_utils import get_session_checker, is_us_market_open_or_recently_closed, now_kr
 from app.batches.run_disclosure import (
     renewal_kr_run_disclosure_batch,
     renewal_us_run_disclosure_batch,
@@ -365,13 +365,7 @@ def kr_stock_indices_collect():
 @CELERY_APP.task(name="us_stock_indices_collect", ignore_result=True)
 def us_stock_indices_collect():
     """미국 주가지수 데이터 수집"""
-    now_us_datetime = now_us()
-    now_us_date = now_us_datetime.strftime("%Y-%m-%d")
-    now_us_time = now_us_datetime.strftime("%H:%M:%S")
-    if (
-        get_session_checker(country="US", start_date=now_us_date).is_session(now_us_date)
-        and "09:30:00" <= now_us_time <= "16:30:00"
-    ):
+    if is_us_market_open_or_recently_closed(extra_hours=1):
         try:
             notifier.notify_info("US_stock_indices_collect process started")
             get_stock_indices_data("NASDAQ")
