@@ -1,7 +1,7 @@
 import datetime
 from io import BytesIO
 import os
-from typing import List, Literal, Optional
+from typing import List, Literal
 from fastapi import HTTPException
 import numpy as np
 import pandas as pd
@@ -18,7 +18,7 @@ from app.common.constants import (
 )
 from app.core.exception.base import CustomException
 from app.core.logging.config import get_logger
-from app.modules.screener_etf.enum import ETFCategoryEnum, ETFMarketEnum
+from app.modules.screener_etf.enum import ETFMarketEnum
 from app.modules.screener.schemas import FactorResponse, GroupFilter
 from app.modules.screener.service import ScreenerService
 from app.modules.screener_etf.schemas import FilteredETF
@@ -288,22 +288,6 @@ class ScreenerETFService(ScreenerService):
             return {"message": message}
         else:
             raise HTTPException(status_code=500, detail="Failed to create or update group")
-
-    def get_columns(self, category: ETFCategoryEnum, group_id: Optional[int] = None) -> List[str]:
-        if category == ETFCategoryEnum.CUSTOM:
-            if not group_id:
-                raise ValueError("GroupId is required for custom category")
-            group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
-            factor_filters = self.database._select(table="screener_factor_filters", columns=["factor"], group_id=group.id)
-            factor_filters = [factor_filter.factor for factor_filter in factor_filters]
-
-        else:
-            factor_filters = self.factor_utils.get_columns(category)
-
-        columns = [factor_filter for factor_filter in factor_filters]
-
-        result = ETF_DEFAULT_SCREENER_COLUMNS + columns
-        return [FACTOR_MAP[column] for column in result]
 
     def get_filtered_etfs_description(self, filtered_etf: FilteredETF):
         non_numaric_columns = [FACTOR_MAP[col] for col in NON_NUMERIC_COLUMNS_ETF]
