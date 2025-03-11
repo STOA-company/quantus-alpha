@@ -111,14 +111,14 @@ CELERY_APP.conf.beat_schedule = {
         "task": "us_news_renewal",
         "schedule": crontab(minute="10,25,40,55"),
     },
-    "kr-top-stories": {
-        "task": "kr_top_stories",
-        "schedule": crontab(minute="6,16,26,36,46,56"),
-    },
-    "us-top-stories": {
-        "task": "us_top_stories",
-        "schedule": crontab(minute="6,16,26,36,46,56"),
-    },
+    # "kr-top-stories": {
+    #     "task": "kr_top_stories",
+    #     "schedule": crontab(minute="6,16,26,36,46,56"),
+    # },
+    # "us-top-stories": {
+    #     "task": "us_top_stories",
+    #     "schedule": crontab(minute="6,16,26,36,46,56"),
+    # },
     "process_outliers_us": {
         "task": "process_outliers_us",
         "schedule": crontab(hour="23", minute="35"),
@@ -154,5 +154,29 @@ CELERY_APP.conf.beat_schedule = {
     "update_kr_top_losers": {
         "task": "update_kr_top_losers",
         "schedule": crontab(hour="9", minute="1"),
+    },
+    "update_us_etf_parquet": {  # 미국 ETF 팩터 파일 업데이트
+        "task": "update_us_etf_parquet",
+        "schedule": crontab(hour="11", minute="30"),
+    },
+    "update_kr_etf_parquet": {  # 한국 ETF 팩터 파일 업데이트
+        "task": "update_kr_etf_parquet",
+        "schedule": crontab(hour="18", minute="30"),
+    },
+    "update_us_stock_dividend_parquet": {  # 미국 주식 배당 파일 업데이트
+        "task": "update_us_stock_dividend_parquet",
+        "schedule": crontab(hour="11", minute="37"),
+    },
+    "update_kr_stock_dividend_parquet": {  # 한국 주식 배당 파일 업데이트
+        "task": "update_kr_stock_dividend_parquet",
+        "schedule": crontab(hour="18", minute="37"),
+    },
+    "update_us_dividend_rds": {  # 미국 배당 데이터베이스 업데이트
+        "task": "update_us_dividend_rds",
+        "schedule": crontab(hour="11", minute="45"),
+    },
+    "update_kr_dividend_rds": {  # 한국 배당 데이터베이스 업데이트
+        "task": "update_kr_dividend_rds",
+        "schedule": crontab(hour="18", minute="45"),
     },
 }
