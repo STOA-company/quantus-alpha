@@ -7,6 +7,7 @@ from app.modules.screener.schemas import (
     GroupMetaData,
     FilteredStocks,
     GroupFilter,
+    GroupFilterResponse,
 )
 import logging
 from app.utils.oauth_utils import get_current_user
@@ -95,7 +96,7 @@ def get_filtered_stocks(
         if filtered_stocks.lang == "en":
             reverse_factor_map = REVERSE_FACTOR_MAP_EN
 
-        for column in [reverse_factor_map[column] for column in filtered_stocks.columns]:
+        for column in [reverse_factor_map[column] for column in filtered_stocks.factor_filters]:
             if column not in request_columns:
                 request_columns.append(column)
 
@@ -158,7 +159,7 @@ def get_filtered_stocks_count(
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
             custom_filters,
-            [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.columns],
+            [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.factor_filters],
         )
 
         result = {"count": total_count}
@@ -195,7 +196,7 @@ def get_filtered_stocks_with_description(
         if filtered_stocks.lang == "en":
             reverse_factor_map = REVERSE_FACTOR_MAP_EN
 
-        for column in [reverse_factor_map[column] for column in filtered_stocks.columns]:
+        for column in [reverse_factor_map[column] for column in filtered_stocks.factor_filters]:
             if column not in request_columns:
                 request_columns.append(column)
 
@@ -249,7 +250,7 @@ def download_filtered_stocks(
             for condition in filtered_stocks.custom_filters
         ]
     sorted_df = screener_service.get_filtered_stocks(
-        filtered_stocks.market_filter, filtered_stocks.sector_filter, custom_filters, filtered_stocks.columns
+        filtered_stocks.market_filter, filtered_stocks.sector_filter, custom_filters, filtered_stocks.factor_filters
     )
 
     stream = io.StringIO()
@@ -278,7 +279,7 @@ def get_groups(
 
 
 @router.post("/groups", response_model=Dict)
-def create_or_update_group(
+async def create_or_update_group(
     group_filter: GroupFilter,
     current_user: str = Depends(get_current_user),
     screener_service: ScreenerService = Depends(get_screener_service),
@@ -288,17 +289,18 @@ def create_or_update_group(
     """
     try:
         if group_filter.id:
-            is_success = screener_service.update_group(
+            is_success = await screener_service.update_group(
                 group_id=group_filter.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
                 sector_filter=group_filter.sector_filter,
                 custom_filters=group_filter.custom_filters,
                 factor_filters=group_filter.factor_filters,
+                category=group_filter.category,
             )
             message = "Filter updated successfully"
         else:
-            is_success = screener_service.create_group(
+            is_success = await screener_service.create_group(
                 user_id=current_user.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
@@ -366,22 +368,36 @@ def update_group_name(group_id: int, name: str, screener_service: ScreenerServic
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/groups/{group_id}", response_model=GroupFilter)
-def get_group_filters(group_id: int, screener_service: ScreenerService = Depends(get_screener_service)):
+@router.get("/groups/{group_id}", response_model=GroupFilterResponse)
+def get_group_filters(group_id: Optional[int] = None, category: CategoryEnum = CategoryEnum.TECHNICAL, screener_service: ScreenerService = Depends(get_screener_service)):
     """
     필터 목록 조회
     """
     try:
         if group_id == -1:
-            return GroupFilter(
+            return GroupFilterResponse(
                 id=-1,
                 name="기본",
                 market_filter=MarketEnum.US,
+                category=category,
+                has_custom=False,
                 sector_filter=[],
                 custom_filters=[],
                 factor_filters=[],
             )
-        group_filters = screener_service.get_group_filters(group_id)
+
+        if group_id == None:
+            return GroupFilterResponse(
+                name="기본",
+                market_filter=MarketEnum.US,
+                category=category,
+                has_custom=False,
+                sector_filter=[],
+                custom_filters=[],
+                factor_filters=screener_service.get_columns(group_id, category),
+            )
+        
+        group_filters = screener_service.get_group_filters(group_id, category)
         stock_filters = group_filters["stock_filters"]
 
         market_filter = None
@@ -397,13 +413,15 @@ def get_group_filters(group_id: int, screener_service: ScreenerService = Depends
                 custom_filters.append(stock_filter)
 
         factor_filters = group_filters["factor_filters"]
-        return GroupFilter(
+        return GroupFilterResponse(
             id=group_id,
             name=group_filters["name"],
             market_filter=market_filter,
             sector_filter=sector_filter,
             custom_filters=custom_filters,
             factor_filters=factor_filters,
+            category=category,
+            has_custom=group_filters["has_custom"],
         )
     except Exception as e:
         logger.error(f"Error getting group filters: {e}")
@@ -423,13 +441,13 @@ def get_columns(
     try:
         columns = []
         if category == CategoryEnum.CUSTOM:
-            columns = screener_service.get_columns(group_id)
+            columns = screener_service.get_columns(group_id, category)
         elif category == CategoryEnum.TECHNICAL:
-            columns = ["베타 (52주)", "RSI (14일)", "샤프 비율 (52주)", "모멘텀 (6개월)", "변동성 (52주)"]
+            columns = screener_service.get_columns(group_id, category)
         elif category == CategoryEnum.FUNDAMENTAL:
-            columns = ["ROE", "F-score", "부채 비율", "영업 이익", "Altman Z-score"]
+            columns = screener_service.get_columns(group_id, category)
         elif category == CategoryEnum.VALUATION:
-            columns = ["PBR", "PCR", "PER", "POR", "PSR"]
+            columns = screener_service.get_columns(group_id, category)
 
         result = ["티커", "종목명", "국가", "시장", "산업", "스코어"] + columns
         if lang == "en":
