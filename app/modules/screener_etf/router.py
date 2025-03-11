@@ -3,6 +3,7 @@ from typing import Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.batches.run_etf_screener import run_etf_screener_data
+from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
 from app.modules.screener.schemas import ColumnsResponse, FactorResponse, GroupFilter, GroupFilterResponse, GroupMetaData
 from app.modules.screener_etf.enum import ETFCategoryEnum, ETFMarketEnum
@@ -97,8 +98,8 @@ def create_or_update_group(
     return result
 
 
-@router.get("/groups/{group_id}", response_model=GroupFilterResponse)
-def get_group_filter(
+@router.get("/groups/{group_id}/{category}", response_model=GroupFilterResponse)
+def get_group_filters(
     group_id: int = -1,
     category: CategoryEnum = CategoryEnum.TECHNICAL,
     screener_etf_service: ScreenerETFService = Depends(ScreenerETFService),
@@ -114,7 +115,7 @@ def get_group_filter(
                 market_filter=ETFMarketEnum.US,
                 category=category,
                 has_custom=False,
-                stock_filters=[],
+                sector_filter=[],
                 custom_filters=[],
                 factor_filters=screener_etf_service.get_columns(group_id, category),
             )
@@ -137,6 +138,7 @@ def get_group_filter(
         return GroupFilterResponse(
             id=group_id,
             name=group_filters["name"],
+            type=StockType.ETF,
             market_filter=market_filter,
             sector_filter=[],
             custom_filters=custom_filters,
