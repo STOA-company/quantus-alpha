@@ -474,17 +474,17 @@ class ScreenerService:
             raise e
         
 
-    def get_columns(self, group_id: Optional[int] = None, category: Optional[CategoryEnum] = None) -> List[str]:
+    def get_columns(self, group_id: int = -1, category: CategoryEnum = CategoryEnum.TECHNICAL) -> List[str]:
         try:
             if category == CategoryEnum.CUSTOM:
-                if not group_id:
+                if group_id == -1:
                     return []   
                 group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
                 factor_filters = self.database._select(table="screener_factor_filters", columns=["factor"], group_id=group.id)
             else:
                 factor_filters = factor_utils.get_default_columns(category=category)
 
-            return [FACTOR_MAP[factor_filter.factor] for factor_filter in factor_filters]
+            return [FACTOR_MAP[factor_filter] for factor_filter in factor_filters]
 
 
         except Exception as e:
