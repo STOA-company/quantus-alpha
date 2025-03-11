@@ -20,8 +20,8 @@ from app.utils import factor_utils
 from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.etf_utils import ETFDataLoader
 from app.utils.factor_utils import FactorUtils
-from app.utils.score_utils import calculate_factor_score
-from app.cache.factors import factors_cache
+from app.utils.score_utils import etf_score_utils
+from app.cache.factors import etf_factors_cache
 from app.database.crud import database
 
 
@@ -30,6 +30,7 @@ class ScreenerETFService(ScreenerService):
         super().__init__()
         self.factor_utils = FactorUtils()
         self.factor_loader = ETFDataLoader()
+        self.factors_cache = etf_factors_cache
         self.db = database
 
     def get_etf_factors(self, market: ETFMarketEnum):
@@ -105,7 +106,7 @@ class ScreenerETFService(ScreenerService):
         # 필터링
         df_etfs = self._filter_etfs(df_etfs=df_etfs, filtered_etf=filtered_etf)
         # 점수 계산
-        df_scored = calculate_factor_score(df_etfs, country=ctry, asset_type="etf")
+        df_scored = etf_score_utils.calculate_factor_score(df_etfs)
         # 병합
         df_etfs = df_etfs.merge(df_scored, on="ticker", how="inner")
         # 정렬
@@ -121,7 +122,7 @@ class ScreenerETFService(ScreenerService):
         else:
             df_etfs = df_etfs.iloc[:-1]
             has_next = True
-        factors = factors_cache.get_configs(country=ctry, asset_type="etf")
+        factors = self.factors_cache.get_configs()
 
         # 컬럼 정렬
         if filtered_etf.columns:
@@ -308,7 +309,7 @@ class ScreenerETFService(ScreenerService):
         df_etfs = self._filter_etfs(df_etfs=df_etfs, filtered_etf=filtered_etf)
 
         # 점수 계산
-        df_scored = calculate_factor_score(df_etfs, country=ctry, asset_type="etf")
+        df_scored = etf_score_utils.calculate_factor_score(df_etfs)
 
         # 병합
         df_etfs = df_etfs.merge(df_scored, on="ticker", how="inner")
@@ -327,7 +328,7 @@ class ScreenerETFService(ScreenerService):
         else:
             df_etfs = df_etfs.iloc[:-1]
             has_next = True
-        factors = factors_cache.get_configs(country=ctry, asset_type="etf")
+        factors = self.factors_cache.get_configs()
 
         # 컬럼 정렬
         if filtered_etf.columns:

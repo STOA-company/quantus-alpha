@@ -105,7 +105,6 @@ class StockUtils:
             table="stock_trend",
             columns=["ticker", "current_price"],
             ticker__in=tickers,
-            last_updated=latest_date,
         )
 
         # 티커별 현재 가격 딕셔너리

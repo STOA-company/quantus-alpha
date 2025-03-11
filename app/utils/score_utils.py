@@ -1,192 +1,202 @@
 import pandas as pd
 import numpy as np
-from app.cache.factors import factors_cache
+from app.cache.factors import factors_cache, etf_factors_cache
 from app.utils.test_utils import time_it
 from app.common.constants import NON_NUMERIC_COLUMNS, NON_NUMERIC_COLUMNS_ETF
 
 
-@time_it
-def calculate_factor_score_with_description(df: pd.DataFrame, country: str, asset_type: str) -> pd.DataFrame:
-    df_copy = df.copy()
-    columns = df.columns.tolist()
+class ScoreUtils:
+    def __init__(self, asset_type: str):
+        self.factors_cache = etf_factors_cache if asset_type == "etf" else factors_cache
+        self.asset_type = asset_type
 
-    numeric_columns = [col for col in columns if col not in NON_NUMERIC_COLUMNS]
+    @time_it
+    def calculate_factor_score_with_description(self, df: pd.DataFrame) -> pd.DataFrame:
+        df_copy = df.copy()
+        columns = df.columns.tolist()
 
-    for col in numeric_columns:
-        df_copy[col] = df_copy[col].fillna(df_copy[col].median())
+        numeric_columns = [col for col in columns if col not in NON_NUMERIC_COLUMNS]
 
-    n_rows = len(df_copy)
+        for col in numeric_columns:
+            df_copy[col] = df_copy[col].fillna(df_copy[col].median())
 
-    factor_ranks = np.ones((n_rows, 0))
-    max_ranks_per_factor = []  # 각 팩터의 최대 순위(꼴등) 저장
-    descriptions = np.empty((n_rows, len(numeric_columns)), dtype=object)
+        n_rows = len(df_copy)
 
-    for col_idx, col in enumerate(numeric_columns):
-        factors_cache.force_update(country=country, asset_type=asset_type)
-        config = factors_cache.get_configs(country=country, asset_type=asset_type).get(col)
-        if not config:
-            continue
+        factor_ranks = np.ones((n_rows, 0))
+        max_ranks_per_factor = []  # 각 팩터의 최대 순위(꼴등) 저장
+        descriptions = np.empty((n_rows, len(numeric_columns)), dtype=object)
 
-        series = df_copy[col]
-        ascending = config.get("direction") == "ASC"
+        for col_idx, col in enumerate(numeric_columns):
+            config = self.factors_cache.get_configs().get(col)
+            if not config:
+                continue
 
-        ranks = series.rank(method="min", ascending=ascending)
-        max_ranks_per_factor.append(ranks.max())  # 해당 팩터의 최대 순위(꼴등) 저장
+            series = df_copy[col]
+            ascending = config.get("direction") == "ASC"
 
-        factor_ranks = np.column_stack((factor_ranks, ranks.values))
+            ranks = series.rank(method="min", ascending=ascending)
+            max_ranks_per_factor.append(ranks.max())  # 해당 팩터의 최대 순위(꼴등) 저장
 
-        for i in range(n_rows):
-            value = series.iloc[i]
-            rank = ranks.iloc[i]
+            factor_ranks = np.column_stack((factor_ranks, ranks.values))
 
-            rank_str = "N/A" if pd.isna(rank) else f"{int(rank)}위"
+            for i in range(n_rows):
+                value = series.iloc[i]
+                rank = ranks.iloc[i]
 
-            description = "낮을수록 좋음" if ascending else "높을수록 좋음"
+                rank_str = "N/A" if pd.isna(rank) else f"{int(rank)}위"
 
-            value_str = "N/A" if pd.isna(value) else str(value)
-            descriptions[i, col_idx] = f"{col}: {value_str} (순위: {rank_str}, {description})"
+                description = "낮을수록 좋음" if ascending else "높을수록 좋음"
 
-    score_df = pd.DataFrame({"Code": df["Code"].values, "score": np.zeros(n_rows)})
+                value_str = "N/A" if pd.isna(value) else str(value)
+                descriptions[i, col_idx] = f"{col}: {value_str} (순위: {rank_str}, {description})"
 
-    # 점수 계산 로직 (새로운 방식)
-    if factor_ranks.shape[1] > 0:
-        # 각 종목별로 각 팩터에서의 순위를 정규화 (1: 최고 순위, 0: 최저 순위)
-        normalized_ranks = np.zeros_like(factor_ranks, dtype=float)
+        score_df = pd.DataFrame({"Code": df["Code"].values, "score": np.zeros(n_rows)})
 
-        for i, max_rank in enumerate(max_ranks_per_factor):
-            if max_rank > 1:  # 순위가 여러 개인 경우만 정규화
-                # (최대 순위 - 현재 순위) / (최대 순위 - 1)
-                normalized_ranks[:, i] = (max_rank - factor_ranks[:, i]) / (max_rank - 1)
-            else:
-                normalized_ranks[:, i] = 1.0  # 모든 종목이 동일한 순위일 경우
+        # 점수 계산 로직 (새로운 방식)
+        if factor_ranks.shape[1] > 0:
+            # 각 종목별로 각 팩터에서의 순위를 정규화 (1: 최고 순위, 0: 최저 순위)
+            normalized_ranks = np.zeros_like(factor_ranks, dtype=float)
 
-        # 정규화된 순위의 평균 (0~1 사이 값)
-        avg_normalized_ranks = np.mean(normalized_ranks, axis=1)
-
-        # 0~1 범위를 0~100 점수로 변환
-        scores = 100 * avg_normalized_ranks
-
-        # 모든 팩터에서 정확히 1등인 경우에만 100점 부여
-        all_first = np.all(factor_ranks == 1, axis=1)
-
-        # 모든 팩터에서 꼴등인 경우
-        all_last = np.ones(n_rows, dtype=bool)
-        for i, max_rank in enumerate(max_ranks_per_factor):
-            all_last &= factor_ranks[:, i] == max_rank
-
-        # 모든 팩터에서 1등이 아닌 종목은 최대 99.99점
-        scores[~all_first] = np.minimum(scores[~all_first], 99.99)
-
-        # 모든 팩터에서 꼴등인 종목은 0점
-        scores[all_last] = 0.0
-
-        score_df["score"] = np.round(scores, 2)
-
-    # 설명 문자열 결합
-    joined_descriptions = []
-    for i in range(n_rows):
-        valid_descs = [d for d in descriptions[i] if d is not None and not pd.isna(d)]
-        joined_descriptions.append(" | ".join(valid_descs))
-
-    score_df["description"] = joined_descriptions
-
-    # 정렬 및 반환
-    return score_df.sort_values("score", ascending=False)
-
-
-@time_it
-def calculate_factor_score(df: pd.DataFrame, country: str, asset_type: str) -> pd.DataFrame:
-    if df.empty:
-        return pd.DataFrame()
-
-    if asset_type == "etf":
-        df = df.rename(
-            columns={
-                "ticker": "Code",
-            }
-        )
-
-    df_copy = df.copy()
-    columns = df_copy.columns.tolist()
-
-    non_numeric_columns = NON_NUMERIC_COLUMNS_ETF if asset_type == "etf" else NON_NUMERIC_COLUMNS
-
-    # 비수치 컬럼 사전 필터링
-    numeric_columns = [col for col in columns if col not in non_numeric_columns]
-
-    # NaN -> 중앙값
-    for col in numeric_columns:
-        df_copy[col] = df_copy[col].fillna(df_copy[col].median())
-
-    n_rows = len(df_copy)
-
-    factor_ranks = np.ones((n_rows, 0))  # 각 팩터 별 순위 초기화
-    max_ranks_per_factor = []  # 각 팩터의 최대 순위(꼴등) 저장
-
-    for col in numeric_columns:
-        config = factors_cache.get_configs(country=country, asset_type=asset_type).get(col)
-        if not config:
-            continue
-
-        series = df_copy[col]
-        ascending = config.get("direction") == "ASC"
-        min_value = config.get("min_value")
-
-        if min_value is not None:
-            # min_value보다 작은 값
-            below_min_mask = series < min_value
-
-            if below_min_mask.any():
-                if ascending:
-                    series.loc[below_min_mask] = float("inf")
+            for i, max_rank in enumerate(max_ranks_per_factor):
+                if max_rank > 1:  # 순위가 여러 개인 경우만 정규화
+                    # (최대 순위 - 현재 순위) / (최대 순위 - 1)
+                    normalized_ranks[:, i] = (max_rank - factor_ranks[:, i]) / (max_rank - 1)
                 else:
-                    series.loc[below_min_mask] = float("-inf")
+                    normalized_ranks[:, i] = 1.0  # 모든 종목이 동일한 순위일 경우
 
-        ranks = series.rank(method="min", ascending=ascending)
-        max_ranks_per_factor.append(ranks.max())  # 해당 팩터의 최대 순위(꼴등) 저장
+            # 정규화된 순위의 평균 (0~1 사이 값)
+            avg_normalized_ranks = np.mean(normalized_ranks, axis=1)
 
-        factor_ranks = np.column_stack((factor_ranks, ranks.values))
+            # 0~1 범위를 0~100 점수로 변환
+            scores = 100 * avg_normalized_ranks
 
-    score_df = pd.DataFrame({"Code": df["Code"].values, "score": np.zeros(n_rows)})
+            # 모든 팩터에서 정확히 1등인 경우에만 100점 부여
+            all_first = np.all(factor_ranks == 1, axis=1)
 
-    if factor_ranks.shape[1] > 0:
-        # 종목 별 순위를 정규화 (1: 최고 순위, 0: 최저 순위)
-        normalized_ranks = np.zeros_like(factor_ranks, dtype=float)
+            # 모든 팩터에서 꼴등인 경우
+            all_last = np.ones(n_rows, dtype=bool)
+            for i, max_rank in enumerate(max_ranks_per_factor):
+                all_last &= factor_ranks[:, i] == max_rank
 
-        for i, max_rank in enumerate(max_ranks_per_factor):
-            if max_rank > 1:  # 순위가 여러 개인 경우만 정규화
-                # (최대 순위 - 현재(해당 종목) 순위) / (최대 순위 - 1)
-                normalized_ranks[:, i] = (max_rank - factor_ranks[:, i]) / (max_rank - 1)
-            else:
-                normalized_ranks[:, i] = 1.0  # 모든 종목이 동일한 순위일 경우
+            # 모든 팩터에서 1등이 아닌 종목은 최대 99.99점
+            scores[~all_first] = np.minimum(scores[~all_first], 99.99)
 
-        # 정규화된 순위의 평균 (0~1 사이 값)
-        avg_normalized_ranks = np.mean(normalized_ranks, axis=1)
+            # 모든 팩터에서 꼴등인 종목은 0점
+            scores[all_last] = 0.0
 
-        # 0~1 범위를 0~100 점수로 변환
-        scores = 100 * avg_normalized_ranks
+            score_df["score"] = np.round(scores, 2)
 
-        # 모든 팩터에서 정확히 1등인 경우에만 100점 부여
-        all_first = np.all(factor_ranks == 1, axis=1)
+        # 설명 문자열 결합
+        joined_descriptions = []
+        for i in range(n_rows):
+            valid_descs = [d for d in descriptions[i] if d is not None and not pd.isna(d)]
+            joined_descriptions.append(" | ".join(valid_descs))
 
-        # 모든 팩터에서 꼴등인 경우
-        all_last = np.ones(n_rows, dtype=bool)
-        for i, max_rank in enumerate(max_ranks_per_factor):
-            all_last &= factor_ranks[:, i] == max_rank
+        score_df["description"] = joined_descriptions
 
-        # 모든 팩터에서 1등이 아닌 종목은 최대 99.99점
-        scores[~all_first] = np.minimum(scores[~all_first], 99.99)
+        # 정렬 및 반환
+        return score_df.sort_values("score", ascending=False)
 
-        # 모든 팩터에서 꼴등인 종목은 0점
-        scores[all_last] = 0.0
+    @time_it
+    def calculate_factor_score(self, df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty:
+            return pd.DataFrame()
 
-        score_df["score"] = scores
+        if self.asset_type == "etf":
+            df = df.rename(
+                columns={
+                    "ticker": "Code",
+                }
+            )
 
-    if asset_type == "etf":
-        score_df = score_df.rename(
-            columns={
-                "Code": "ticker",
-            }
-        )
+        df_copy = df.copy()
+        columns = df_copy.columns.tolist()
 
-    return score_df.sort_values("score", ascending=False)
+        non_numeric_columns = NON_NUMERIC_COLUMNS_ETF if self.asset_type == "etf" else NON_NUMERIC_COLUMNS
+
+        # 비수치 컬럼 사전 필터링
+        numeric_columns = [col for col in columns if col not in non_numeric_columns]
+
+        # NaN -> 중앙값
+        for col in numeric_columns:
+            df_copy[col] = df_copy[col].fillna(df_copy[col].median())
+
+        n_rows = len(df_copy)
+
+        factor_ranks = np.ones((n_rows, 0))  # 각 팩터 별 순위 초기화
+        max_ranks_per_factor = []  # 각 팩터의 최대 순위(꼴등) 저장
+
+        for col in numeric_columns:
+            config = self.factors_cache.get_configs().get(col)
+            if not config:
+                continue
+
+            series = df_copy[col]
+            ascending = config.get("direction") == "ASC"
+            min_value = config.get("min_value")
+            max_value = config.get("max_value")
+
+            outlier_mask = pd.Series(False, index=series.index)
+            if min_value is not None:
+                outlier_mask = series < min_value
+            if max_value is not None:
+                outlier_mask = series > max_value
+
+            if outlier_mask.any():
+                if ascending:
+                    series.loc[outlier_mask] = float("inf")
+                else:
+                    series.loc[outlier_mask] = float("-inf")
+
+            ranks = series.rank(method="min", ascending=ascending)
+            max_ranks_per_factor.append(ranks.max())  # 해당 팩터의 최대 순위(꼴등) 저장
+
+            factor_ranks = np.column_stack((factor_ranks, ranks.values))
+
+        score_df = pd.DataFrame({"Code": df["Code"].values, "score": np.zeros(n_rows)})
+
+        if factor_ranks.shape[1] > 0:
+            # 종목 별 순위를 정규화 (1: 최고 순위, 0: 최저 순위)
+            normalized_ranks = np.zeros_like(factor_ranks, dtype=float)
+
+            for i, max_rank in enumerate(max_ranks_per_factor):
+                if max_rank > 1:  # 순위가 여러 개인 경우만 정규화
+                    # (최대 순위 - 현재(해당 종목) 순위) / (최대 순위 - 1)
+                    normalized_ranks[:, i] = (max_rank - factor_ranks[:, i]) / (max_rank - 1)
+                else:
+                    normalized_ranks[:, i] = 1.0  # 모든 종목이 동일한 순위일 경우
+
+            # 정규화된 순위의 평균 (0~1 사이 값)
+            avg_normalized_ranks = np.mean(normalized_ranks, axis=1)
+
+            # 0~1 범위를 0~100 점수로 변환
+            scores = 100 * avg_normalized_ranks
+
+            # 모든 팩터에서 정확히 1등인 경우에만 100점 부여
+            all_first = np.all(factor_ranks == 1, axis=1)
+
+            # 모든 팩터에서 꼴등인 경우
+            all_last = np.ones(n_rows, dtype=bool)
+            for i, max_rank in enumerate(max_ranks_per_factor):
+                all_last &= factor_ranks[:, i] == max_rank
+
+            # 모든 팩터에서 1등이 아닌 종목은 최대 99.99점
+            scores[~all_first] = np.minimum(scores[~all_first], 99.99)
+
+            # 모든 팩터에서 꼴등인 종목은 0점
+            scores[all_last] = 0.0
+
+            score_df["score"] = np.round(scores, 2)
+
+        if self.asset_type == "etf":
+            score_df = score_df.rename(
+                columns={
+                    "Code": "ticker",
+                }
+            )
+
+        return score_df.sort_values("score", ascending=False)
+
+
+score_utils = ScoreUtils(asset_type="stock")
+etf_score_utils = ScoreUtils(asset_type="etf")

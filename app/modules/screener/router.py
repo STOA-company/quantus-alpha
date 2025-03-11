@@ -11,6 +11,7 @@ from app.modules.screener.schemas import (
 import logging
 from app.utils.oauth_utils import get_current_user
 from app.utils.factor_utils import factor_utils
+from app.cache.factors import factors_cache
 from app.models.models_factors import CategoryEnum
 from app.common.constants import (
     REVERSE_FACTOR_MAP,
@@ -436,4 +437,21 @@ def get_columns(
         return {"columns": result}
     except Exception as e:
         logger.error(f"Error getting columns: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/parquet/{country}")
+def update_parquet(country: str):
+    try:
+        if country == "kr":
+            factor_utils.process_kr_factor_data()
+        elif country == "us":
+            factor_utils.process_us_factor_data()
+        else:
+            raise HTTPException(status_code=400, detail="Invalid country")
+        factor_utils.archive_parquet(country)
+        factors_cache.force_update()
+        return {"message": "Parquet updated successfully"}
+    except Exception as e:
+        logger.error(f"Error updating parquet: {e}")
         raise HTTPException(status_code=500, detail=str(e))
