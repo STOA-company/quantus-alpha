@@ -406,7 +406,8 @@ def get_group_filters(group_id: int = -1, screener_service: ScreenerService = De
             else:
                 custom_filters.append(stock_filter)
 
-        factor_filters = group_filters["factor_filters"]
+        custom_factor_filters = group_filters["custom_factor_filters"]
+
         return GroupFilterResponse(
             id=group_id,
             name=group_filters["name"],
@@ -417,7 +418,7 @@ def get_group_filters(group_id: int = -1, screener_service: ScreenerService = De
                 "technical": screener_service.get_columns(group_id, CategoryEnum.TECHNICAL),
                 "fundamental": screener_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL),
                 "valuation": screener_service.get_columns(group_id, CategoryEnum.VALUATION),
-                "custom": factor_filters
+                "custom": custom_factor_filters
             },
             has_custom=group_filters["has_custom"],
         )

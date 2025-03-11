@@ -48,16 +48,10 @@ class GroupFilter(BaseModel):
     sector_filter: Optional[List[str]] = None
     category: Optional[CategoryEnum] = None
     custom_filters: Optional[List[FilterCondition]] = None
-    factor_filters: Optional[List[str]] = None
-
-class GroupFilterResponse(BaseModel):
-    id: Optional[int] = None
-    name: Optional[str] = None
-    type: Optional[StockType] = StockType.STOCK
-    market_filter: Optional[MarketEnum] = MarketEnum.US
-    sector_filter: Optional[List[str]] = None
-    custom_filters: Optional[List[FilterCondition]] = None
     factor_filters: Optional[Dict[str, List[str]]] = None
+
+
+class GroupFilterResponse(GroupFilter):
     has_custom: bool = False
 
 
