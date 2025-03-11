@@ -22,7 +22,6 @@ from app.modules.screener_etf.enum import ETFCategoryEnum, ETFMarketEnum
 from app.modules.screener.schemas import FactorResponse, GroupFilter
 from app.modules.screener.service import ScreenerService
 from app.modules.screener_etf.schemas import FilteredETF
-from app.utils import factor_utils
 from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.date_utils import get_business_days
 from app.utils.etf_utils import ETFDataLoader
@@ -299,7 +298,7 @@ class ScreenerETFService(ScreenerService):
             factor_filters = [factor_filter.factor for factor_filter in factor_filters]
 
         else:
-            factor_filters = factor_utils.get_columns(category)
+            factor_filters = self.factor_utils.get_columns(category)
 
         columns = [factor_filter for factor_filter in factor_filters]
 

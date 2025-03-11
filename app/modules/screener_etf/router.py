@@ -2,6 +2,7 @@ import io
 from typing import Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from app.batches.run_etf_screener import run_etf_screener_data
 from app.modules.screener.schemas import ColumnsResponse, FactorResponse, GroupFilter, GroupMetaData
 from app.modules.screener_etf.enum import ETFCategoryEnum, ETFMarketEnum
 from app.modules.screener_etf.schemas import FilteredETF
@@ -148,6 +149,16 @@ def update_parquet(ctry: Literal["KR", "US"], screener_etf_service: ScreenerETFS
     try:
         result = screener_etf_service.update_parquet(ctry=ctry)
         return result
+    except Exception as e:
+        logger.exception(e)
+        raise e
+
+
+@router.get("/old/parquet")
+def get_old_parquet(screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
+    try:
+        run_etf_screener_data()
+        return True
     except Exception as e:
         logger.exception(e)
         raise e

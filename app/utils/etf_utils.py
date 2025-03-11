@@ -1191,7 +1191,7 @@ class ETFDataPreprocessor:
         select_columns_base = [
             "단축코드",
             "한글종목약명",
-            "영문종목명",
+            # "영문종목명",
             "상장일_y",
             "기초지수명",
             "추적배수",
@@ -1209,7 +1209,7 @@ class ETFDataPreprocessor:
             columns={
                 "단축코드": "ticker",
                 "한글종목약명": "kr_name",
-                "영문종목명": "en_name",
+                # "영문종목명": "en_name",
                 "상장일_y": "listing_date",
                 "기초지수명": "base_index_name",
                 "추적배수": "tracking_multiplier",
@@ -2071,13 +2071,16 @@ class ETFDataMerger:
             df_merged = df_krx if df_merged is None else pd.merge(df_merged, df_krx, on="ticker", how="left")
         if morningstar:
             # 데이터 가져오기
-            df_morningstar = self.loader.load_morningstar(ctry)
+            df_morningstar = self.loader.load_morningstar(is_expense=True, is_rating=True)
             # 데이터 전처리
             df_morningstar = self.preprocessor.morningstar_data_preprocess(df_morningstar, ctry)
             # 데이터 합치기
+
             df_merged = (
                 df_morningstar if df_merged is None else pd.merge(df_merged, df_morningstar, on="ticker", how="left")
             )
+
+        df_merged = df_merged.rename(columns={"ticker": "Code", "kr_name": "Name", "en_name": "Name"})
 
         return df_merged
 
@@ -2085,7 +2088,8 @@ class ETFDataMerger:
 # 사용 예시
 if __name__ == "__main__":
     downloader = ETFDataDownloader()
-    downloader.dwonload_etf_price(ctry="KR", download=True)
+    # downloader.download_etf_dividend(ctry="KR", download=True)
+    downloader.download_etf_dividend(ctry="KR", download=True)
 
     # try:
     #     # 크롤러 초기화 (데이터베이스 연결 없이)

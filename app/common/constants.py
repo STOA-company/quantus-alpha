@@ -18,6 +18,7 @@ NON_NUMERIC_COLUMNS_ETF = [
     "ctry",
     "kr_name",
     "en_name",
+    "Name",
     "market",
     "listing_date",
     "base_index_name",
@@ -301,6 +302,7 @@ MORNINGSTAR_DIR = "check_data/etf_morningstar"
 
 ETF_FACTOR_LIST = [
     "ticker",
+    "Code",
     "date",
     "open",
     "high",
@@ -353,6 +355,7 @@ ETF_FACTOR_LIST = [
     "market",
     "kr_name",
     "en_name",
+    "Name",
     "listing_date",
     "base_index_name",
     "tracking_multiplier",
