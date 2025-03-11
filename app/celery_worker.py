@@ -3,8 +3,6 @@ from functools import wraps
 
 from app.batches.run_etf_screener import run_etf_screener_data
 from app.batches.run_news import (
-    renewal_kr_run_news_is_top_story,
-    renewal_us_run_news_is_top_story,
     run_news_batch,
 )
 from app.common.celery_config import CELERY_APP
@@ -21,9 +19,7 @@ from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_sto
 from app.utils.date_utils import get_session_checker, now_kr, now_us
 from app.batches.run_disclosure import (
     renewal_kr_run_disclosure_batch,
-    kr_run_disclosure_is_top_story,
     renewal_us_run_disclosure_batch,
-    us_run_disclosure_is_top_story,
 )
 from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
 from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_stat_cls_code_batch
@@ -255,57 +251,57 @@ def us_news_renewal():
         raise
 
 
-@CELERY_APP.task(name="kr_top_stories", ignore_result=True)
-def kr_top_stories():
-    """한국 주요 소식 선정"""
-    notifier.notify_info("KR_top_stories process started")
+# @CELERY_APP.task(name="kr_top_stories", ignore_result=True) # TODO:: 250311 주요소식 선정 중단 / 문제 없을 시 아예 삭제
+# def kr_top_stories():
+#     """한국 주요 소식 선정"""
+#     notifier.notify_info("KR_top_stories process started")
 
-    has_error = False
+#     has_error = False
 
-    try:
-        kr_run_disclosure_is_top_story()
-    except Exception as e:
-        has_error = True
-        error_msg = f"KR disclosure top story failed: {str(e)}"
-        notifier.notify_error(error_msg, "고경민")
-        logging.error(error_msg)
+#     try:
+#         kr_run_disclosure_is_top_story()
+#     except Exception as e:
+#         has_error = True
+#         error_msg = f"KR disclosure top story failed: {str(e)}"
+#         notifier.notify_error(error_msg, "고경민")
+#         logging.error(error_msg)
 
-    try:
-        renewal_kr_run_news_is_top_story()
-    except Exception as e:
-        has_error = True
-        error_msg = f"KR news top story failed: {str(e)}"
-        notifier.notify_error(error_msg, "고경민")
-        logging.error(error_msg)
+#     try:
+#         renewal_kr_run_news_is_top_story()
+#     except Exception as e:
+#         has_error = True
+#         error_msg = f"KR news top story failed: {str(e)}"
+#         notifier.notify_error(error_msg, "고경민")
+#         logging.error(error_msg)
 
-    if not has_error:
-        notifier.notify_success("KR_top_stories process completed")
+#     if not has_error:
+#         notifier.notify_success("KR_top_stories process completed")
 
 
-@CELERY_APP.task(name="us_top_stories", ignore_result=True)
-def us_top_stories():
-    """미국 주요 소식 선정"""
-    notifier.notify_info("US_top_stories process started")
-    has_error = False
+# @CELERY_APP.task(name="us_top_stories", ignore_result=True)
+# def us_top_stories():
+#     """미국 주요 소식 선정"""
+#     notifier.notify_info("US_top_stories process started")
+#     has_error = False
 
-    try:
-        us_run_disclosure_is_top_story()
-    except Exception as e:
-        has_error = True
-        error_msg = f"US disclosure top story failed: {str(e)}"
-        notifier.notify_error(error_msg, "고경민")
-        logging.error(error_msg)
+#     try:
+#         us_run_disclosure_is_top_story()
+#     except Exception as e:
+#         has_error = True
+#         error_msg = f"US disclosure top story failed: {str(e)}"
+#         notifier.notify_error(error_msg, "고경민")
+#         logging.error(error_msg)
 
-    try:
-        renewal_us_run_news_is_top_story()
-    except Exception as e:
-        has_error = True
-        error_msg = f"US news top story failed: {str(e)}"
-        notifier.notify_error(error_msg, "고경민")
-        logging.error(error_msg)
+#     try:
+#         renewal_us_run_news_is_top_story()
+#     except Exception as e:
+#         has_error = True
+#         error_msg = f"US news top story failed: {str(e)}"
+#         notifier.notify_error(error_msg, "고경민")
+#         logging.error(error_msg)
 
-    if not has_error:
-        notifier.notify_success("US_top_stories process completed")
+#     if not has_error:
+#         notifier.notify_success("US_top_stories process completed")
 
 
 @CELERY_APP.task(name="memory-status", ignore_result=True)
