@@ -5,7 +5,6 @@ from app.modules.community.schemas import CommentItemWithPostInfo, ResponsePost
 from app.utils.oauth_utils import get_current_user
 from app.modules.user.service import get_user_service, UserService
 from app.modules.user.schemas import UserInfoResponse, UserProfileResponse
-from app.modules.screener.service import get_screener_service, ScreenerService
 from fastapi import HTTPException
 from fastapi.security import HTTPBearer
 from app.utils.oauth_utils import (
@@ -25,7 +24,7 @@ security = HTTPBearer()
 
 
 @router.post("/signup")
-def signup(
+async def signup(
     email_token: str = Form(...),
     provider: str = Form(default="google"),
     nickname: str = Form(...),
@@ -33,7 +32,6 @@ def signup(
     profile_image: UploadFile = File(...),
     image_format: Optional[str] = Form(None),
     service: UserService = Depends(get_user_service),
-    screener_service: ScreenerService = Depends(get_screener_service),
 ):
     email = decode_email_token(email_token)["sub"]
     base64 = None
@@ -51,14 +49,16 @@ def signup(
     refresh_token = create_refresh_token(user.id)
     access_token_hash = service.store_token(access_token, refresh_token)
 
-    all_sectors = screener_service.get_available_sectors()
-    screener_group_created = screener_service.create_group(user_id=user.id, sector_filter=all_sectors)
+    await service.screener_init(user_id=user.id)
 
     return {
         "message": "Signup successful",
         "access_token_hash": access_token_hash,
-        "screener_group_created": screener_group_created,
     }
+
+@router.post("/screener-init")
+async def screener_init(user_id: int, service: UserService = Depends(get_user_service)):
+    await service.screener_init(user_id=user_id)
 
 
 @router.patch("/nickname")

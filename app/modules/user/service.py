@@ -8,6 +8,7 @@ from app.database.crud import database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.community.schemas import CommentItemWithPostInfo, PostInfo, ResponsePost, UserInfo
 from app.modules.user.schemas import UserProfileResponse
+from app.modules.screener.service import get_screener_service
 
 from sqlalchemy import text
 
@@ -409,6 +410,11 @@ class UserService:
             logger.info(f"Token deleted: {access_token_hash}")
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+        
+    async def screener_init(self, user_id: int):
+        screener_service = get_screener_service()
+        all_sectors = screener_service.get_available_sectors()
+        await screener_service.create_group(user_id=user_id, sector_filter=all_sectors)
 
 
 def get_user_service() -> UserService:

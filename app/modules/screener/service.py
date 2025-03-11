@@ -10,6 +10,8 @@ from app.utils.factor_utils import factor_utils
 from app.enum.type import StockType
 from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, REVERSE_FACTOR_MAP, FACTOR_MAP_EN
 from app.core.exception.custom import CustomException
+from app.models.models_factors import CategoryEnum
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +228,7 @@ class ScreenerService:
             logger.error(f"Error in get_filtered_stocks_with_description: {e}")
             raise e
 
-    def create_group(
+    async def create_group(
         self,
         user_id: int,
         name: str = "기본",
@@ -241,6 +243,8 @@ class ScreenerService:
             raise CustomException(status_code=409, message="Group name already exists for this type")
 
         try:
+            insert_tasks = []
+
             groups = self.database._select(table="screener_groups", user_id=user_id, order="order", ascending=False)
             if groups:
                 order = groups[0].order + 1
@@ -253,25 +257,30 @@ class ScreenerService:
 
             group_id = self.database._select(table="screener_groups", user_id=user_id, name=name)[0].id
 
+            await self.create_default_factor_filters(group_id=group_id)
+
+            if group_id is None:
+                raise CustomException(status_code=500, message="Failed to create group")
+
             # 종목 필터
             if market_filter:
-                self.database._insert(
+                insert_tasks.append(self.database.insert_wrapper(
                     table="screener_stock_filters",
                     sets={"group_id": group_id, "factor": "market", "value": market_filter},
-                )
+                ))
 
             if sector_filter:
                 for sector in sector_filter:
                     if sector not in self.get_available_sectors():
                         raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
-                    self.database._insert(
+                    insert_tasks.append(self.database.insert_wrapper(
                         table="screener_stock_filters",
                         sets={"group_id": group_id, "factor": "sector", "value": sector},
-                    )
+                    ))
 
             if custom_filters:
                 for condition in custom_filters:
-                    self.database._insert(
+                    insert_tasks.append(self.database.insert_wrapper(
                         table="screener_stock_filters",
                         sets={
                             "group_id": group_id,
@@ -279,15 +288,17 @@ class ScreenerService:
                             "above": condition.above,
                             "below": condition.below,
                         },
-                    )
+                    ))
 
             # 팩터 필터
             if factor_filters:
                 for idx, factor in enumerate(factor_filters):
-                    self.database._insert(
+                    insert_tasks.append(self.database.insert_wrapper(
                         table="screener_factor_filters",
                         sets={"group_id": group_id, "factor": REVERSE_FACTOR_MAP[factor], "order": idx + 1},
-                    )
+                    ))
+
+            await asyncio.gather(*insert_tasks)
 
             return True
 
@@ -298,16 +309,19 @@ class ScreenerService:
             logger.error(f"Error in create_group: {e}")
             raise e
 
-    def update_group(
+    async def update_group(
         self,
         group_id: int,
-        name: str,
+        name: Optional[str] = None,
         market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
         factor_filters: Optional[List[str]] = None,
+        category: Optional[CategoryEnum] = CategoryEnum.CUSTOM,
     ) -> bool:
         try:
+            insert_tasks = []
+
             if name:
                 current_group = self.database._select(table="screener_groups", id=group_id)
                 if not current_group:
@@ -328,29 +342,29 @@ class ScreenerService:
                 self.database._delete(table="screener_stock_filters", group_id=group_id)
 
             if market_filter:
-                self.database._insert(
+                insert_tasks.append(self.database.insert_wrapper(
                     table="screener_stock_filters",
                     sets={
                         "group_id": group_id,
                         "factor": "market",
                         "value": market_filter,
                     },
-                )
+                ))
 
             if sector_filter:
                 for sector in sector_filter:
-                    self.database._insert(
+                    insert_tasks.append(self.database.insert_wrapper(
                         table="screener_stock_filters",
                         sets={
                             "group_id": group_id,
                             "factor": "sector",
                             "value": sector,
                         },
-                    )
+                    ))
 
             if custom_filters:
                 for condition in custom_filters:
-                    self.database._insert(
+                    insert_tasks.append(self.database.insert_wrapper(
                         table="screener_stock_filters",
                         sets={
                             "group_id": group_id,
@@ -358,16 +372,13 @@ class ScreenerService:
                             "above": condition.above,
                             "below": condition.below,
                         },
-                    )
+                    ))
 
             # 팩터 필터
             if factor_filters:
-                self.database._delete(table="screener_factor_filters", group_id=group_id)
-                for idx, factor in enumerate(factor_filters):
-                    self.database._insert(
-                        table="screener_factor_filters",
-                        sets={"group_id": group_id, "factor": REVERSE_FACTOR_MAP[factor], "order": idx + 1},
-                    )
+                await self.reorder_factor_filters(group_id, category, factor_filters)
+
+            await asyncio.gather(*insert_tasks)
 
             return True
         except Exception as e:
@@ -402,11 +413,16 @@ class ScreenerService:
             logger.error(f"Error in get_groups: {e}")
             raise e
 
-    def get_group_filters(self, group_id: int) -> Dict:
+
+    def get_group_filters(self, group_id: int, category: CategoryEnum = CategoryEnum.CUSTOM) -> Dict:
         try:
             group = self.database._select(table="screener_groups", id=group_id)
             stock_filters = self.database._select(table="screener_stock_filters", group_id=group_id)
-            factor_filters = self.database._select(table="screener_factor_filters", group_id=group_id)
+            factor_filters = self.database._select(table="screener_factor_filters", group_id=group_id, category=category)
+
+            custom_factor_filters = self.database._select(table="screener_factor_filters", group_id=group_id, category=CategoryEnum.CUSTOM)
+            has_custom = len(custom_factor_filters) > 0
+
             return {
                 "name": group[0].name,
                 "stock_filters": [
@@ -419,6 +435,7 @@ class ScreenerService:
                     for stock_filter in stock_filters
                 ],
                 "factor_filters": [FACTOR_MAP[factor_filter.factor] for factor_filter in factor_filters],
+                "has_custom": has_custom,
             }
         except Exception as e:
             logger.error(f"Error in get_group_filters: {e}")
@@ -435,14 +452,41 @@ class ScreenerService:
         except Exception as e:
             logger.error(f"Error in reorder_groups: {e}")
             raise e
+    
 
-    def get_columns(self, group_id: Optional[int] = None) -> List[str]:
+    async def reorder_factor_filters(self, group_id: int, category: CategoryEnum = CategoryEnum.CUSTOM, factor_filters: List[str] = []) -> bool:
         try:
-            if not group_id:
-                return []
-            group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
-            factor_filters = self.database._select(table="screener_factor_filters", columns=["factor"], group_id=group.id)
+            self.database._delete(table="screener_factor_filters", group_id=group_id, category=category)
+            insert_tasks = []
+            for idx, factor in enumerate(factor_filters):
+                insert_tasks.append(self.database.insert_wrapper(
+                    table="screener_factor_filters",
+                    sets={
+                        "group_id": group_id,
+                        "factor": REVERSE_FACTOR_MAP[factor],
+                        "order": idx + 1,
+                        "category": category,
+                    },
+                ))
+            await asyncio.gather(*insert_tasks)
+            return True
+        except Exception as e:
+            logger.exception(f"Error in reorder_factor_filters: {e}")
+            raise e
+        
+
+    def get_columns(self, group_id: Optional[int] = None, category: Optional[CategoryEnum] = None) -> List[str]:
+        try:
+            if category == CategoryEnum.CUSTOM:
+                if not group_id:
+                    return []   
+                group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
+                factor_filters = self.database._select(table="screener_factor_filters", columns=["factor"], group_id=group.id)
+            else:
+                factor_filters = factor_utils.get_default_columns(category=category)
+
             return [FACTOR_MAP[factor_filter.factor] for factor_filter in factor_filters]
+
 
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
@@ -499,6 +543,40 @@ class ScreenerService:
         sectors = list(set(kr_sectors + us_sectors))
 
         return sectors
+    
+    async def create_default_factor_filters(self, group_id: int) -> bool:
+        try:
+            technical = factor_utils.get_default_columns(category=CategoryEnum.TECHNICAL)
+            fundamental = factor_utils.get_default_columns(category=CategoryEnum.FUNDAMENTAL)
+            valuation = factor_utils.get_default_columns(category=CategoryEnum.VALUATION)
+
+            insert_tasks = []
+            
+            for idx, factor in enumerate(technical):
+                insert_tasks.append(self.database.insert_wrapper(
+                    table="screener_factor_filters", 
+                    sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.TECHNICAL}
+                ))
+
+            for idx, factor in enumerate(fundamental):
+                insert_tasks.append(self.database.insert_wrapper(
+                    table="screener_factor_filters", 
+                    sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.FUNDAMENTAL}
+                ))
+
+            for idx, factor in enumerate(valuation):
+                    insert_tasks.append(self.database.insert_wrapper(
+                    table="screener_factor_filters", 
+                    sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.VALUATION}
+                ))
+
+            await asyncio.gather(*insert_tasks)
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error in create_default_factor_filters: {e}")
+            self.database._delete(table="screener_factor_filters", group_id=group_id)
+            raise e
 
 
 def get_screener_service():

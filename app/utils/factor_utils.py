@@ -55,16 +55,13 @@ class FactorUtils:
 
         return result
 
-    def get_columns(self, category: Optional[CategoryEnum] = None, is_stock: Optional[bool] = True) -> List[str]:
-        db_columns = self.db._select(table="factors", columns=["factor"], category=category, is_stock=is_stock)
-
-        result = ["market", "sector", "score"]
-        for column_tuple in db_columns:
-            column_name = column_tuple[0]
-
-            result.append(column_name)
-
-        return result
+    def get_default_columns(self, category: Optional[CategoryEnum] = None, is_stock: Optional[bool] = True) -> List[str]:
+        if category == CategoryEnum.TECHNICAL:
+            return ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
+        if category == CategoryEnum.FUNDAMENTAL:
+            return ["roe", "fscore", "deptRatio", "operating_income", "z_score"]
+        if category == CategoryEnum.VALUATION:
+            return ["pbr", "pcr", "per", "por", "psr"]
 
     def process_kr_factor_data(self):
         output_file = "parquet/kr_stock_factors.parquet"
