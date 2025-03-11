@@ -1,13 +1,13 @@
 import io
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from app.batches.run_etf_screener import run_etf_screener_data
 from app.modules.screener.schemas import ColumnsResponse, FactorResponse, GroupFilter, GroupMetaData
 from app.modules.screener_etf.enum import ETFCategoryEnum, ETFMarketEnum
 from app.modules.screener_etf.schemas import FilteredETF
 from app.modules.screener_etf.service import ScreenerETFService
 from app.utils.oauth_utils import get_current_user
-from app.batches.run_etf_screener import run_etf_screener_data
 from app.core.logging.config import get_logger
 
 
@@ -144,8 +144,18 @@ def get_columns(
     return ColumnsResponse(columns=result)
 
 
-@router.get("/parquet")
-def update_parquet():
+@router.get("/parquet/{ctry}")
+def update_parquet(ctry: Literal["KR", "US"], screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
+    try:
+        result = screener_etf_service.update_parquet(ctry=ctry)
+        return result
+    except Exception as e:
+        logger.exception(e)
+        raise e
+
+
+@router.get("/old/parquet")
+def get_old_parquet(screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
     try:
         run_etf_screener_data()
         return True

@@ -1,28 +1,36 @@
-from typing import List, Optional
+import datetime
+from io import BytesIO
+import os
+from typing import List, Literal, Optional
 from fastapi import HTTPException
 import numpy as np
 import pandas as pd
+from Aws.logic.s3 import get_data_from_bucket
 from app.common.constants import (
     ETF_DEFAULT_SCREENER_COLUMNS,
     FACTOR_MAP,
     FACTOR_MAP_EN,
     NON_NUMERIC_COLUMNS_ETF,
+    PARQUET_DIR,
     REVERSE_FACTOR_MAP,
     REVERSE_FACTOR_MAP_EN,
     UNIT_MAP,
 )
 from app.core.exception.base import CustomException
+from app.core.logging.config import get_logger
 from app.modules.screener_etf.enum import ETFCategoryEnum, ETFMarketEnum
 from app.modules.screener.schemas import FactorResponse, GroupFilter
 from app.modules.screener.service import ScreenerService
 from app.modules.screener_etf.schemas import FilteredETF
-from app.utils import factor_utils
 from app.utils.data_utils import ceil_to_integer, floor_to_integer
+from app.utils.date_utils import get_business_days
 from app.utils.etf_utils import ETFDataLoader
 from app.utils.factor_utils import FactorUtils
 from app.utils.score_utils import etf_score_utils
 from app.cache.factors import etf_factors_cache
 from app.database.crud import database
+
+logger = get_logger(__name__)
 
 
 class ScreenerETFService(ScreenerService):
@@ -51,6 +59,15 @@ class ScreenerETFService(ScreenerService):
 
         result = []
         for factor in factors:
+            if factor.unit == "SMALL_PRICE":
+                unit = "원" if nation == "kr" else "$"
+                type = "input"
+            elif factor.unit == "BIG_PRICE":
+                unit = "억원" if nation == "kr" else "K$"
+                type = "input"
+            else:
+                unit = UNIT_MAP[factor.unit.lower()]
+                type = "slider"
             factor_name = factor.factor
 
             if factor_name not in filtered_market_data.columns:
@@ -80,6 +97,7 @@ class ScreenerETFService(ScreenerService):
                     direction=factor.sort_direction,
                     min_value=floor_to_integer(min_value),
                     max_value=ceil_to_integer(max_value),
+                    type=type,
                 )
             )
 
@@ -139,7 +157,7 @@ class ScreenerETFService(ScreenerService):
                     if col in row:
                         etf_data[col] = row[col]
                 elif col == "score":
-                    etf_data[col] = {"value": float(row[col]), "unit": ""}
+                    etf_data[col] = float(row[col])
                 elif col in row:
                     if pd.isna(row[col]) or np.isinf(row[col]):
                         etf_data[col] = {"value": "", "unit": ""}
@@ -280,7 +298,7 @@ class ScreenerETFService(ScreenerService):
             factor_filters = [factor_filter.factor for factor_filter in factor_filters]
 
         else:
-            factor_filters = factor_utils.get_columns(category)
+            factor_filters = self.factor_utils.get_columns(category)
 
         columns = [factor_filter for factor_filter in factor_filters]
 
@@ -372,3 +390,34 @@ class ScreenerETFService(ScreenerService):
             mapped_result.append(mapped_item)
 
         return mapped_result, has_next
+
+    def update_parquet(self, ctry: Literal["KR", "US"]):
+        today = datetime.datetime.now().date()
+        start_date = today - datetime.timedelta(days=7)
+
+        if ctry == "KR":
+            country = "kr"
+        elif ctry == "US":
+            country = "us"
+        else:
+            raise ValueError("Invalid country")
+
+        business_days = get_business_days(country=ctry, start_date=start_date, end_date=today)
+        str_business_days = [business_day.strftime("%Y%m%d") for business_day in business_days]
+        str_business_days.sort(reverse=True)
+
+        for business_day in str_business_days:
+            try:
+                data = get_data_from_bucket(
+                    bucket="alpha-finder-factors",
+                    dir=f"etf/{country}",
+                    key=f"{country}_etf_factors_{business_day}.parquet",
+                )
+                df = pd.read_parquet(BytesIO(data), engine="pyarrow")
+                file_name = f"{country}_etf_factors.parquet"
+                df.to_parquet(os.path.join(PARQUET_DIR, file_name), index=False)
+                print(df.head())
+                return True
+            except Exception:
+                continue
+        return False
