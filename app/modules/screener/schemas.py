@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from app.models.models_factors import CategoryEnum
 from app.models.models_screener import StockType
-from typing import Optional, List
+from typing import Optional, List, Dict
 from enum import Enum
 
 
@@ -46,11 +46,18 @@ class GroupFilter(BaseModel):
     type: Optional[StockType] = StockType.STOCK
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
+    category: Optional[CategoryEnum] = None
     custom_filters: Optional[List[FilterCondition]] = None
-    category: Optional[CategoryEnum] = CategoryEnum.CUSTOM
     factor_filters: Optional[List[str]] = None
 
-class GroupFilterResponse(GroupFilter):
+class GroupFilterResponse(BaseModel):
+    id: Optional[int] = None
+    name: Optional[str] = None
+    type: Optional[StockType] = StockType.STOCK
+    market_filter: Optional[MarketEnum] = MarketEnum.US
+    sector_filter: Optional[List[str]] = None
+    custom_filters: Optional[List[FilterCondition]] = None
+    factor_filters: Optional[Dict[str, List[str]]] = None
     has_custom: bool = False
 
 
