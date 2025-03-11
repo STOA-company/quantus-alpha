@@ -368,8 +368,8 @@ def update_group_name(group_id: int, name: str, screener_service: ScreenerServic
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/groups/{group_id}", response_model=GroupFilter)
-def get_group_filters(group_id: int, category: CategoryEnum = CategoryEnum.TECHNICAL, screener_service: ScreenerService = Depends(get_screener_service)):
+@router.get("/groups/{group_id}", response_model=GroupFilterResponse)
+def get_group_filters(group_id: Optional[int] = None, category: CategoryEnum = CategoryEnum.TECHNICAL, screener_service: ScreenerService = Depends(get_screener_service)):
     """
     필터 목록 조회
     """
@@ -380,11 +380,23 @@ def get_group_filters(group_id: int, category: CategoryEnum = CategoryEnum.TECHN
                 name="기본",
                 market_filter=MarketEnum.US,
                 category=category,
-                has_custom=True,
+                has_custom=False,
                 sector_filter=[],
                 custom_filters=[],
                 factor_filters=[],
             )
+
+        if group_id == None:
+            return GroupFilterResponse(
+                name="기본",
+                market_filter=MarketEnum.US,
+                category=category,
+                has_custom=False,
+                sector_filter=[],
+                custom_filters=[],
+                factor_filters=screener_service.get_columns(group_id, category),
+            )
+        
         group_filters = screener_service.get_group_filters(group_id, category)
         stock_filters = group_filters["stock_filters"]
 
