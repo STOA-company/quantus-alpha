@@ -10,13 +10,14 @@ RUN_CELERY=true
 
 echo "Deploying batch server for environment: $ENV using $ENV_FILE (Branch: $BRANCH)"
 
+echo "Changing to project directory..."
+cd ~/quantus-alpha || exit 1
+
 if [ ! -f "$ENV_FILE" ]; then
     echo "Error: $ENV_FILE not found!"
     exit 1
 fi
 
-echo "Changing to project directory..."
-cd ~/quantus-alpha || exit 1
 
 echo "Fetching latest changes..."
 git fetch origin || exit 1
