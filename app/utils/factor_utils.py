@@ -326,9 +326,14 @@ class FactorUtils:
 
         if unit.lower() == "big_price":
             if nation == "kr":
-                if value >= 10000:  # 1조원 이상
-                    return round(value / 10000, 2), "조원"
-                return int(value), "억원"
+                if lang == "kr":
+                    if value >= 10000:  # 1조원 이상
+                        return round(value / 10000, 2), "조원"
+                    return int(value), "억원"
+                else:
+                    if value >= 10000:  # 1조원 이상
+                        return round(value / 10000, 2), "T₩"  # 조 단위는 T₩로 표시
+                    return round(value / 10, 2), "B₩"  # 억 단위는 B₩로 표시 (1억원 = 0.1B₩)
             else:  # US
                 # 1T = 1000B = 1000조원
                 if value >= 1000000000:  # 1000조원 이상
