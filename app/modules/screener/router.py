@@ -96,7 +96,7 @@ def get_filtered_stocks(
         if filtered_stocks.lang == "en":
             reverse_factor_map = REVERSE_FACTOR_MAP_EN
 
-        for column in [reverse_factor_map[column] for column in filtered_stocks.columns]:
+        for column in [reverse_factor_map[column] for column in filtered_stocks.factor_filters]:
             if column not in request_columns:
                 request_columns.append(column)
 
@@ -159,7 +159,7 @@ def get_filtered_stocks_count(
             filtered_stocks.market_filter,
             filtered_stocks.sector_filter,
             custom_filters,
-            [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.columns],
+            [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.factor_filters],
         )
 
         result = {"count": total_count}
@@ -196,7 +196,7 @@ def get_filtered_stocks_with_description(
         if filtered_stocks.lang == "en":
             reverse_factor_map = REVERSE_FACTOR_MAP_EN
 
-        for column in [reverse_factor_map[column] for column in filtered_stocks.columns]:
+        for column in [reverse_factor_map[column] for column in filtered_stocks.factor_filters]:
             if column not in request_columns:
                 request_columns.append(column)
 
@@ -250,7 +250,7 @@ def download_filtered_stocks(
             for condition in filtered_stocks.custom_filters
         ]
     sorted_df = screener_service.get_filtered_stocks(
-        filtered_stocks.market_filter, filtered_stocks.sector_filter, custom_filters, filtered_stocks.columns
+        filtered_stocks.market_filter, filtered_stocks.sector_filter, custom_filters, filtered_stocks.factor_filters
     )
 
     stream = io.StringIO()
