@@ -25,6 +25,7 @@ class StockInformation(Base):
     is_krx_300 = Column(Boolean, default=True, comment="KRX 300 편입 여부")
     is_snp_500 = Column(Boolean, default=True, comment="S&P 500 편입 여부")
     is_nasdaq_100 = Column(Boolean, default=True, comment="나스닥 100 편입 여부")
+    is_russell_2000 = Column(Boolean, default=False, nullable=True, comment="러셀 2000 편입 여부")
 
     # GICS Sector information (nullable)
     sector_1 = Column(String(100), nullable=True, comment="GICS Level 1 (11개 섹터)")

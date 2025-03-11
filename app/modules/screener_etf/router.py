@@ -3,7 +3,8 @@ from typing import Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.batches.run_etf_screener import run_etf_screener_data
-from app.modules.screener.schemas import ColumnsResponse, FactorResponse, GroupFilter, GroupMetaData
+from app.models.models_factors import CategoryEnum
+from app.modules.screener.schemas import ColumnsResponse, FactorResponse, GroupFilter, GroupFilterResponse, GroupMetaData
 from app.modules.screener_etf.enum import ETFCategoryEnum, ETFMarketEnum
 from app.modules.screener_etf.schemas import FilteredETF
 from app.modules.screener_etf.service import ScreenerETFService
@@ -96,6 +97,58 @@ def create_or_update_group(
     return result
 
 
+@router.get("/groups/{group_id}", response_model=GroupFilterResponse)
+def get_group_filter(
+    group_id: int = -1,
+    category: CategoryEnum = CategoryEnum.TECHNICAL,
+    screener_etf_service: ScreenerETFService = Depends(ScreenerETFService),
+):
+    """
+    필터 목록 조회
+    """
+    try:
+        if group_id == -1:
+            return GroupFilterResponse(
+                id=-1,
+                name="기본",
+                market_filter=ETFMarketEnum.US,
+                category=category,
+                has_custom=False,
+                stock_filters=[],
+                custom_filters=[],
+                factor_filters=screener_etf_service.get_columns(group_id, category),
+            )
+
+        group_filters = screener_etf_service.get_group_filters(group_id, category)
+        stock_filters = group_filters["stock_filters"]
+
+        market_filter = None
+        custom_filters = []
+
+        for stock_filter in stock_filters:
+            if stock_filter["factor"] == "시장":
+                market_filter = stock_filter["value"]
+            elif stock_filter["factor"] == "산업":
+                continue
+            else:
+                custom_filters.append(stock_filter)
+
+        factor_filters = group_filters["factor_filters"]
+        return GroupFilterResponse(
+            id=group_id,
+            name=group_filters["name"],
+            market_filter=market_filter,
+            sector_filter=[],
+            custom_filters=custom_filters,
+            factor_filters=factor_filters,
+            category=category,
+            has_custom=group_filters["has_custom"],
+        )
+    except Exception as e:
+        logger.error(f"Error getting group filters: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete("/groups/{group_id}", response_model=Dict)
 def delete_group(
     group_id: int,
@@ -132,6 +185,19 @@ def reorder_groups(
         return {"message": "Group reordered successfully"}
     else:
         raise HTTPException(status_code=500, detail="Failed to reorder groups")
+
+
+@router.post("/groups/name")
+def update_group_name(group_id: int, name: str, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
+    """
+    그룹 이름 수정
+    """
+    try:
+        updated_group_name = screener_etf_service.update_group_name(group_id, name)
+        return {"message": f"Group name updated to {updated_group_name}"}
+    except Exception as e:
+        logger.error(f"Error updating group name: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/columns", response_model=ColumnsResponse)
