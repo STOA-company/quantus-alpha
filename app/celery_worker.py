@@ -1,6 +1,7 @@
 import logging
 from functools import wraps
 
+from app.batches.run_etf_screener import run_etf_screener_data
 from app.batches.run_news import (
     renewal_kr_run_news_is_top_story,
     renewal_us_run_news_is_top_story,
@@ -517,6 +518,32 @@ def update_kr_stock_parquet():
     except Exception as e:
         notifier.notify_error(f"update_kr_stock_parquet process failed: {str(e)}")
         raise
+
+
+@CELERY_APP.task(name="update_kr_etf_parquet", ignore_result=True)
+def update_kr_etf_parquet():
+    """한국 ETF 파일 업데이트"""
+    notifier.notify_info("update_kr_etf_parquet process started")
+    try:
+        run_etf_screener_data("KR")
+        notifier.notify_success("update_kr_etf_parquet process completed")
+    except Exception as e:
+        notifier.notify_error(
+            f"update_kr_etf_parquet process failed: {str(e)}",
+        )
+
+
+@CELERY_APP.task(name="update_us_etf_parquet", ignore_result=True)
+def update_us_etf_parquet():
+    """미국 ETF 파일 업데이트"""
+    notifier.notify_info("update_us_etf_parquet process started")
+    try:
+        run_etf_screener_data("US")
+        notifier.notify_success("update_kr_etf_parquet process completed")
+    except Exception as e:
+        notifier.notify_error(
+            f"update_us_etf_parquet process failed: {str(e)}",
+        )
 
 
 # Worker 시작점

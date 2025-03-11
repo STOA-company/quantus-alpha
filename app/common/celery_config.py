@@ -155,4 +155,12 @@ CELERY_APP.conf.beat_schedule = {
         "task": "update_kr_top_losers",
         "schedule": crontab(hour="9", minute="1"),
     },
+    "update_us_etf_parquet": {
+        "task": "update_us_etf_parquet",
+        "schedule": crontab(hour="11", minute="30"),
+    },
+    "update_kr_etf_parquet": {
+        "task": "update_kr_etf_parquet",
+        "schedule": crontab(hour="18", minute="30"),
+    },
 }
