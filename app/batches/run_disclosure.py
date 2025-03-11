@@ -283,13 +283,14 @@ def renewal_kr_run_disclosure_batch(date: str = None):
     LEFT JOIN kor_disclosure d ON t.filing_id = d.filing_id
     LEFT JOIN kor_disclosure_analysis a ON t.filing_id = a.filing_id
     WHERE DATE(t.created_at) = :check_date
+    AND t.lang = 'ko-KR'
     """)
 
     # _execute 메서드로 쿼리 실행
     result = database._execute(query, {"check_date": check_date_str})
     if result.rowcount == 0:
         error_msg = f"""
-        `미국 공시 데이터 누락: kor_disclosure_analysis_translation 테이블 데이터 체크 필요합니다.`
+        `한국 공시 데이터 누락: kor_disclosure_analysis_translation 테이블 데이터 체크 필요합니다.`
         * business_day: {check_date}
         """
         raise ValueError(error_msg)
@@ -643,7 +644,8 @@ def us_run_disclosure_is_top_story(date: str = None):
         raise ValueError(error_msg)
 
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
+    renewal_kr_run_disclosure_batch()
 #     from app.core.logging.config import configure_logging
 #     configure_logging()
 #     kr_run_disclosure_is_top_story(20250201)
