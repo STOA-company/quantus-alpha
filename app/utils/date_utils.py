@@ -157,3 +157,33 @@ def is_holiday(country: Literal["KR", "US"], date_str: str) -> bool:
     except Exception as e:
         logging.error(f"Error in is_holiday: {str(e)}")
         return False
+
+
+def is_us_market_open_or_recently_closed(extra_hours=1):
+    """
+    미국 시장이 열려있거나 마감 후 지정된 시간(기본 1시간) 이내인지 확인합니다.
+
+    Args:
+        extra_hours (int): 마감 후 추가 시간(시간 단위)
+
+    Returns:
+        bool: 시장이 열려있거나 마감 후 지정된 시간 이내면 True
+    """
+    calendar = ecals.get_calendar("XNYS")  # 뉴욕 증권거래소
+    current_time = now_us()
+
+    # 오늘이 거래일인지 확인
+    today_date = current_time.date()
+    if not calendar.is_session(today_date):
+        return False
+
+    # 현재 시장이 열려있는지 확인
+    if calendar.is_open_on_minute(current_time):
+        return True
+
+    # 시장 마감 시간 확인
+    close_time = calendar.schedule.loc[today_date]["close"]
+
+    # 마감 후 extra_hours 시간 이내인지 확인
+    time_since_close = current_time - close_time
+    return time_since_close.total_seconds() <= extra_hours * 3600
