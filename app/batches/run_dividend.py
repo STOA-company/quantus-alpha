@@ -142,7 +142,7 @@ class StockDividendDataDownloader(ETFDataDownloader):
 
     def download_stock_dividend(self, ctry: str, download: bool = False):
         """
-        배당 데이터 다운로드
+        주식 배당 데이터 다운로드
 
         Args:
             ctry (str): 국가코드 (US, KR)
@@ -155,63 +155,125 @@ class StockDividendDataDownloader(ETFDataDownloader):
         if ctry == "US":
             country = "us"
             query = """
+            WITH DSINFO AS (
+                SELECT infocode
+                FROM DS2CtryQtInfo
+                WHERE Region = 'us'
+                AND StatusCode IN ('A', 'S')
+                AND TypeCode = 'EQ'  -- ET :ETF, EQ: 주식
+            ),
+            DSSUM AS (
+                SELECT D.INFOCODE,
+                    D.EFFECTIVEDATE,
+                    D.PayDate,
+                    SUM(D.DIVRATE) AS DSSUM
+                FROM DS2DIV D WITH (INDEX(DS2Div_1))
+                INNER JOIN DSINFO I ON D.INFOCODE = I.INFOCODE
+                WHERE D.EFFECTIVEDATE BETWEEN '2020-01-01' AND GETDATE()
+                GROUP BY D.INFOCODE, D.EFFECTIVEDATE, D.PayDate
+            ),
+            DSSUMADJ AS (
+                SELECT A.INFOCODE,
+                    A.ADJDATE,
+                    A.CUMADJFACTOR,
+                    C.EFFECTIVEDATE,
+                    C.DSSUM AS UNADJ_DIV,
+                    C.PayDate,
+                    ROW_NUMBER() OVER(PARTITION BY A.INFOCODE ORDER BY A.ADJDATE) AS RN
+                FROM DS2ADJ A WITH (INDEX(DS2Adj_1))
+                INNER JOIN DSSUM C ON C.INFOCODE = A.INFOCODE
+                                AND C.EFFECTIVEDATE BETWEEN A.ADJDATE AND ISNULL(A.ENDADJDATE, GETDATE())
+                WHERE A.ADJDATE BETWEEN '1993-01-01' AND GETDATE()
+                AND A.ADJTYPE = '2'
+            ),
+            LatestTicker AS (
+                SELECT
+                    InfoCode,
+                    Ticker,
+                    ROW_NUMBER() OVER (PARTITION BY InfoCode ORDER BY EndDate DESC) AS rn
+                FROM Ds2MnemChg
+            )
             SELECT
-                c.Ticker as 'ticker',
-                d.Desc_,
-                a.DivRate as 'per_share', a.PayDate as 'payment_date', a.EffectiveDate as 'ex_date'
-            from DS2Div a
-            join DS2CtryQtInfo b
-                on b.InfoCode = a.InfoCode
-            JOIN
-                Ds2MnemChg c
-                ON c.InfoCode  = a.InfoCode
-                AND c.EndDate = (
-                    SELECT MAX(EndDate)
-                    FROM Ds2MnemChg
-                    WHERE InfoCode = a.InfoCode
-                )
-            JOIN
-                DS2XRef d ON a.DivTypeCode = d.Code AND d.Type_ = 8
-            where b.Region = 'us'
-                and b.TypeCode ='EQ'
-                and b.StatusCode != 'D'
-                and c.EndDate >= '2025-01-01'
-                and (a.LicFlag = 1 or a.LicFlag = 128)
-                and a.ISOCurrCode = 'USD'
-            order by Ticker,PayDate
-            ;
+                T.Ticker as 'ticker',
+                A.EFFECTIVEDATE as 'ex_date',
+                A.UNADJ_DIV,
+                A.PayDate as 'payment_date',
+                CASE
+                    WHEN A.EFFECTIVEDATE <> A.ADJDATE THEN A.CUMADJFACTOR
+                    ELSE B.CUMADJFACTOR
+                END as 'adj_factor',
+                CASE
+                    WHEN A.EFFECTIVEDATE <> A.ADJDATE THEN A.CUMADJFACTOR * A.UNADJ_DIV
+                    ELSE A.UNADJ_DIV * B.CUMADJFACTOR
+                END AS 'per_share'
+            FROM DSSUMADJ AS A
+            LEFT OUTER JOIN DSSUMADJ AS B ON A.INFOCODE = B.INFOCODE AND A.RN - 1 = B.RN
+            LEFT OUTER JOIN LatestTicker T ON T.InfoCode = A.INFOCODE AND T.rn = 1
+            WHERE A.EFFECTIVEDATE IS NOT NULL
+            ORDER BY T.Ticker, A.EFFECTIVEDATE;
             """
 
         if ctry == "KR":
             country = "kr"
             query = """
+            WITH DSINFO AS (
+                SELECT infocode, DsLocalCode
+                FROM DS2CtryQtInfo
+                WHERE Region = 'kr'
+                AND StatusCode IN ('A', 'S')
+                AND TypeCode = 'EQ'
+            ),
+            DSSUM AS (
+                SELECT D.INFOCODE,
+                    D.EFFECTIVEDATE,
+                    D.PayDate,
+                    SUM(D.DIVRATE) AS DSSUM
+                FROM DS2DIV D WITH (INDEX(DS2Div_1))
+                INNER JOIN DSINFO I ON D.INFOCODE = I.INFOCODE
+                WHERE D.EFFECTIVEDATE BETWEEN '2020-01-01' AND GETDATE()
+                GROUP BY D.INFOCODE, D.EFFECTIVEDATE, D.PayDate
+            ),
+            DSSUMADJ AS (
+                SELECT A.INFOCODE,
+                    A.ADJDATE,
+                    A.CUMADJFACTOR,
+                    C.EFFECTIVEDATE,
+                    C.DSSUM AS UNADJ_DIV,
+                    C.PayDate,
+                    ROW_NUMBER() OVER(PARTITION BY A.INFOCODE ORDER BY A.ADJDATE) AS RN
+                FROM DS2ADJ A WITH (INDEX(DS2Adj_1))
+                INNER JOIN DSSUM C ON C.INFOCODE = A.INFOCODE
+                                AND C.EFFECTIVEDATE BETWEEN A.ADJDATE AND ISNULL(A.ENDADJDATE, GETDATE())
+                WHERE A.ADJDATE BETWEEN '1993-01-01' AND GETDATE()
+                AND A.ADJTYPE = '2'
+            ),
+            LatestTicker AS (
+                SELECT
+                    InfoCode,
+                    Ticker,
+                    ROW_NUMBER() OVER (PARTITION BY InfoCode ORDER BY EndDate DESC) AS rn
+                FROM Ds2MnemChg
+            )
             SELECT
-                d.Desc_,
-                a.DivRate as 'per_share', a.PayDate as 'payment_date', a.EffectiveDate as 'ex_date',
-                b.DsLocalCode as 'ticker', b.DsQtName, b.Region,
-                e.Close_ as 'price',
-                f.PrimExchIntCode
-            from DS2Div a
-            join DS2CtryQtInfo b
-                on b.InfoCode = a.InfoCode
-            JOIN
-                DS2XRef d
-                ON a.DivTypeCode = d.Code AND d.Type_ = 8
-            JOIN
-                vw_Ds2Pricing e
-                ON e.InfoCode = b.InfoCode
-                AND e.MarketDate = a.EffectiveDate
-            JOIN
-                vw_Ds2SecInfo f
-                ON f.InfoCode = b.InfoCode
-            where b.Region = 'KR'
-                and b.TypeCode ='ET'
-                and b.StatusCode != 'D'
-                and a.LicFlag = 8
-                and a.ISOCurrCode = 'KRW'
-                and e.MarketDate >='2020-01-01'
-                and e.AdjType = 2
-            order by b.DsLocalCode, a.PayDate
+                C.DsLocalCode as 'ticker',
+                A.EFFECTIVEDATE as 'ex_date',
+                A.UNADJ_DIV,
+                A.PayDate as 'payment_date',
+                CASE
+                    WHEN A.EFFECTIVEDATE <> A.ADJDATE THEN A.CUMADJFACTOR
+                    ELSE B.CUMADJFACTOR
+                END as 'adj_factor',
+                CASE
+                    WHEN A.EFFECTIVEDATE <> A.ADJDATE THEN A.CUMADJFACTOR * A.UNADJ_DIV
+                    ELSE A.UNADJ_DIV * B.CUMADJFACTOR
+                END AS 'per_share'
+            FROM DSSUMADJ AS A
+            LEFT OUTER JOIN DSSUMADJ AS B ON A.INFOCODE = B.INFOCODE AND A.RN - 1 = B.RN
+            LEFT OUTER JOIN DSINFO AS C ON A.INFOCODE = C.INFOCODE
+            LEFT OUTER JOIN LatestTicker T ON T.InfoCode = A.INFOCODE AND T.rn = 1
+            WHERE A.EFFECTIVEDATE IS NOT NULL
+            ORDER BY T.Ticker, A.EFFECTIVEDATE;
+
             """
         df = self._get_refinitiv_data(query)
 
@@ -230,4 +292,5 @@ class StockDividendDataDownloader(ETFDataDownloader):
 
 
 if __name__ == "__main__":
-    insert_dividend("US")
+    downloader = StockDividendDataDownloader()
+    downloader.download_stock_dividend("KR", download=True)

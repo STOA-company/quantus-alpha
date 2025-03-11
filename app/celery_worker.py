@@ -27,8 +27,11 @@ from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_sta
 from app.utils.date_utils import check_market_status, is_business_day
 from app.utils.stock_utils import kr_stock_utils, us_stock_utils
 from app.utils.factor_utils import factor_utils
+from app.batches.run_dividend import insert_dividend
+
 
 notifier = SlackNotifier()
+notifier_1d = SlackNotifier()
 logger = logging.getLogger(__name__)
 
 
@@ -495,51 +498,141 @@ def update_kr_top_losers():
 @CELERY_APP.task(name="update_us_stock_parquet", ignore_result=True)
 def update_us_stock_parquet():
     """미국 주식 파일 업데이트"""
-    notifier.notify_info("update_us_stock_parquet process started")
+    notifier_1d.notify_info("update_us_stock_parquet process started")
     try:
         factor_utils.process_us_factor_data()
-        notifier.notify_success("update_us_stock_parquet process completed")
+        notifier_1d.notify_success("update_us_stock_parquet process completed")
     except Exception as e:
-        notifier.notify_error(f"update_us_stock_parquet process failed: {str(e)}")
+        notifier_1d.notify_error(f"update_us_stock_parquet process failed: {str(e)}")
         raise
 
 
 @CELERY_APP.task(name="update_kr_stock_parquet", ignore_result=True)
 def update_kr_stock_parquet():
     """한국 주식 파일 업데이트"""
-    notifier.notify_info("update_kr_stock_parquet process started")
+    notifier_1d.notify_info("update_kr_stock_parquet process started")
     try:
         factor_utils.process_kr_factor_data()
-        notifier.notify_success("update_kr_stock_parquet process completed")
+        notifier_1d.notify_success("update_kr_stock_parquet process completed")
     except Exception as e:
-        notifier.notify_error(f"update_kr_stock_parquet process failed: {str(e)}")
+        notifier_1d.notify_error(f"update_kr_stock_parquet process failed: {str(e)}")
         raise
 
 
 @CELERY_APP.task(name="update_kr_etf_parquet", ignore_result=True)
 def update_kr_etf_parquet():
-    """한국 ETF 파일 업데이트"""
-    notifier.notify_info("update_kr_etf_parquet process started")
-    try:
-        run_etf_screener_data("KR")
-        notifier.notify_success("update_kr_etf_parquet process completed")
-    except Exception as e:
-        notifier.notify_error(
-            f"update_kr_etf_parquet process failed: {str(e)}",
-        )
+    """한국 ETF 팩터 파일 업데이트"""
+    notifier_1d.notify_info("update_kr_etf_parquet process started")
+    if is_business_day("KR"):
+        try:
+            run_etf_screener_data("KR")
+            notifier_1d.notify_success("update_kr_etf_parquet process completed")
+        except Exception as e:
+            notifier_1d.notify_error(
+                f"update_kr_etf_parquet process failed: {str(e)}",
+            )
+    else:
+        notifier_1d.notify_info("KR market is not open. update_kr_etf_parquet process skipped.")
 
 
 @CELERY_APP.task(name="update_us_etf_parquet", ignore_result=True)
 def update_us_etf_parquet():
-    """미국 ETF 파일 업데이트"""
-    notifier.notify_info("update_us_etf_parquet process started")
-    try:
-        run_etf_screener_data("US")
-        notifier.notify_success("update_kr_etf_parquet process completed")
-    except Exception as e:
-        notifier.notify_error(
-            f"update_us_etf_parquet process failed: {str(e)}",
-        )
+    """미국 ETF 팩터 파일 업데이트"""
+    notifier_1d.notify_info("update_us_etf_parquet process started")
+    if is_business_day("US"):
+        try:
+            run_etf_screener_data("US")
+            notifier_1d.notify_success("update_us_etf_parquet process completed")
+        except Exception as e:
+            notifier_1d.notify_error(
+                f"update_us_etf_parquet process failed: {str(e)}",
+            )
+    else:
+        notifier_1d.notify_info("US market is not open. update_us_etf_parquet process skipped.")
+
+
+@CELERY_APP.task(name="update_us_stock_dividend_parquet", ignore_result=True)
+def update_us_stock_dividend_parquet():
+    """미국 주식 배당금 파일 업데이트"""
+    notifier_1d.notify_info("update_us_stock_dividend_parquet process started")
+    if is_business_day("US"):
+        try:
+            from app.batches.run_dividend import StockDividendDataDownloader
+
+            downloader = StockDividendDataDownloader()
+            downloader.download_stock_dividend(ctry="US", download=True)
+            notifier_1d.notify_success("update_us_stock_dividend_parquet process completed")
+        except Exception as e:
+            notifier_1d.notify_error(
+                f"update_us_stock_dividend_parquet process failed: {str(e)}",
+            )
+    else:
+        notifier_1d.notify_info("US market is not open. update_us_stock_dividend_parquet process skipped.")
+
+
+@CELERY_APP.task(name="update_kr_stock_dividend_parquet", ignore_result=True)
+def update_kr_stock_dividend_parquet():
+    """한국 주식 배당금 파일 업데이트"""
+    notifier_1d.notify_info("update_kr_stock_dividend_parquet process started")
+    if is_business_day("KR"):
+        try:
+            from app.batches.run_dividend import StockDividendDataDownloader
+
+            downloader = StockDividendDataDownloader()
+            downloader.download_stock_dividend(ctry="KR", download=True)
+            notifier_1d.notify_success("update_kr_stock_dividend_parquet process completed")
+        except Exception as e:
+            notifier.notify_error(
+                f"update_kr_stock_dividend_parquet process failed: {str(e)}",
+            )
+    else:
+        notifier_1d.notify_info("KR market is not open. update_kr_stock_dividend_parquet process skipped.")
+
+
+@CELERY_APP.task(name="update_us_dividend_rds", ignore_result=True)
+def update_us_dividend_rds():
+    """미국 주식/ETF 배당금 데이터베이스 업데이트"""
+    notifier_1d.notify_info("update_us_dividend_rds process started")
+    if is_business_day("US"):
+        try:
+            insert_dividend(ctry="US", type="stock")
+            notifier_1d.notify_success("update_us_stock_dividend_rds process completed")
+        except Exception as e:
+            notifier_1d.notify_error(
+                f"update_us_stock_dividend_rds process failed: {str(e)}",
+            )
+        try:
+            insert_dividend(ctry="US", type="etf")
+            notifier_1d.notify_success("update_us_etf_dividend_rds process completed")
+        except Exception as e:
+            notifier_1d.notify_error(
+                f"update_us_etf_dividend_rds process failed: {str(e)}",
+            )
+    else:
+        notifier_1d.notify_info("US market is not open. update_us_dividend_rds process skipped.")
+
+
+@CELERY_APP.task(name="update_kr_dividend_rds", ignore_result=True)
+def update_kr_dividend_rds():
+    """한국 주식/ETF 배당금 데이터베이스 업데이트"""
+    notifier_1d.notify_info("update_kr_dividend_rds process started")
+    if is_business_day("KR"):
+        try:
+            insert_dividend(ctry="KR", type="stock")
+            notifier_1d.notify_success("update_kr_stock_dividend_rds process completed")
+        except Exception as e:
+            notifier_1d.notify_error(
+                f"update_kr_stock_dividend_rds process failed: {str(e)}",
+            )
+        try:
+            insert_dividend(ctry="KR", type="etf")
+            notifier_1d.notify_success("update_kr_etf_dividend_rds process completed")
+        except Exception as e:
+            notifier_1d.notify_error(
+                f"update_kr_etf_dividend_rds process failed: {str(e)}",
+            )
+    else:
+        notifier_1d.notify_info("KR market is not open. update_kr_dividend_rds process skipped.")
 
 
 # Worker 시작점
