@@ -308,6 +308,7 @@ async def create_or_update_group(
                 custom_filters=group_filter.custom_filters,
                 factor_filters=group_filter.factor_filters,
                 type=group_filter.type,
+                category=group_filter.category,
             )
             message = "Group created successfully"
         if is_success:
@@ -368,8 +369,8 @@ def update_group_name(group_id: int, name: str, screener_service: ScreenerServic
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/groups/{group_id}/{category}", response_model=GroupFilterResponse)
-def get_group_filters(group_id: int = -1, category: CategoryEnum = CategoryEnum.TECHNICAL, screener_service: ScreenerService = Depends(get_screener_service)):
+@router.get("/groups/{group_id}", response_model=GroupFilterResponse)
+def get_group_filters(group_id: int = -1, screener_service: ScreenerService = Depends(get_screener_service)):
     """
     필터 목록 조회
     """
@@ -379,14 +380,18 @@ def get_group_filters(group_id: int = -1, category: CategoryEnum = CategoryEnum.
                 id=-1,
                 name="기본",
                 market_filter=MarketEnum.US,
-                category=category,
                 has_custom=False,
                 sector_filter=[],
                 custom_filters=[],
-                factor_filters=screener_service.get_columns(group_id, category),
+                factor_filters= {
+                    "technical": screener_service.get_columns(group_id, CategoryEnum.TECHNICAL),
+                    "fundamental": screener_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL),
+                    "valuation": screener_service.get_columns(group_id, CategoryEnum.VALUATION),
+                    "custom": []
+                },
             )
         
-        group_filters = screener_service.get_group_filters(group_id, category)
+        group_filters = screener_service.get_group_filters(group_id)
         stock_filters = group_filters["stock_filters"]
 
         market_filter = None
@@ -408,8 +413,12 @@ def get_group_filters(group_id: int = -1, category: CategoryEnum = CategoryEnum.
             market_filter=market_filter,
             sector_filter=sector_filter,
             custom_filters=custom_filters,
-            factor_filters=factor_filters,
-            category=category,
+            factor_filters={
+                "technical": screener_service.get_columns(group_id, CategoryEnum.TECHNICAL),
+                "fundamental": screener_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL),
+                "valuation": screener_service.get_columns(group_id, CategoryEnum.VALUATION),
+                "custom": factor_filters
+            },
             has_custom=group_filters["has_custom"],
         )
     except Exception as e:
