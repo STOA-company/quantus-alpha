@@ -291,15 +291,6 @@ class ScreenerService:
                         },
                     ))
 
-            # 팩터 필터
-            if factor_filters:
-                category = CategoryEnum.CUSTOM if category is None else category
-                for idx, factor in enumerate(factor_filters):
-                    insert_tasks.append(self.database.insert_wrapper(
-                        table="screener_factor_filters",
-                        sets={"group_id": group_id, "factor": REVERSE_FACTOR_MAP[factor], "order": idx + 1, "category": category},
-                    ))
-
             await asyncio.gather(*insert_tasks)
 
             return True
@@ -318,7 +309,7 @@ class ScreenerService:
         market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
-        factor_filters: Optional[List[str]] = None,
+        factor_filters: Optional[Dict[str, List[str]]] = None,
         category: Optional[CategoryEnum] = CategoryEnum.CUSTOM,
     ) -> bool:
         try:
@@ -378,7 +369,8 @@ class ScreenerService:
 
             # 팩터 필터
             if factor_filters:
-                await self.reorder_factor_filters(group_id, category, factor_filters)
+                for category, factors in factor_filters.items():
+                    await self.reorder_factor_filters(group_id, category, factors)
 
             await asyncio.gather(*insert_tasks)
 

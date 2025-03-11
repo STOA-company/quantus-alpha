@@ -407,6 +407,7 @@ def get_group_filters(group_id: int = -1, screener_service: ScreenerService = De
                 custom_filters.append(stock_filter)
 
         factor_filters = group_filters["factor_filters"]
+        
         return GroupFilterResponse(
             id=group_id,
             name=group_filters["name"],
