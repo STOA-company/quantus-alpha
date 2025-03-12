@@ -74,8 +74,10 @@ def get_filtered_stocks(
                 request_columns.append(column)
 
         sort_by = "score"
-        if filtered_stocks.sort_by:
-            sort_by = reverse_factor_map[filtered_stocks.sort_by]
+        ascending = False
+        if filtered_stocks.sort_info:
+            sort_by = reverse_factor_map[filtered_stocks.sort_info.sort_by]
+            ascending = filtered_stocks.sort_info.ascending
 
         stocks_data, total_count = screener_service.get_filtered_stocks(
             filtered_stocks.market_filter,
@@ -85,7 +87,7 @@ def get_filtered_stocks(
             filtered_stocks.limit,
             filtered_stocks.offset,
             sort_by,
-            filtered_stocks.ascending,
+            ascending,
             filtered_stocks.lang,
         )
 
