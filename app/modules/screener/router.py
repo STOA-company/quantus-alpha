@@ -370,11 +370,20 @@ def update_group_name(group_id: int, name: str, screener_service: ScreenerServic
 
 
 @router.get("/groups/{group_id}", response_model=GroupFilterResponse)
-def get_group_filters(group_id: int = -1, screener_service: ScreenerService = Depends(get_screener_service)):
+def get_group_filters(group_id: int = -1, lang: str = "kr", screener_service: ScreenerService = Depends(get_screener_service)):
     """
     필터 목록 조회
     """
     try:
+        technical_columns = screener_service.get_columns(group_id, CategoryEnum.TECHNICAL)
+        fundamental_columns = screener_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL)
+        valuation_columns = screener_service.get_columns(group_id, CategoryEnum.VALUATION)
+
+        if lang == "en":
+            technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
+            fundamental_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in fundamental_columns]
+            valuation_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in valuation_columns]
+
         if group_id == -1:
             return GroupFilterResponse(
                 id=-1,
@@ -384,9 +393,9 @@ def get_group_filters(group_id: int = -1, screener_service: ScreenerService = De
                 sector_filter=[],
                 custom_filters=[],
                 factor_filters= {
-                    "technical": screener_service.get_columns(group_id, CategoryEnum.TECHNICAL),
-                    "fundamental": screener_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL),
-                    "valuation": screener_service.get_columns(group_id, CategoryEnum.VALUATION),
+                    "technical": technical_columns,
+                    "fundamental": fundamental_columns,
+                    "valuation": valuation_columns,
                     "custom": []
                 },
             )
@@ -408,6 +417,10 @@ def get_group_filters(group_id: int = -1, screener_service: ScreenerService = De
 
         custom_factor_filters = group_filters["custom_factor_filters"]
 
+        if lang == "en":
+            # sector_filter = [MARKET_KOREAN_TO_ENGLISH_MAP[sector] for sector in sector_filter]
+            custom_factor_filters = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in custom_factor_filters]
+
         return GroupFilterResponse(
             id=group_id,
             name=group_filters["name"],
@@ -415,9 +428,9 @@ def get_group_filters(group_id: int = -1, screener_service: ScreenerService = De
             sector_filter=sector_filter,
             custom_filters=custom_filters,
             factor_filters={
-                "technical": screener_service.get_columns(group_id, CategoryEnum.TECHNICAL),
-                "fundamental": screener_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL),
-                "valuation": screener_service.get_columns(group_id, CategoryEnum.VALUATION),
+                "technical": technical_columns,
+                "fundamental": fundamental_columns,
+                "valuation": valuation_columns,
                 "custom": custom_factor_filters
             },
             has_custom=group_filters["has_custom"],
