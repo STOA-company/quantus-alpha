@@ -308,9 +308,9 @@ class FactorUtils:
 
         # 종목 필터링
         if market_filter:
-            if market_filter == MarketEnum.US:
+            if market_filter == ETFMarketEnum.US:
                 filtered_df = filtered_df[filtered_df["country"] == "us"]
-            elif market_filter == MarketEnum.KR:
+            elif market_filter == ETFMarketEnum.KR:
                 filtered_df = filtered_df[filtered_df["country"] == "kr"]
             elif market_filter in [ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
                 filtered_df = filtered_df[filtered_df["market"] == market_filter.value]
@@ -325,7 +325,7 @@ class FactorUtils:
                 if filter["below"] is not None:
                     filtered_df = filtered_df[filtered_df[factor] <= filter["below"]]
 
-        etf_tickers = filtered_df["ticker"].tolist()
+        etf_tickers = filtered_df["Code"].tolist()
         return etf_tickers
 
     def get_filtered_stocks_df(
@@ -352,7 +352,7 @@ class FactorUtils:
             required_columns.remove("score")
 
         df = self.etf_factor_loader.load_etf_factors(market_filter)
-        filtered_df = df[df["ticker"].isin(codes)][required_columns]
+        filtered_df = df[df["Code"].isin(codes)][required_columns]
 
         return filtered_df
 

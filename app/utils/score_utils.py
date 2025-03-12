@@ -103,13 +103,6 @@ class ScoreUtils:
         if df.empty:
             return pd.DataFrame()
 
-        if self.asset_type == "etf":
-            df = df.rename(
-                columns={
-                    "ticker": "Code",
-                }
-            )
-
         df_copy = df.copy()
         columns = df_copy.columns.tolist()
 
@@ -188,13 +181,6 @@ class ScoreUtils:
             scores[all_last] = 0.0
 
             score_df["score"] = np.round(scores, 2)
-
-        if self.asset_type == "etf":
-            score_df = score_df.rename(
-                columns={
-                    "Code": "ticker",
-                }
-            )
 
         return score_df.sort_values("score", ascending=False)
 

@@ -1,8 +1,7 @@
 import datetime
 from io import BytesIO
 import os
-from typing import List, Literal
-from fastapi import HTTPException
+from typing import List, Literal, Optional, Dict
 import numpy as np
 import pandas as pd
 from Aws.logic.s3 import get_data_from_bucket
@@ -13,7 +12,6 @@ from app.common.constants import (
     NON_NUMERIC_COLUMNS_ETF,
     PARQUET_DIR,
     REVERSE_FACTOR_MAP,
-    REVERSE_FACTOR_MAP_EN,
     UNIT_MAP,
 )
 from app.core.exception.base import CustomException
@@ -74,37 +72,54 @@ class ScreenerETFService(ScreenerService):
             logger.exception(f"Error in get_factors: {e}")
             raise e
 
-    def get_filtered_etfs(self, filtered_etf: FilteredETF):
+    def get_filtered_etfs(
+        self,
+        market_filter: Optional[ETFMarketEnum] = None,
+        custom_filters: Optional[List[Dict]] = None,
+        columns: Optional[List[str]] = None,
+        limit: Optional[int] = 50,
+        offset: Optional[int] = 0,
+        sort_by: Optional[str] = "score",
+        ascending: Optional[bool] = False,
+        lang: Optional[str] = "kr",
+    ):
+        if columns is None:
+            columns = []
+
         non_numeric_columns = [FACTOR_MAP[col] for col in NON_NUMERIC_COLUMNS_ETF]
-        if filtered_etf.sort_by not in filtered_etf.columns and filtered_etf.sort_by not in non_numeric_columns:
+
+        if sort_by not in columns and sort_by not in non_numeric_columns:
             raise CustomException(status_code=400, message="sort_by must be in columns")
 
-        etfs = factor_utils.filter_etfs(filtered_etf.market_filter, filtered_etf.custom_filters)
+        etfs = factor_utils.filter_etfs(market_filter, custom_filters)
         # 필터링
-        filtered_df = factor_utils.get_filtered_etfs_df(filtered_etf.market_filter, etfs, filtered_etf.columns)
+        filtered_df = factor_utils.get_filtered_etfs_df(market_filter, etfs, columns)
         # 점수 계산
         scored_df = etf_score_utils.calculate_factor_score(filtered_df)
         if scored_df.empty:
             return [], 0 
+        
+        print("filtered_df: ", filtered_df.columns)
+        print("scored_df: ", scored_df.columns)
         # 병합
-        merged_df = filtered_df.merge(scored_df, on="ticker", how="inner")
+        merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
         # 정렬
-        sorted_df = merged_df.sort_values(by=filtered_etf.sort_by, ascending=filtered_etf.ascending).reset_index(drop=True)
+        sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
         # 페이징
         total_count = len(sorted_df)
-        sorted_df = sorted_df.iloc[filtered_etf.offset * filtered_etf.limit : filtered_etf.offset * filtered_etf.limit + filtered_etf.limit + 1]
+        sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit + 1]
         
         factors = etf_factors_cache.get_configs()
         result = []
 
-        if filtered_etf.columns:
+        if columns:
             ordered_columns = []
-            for col in filtered_etf.columns:
+            for col in columns:
                 mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
                 if mapped_col not in ordered_columns:
                     ordered_columns.append(mapped_col)
         else:
-            ordered_columns = ["ticker", "kr_name", "manager", "score"]
+            ordered_columns = ["Code", "Name", "manager", "score", "country"]
         
         selected_columns = ordered_columns.copy()
 
@@ -126,17 +141,17 @@ class ScreenerETFService(ScreenerService):
                         etf_data[col] = {"value": "", "unit": ""}
                     else:
                         value, unit = factor_utils.convert_unit_and_value(
-                            filtered_etf.market_filter,
+                            market_filter,
                             float(row[col]),
                             factors[col].get("unit", "") if col in factors else "",
-                            filtered_etf.lang,
+                            lang,
                         )
                         etf_data[col] = {"value": value, "unit": unit}
 
             result.append(etf_data)
 
         mapped_result = []
-        factor_map = FACTOR_MAP if filtered_etf.lang == "kr" else FACTOR_MAP_EN
+        factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
         for item in result:
             mapped_item = {}
             for key, value in item.items():

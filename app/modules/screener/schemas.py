@@ -47,8 +47,8 @@ class GroupFilter(BaseModel):
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
     category: Optional[CategoryEnum] = None
-    custom_filters: Optional[List[FilterCondition]] = None
-    factor_filters: Optional[Dict[str, List[str]]] = None
+    custom_filters: Optional[List[FilterCondition]] = []
+    factor_filters: Optional[Dict[str, List[str]]] = {}
 
 
 class GroupFilterResponse(GroupFilter):
@@ -58,8 +58,8 @@ class GroupFilterResponse(GroupFilter):
 class FilteredStocks(BaseModel):
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
-    custom_filters: Optional[List[FilterCondition]] = None
-    factor_filters: Optional[List[str]] = None
+    custom_filters: Optional[List[FilterCondition]] = []
+    factor_filters: Optional[List[str]] = []
     limit: Optional[int] = 50
     offset: Optional[int] = 0
     sort_by: Optional[str] = None

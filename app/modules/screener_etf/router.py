@@ -11,7 +11,7 @@ from app.modules.screener_etf.schemas import FilteredETF
 from app.modules.screener_etf.service import ScreenerETFService
 from app.utils.oauth_utils import get_current_user
 from app.core.logging.config import get_logger
-from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP
+from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP, MARKET_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN
 from app.core.exception.base import CustomException
 
 router = APIRouter()
@@ -27,9 +27,56 @@ def get_factors(market: ETFMarketEnum, screener_etf_service: ScreenerETFService 
 
 @router.post("", response_model=Dict)
 def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
-    result, has_next = screener_etf_service.get_filtered_etfs(filtered_etf=filtered_etf)
-    result = {"data": result, "has_next": has_next}
-    return result
+    try:
+        custom_filters = []
+        if filtered_etf.custom_filters:
+            custom_filters = [
+                {
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "above": condition.above,
+                    "below": condition.below,
+                }
+                for condition in filtered_etf.custom_filters
+            ]
+
+        request_columns = ["Code", "Name", "manager", "score", "country"]
+        reverse_factor_map = REVERSE_FACTOR_MAP
+        if filtered_etf.lang == "en":
+            reverse_factor_map = REVERSE_FACTOR_MAP_EN
+
+        for column in [reverse_factor_map[column] for column in filtered_etf.factor_filters]:
+            if column not in request_columns:
+                request_columns.append(column)
+
+        sort_by = "score"
+        if filtered_etf.sort_by:
+            sort_by = reverse_factor_map[filtered_etf.sort_by]
+
+        etfs_data, total_count = screener_etf_service.get_filtered_etfs(
+            filtered_etf.market_filter,
+            custom_filters,
+            request_columns,
+            filtered_etf.limit,
+            filtered_etf.offset,
+            sort_by,
+            filtered_etf.ascending,
+            filtered_etf.lang
+        )
+
+        has_next = filtered_etf.offset * filtered_etf.limit + filtered_etf.limit < total_count
+
+        if filtered_etf.lang == "en":
+            for etf in etfs_data:
+                etf["Market"] = MARKET_KOREAN_TO_ENGLISH_MAP[etf["Market"]]
+
+        result = {"data": etfs_data, "has_next": has_next}
+        return result
+    except CustomException as e:
+        logger.exception(f"Error getting filtered etfs: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        logger.exception(f"Error getting filtered etfs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/count", response_model=Dict)
@@ -55,7 +102,7 @@ def download_filtered_etfs(
             for condition in filtered_etf.custom_filters
         ]
     sorted_df = screener_etf_service.get_filtered_etfs(
-        filtered_etf.market_filter, filtered_etf.sector_filter, custom_filters, filtered_etf.columns
+        filtered_etf.market_filter, filtered_etf.sector_filter, custom_filters, filtered_etf.factor_filters
     )
 
     stream = io.StringIO()
