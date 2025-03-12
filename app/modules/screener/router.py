@@ -355,16 +355,15 @@ def get_group_filters(
         fundamental_columns = screener_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL)
         valuation_columns = screener_service.get_columns(group_id, CategoryEnum.VALUATION)
 
-        technical_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
-        fundamental_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.FUNDAMENTAL)
-        valuation_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.VALUATION)
-        custom_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
-
         if lang == "en":
             technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
             fundamental_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in fundamental_columns]
             valuation_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in valuation_columns]
 
+        technical_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
+        fundamental_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.FUNDAMENTAL)
+        valuation_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.VALUATION)
+        custom_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
         if group_id == -1:
             all_sectors = screener_service.get_available_sectors()
             return GroupFilterResponse(
@@ -420,6 +419,12 @@ def get_group_filters(
                 "fundamental": fundamental_columns,
                 "valuation": valuation_columns,
                 "custom": custom_factor_filters
+            },
+            sort_info= {
+                CategoryEnum.TECHNICAL: technical_sort_info,
+                CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
+                CategoryEnum.VALUATION: valuation_sort_info,
+                CategoryEnum.CUSTOM: custom_sort_info,
             },
             has_custom=group_filters["has_custom"],
         )

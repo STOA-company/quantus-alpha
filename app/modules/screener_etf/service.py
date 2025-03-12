@@ -34,7 +34,7 @@ class ScreenerETFService(ScreenerService):
 
     def get_etf_factors(self, market: ETFMarketEnum):
         try:
-            factors = self.factor_utils.get_etf_factors(market)
+            factors = factor_utils.get_etf_factors(market)
 
             if market in [ETFMarketEnum.US, ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
                 nation = "us"
