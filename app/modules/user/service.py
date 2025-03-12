@@ -416,7 +416,7 @@ class UserService:
         screener_service = get_screener_service()
         all_sectors = screener_service.get_available_sectors()
         await screener_service.create_group(user_id=user_id, sector_filter=all_sectors)
-        await screener_service.create_group(user_id=user_id, sector_filter=all_sectors, type=StockType.ETF)
+        await screener_service.create_group(user_id=user_id, type=StockType.ETF)
 
 
 def get_user_service() -> UserService:

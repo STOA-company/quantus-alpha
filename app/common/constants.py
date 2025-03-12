@@ -14,6 +14,8 @@ NON_NUMERIC_COLUMNS = ["Code", "Name", "market", "sector", "country", "score", "
 
 NON_NUMERIC_COLUMNS_ETF = [
     "Code",
+    "country",
+    "score",
     "ticker",
     "ctry",
     "kr_name",

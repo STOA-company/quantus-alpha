@@ -6,8 +6,8 @@ from typing import Optional, List
 
 class FilteredETF(BaseModel):
     market_filter: Optional[ETFMarketEnum] = ETFMarketEnum.US
-    custom_filters: Optional[List[FilterCondition]] = None
-    columns: Optional[List[str]] = None
+    custom_filters: Optional[List[FilterCondition]] = []
+    factor_filters: Optional[List[str]] = []
     limit: Optional[int] = 50
     offset: Optional[int] = 0
     sort_by: Optional[str] = None
