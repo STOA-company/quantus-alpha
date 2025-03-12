@@ -68,8 +68,7 @@ class FilteredStocks(BaseModel):
     factor_filters: Optional[List[str]] = None
     limit: Optional[int] = 50
     offset: Optional[int] = 0
-    sort_by: Optional[str] = None
-    ascending: Optional[bool] = False
+    sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None
     lang: Optional[str] = "kr"
 
 

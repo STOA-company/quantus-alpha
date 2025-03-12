@@ -364,6 +364,7 @@ def get_group_filters(
         fundamental_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.FUNDAMENTAL)
         valuation_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.VALUATION)
         custom_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
+        
         if group_id == -1:
             all_sectors = screener_service.get_available_sectors()
             return GroupFilterResponse(
