@@ -20,8 +20,8 @@ logger = get_logger(__name__)
 
 @router.get("/factors/{market}", response_model=List[FactorResponse])
 def get_factors(market: ETFMarketEnum, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
-    result = screener_etf_service.get_etf_factors(market=market)
-
+    factors = screener_etf_service.get_etf_factors(market=market)
+    result = [FactorResponse(**factor) for factor in factors]
     return result
 
 
