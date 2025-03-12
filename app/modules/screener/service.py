@@ -8,7 +8,7 @@ import numpy as np
 from app.modules.screener.schemas import MarketEnum
 from app.utils.factor_utils import factor_utils
 from app.enum.type import StockType
-from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, REVERSE_FACTOR_MAP, FACTOR_MAP_EN
+from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, REVERSE_FACTOR_MAP, FACTOR_MAP_EN, UNIT_MAP
 from app.core.exception.custom import CustomException
 from app.models.models_factors import CategoryEnum
 import asyncio
@@ -24,10 +24,40 @@ class ScreenerService:
         try:
             factors = factor_utils.get_factors(market)
 
-            return factors
+            if market in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
+                nation = "us"
+            else:
+                nation = "kr"
+
+            result = []
+            for factor in factors:
+                if factor["unit"] == "small_price":
+                    unit = "원" if nation == "kr" else "$"
+                    type = "input"
+                elif factor["unit"] == "big_price":
+                    unit = "억원" if nation == "kr" else "K$"
+                    type = "input"
+                else:
+                    unit = UNIT_MAP[factor["unit"]]
+                    type = "slider"
+                    
+                result.append(
+                    {
+                        "factor": factor["factor"],
+                        "description": factor["description"],
+                        "unit": unit,
+                        "category": factor["category"],
+                        "direction": factor["direction"],
+                        "min_value": factor["min_value"],
+                        "max_value": factor["max_value"],
+                        "type": type,
+                    }
+                )
+
+            return result
 
         except Exception as e:
-            logger.error(f"Error in get_factors: {e}")
+            logger.exception(f"Error in get_factors: {e}")
             raise e
 
     def get_filtered_stocks(

@@ -12,6 +12,7 @@ from app.modules.screener_etf.service import ScreenerETFService
 from app.utils.oauth_utils import get_current_user
 from app.core.logging.config import get_logger
 from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP
+from app.core.exception.base import CustomException
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -37,14 +38,6 @@ def get_filtered_etfs_count(
 ):
     result = screener_etf_service.get_filtered_etfs_count(filtered_etf=filtered_etf)
     return {"count": result}
-
-
-@router.post("/description", response_model=Dict)
-def get_filtered_etfs_description(
-    filtered_etf: FilteredETF, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)
-):
-    result, has_next = screener_etf_service.get_filtered_etfs_description(filtered_etf=filtered_etf)
-    return {"data": result, "has_next": has_next}
 
 
 @router.post("/download", response_model=Dict)
@@ -87,17 +80,49 @@ def get_groups(
 
 
 @router.post("/groups", response_model=Dict)
-def create_or_update_group(
+async def create_or_update_group(
     group_filter: GroupFilter,
     current_user: str = Depends(get_current_user),
     screener_etf_service: ScreenerETFService = Depends(ScreenerETFService),
 ):
-    result = screener_etf_service.create_or_update_group(current_user=current_user, group_filter=group_filter, type="ETF")
+    """
+    필터 생성 또는 업데이트
+    """
+    try:
+        if group_filter.id:
+            is_success = await screener_etf_service.update_group(
+                group_id=group_filter.id,
+                name=group_filter.name,
+                market_filter=group_filter.market_filter,
+                sector_filter=group_filter.sector_filter,
+                custom_filters=group_filter.custom_filters,
+                factor_filters=group_filter.factor_filters,
+                category=group_filter.category,
+            )
+            message = "Filter updated successfully"
+        else:
+            is_success = await screener_etf_service.create_group(
+                user_id=current_user.id,
+                name=group_filter.name,
+                market_filter=group_filter.market_filter,
+                sector_filter=group_filter.sector_filter,
+                custom_filters=group_filter.custom_filters,
+                factor_filters=group_filter.factor_filters,
+                type=group_filter.type,
+                category=group_filter.category,
+            )
+            message = "Group created successfully"
+        if is_success:
+            return {"message": message}
+    except CustomException as e:
+        logger.error(f"Error creating group: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        logger.error(f"Error creating group: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return result
 
-
-@router.get("/groups/{group_id}/{category}", response_model=GroupFilterResponse)
+@router.get("/groups/{group_id}", response_model=GroupFilterResponse)
 def get_group_filters(
     group_id: int = -1,
     lang: str = "kr",
@@ -152,10 +177,8 @@ def get_group_filters(
         custom_factor_filters = group_filters["custom_factor_filters"]
 
         if lang == "en":
-            # sector_filter = [MARKET_KOREAN_TO_ENGLISH_MAP[sector] for sector in sector_filter]
             custom_factor_filters = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in custom_factor_filters]
 
-        factor_filters = group_filters["factor_filters"]
         return GroupFilterResponse(
             id=group_id,
             name=group_filters["name"],
