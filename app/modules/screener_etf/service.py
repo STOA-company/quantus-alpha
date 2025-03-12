@@ -40,6 +40,7 @@ class ScreenerETFService(ScreenerService):
         self.factor_loader = ETFDataLoader()
         self.factors_cache = etf_factors_cache
         self.db = database
+        self.MAX_GROUPS = 5
 
     def get_etf_factors(self, market: ETFMarketEnum):
         factors = self.db._select(table="factors", is_etf=True)
@@ -259,7 +260,7 @@ class ScreenerETFService(ScreenerService):
         if current_user.id is None:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        if group_filter.id and group_filter.id != 0:
+        if group_filter.id:
             is_success = self.update_group(
                 group_id=group_filter.id,
                 name=group_filter.name,
@@ -267,6 +268,7 @@ class ScreenerETFService(ScreenerService):
                 sector_filter=group_filter.sector_filter,
                 custom_filters=group_filter.custom_filters,
                 factor_filters=group_filter.factor_filters,
+                category=group_filter.category,
             )
             message = "Filter updated successfully"
         else:
@@ -281,6 +283,7 @@ class ScreenerETFService(ScreenerService):
                 custom_filters=group_filter.custom_filters,
                 factor_filters=group_filter.factor_filters,
                 type=group_filter.type or type,
+                category=group_filter.category,
             )
             message = "Group created successfully"
 
