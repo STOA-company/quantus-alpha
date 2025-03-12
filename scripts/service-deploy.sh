@@ -46,6 +46,32 @@ git pull origin $BRANCH || exit 1
 echo "Installing dependencies with Poetry..."
 poetry install || { echo "Poetry installation failed!"; exit 1; }
 
+# Git 작업 직후, 배포 전 Docker 시스템 정리
+echo "Cleaning up Docker system..."
+# 중지된 컨테이너 정리
+docker container prune -f
+# 사용하지 않는 이미지 정리
+docker image prune -f
+# 사용하지 않는 빌드 캐시 정리
+docker builder prune -f
+# 현재 디스크 사용량 표시
+echo "Current disk usage:"
+df -h | grep "/$"
+
+# 만약 디스크 사용률이 85% 이상이면 더 적극적인 정리 수행
+disk_usage=$(df -h | grep "/$" | awk '{print $5}' | sed 's/%//')
+if [ -n "$disk_usage" ] && [ "$disk_usage" -gt 85 ]; then
+    echo "High disk usage detected: ${disk_usage}%. Performing aggressive cleanup..."
+    # 더 적극적인 이미지 정리 (사용중이지 않은 모든 이미지)
+    docker image prune -a -f
+    # 사용하지 않는 볼륨 정리
+    docker volume prune -f
+    # Docker 시스템 전체 정리
+    docker system prune -f
+    echo "After aggressive cleanup:"
+    df -h | grep "/$"
+fi
+
 current_service=$(docker-compose -f docker-compose.yml ps | grep -E 'web-(blue|green)' | grep "Up" | awk '{print $1}' | head -n1)
 
 if [ -z "$current_service" ]; then
