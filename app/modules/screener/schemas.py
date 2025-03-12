@@ -40,6 +40,11 @@ class GroupMetaData(BaseModel):
     type: Optional[StockType] = StockType.STOCK
 
 
+class SortInfo(BaseModel):
+    sort_by: Optional[str] = None
+    ascending: Optional[bool] = None
+
+
 class GroupFilter(BaseModel):
     id: Optional[int] = None
     name: Optional[str] = None
@@ -47,8 +52,9 @@ class GroupFilter(BaseModel):
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
     category: Optional[CategoryEnum] = None
-    custom_filters: Optional[List[FilterCondition]] = []
-    factor_filters: Optional[Dict[str, List[str]]] = {}
+    custom_filters: Optional[List[FilterCondition]] = None
+    factor_filters: Optional[Dict[str, List[str]]] = None
+    sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None
 
 
 class GroupFilterResponse(GroupFilter):
@@ -58,8 +64,8 @@ class GroupFilterResponse(GroupFilter):
 class FilteredStocks(BaseModel):
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
-    custom_filters: Optional[List[FilterCondition]] = []
-    factor_filters: Optional[List[str]] = []
+    custom_filters: Optional[List[FilterCondition]] = None
+    factor_filters: Optional[List[str]] = None
     limit: Optional[int] = 50
     offset: Optional[int] = 0
     sort_by: Optional[str] = None

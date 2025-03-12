@@ -1,5 +1,5 @@
 from app.models.models_base import ServiceBase, BaseMixin
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Enum, Boolean
 from sqlalchemy.schema import Index
 from sqlalchemy.orm import relationship
 from app.enum.type import StockType
@@ -49,3 +49,14 @@ class ScreenerFactorFilter(ServiceBase, BaseMixin):
     category = Column(Enum(CategoryEnum), default=CategoryEnum.CUSTOM, nullable=False)
 
     group = relationship("ScreenerGroup", back_populates="factor_filters")
+
+
+class ScreenerSortInfo(ServiceBase, BaseMixin):
+    __tablename__ = "screener_sort_infos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey("screener_groups.id", ondelete="CASCADE"), nullable=False)
+    category = Column(Enum(CategoryEnum), nullable=False)
+    type = Column(Enum(StockType), nullable=False, default=StockType.STOCK)
+    sort_by = Column(String(50), nullable=False, default="score")
+    ascending = Column(Boolean, nullable=True, default=False)

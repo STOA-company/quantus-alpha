@@ -5,7 +5,7 @@ from app.utils.score_utils import score_utils
 from app.cache.factors import factors_cache
 import pandas as pd
 import numpy as np
-from app.modules.screener.schemas import MarketEnum
+from app.modules.screener.schemas import MarketEnum, SortInfo
 from app.utils.factor_utils import factor_utils
 from app.enum.type import StockType
 from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, REVERSE_FACTOR_MAP, FACTOR_MAP_EN, UNIT_MAP
@@ -339,6 +339,7 @@ class ScreenerService:
         custom_filters: Optional[List[Dict]] = None,
         factor_filters: Optional[Dict[str, List[str]]] = None,
         category: Optional[CategoryEnum] = CategoryEnum.CUSTOM,
+        sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None,
     ) -> bool:
         try:
             insert_tasks = []
@@ -399,6 +400,13 @@ class ScreenerService:
             if factor_filters:
                 for category, factors in factor_filters.items():
                     await self.reorder_factor_filters(group_id, category, factors)
+
+            if sort_info:
+                for category, sort_info in sort_info.items():
+                    if sort_info.sort_by:
+                        self.database._update(table="screener_sort_infos", group_id=group_id, category=category, sets={"sort_by": sort_info.sort_by})
+                    if sort_info.ascending:
+                        self.database._update(table="screener_sort_infos", group_id=group_id, category=category, sets={"ascending": sort_info.get("ascending")})
 
             await asyncio.gather(*insert_tasks)
 
@@ -584,10 +592,20 @@ class ScreenerService:
                 ))
 
             for idx, factor in enumerate(valuation):
-                    insert_tasks.append(self.database.insert_wrapper(
+                insert_tasks.append(self.database.insert_wrapper(
                     table="screener_factor_filters", 
                     sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.VALUATION}
                 ))
+            
+            insert_tasks.append(self.database.insert_wrapper(
+                table="screener_sort_infos", sets={"group_id": group_id, "category": CategoryEnum.TECHNICAL, "sort_by": "score", "ascending": False, "type": type}
+            ))
+            insert_tasks.append(self.database.insert_wrapper(
+                table="screener_sort_infos", sets={"group_id": group_id, "category": CategoryEnum.FUNDAMENTAL, "sort_by": "score", "ascending": False, "type": type}
+            ))
+            insert_tasks.append(self.database.insert_wrapper(
+                table="screener_sort_infos", sets={"group_id": group_id, "category": CategoryEnum.VALUATION, "sort_by": "score", "ascending": False, "type": type}
+            ))
 
             if type == StockType.ETF:
                 dividend = factor_utils.get_default_columns(category=CategoryEnum.DIVIDEND)
@@ -597,6 +615,10 @@ class ScreenerService:
                         sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.DIVIDEND}
                     ))
 
+                insert_tasks.append(self.database.insert_wrapper(
+                    table="screener_sort_infos", sets={"group_id": group_id, "category": CategoryEnum.DIVIDEND, "sort_by": "score", "ascending": False, "type": type}
+                ))
+
             await asyncio.gather(*insert_tasks)
             
             return True
@@ -604,6 +626,13 @@ class ScreenerService:
             logger.error(f"Error in create_default_factor_filters: {e}")
             self.database._delete(table="screener_factor_filters", group_id=group_id)
             raise e
+    
+    def get_sort_info(self, group_id: int, category: CategoryEnum) -> SortInfo:
+        sort_infos = self.database._select(table="screener_sort_infos", group_id=group_id, category=category)
+        if sort_infos:
+            return SortInfo(sort_by=sort_infos[0].sort_by, ascending=sort_infos[0].ascending)
+        else:
+            return SortInfo(sort_by="score", ascending=False)
 
 
 def get_screener_service():
