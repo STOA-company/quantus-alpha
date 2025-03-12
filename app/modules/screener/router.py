@@ -17,7 +17,6 @@ from app.models.models_factors import CategoryEnum
 from app.common.constants import (
     REVERSE_FACTOR_MAP,
     REVERSE_FACTOR_MAP_EN,
-    UNIT_MAP,
     FACTOR_KOREAN_TO_ENGLISH_MAP,
     MARKET_KOREAN_TO_ENGLISH_MAP,
 )
@@ -36,34 +35,7 @@ def get_factors(market: MarketEnum, screener_service: ScreenerService = Depends(
     """
     try:
         factors = screener_service.get_factors(market)
-        if market in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
-            nation = "us"
-        else:
-            nation = "kr"
-
-        result = []
-        for factor in factors:
-            if factor["unit"] == "small_price":
-                unit = "원" if nation == "kr" else "$"
-                type = "input"
-            elif factor["unit"] == "big_price":
-                unit = "억원" if nation == "kr" else "K$"
-                type = "input"
-            else:
-                unit = UNIT_MAP[factor["unit"]]
-                type = "slider"
-            result.append(
-                FactorResponse(
-                    factor=factor["factor"],
-                    description=factor["description"],
-                    unit=unit,
-                    category=factor["category"],
-                    direction=factor["direction"],
-                    min_value=factor["min_value"],
-                    max_value=factor["max_value"],
-                    type=type,
-                )
-            )
+        result = FactorResponse.model_validate(factors)
         return result
     except Exception as e:
         logger.error(f"Error getting factors: {e}")

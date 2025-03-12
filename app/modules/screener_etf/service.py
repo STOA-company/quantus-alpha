@@ -19,16 +19,13 @@ from app.common.constants import (
 from app.core.exception.base import CustomException
 from app.core.logging.config import get_logger
 from app.modules.screener_etf.enum import ETFMarketEnum
-from app.modules.screener.schemas import FactorResponse, GroupFilter
+from app.modules.screener.schemas import GroupFilter
 from app.modules.screener.service import ScreenerService
 from app.modules.screener_etf.schemas import FilteredETF
-from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.date_utils import get_business_days
-from app.utils.etf_utils import ETFDataLoader
-from app.utils.factor_utils import FactorUtils
 from app.utils.score_utils import etf_score_utils
+from app.utils.factor_utils import factor_utils
 from app.cache.factors import etf_factors_cache
-from app.database.crud import database
 
 logger = get_logger(__name__)
 
@@ -36,124 +33,89 @@ logger = get_logger(__name__)
 class ScreenerETFService(ScreenerService):
     def __init__(self):
         super().__init__()
-        self.factor_utils = FactorUtils()
-        self.factor_loader = ETFDataLoader()
-        self.factors_cache = etf_factors_cache
-        self.db = database
-        self.MAX_GROUPS = 5
 
     def get_etf_factors(self, market: ETFMarketEnum):
-        factors = self.db._select(table="factors", is_etf=True)
-        market_data = self.factor_loader.load_etf_factors(market.value)
+        try:
+            factors = self.factor_utils.get_etf_factors(market)
 
-        # 시장별 데이터 필터링
-        if market in [ETFMarketEnum.NYSE, ETFMarketEnum.NASDAQ, ETFMarketEnum.BATS]:
-            filtered_market_data = market_data[market_data["market"] == market.value]
-        else:
-            filtered_market_data = market_data
-
-        # 국가 설정
-        if market in [ETFMarketEnum.US, ETFMarketEnum.NYSE, ETFMarketEnum.NASDAQ, ETFMarketEnum.BATS]:
-            nation = "us"
-        else:
-            nation = "kr"
-
-        result = []
-        for factor in factors:
-            if factor.unit == "SMALL_PRICE":
-                unit = "원" if nation == "kr" else "$"
-                type = "input"
-            elif factor.unit == "BIG_PRICE":
-                unit = "억원" if nation == "kr" else "K$"
-                type = "input"
+            if market in [ETFMarketEnum.US, ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
+                nation = "us"
             else:
-                unit = UNIT_MAP[factor.unit.lower()]
-                type = "slider"
-            factor_name = factor.factor
+                nation = "kr"
 
-            if factor_name not in filtered_market_data.columns:
-                raise ValueError(f"팩터 '{factor_name}'가 데이터에 존재하지 않습니다.")
-
-            # 데이터 타입 확인 및 숫자 데이터만 필터링
-            numeric_data = pd.to_numeric(filtered_market_data[factor_name], errors="coerce")
-
-            # NaN 값 제외하고 최소/최대값 계산
-            min_value = numeric_data.min()
-            max_value = numeric_data.max()
-
-            # 단위 결정
-            if factor.unit == "SMALL_PRICE":
-                unit = "원" if nation == "kr" else "$"
-            elif factor.unit == "BIG_PRICE":
-                unit = "억원" if nation == "kr" else "K$"
-            else:
-                unit = UNIT_MAP[factor.unit.lower()]
-
-            result.append(
-                FactorResponse(
-                    factor=FACTOR_MAP[factor.factor],
-                    description=factor.description,
-                    unit=unit,
-                    category=factor.category,
-                    direction=factor.sort_direction,
-                    min_value=floor_to_integer(min_value),
-                    max_value=ceil_to_integer(max_value),
-                    type=type,
+            result = []
+            for factor in factors:
+                if factor["unit"] == "small_price":
+                    unit = "원" if nation == "kr" else "$"
+                    type = "input"
+                elif factor["unit"] == "big_price":
+                    unit = "억원" if nation == "kr" else "K$"
+                    type = "input"
+                else:
+                    unit = UNIT_MAP[factor["unit"]]
+                    type = "slider"
+                    
+                result.append(
+                    {
+                        "factor": factor["factor"],
+                        "description": factor["description"],
+                        "unit": unit,
+                        "category": factor["category"],
+                        "direction": factor["direction"],
+                        "min_value": factor["min_value"],
+                        "max_value": factor["max_value"],
+                        "type": type,
+                    }
                 )
-            )
 
-        return result
+            return result
+
+        except Exception as e:
+            logger.exception(f"Error in get_factors: {e}")
+            raise e
 
     def get_filtered_etfs(self, filtered_etf: FilteredETF):
-        non_numaric_columns = [FACTOR_MAP[col] for col in NON_NUMERIC_COLUMNS_ETF]
-        reverse_factor_map = REVERSE_FACTOR_MAP if filtered_etf.lang == "kr" else REVERSE_FACTOR_MAP_EN
-        reverse_sort_by = reverse_factor_map[filtered_etf.sort_by] if filtered_etf.sort_by is not None else "score"
-        if filtered_etf.sort_by is None:
-            filtered_etf.sort_by = "score"
-        else:
-            if filtered_etf.sort_by not in filtered_etf.columns and filtered_etf.sort_by not in non_numaric_columns:
-                raise CustomException(status_code=400, message="sort_by must be in columns")
+        non_numeric_columns = [FACTOR_MAP[col] for col in NON_NUMERIC_COLUMNS_ETF]
+        if filtered_etf.sort_by not in filtered_etf.columns and filtered_etf.sort_by not in non_numeric_columns:
+            raise CustomException(status_code=400, message="sort_by must be in columns")
 
-        if filtered_etf.market_filter == ETFMarketEnum.KR:
-            ctry = "kr"
-        else:
-            ctry = "us"
-
-        # 데이터 로드
-        df_etfs = self.factor_loader.load_etf_factors(filtered_etf.market_filter.value)
-
+        etfs = factor_utils.filter_etfs(filtered_etf.market_filter, filtered_etf.custom_filters)
         # 필터링
-        df_etfs = self._filter_etfs(df_etfs=df_etfs, filtered_etf=filtered_etf)
+        filtered_df = factor_utils.get_filtered_etfs_df(filtered_etf.market_filter, etfs, filtered_etf.columns)
         # 점수 계산
-        df_scored = etf_score_utils.calculate_factor_score(df_etfs)
+        scored_df = etf_score_utils.calculate_factor_score(filtered_df)
+        if scored_df.empty:
+            return [], 0 
         # 병합
-        df_etfs = df_etfs.merge(df_scored, on="ticker", how="inner")
+        merged_df = filtered_df.merge(scored_df, on="ticker", how="inner")
         # 정렬
-        df_etfs = df_etfs.sort_values(reverse_sort_by, ascending=filtered_etf.ascending).reset_index(drop=True)
+        sorted_df = merged_df.sort_values(by=filtered_etf.sort_by, ascending=filtered_etf.ascending).reset_index(drop=True)
         # 페이징
-        df_etfs = df_etfs.iloc[
-            filtered_etf.offset * filtered_etf.limit : filtered_etf.offset * filtered_etf.limit + filtered_etf.limit + 1
-        ]
-        need_count = filtered_etf.limit
-
-        if len(df_etfs) <= need_count:
-            has_next = False
-        else:
-            df_etfs = df_etfs.iloc[:-1]
-            has_next = True
-        factors = self.factors_cache.get_configs()
-
-        # 컬럼 정렬
-        if filtered_etf.columns:
-            df_etfs = self.sort_columns(df=df_etfs, columns=filtered_etf.columns, lang=filtered_etf.lang, ctry=ctry)
-
+        total_count = len(sorted_df)
+        sorted_df = sorted_df.iloc[filtered_etf.offset * filtered_etf.limit : filtered_etf.offset * filtered_etf.limit + filtered_etf.limit + 1]
+        
+        factors = etf_factors_cache.get_configs()
         result = []
-        for _, row in df_etfs.iterrows():
+
+        if filtered_etf.columns:
+            ordered_columns = []
+            for col in filtered_etf.columns:
+                mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
+                if mapped_col not in ordered_columns:
+                    ordered_columns.append(mapped_col)
+        else:
+            ordered_columns = ["ticker", "kr_name", "manager", "score"]
+        
+        selected_columns = ordered_columns.copy()
+
+        sorted_df = sorted_df[selected_columns]
+
+        for _, row in sorted_df.iterrows():
             # 기본으로 표시될 컬럼들
             etf_data = {}
 
             # 숫자형 데이터 처리
-            for col in df_etfs.columns:
+            for col in sorted_df.columns:
                 if col in NON_NUMERIC_COLUMNS_ETF:
                     if col in row:
                         etf_data[col] = row[col]
@@ -163,10 +125,11 @@ class ScreenerETFService(ScreenerService):
                     if pd.isna(row[col]) or np.isinf(row[col]):
                         etf_data[col] = {"value": "", "unit": ""}
                     else:
-                        value, unit = self.factor_utils.convert_unit_and_value(
+                        value, unit = factor_utils.convert_unit_and_value(
                             filtered_etf.market_filter,
                             float(row[col]),
                             factors[col].get("unit", "") if col in factors else "",
+                            filtered_etf.lang,
                         )
                         etf_data[col] = {"value": value, "unit": unit}
 
@@ -181,30 +144,8 @@ class ScreenerETFService(ScreenerService):
                 mapped_item[mapped_key] = value
             mapped_result.append(mapped_item)
 
-        return mapped_result, has_next
+        return mapped_result, total_count
 
-    def sort_columns(self, df: pd.DataFrame, columns: List[str], lang: str, ctry: str):
-        if ctry == "kr":
-            default_columns = ["ticker", "kr_name", "manager", "score"]
-        else:
-            default_columns = ["ticker", "en_name", "manager", "score"]
-
-        request_columns = default_columns.copy()
-        reverse_factor_map = REVERSE_FACTOR_MAP if lang == "kr" else REVERSE_FACTOR_MAP_EN
-
-        for column in columns:
-            internal_column = reverse_factor_map.get(column)
-            if internal_column and internal_column not in request_columns:
-                request_columns.append(internal_column)
-
-        ordered_columns = []
-        for col in request_columns:
-            if col in df.columns:
-                ordered_columns.append(col)
-
-        df = df[ordered_columns]
-
-        return df
 
     def _filter_etfs(self, df_etfs: pd.DataFrame, filtered_etf: FilteredETF):
         # 종목 필터 - 기본 필터
@@ -256,127 +197,6 @@ class ScreenerETFService(ScreenerService):
 
         return df_etfs.shape[0]
 
-    def create_or_update_group(self, current_user: str, group_filter: GroupFilter, type: str = "STOCK"):
-        if current_user.id is None:
-            raise HTTPException(status_code=401, detail="Unauthorized")
-
-        if group_filter.id:
-            is_success = self.update_group(
-                group_id=group_filter.id,
-                name=group_filter.name,
-                market_filter=group_filter.market_filter,
-                sector_filter=group_filter.sector_filter,
-                custom_filters=group_filter.custom_filters,
-                factor_filters=group_filter.factor_filters,
-                category=group_filter.category,
-            )
-            message = "Filter updated successfully"
-        else:
-            group_length = self.get_group_length(current_user.id)
-            if group_length >= self.MAX_GROUPS:
-                raise HTTPException(status_code=400, detail="Groups is too long")
-            is_success = self.create_group(
-                user_id=current_user.id,
-                name=group_filter.name,
-                market_filter=group_filter.market_filter,
-                sector_filter=group_filter.sector_filter,
-                custom_filters=group_filter.custom_filters,
-                factor_filters=group_filter.factor_filters,
-                type=group_filter.type or type,
-                category=group_filter.category,
-            )
-            message = "Group created successfully"
-
-        if is_success:
-            return {"message": message}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to create or update group")
-
-    def get_filtered_etfs_description(self, filtered_etf: FilteredETF):
-        non_numaric_columns = [FACTOR_MAP[col] for col in NON_NUMERIC_COLUMNS_ETF]
-        reverse_factor_map = REVERSE_FACTOR_MAP if filtered_etf.lang == "kr" else REVERSE_FACTOR_MAP_EN
-        reverse_sort_by = reverse_factor_map[filtered_etf.sort_by] if filtered_etf.sort_by is not None else "score"
-        if filtered_etf.sort_by is None:
-            filtered_etf.sort_by = "score"
-        else:
-            if filtered_etf.sort_by not in filtered_etf.columns and filtered_etf.sort_by not in non_numaric_columns:
-                raise CustomException(status_code=400, message="sort_by must be in columns")
-
-        if filtered_etf.market_filter == ETFMarketEnum.KR:
-            ctry = "kr"
-        else:
-            ctry = "us"
-
-        # 데이터 로드
-        df_etfs = self.factor_loader.load_etf_factors(filtered_etf.market_filter.value)
-
-        # 필터링
-        df_etfs = self._filter_etfs(df_etfs=df_etfs, filtered_etf=filtered_etf)
-
-        # 점수 계산
-        df_scored = etf_score_utils.calculate_factor_score(df_etfs)
-
-        # 병합
-        df_etfs = df_etfs.merge(df_scored, on="ticker", how="inner")
-
-        # 정렬
-        df_etfs = df_etfs.sort_values(reverse_sort_by, ascending=filtered_etf.ascending).reset_index(drop=True)
-
-        # 페이징
-        df_etfs = df_etfs.iloc[
-            filtered_etf.offset * filtered_etf.limit : filtered_etf.offset * filtered_etf.limit + filtered_etf.limit + 1
-        ]
-        need_count = filtered_etf.limit
-
-        if len(df_etfs) <= need_count:
-            has_next = False
-        else:
-            df_etfs = df_etfs.iloc[:-1]
-            has_next = True
-        factors = self.factors_cache.get_configs()
-
-        # 컬럼 정렬
-        if filtered_etf.columns:
-            df_etfs = self.sort_columns(df=df_etfs, columns=filtered_etf.columns, lang=filtered_etf.lang, ctry=ctry)
-
-        if "description" not in df_etfs.columns and "description" in df_etfs.columns:
-            df_etfs["description"] = ""
-
-        result = []
-        for _, row in df_etfs.iterrows():
-            # 기본으로 표시될 컬럼들
-            etf_data = {}
-
-            # 숫자형 데이터 처리
-            for col in df_etfs.columns:
-                if col in NON_NUMERIC_COLUMNS_ETF or col == "description":
-                    if col in row:
-                        etf_data[col] = row[col]
-                elif col == "score":
-                    etf_data[col] = {"value": float(row[col]), "unit": ""}
-                elif col in row:
-                    if pd.isna(row[col]) or np.isinf(row[col]):
-                        etf_data[col] = {"value": "", "unit": ""}
-                    else:
-                        value, unit = self.factor_utils.convert_unit_and_value(
-                            filtered_etf.market_filter,
-                            float(row[col]),
-                            factors[col].get("unit", "") if col in factors else "",
-                        )
-                        etf_data[col] = {"value": value, "unit": unit}
-
-            result.append(etf_data)
-
-        mapped_result = []
-        factor_map = FACTOR_MAP if filtered_etf.lang == "kr" else FACTOR_MAP_EN
-        for item in result:
-            mapped_item = {}
-            for key, value in item.items():
-                mapped_key = factor_map.get(key, key)
-                mapped_item[mapped_key] = value
-            mapped_result.append(mapped_item)
-
-        return mapped_result, has_next
 
     def update_parquet(self, ctry: Literal["KR", "US"]):
         today = datetime.datetime.now().date()
