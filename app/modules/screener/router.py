@@ -35,7 +35,7 @@ def get_factors(market: MarketEnum, screener_service: ScreenerService = Depends(
     """
     try:
         factors = screener_service.get_factors(market)
-        result = FactorResponse.model_validate(factors)
+        result = [FactorResponse(**factor) for factor in factors]
         return result
     except Exception as e:
         logger.error(f"Error getting factors: {e}")
