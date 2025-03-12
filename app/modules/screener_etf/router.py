@@ -82,9 +82,8 @@ def get_groups(
     if current_user.id is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    result = screener_etf_service.get_groups(current_user.id, type="ETF")
-
-    return result
+    groups = screener_etf_service.get_groups(current_user.id, type="ETF")
+    return [GroupMetaData(id=group["id"], name=group["name"], type=group["type"]) for group in groups]
 
 
 @router.post("/groups", response_model=Dict)

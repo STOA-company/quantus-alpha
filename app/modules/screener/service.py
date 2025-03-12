@@ -236,8 +236,6 @@ class ScreenerService:
         market_filter: Optional[MarketEnum] = MarketEnum.US,
         sector_filter: Optional[List[str]] = [],
         custom_filters: Optional[List[Dict]] = [],
-        factor_filters: Optional[List[str]] = [],
-        category: Optional[CategoryEnum] = CategoryEnum.CUSTOM,
     ) -> bool:
         existing_groups = self.database._select(table="screener_groups", user_id=user_id, name=name, type=type)
         if existing_groups:
@@ -258,7 +256,7 @@ class ScreenerService:
 
             group_id = self.database._select(table="screener_groups", user_id=user_id, name=name)[0].id
 
-            await self.create_default_factor_filters(group_id=group_id)
+            await self.create_default_factor_filters(group_id=group_id, type=type)
 
             if group_id is None:
                 raise CustomException(status_code=500, message="Failed to create group")
@@ -471,7 +469,7 @@ class ScreenerService:
     def get_columns(self, group_id: int = -1, category: CategoryEnum = CategoryEnum.TECHNICAL) -> List[str]:
         try:
             if group_id == -1:
-                return []   
+                return factor_utils.get_default_columns(category=category)
 
             factor_filters = self.database._select(table="screener_factor_filters", columns=["factor", "order"], group_id=group_id, category=category)
             factor_filters = sorted(factor_filters, key=lambda x: x.order)
@@ -534,7 +532,7 @@ class ScreenerService:
 
         return sectors
     
-    async def create_default_factor_filters(self, group_id: int) -> bool:
+    async def create_default_factor_filters(self, group_id: int, type: StockType) -> bool:
         try:
             technical = factor_utils.get_default_columns(category=CategoryEnum.TECHNICAL)
             fundamental = factor_utils.get_default_columns(category=CategoryEnum.FUNDAMENTAL)
@@ -559,6 +557,14 @@ class ScreenerService:
                     table="screener_factor_filters", 
                     sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.VALUATION}
                 ))
+
+            if type == StockType.ETF:
+                dividend = factor_utils.get_default_columns(category=CategoryEnum.DIVIDEND)
+                for idx, factor in enumerate(dividend):
+                    insert_tasks.append(self.database.insert_wrapper(
+                        table="screener_factor_filters", 
+                        sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.DIVIDEND}
+                    ))
 
             await asyncio.gather(*insert_tasks)
             
