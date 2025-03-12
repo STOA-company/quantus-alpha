@@ -499,7 +499,8 @@ class ScreenerService:
     def get_columns(self, group_id: int = -1, category: CategoryEnum = CategoryEnum.TECHNICAL) -> List[str]:
         try:
             if group_id == -1:
-                return factor_utils.get_default_columns(category=category)
+                default_columns = factor_utils.get_default_columns(category=category)
+                return [FACTOR_MAP[column] for column in default_columns]
 
             factor_filters = self.database._select(table="screener_factor_filters", columns=["factor", "order"], group_id=group_id, category=category)
             factor_filters = sorted(factor_filters, key=lambda x: x.order)
