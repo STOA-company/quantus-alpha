@@ -413,6 +413,7 @@ class ScreenerService:
             group = self.database._select(table="screener_groups", id=group_id)            
             stock_filters = self.database._select(table="screener_stock_filters", group_id=group_id)
             custom_factor_filters = self.database._select(table="screener_factor_filters", group_id=group_id, category=CategoryEnum.CUSTOM)
+            custom_factor_filters = sorted(custom_factor_filters, key=lambda x: x.order)
             has_custom = len(custom_factor_filters) > 0
 
             return {
@@ -469,16 +470,13 @@ class ScreenerService:
 
     def get_columns(self, group_id: int = -1, category: CategoryEnum = CategoryEnum.TECHNICAL) -> List[str]:
         try:
-            if category == CategoryEnum.CUSTOM:
-                if group_id == -1:
-                    return []   
-                group = self.database._select(table="screener_groups", columns=["id"], id=group_id)[0]
-                factor_filters = self.database._select(table="screener_factor_filters", columns=["factor"], group_id=group.id)
-            else:
-                factor_filters = factor_utils.get_default_columns(category=category)
+            if group_id == -1:
+                return []   
 
-            return [FACTOR_MAP[factor_filter] for factor_filter in factor_filters]
+            factor_filters = self.database._select(table="screener_factor_filters", columns=["factor", "order"], group_id=group_id, category=category)
+            factor_filters = sorted(factor_filters, key=lambda x: x.order)
 
+            return [FACTOR_MAP[factor_filter.factor] for factor_filter in factor_filters]
 
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")

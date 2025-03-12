@@ -440,36 +440,6 @@ def get_group_filters(group_id: int = -1, lang: str = "kr", screener_service: Sc
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/columns", response_model=dict)
-def get_columns(
-    category: CategoryEnum,
-    group_id: Optional[int] = None,
-    lang: Optional[str] = "kr",
-    screener_service: ScreenerService = Depends(get_screener_service),
-):
-    """
-    컬럼 목록 조회
-    """
-    try:
-        columns = []
-        if category == CategoryEnum.CUSTOM:
-            columns = screener_service.get_columns(group_id, category)
-        elif category == CategoryEnum.TECHNICAL:
-            columns = screener_service.get_columns(group_id, category)
-        elif category == CategoryEnum.FUNDAMENTAL:
-            columns = screener_service.get_columns(group_id, category)
-        elif category == CategoryEnum.VALUATION:
-            columns = screener_service.get_columns(group_id, category)
-
-        result = ["티커", "종목명", "국가", "시장", "산업", "스코어"] + columns
-        if lang == "en":
-            result = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in result]
-        return {"columns": result}
-    except Exception as e:
-        logger.error(f"Error getting columns: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.get("/parquet/{country}")
 def update_parquet(country: str):
     try:
