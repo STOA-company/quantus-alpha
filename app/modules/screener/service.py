@@ -630,9 +630,9 @@ class ScreenerService:
     def get_sort_info(self, group_id: int, category: CategoryEnum) -> SortInfo:
         sort_infos = self.database._select(table="screener_sort_infos", group_id=group_id, category=category)
         if sort_infos:
-            return SortInfo(sort_by=sort_infos[0].sort_by, ascending=sort_infos[0].ascending)
+            return SortInfo(sort_by=FACTOR_MAP[sort_infos[0].sort_by], ascending=sort_infos[0].ascending)
         else:
-            return SortInfo(sort_by="score", ascending=False)
+            return SortInfo(sort_by="스코어", ascending=False)
 
 
 def get_screener_service():

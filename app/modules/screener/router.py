@@ -76,7 +76,7 @@ def get_filtered_stocks(
         sort_by = "score"
         ascending = False
         if filtered_stocks.sort_info:
-            sort_by = reverse_factor_map[filtered_stocks.sort_info.sort_by]
+            sort_by = REVERSE_FACTOR_MAP[filtered_stocks.sort_info.sort_by]
             ascending = filtered_stocks.sort_info.ascending
 
         stocks_data, total_count = screener_service.get_filtered_stocks(
@@ -432,7 +432,7 @@ def get_group_filters(
             has_custom=group_filters["has_custom"],
         )
     except Exception as e:
-        logger.error(f"Error getting group filters: {e}")
+        logger.exception(f"Error getting group filters: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
