@@ -388,12 +388,13 @@ def get_group_filters(
             valuation_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in valuation_columns]
 
         if group_id == -1:
+            all_sectors = screener_service.get_available_sectors()
             return GroupFilterResponse(
                 id=-1,
                 name="기본",
                 market_filter=MarketEnum.US,
                 has_custom=False,
-                sector_filter=[],
+                sector_filter=all_sectors,
                 custom_filters=[],
                 factor_filters= {
                     "technical": technical_columns,

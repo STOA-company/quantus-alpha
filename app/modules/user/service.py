@@ -9,6 +9,7 @@ from app.models.models_users import AlphafinderUser
 from app.modules.community.schemas import CommentItemWithPostInfo, PostInfo, ResponsePost, UserInfo
 from app.modules.user.schemas import UserProfileResponse
 from app.modules.screener.service import get_screener_service
+from app.enum.type import StockType
 
 from sqlalchemy import text
 
@@ -415,6 +416,7 @@ class UserService:
         screener_service = get_screener_service()
         all_sectors = screener_service.get_available_sectors()
         await screener_service.create_group(user_id=user_id, sector_filter=all_sectors)
+        await screener_service.create_group(user_id=user_id, sector_filter=all_sectors, type=StockType.ETF)
 
 
 def get_user_service() -> UserService:
