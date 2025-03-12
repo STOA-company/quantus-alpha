@@ -370,7 +370,10 @@ def update_group_name(group_id: int, name: str, screener_service: ScreenerServic
 
 
 @router.get("/groups/{group_id}", response_model=GroupFilterResponse)
-def get_group_filters(group_id: int = -1, lang: str = "kr", screener_service: ScreenerService = Depends(get_screener_service)):
+def get_group_filters(
+    group_id: int = -1, 
+    lang: str = "kr",
+    screener_service: ScreenerService = Depends(get_screener_service)):
     """
     필터 목록 조회
     """
