@@ -194,6 +194,7 @@ def get_group_filters(
                 id=-1,
                 name="기본",
                 market_filter=ETFMarketEnum.US,
+                type=StockType.ETF,
                 has_custom=False,
                 sector_filter=[],
                 custom_filters=[],
@@ -229,7 +230,8 @@ def get_group_filters(
         return GroupFilterResponse(
             id=group_id,
             name=group_filters["name"],
-            market_filter=market_filter,
+            market_filter=market_filter if market_filter else ETFMarketEnum.US,
+            type=StockType.ETF,
             sector_filter=sector_filter,
             custom_filters=custom_filters,
             factor_filters={
