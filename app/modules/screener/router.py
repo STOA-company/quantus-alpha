@@ -8,6 +8,7 @@ from app.modules.screener.schemas import (
     FilteredStocks,
     GroupFilter,
     GroupFilterResponse,
+    SortInfo,
 )
 import logging
 from app.utils.oauth_utils import get_current_user
@@ -269,6 +270,7 @@ async def create_or_update_group(
                 custom_filters=group_filter.custom_filters,
                 factor_filters=group_filter.factor_filters,
                 category=group_filter.category,
+                sort_info=group_filter.sort_info,
             )
             message = "Filter updated successfully"
         else:
@@ -280,7 +282,6 @@ async def create_or_update_group(
                 custom_filters=group_filter.custom_filters,
                 factor_filters=group_filter.factor_filters,
                 type=group_filter.type,
-                category=group_filter.category,
             )
             message = "Group created successfully"
         if is_success:
@@ -354,6 +355,11 @@ def get_group_filters(
         fundamental_columns = screener_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL)
         valuation_columns = screener_service.get_columns(group_id, CategoryEnum.VALUATION)
 
+        technical_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
+        fundamental_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.FUNDAMENTAL)
+        valuation_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.VALUATION)
+        custom_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
+
         if lang == "en":
             technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
             fundamental_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in fundamental_columns]
@@ -374,6 +380,12 @@ def get_group_filters(
                     "valuation": valuation_columns,
                     "custom": []
                 },
+                sort_info= {
+                    CategoryEnum.TECHNICAL: technical_sort_info,
+                    CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
+                    CategoryEnum.VALUATION: valuation_sort_info,
+                    CategoryEnum.CUSTOM: custom_sort_info,
+                }
             )
         
         group_filters = screener_service.get_group_filters(group_id)
