@@ -225,14 +225,13 @@ class BaseScreenerService(ABC):
             dividend = screener_utils.get_default_columns(category=CategoryEnum.DIVIDEND)
 
             insert_tasks = []
-            
-            for idx, factor in enumerate(technical):
-                insert_tasks.append(self.database.insert_wrapper(
-                    table="screener_factor_filters", 
-                    sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.TECHNICAL}
-                ))
 
             if type == StockType.STOCK:
+                for idx, factor in enumerate(technical):
+                    insert_tasks.append(self.database.insert_wrapper(
+                        table="screener_factor_filters", 
+                        sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.TECHNICAL}
+                    ))
                 for idx, factor in enumerate(fundamental):
                     insert_tasks.append(self.database.insert_wrapper(
                         table="screener_factor_filters", 
@@ -256,7 +255,12 @@ class BaseScreenerService(ABC):
                     table="screener_sort_infos", sets={"group_id": group_id, "category": CategoryEnum.VALUATION, "sort_by": "score", "ascending": False, "type": StockType.STOCK}
                 ))
             
-            if type == StockType.ETF:
+            elif type == StockType.ETF:
+                for idx, factor in enumerate(technical):
+                    insert_tasks.append(self.database.insert_wrapper(
+                        table="screener_factor_filters", 
+                        sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.TECHNICAL}
+                    ))
                 for idx, factor in enumerate(dividend):
                     insert_tasks.append(self.database.insert_wrapper(
                         table="screener_factor_filters", 
@@ -270,6 +274,9 @@ class BaseScreenerService(ABC):
                 insert_tasks.append(self.database.insert_wrapper(
                     table="screener_sort_infos", sets={"group_id": group_id, "category": CategoryEnum.DIVIDEND, "sort_by": "score", "ascending": False, "type": StockType.ETF}
                 ))
+
+            else:
+                raise CustomException(status_code=400, message="Invalid type")
 
             await asyncio.gather(*insert_tasks)
             
@@ -308,9 +315,10 @@ class BaseScreenerService(ABC):
                 table="screener_groups", sets={"user_id": user_id, "name": name, "order": order, "type": type}
             )
 
-            group_id = self.database._select(table="screener_groups", user_id=user_id, name=name)[0].id
+            group_id = self.database._select(table="screener_groups", user_id=user_id, name=name, type=type)[0].id
 
             await self.create_default_factor_filters(group_id=group_id, type=type)
+
             if group_id is None:
                 raise CustomException(status_code=500, message="Failed to create group")
 
