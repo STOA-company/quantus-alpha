@@ -291,10 +291,13 @@ class NewsService:
 
     def _get_disclosure_data(self, ticker: str, lang: TranslateCountry) -> Optional[Dict]:
         """공시 데이터 조회 및 분석 데이터 함께 반환"""
+        condition = {"ticker": ticker, "is_exist": True}
+        columns = ["date", "summary", "key_points"]
+
         if lang == TranslateCountry.KO:
-            columns = ["date", "summary", "key_points"]
+            condition["lang"] = "ko-KR"
         elif lang == TranslateCountry.EN:
-            columns = ["date", "en_summary", "en_key_points"]
+            condition["lang"] = "en-US"
 
         disclosure_data = self.db._select(
             table="disclosure_information",
@@ -302,7 +305,7 @@ class NewsService:
             order="date",
             ascending=False,
             limit=1,
-            **dict(ticker=ticker, is_exist=True),
+            **condition,
         )
         if disclosure_data:
             date = disclosure_data[0][0]
