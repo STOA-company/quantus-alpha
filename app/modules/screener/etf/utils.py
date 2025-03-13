@@ -929,6 +929,8 @@ class ETFDataLoader:
         else:
             raise ValueError(f"Invalid market: {market_filter}")
         
+        if "volatility" in df.columns:
+            df.rename(columns={"volatility": "risk_rating"}, inplace=True)
         return df
 
     def load_morningstar(self, is_expense: bool = True, is_rating: bool = True):
