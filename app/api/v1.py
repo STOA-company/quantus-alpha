@@ -13,8 +13,8 @@ from app.modules.trending.router import router as trending_router
 from app.modules.oauth.router import router as oauth_router
 from app.modules.user.router import router as user_router
 from app.modules.community.router import router as community_router
-from app.modules.screener.router import router as screener_router
-from app.modules.screener_etf.router import router as screener_etf_router
+from app.modules.screener.stock.router import router as screener_router
+from app.modules.screener.etf.router import router as screener_etf_router
 
 api_router = APIRouter()
 

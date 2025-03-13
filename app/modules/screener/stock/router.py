@@ -1,18 +1,17 @@
 from fastapi import APIRouter, HTTPException, Depends, Response
 from typing import List, Dict, Optional
 import io
-from app.modules.screener.service import get_screener_service, ScreenerService
-from app.modules.screener.schemas import (
+from app.modules.screener.stock.service import ScreenerStockService
+from app.modules.screener.stock.schemas import (
     FactorResponse,
     GroupMetaData,
     FilteredStocks,
     GroupFilter,
     GroupFilterResponse,
-    SortInfo,
 )
 import logging
 from app.utils.oauth_utils import get_current_user
-from app.utils.factor_utils import factor_utils
+from app.modules.screener.utils import screener_utils
 from app.cache.factors import factors_cache
 from app.models.models_factors import CategoryEnum
 from app.common.constants import (
@@ -21,7 +20,7 @@ from app.common.constants import (
     FACTOR_KOREAN_TO_ENGLISH_MAP,
     MARKET_KOREAN_TO_ENGLISH_MAP,
 )
-from app.modules.screener.schemas import MarketEnum
+from app.modules.screener.stock.schemas import MarketEnum
 from app.core.exception.custom import CustomException
 
 logger = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ router = APIRouter()
 
 
 @router.get("/factors/{market}", response_model=List[FactorResponse])
-def get_factors(market: MarketEnum, screener_service: ScreenerService = Depends(get_screener_service)):
+def get_factors(market: MarketEnum, screener_service: ScreenerStockService = Depends(ScreenerStockService)):
     """
     모든 팩터 조회
     """
@@ -45,7 +44,7 @@ def get_factors(market: MarketEnum, screener_service: ScreenerService = Depends(
 
 @router.post("/stocks", response_model=Dict)
 def get_filtered_stocks(
-    filtered_stocks: FilteredStocks, screener_service: ScreenerService = Depends(get_screener_service)
+    filtered_stocks: FilteredStocks, screener_service: ScreenerStockService = Depends(ScreenerStockService)
 ):
     """
     필터링된 종목들 조회
@@ -79,16 +78,16 @@ def get_filtered_stocks(
             sort_by = REVERSE_FACTOR_MAP[filtered_stocks.sort_info.sort_by]
             ascending = filtered_stocks.sort_info.ascending
 
-        stocks_data, total_count = screener_service.get_filtered_stocks(
-            filtered_stocks.market_filter,
-            filtered_stocks.sector_filter,
-            custom_filters,
-            request_columns,
-            filtered_stocks.limit,
-            filtered_stocks.offset,
-            sort_by,
-            ascending,
-            filtered_stocks.lang,
+        stocks_data, total_count = screener_service.get_filtered_data(
+            market_filter=filtered_stocks.market_filter,
+            sector_filter=filtered_stocks.sector_filter,
+            custom_filters=custom_filters,
+            columns=request_columns,
+            limit=filtered_stocks.limit,
+            offset=filtered_stocks.offset,
+            sort_by=sort_by,
+            ascending=ascending,
+            lang=filtered_stocks.lang,
         )
 
         has_next = filtered_stocks.offset * filtered_stocks.limit + filtered_stocks.limit < total_count
@@ -111,7 +110,7 @@ def get_filtered_stocks(
 
 @router.post("/stocks/count", response_model=Dict)
 def get_filtered_stocks_count(
-    filtered_stocks: FilteredStocks, screener_service: ScreenerService = Depends(get_screener_service)
+    filtered_stocks: FilteredStocks, screener_service: ScreenerStockService = Depends(ScreenerStockService)
 ):
     """
     필터링된 종목들 조회
@@ -130,11 +129,11 @@ def get_filtered_stocks_count(
                 for condition in filtered_stocks.custom_filters
             ]
 
-        total_count = screener_service.get_filtered_stocks_count(
-            filtered_stocks.market_filter,
-            filtered_stocks.sector_filter,
-            custom_filters,
-            [REVERSE_FACTOR_MAP[column] for column in filtered_stocks.factor_filters],
+        total_count = screener_service.get_filtered_data_count(
+            market_filter=filtered_stocks.market_filter,
+            sector_filter=filtered_stocks.sector_filter,
+            custom_filters=custom_filters,
+            columns=[REVERSE_FACTOR_MAP[column] for column in filtered_stocks.factor_filters],
         )
 
         result = {"count": total_count}
@@ -145,74 +144,9 @@ def get_filtered_stocks_count(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/stocks/description", response_model=Dict)
-def get_filtered_stocks_with_description(
-    filtered_stocks: FilteredStocks, screener_service: ScreenerService = Depends(get_screener_service)
-):
-    """
-    필터링된 종목들 조회 (설명 포함)
-
-    market_filter : ["us", "kr", "S&P 500", "NASDAQ", "KOSPI", "KOSDAQ"] 중 하나
-    """
-    try:
-        custom_filters = []
-        if filtered_stocks.custom_filters:
-            custom_filters = [
-                {
-                    "factor": REVERSE_FACTOR_MAP[condition.factor],
-                    "above": condition.above,
-                    "below": condition.below,
-                }
-                for condition in filtered_stocks.custom_filters
-            ]
-
-        request_columns = ["Code", "Name", "country", "score"]
-        reverse_factor_map = REVERSE_FACTOR_MAP
-        if filtered_stocks.lang == "en":
-            reverse_factor_map = REVERSE_FACTOR_MAP_EN
-
-        for column in [reverse_factor_map[column] for column in filtered_stocks.factor_filters]:
-            if column not in request_columns:
-                request_columns.append(column)
-
-        sort_by = "score"
-        if filtered_stocks.sort_by:
-            sort_by = reverse_factor_map[filtered_stocks.sort_by]
-
-        stocks_data, total_count = screener_service.get_filtered_stocks_with_description(
-            filtered_stocks.market_filter,
-            filtered_stocks.sector_filter,
-            custom_filters,
-            request_columns,
-            filtered_stocks.limit,
-            filtered_stocks.offset,
-            sort_by,
-            filtered_stocks.ascending,
-            filtered_stocks.lang,
-        )
-
-        has_next = filtered_stocks.offset * filtered_stocks.limit + filtered_stocks.limit < total_count
-
-        if filtered_stocks.lang == "en":
-            for stock in stocks_data:
-                if "Market" in stock:
-                    stock["Market"] = MARKET_KOREAN_TO_ENGLISH_MAP[stock["Market"]]
-
-        result = {"data": stocks_data, "has_next": has_next}
-        return result
-
-    except CustomException as e:
-        logger.error(f"Error getting filtered stocks with description: {e}")
-        raise HTTPException(status_code=e.status_code, detail=e.message)
-
-    except Exception as e:
-        logger.error(f"Error getting filtered stocks with description: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.post("/stocks/download")
 def download_filtered_stocks(
-    filtered_stocks: FilteredStocks, screener_service: ScreenerService = Depends(get_screener_service)
+    filtered_stocks: FilteredStocks, screener_service: ScreenerStockService = Depends(ScreenerStockService)
 ):
     custom_filters = []
     if filtered_stocks.custom_filters:
@@ -224,8 +158,11 @@ def download_filtered_stocks(
             }
             for condition in filtered_stocks.custom_filters
         ]
-    sorted_df = screener_service.get_filtered_stocks(
-        filtered_stocks.market_filter, filtered_stocks.sector_filter, custom_filters, filtered_stocks.factor_filters
+    sorted_df = screener_service.get_filtered_data(
+        market_filter=filtered_stocks.market_filter,
+        sector_filter=filtered_stocks.sector_filter,
+        custom_filters=custom_filters,
+        columns=[REVERSE_FACTOR_MAP[column] for column in filtered_stocks.factor_filters],
     )
 
     stream = io.StringIO()
@@ -240,7 +177,7 @@ def download_filtered_stocks(
 
 @router.get("/groups", response_model=List[GroupMetaData])
 def get_groups(
-    current_user: str = Depends(get_current_user), screener_service: ScreenerService = Depends(get_screener_service)
+    current_user: str = Depends(get_current_user), screener_service: ScreenerStockService = Depends(ScreenerStockService)
 ):
     """
     저장된 필터 목록 조회
@@ -257,7 +194,7 @@ def get_groups(
 async def create_or_update_group(
     group_filter: GroupFilter,
     current_user: str = Depends(get_current_user),
-    screener_service: ScreenerService = Depends(get_screener_service),
+    screener_service: ScreenerStockService = Depends(ScreenerStockService),
 ):
     """
     필터 생성 또는 업데이트
@@ -282,7 +219,6 @@ async def create_or_update_group(
                 market_filter=group_filter.market_filter,
                 sector_filter=group_filter.sector_filter,
                 custom_filters=group_filter.custom_filters,
-                factor_filters=group_filter.factor_filters,
                 type=group_filter.type,
             )
             message = "Group created successfully"
@@ -297,7 +233,7 @@ async def create_or_update_group(
 
 
 @router.delete("/groups/{group_id}", response_model=Dict)
-def delete_group(group_id: int, screener_service: ScreenerService = Depends(get_screener_service)):
+def delete_group(group_id: int, screener_service: ScreenerStockService = Depends(ScreenerStockService)):
     """
     필터 삭제
     """
@@ -313,7 +249,7 @@ def delete_group(group_id: int, screener_service: ScreenerService = Depends(get_
 
 
 @router.post("/groups/reorder", response_model=Dict)
-def reorder_groups(groups: List[int], screener_service: ScreenerService = Depends(get_screener_service)):
+def reorder_groups(groups: List[int], screener_service: ScreenerStockService = Depends(ScreenerStockService)):
     """
     필터 순서 업데이트
     """
@@ -329,7 +265,7 @@ def reorder_groups(groups: List[int], screener_service: ScreenerService = Depend
 
 
 @router.post("/groups/name")
-def update_group_name(group_id: int, name: str, screener_service: ScreenerService = Depends(get_screener_service)):
+def update_group_name(group_id: int, name: str, screener_service: ScreenerStockService = Depends(ScreenerStockService)):
     """
     그룹 이름 수정
     """
@@ -348,7 +284,7 @@ def update_group_name(group_id: int, name: str, screener_service: ScreenerServic
 def get_group_filters(
     group_id: int = -1, 
     lang: str = "kr",
-    screener_service: ScreenerService = Depends(get_screener_service)):
+    screener_service: ScreenerStockService = Depends(ScreenerStockService)):
     """
     필터 목록 조회
     """
@@ -440,12 +376,12 @@ def get_group_filters(
 def update_parquet(country: str):
     try:
         if country == "kr":
-            factor_utils.process_kr_factor_data()
+            screener_utils.process_kr_factor_data()
         elif country == "us":
-            factor_utils.process_us_factor_data()
+            screener_utils.process_us_factor_data()
         else:
             raise HTTPException(status_code=400, detail="Invalid country")
-        factor_utils.archive_parquet(country)
+        screener_utils.archive_parquet(country)
         factors_cache.force_update()
         return {"message": "Parquet updated successfully"}
     except Exception as e:

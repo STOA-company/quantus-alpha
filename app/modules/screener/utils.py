@@ -3,11 +3,11 @@ from app.database.crud import database
 from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
-from app.modules.screener.schemas import MarketEnum
+from app.modules.screener.stock.schemas import MarketEnum
 from app.common.constants import NEED_TO_MULTIPLY_100, FACTOR_MAP, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
 import numpy as np
 from app.cache.factors import factors_cache
-from app.modules.screener_etf.enum import ETFMarketEnum
+from app.modules.screener.etf.enum import ETFMarketEnum
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.models.models_factors import CategoryEnum
 import logging
@@ -15,14 +15,14 @@ from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.date_utils import is_holiday
 from datetime import datetime, timedelta
 from Aws.logic.s3 import upload_file_to_bucket
-from app.utils.etf_utils import ETFDataLoader
+from app.modules.screener.etf.utils import ETFDataLoader
 
 logger = logging.getLogger(__name__)
 
 notifier = SlackNotifier()
 
 
-class FactorUtils:
+class ScreenerUtils:
     def __init__(self):
         self.db = database
         self.lang = "kr"
@@ -458,4 +458,4 @@ class FactorUtils:
         upload_file_to_bucket(file_path, "alpha-finder-factors", obj_path)
 
 
-factor_utils = FactorUtils()
+screener_utils = ScreenerUtils()

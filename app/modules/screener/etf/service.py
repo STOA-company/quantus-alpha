@@ -16,25 +16,40 @@ from app.common.constants import (
 )
 from app.core.exception.base import CustomException
 from app.core.logging.config import get_logger
-from app.modules.screener_etf.enum import ETFMarketEnum
-from app.modules.screener.schemas import GroupFilter
-from app.modules.screener.service import ScreenerService
-from app.modules.screener_etf.schemas import FilteredETF
+from app.modules.screener.etf.enum import ETFMarketEnum
+from app.modules.screener.etf.schemas import FilteredETF
+from app.modules.screener.base import BaseScreenerService
 from app.utils.date_utils import get_business_days
 from app.utils.score_utils import etf_score_utils
-from app.utils.factor_utils import factor_utils
+from app.modules.screener.utils import screener_utils
 from app.cache.factors import etf_factors_cache
+from app.modules.screener.etf.utils import (
+    ETFDataLoader,
+    ETFDataPreprocessor,
+    ETFFactorExtractor,
+    ETFDataMerger,
+    ETFDataDownloader,
+    KRXDownloader,
+)
 
 logger = get_logger(__name__)
 
 
-class ScreenerETFService(ScreenerService):
+class ScreenerETFService(BaseScreenerService):
+    """ETF 스크리너 서비스 클래스"""
+    
     def __init__(self):
         super().__init__()
-
-    def get_etf_factors(self, market: ETFMarketEnum):
+    
+    def _is_stock(self) -> bool:
+        return False
+    
+    def get_factors(self, market: ETFMarketEnum):
+        """
+        ETF 팩터 정보 조회
+        """
         try:
-            factors = factor_utils.get_etf_factors(market)
+            factors = screener_utils.get_etf_factors(market)
 
             if market in [ETFMarketEnum.US, ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
                 nation = "us"
@@ -71,7 +86,7 @@ class ScreenerETFService(ScreenerService):
         except Exception as e:
             logger.exception(f"Error in get_factors: {e}")
             raise e
-
+    
     def get_filtered_etfs(
         self,
         market_filter: Optional[ETFMarketEnum] = None,
@@ -83,24 +98,25 @@ class ScreenerETFService(ScreenerService):
         ascending: Optional[bool] = False,
         lang: Optional[str] = "kr",
     ):
+        """
+        필터링된 ETF 목록 조회
+        """
         if columns is None:
             columns = []
-
+        
         non_numeric_columns = [FACTOR_MAP[col] for col in NON_NUMERIC_COLUMNS_ETF]
 
         if sort_by not in columns and sort_by not in non_numeric_columns:
             raise CustomException(status_code=400, message="sort_by must be in columns")
 
-        etfs = factor_utils.filter_etfs(market_filter, custom_filters)
+        etfs = screener_utils.filter_etfs(market_filter, custom_filters)
         # 필터링
-        filtered_df = factor_utils.get_filtered_etfs_df(market_filter, etfs, columns)
+        filtered_df = screener_utils.get_filtered_etfs_df(market_filter, etfs, columns)
         # 점수 계산
         scored_df = etf_score_utils.calculate_factor_score(filtered_df)
         if scored_df.empty:
             return [], 0 
         
-        print("filtered_df: ", filtered_df.columns)
-        print("scored_df: ", scored_df.columns)
         # 병합
         merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
         # 정렬
@@ -140,7 +156,7 @@ class ScreenerETFService(ScreenerService):
                     if pd.isna(row[col]) or np.isinf(row[col]):
                         etf_data[col] = {"value": "", "unit": ""}
                     else:
-                        value, unit = factor_utils.convert_unit_and_value(
+                        value, unit = screener_utils.convert_unit_and_value(
                             market_filter,
                             float(row[col]),
                             factors[col].get("unit", "") if col in factors else "",
@@ -160,9 +176,17 @@ class ScreenerETFService(ScreenerService):
             mapped_result.append(mapped_item)
 
         return mapped_result, total_count
-
-
+    
+    def get_filtered_data(self, **kwargs):
+        """
+        필터링된 데이터 조회 (BaseScreenerService 추상 메서드 구현)
+        """
+        return self.get_filtered_etfs(**kwargs)
+    
     def _filter_etfs(self, df_etfs: pd.DataFrame, filtered_etf: FilteredETF):
+        """
+        ETF 필터링
+        """
         # 종목 필터 - 기본 필터
         if filtered_etf.market_filter:
             # if filtered_etf.market_filter == ETFMarketEnum.US:
@@ -196,8 +220,8 @@ class ScreenerETFService(ScreenerService):
         # 컬럼 필터
         required_columns = [col for col in ETF_DEFAULT_SCREENER_COLUMNS if col in df_etfs.columns]
 
-        if filtered_etf.columns is not None:
-            reversed_factors = [REVERSE_FACTOR_MAP[col] for col in filtered_etf.columns]
+        if filtered_etf.factor_filters is not None:
+            reversed_factors = [REVERSE_FACTOR_MAP[col] for col in filtered_etf.factor_filters]
             reversed_factors = [col for col in reversed_factors if col in df_etfs.columns]
             required_columns = required_columns + [col for col in reversed_factors if col not in required_columns]
 
@@ -205,15 +229,21 @@ class ScreenerETFService(ScreenerService):
 
         return df_etfs
 
-    def get_filtered_etfs_count(self, filtered_etf: FilteredETF):
-        df_etfs = self.factor_loader.load_etf_factors(filtered_etf.market_filter.value)
+    def get_filtered_data_count(self, filtered_etf: FilteredETF):
+        """
+        필터링된 ETF 개수 조회
+        """
+        etf_loader = ETFDataLoader()
+        df_etfs = etf_loader.load_etf_factors(filtered_etf.market_filter.value)
 
         df_etfs = self._filter_etfs(df_etfs, filtered_etf)
 
         return df_etfs.shape[0]
 
-
     def update_parquet(self, ctry: Literal["KR", "US"]):
+        """
+        파케이 파일 업데이트
+        """
         today = datetime.datetime.now().date()
         start_date = today - datetime.timedelta(days=7)
 
