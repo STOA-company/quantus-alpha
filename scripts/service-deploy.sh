@@ -147,7 +147,7 @@ while [ $attempt -le $max_attempts ]; do
     echo "Health check attempt $attempt of $max_attempts..."
 
     # 컨테이너 내부에서 직접 헬스 체크
-    health_status=$(docker-compose exec -T $target_service curl -s -o /dev/null -w "%{http_code}" "http://localhost/health-check" 2>/dev/null || echo "000")
+    health_status=$(docker-compose exec -T $target_service curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/health-check" 2>/dev/null || echo "000")
 
     if [ "$health_status" = "200" ]; then
         echo "$target_service is healthy and ready!"

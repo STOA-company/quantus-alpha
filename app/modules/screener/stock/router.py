@@ -232,53 +232,6 @@ async def create_or_update_group(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/groups/{group_id}", response_model=Dict)
-def delete_group(group_id: int, screener_service: ScreenerStockService = Depends(ScreenerStockService)):
-    """
-    필터 삭제
-    """
-    try:
-        is_success = screener_service.delete_group(group_id)
-        if is_success:
-            return {"message": "Group deleted successfully"}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to delete filter")
-    except Exception as e:
-        logger.error(f"Error deleting group: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/groups/reorder", response_model=Dict)
-def reorder_groups(groups: List[int], screener_service: ScreenerStockService = Depends(ScreenerStockService)):
-    """
-    필터 순서 업데이트
-    """
-    try:
-        is_success = screener_service.reorder_groups(groups)
-        if is_success:
-            return {"message": "Group reordered successfully"}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to reorder groups")
-    except Exception as e:
-        logger.error(f"Error reordering groups: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/groups/name")
-def update_group_name(group_id: int, name: str, screener_service: ScreenerStockService = Depends(ScreenerStockService)):
-    """
-    그룹 이름 수정
-    """
-    try:
-        updated_group_name = screener_service.update_group_name(group_id, name)
-        return {"message": f"Group name updated to {updated_group_name}"}
-    except CustomException as e:
-        logger.error(f"Error updating group name: {e}")
-        raise HTTPException(status_code=e.status_code, detail=e.message)
-    except Exception as e:
-        logger.error(f"Error updating group name: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/groups/{group_id}", response_model=GroupFilterResponse)
 def get_group_filters(
@@ -369,6 +322,54 @@ def get_group_filters(
         )
     except Exception as e:
         logger.exception(f"Error getting group filters: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/groups/{group_id}", response_model=Dict)
+def delete_group(group_id: int, screener_service: ScreenerStockService = Depends(ScreenerStockService)):
+    """
+    필터 삭제
+    """
+    try:
+        is_success = screener_service.delete_group(group_id)
+        if is_success:
+            return {"message": "Group deleted successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to delete filter")
+    except Exception as e:
+        logger.error(f"Error deleting group: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/groups/reorder", response_model=Dict)
+def reorder_groups(groups: List[int], screener_service: ScreenerStockService = Depends(ScreenerStockService)):
+    """
+    필터 순서 업데이트
+    """
+    try:
+        is_success = screener_service.reorder_groups(groups)
+        if is_success:
+            return {"message": "Group reordered successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to reorder groups")
+    except Exception as e:
+        logger.error(f"Error reordering groups: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/groups/name")
+def update_group_name(group_id: int, name: str, screener_service: ScreenerStockService = Depends(ScreenerStockService)):
+    """
+    그룹 이름 수정
+    """
+    try:
+        updated_group_name = screener_service.update_group_name(group_id, name)
+        return {"message": f"Group name updated to {updated_group_name}"}
+    except CustomException as e:
+        logger.error(f"Error updating group name: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        logger.error(f"Error updating group name: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

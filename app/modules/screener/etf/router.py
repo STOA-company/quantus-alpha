@@ -150,6 +150,7 @@ async def create_or_update_group(
                 custom_filters=group_filter.custom_filters,
                 factor_filters=group_filter.factor_filters,
                 category=group_filter.category,
+                sort_info=group_filter.sort_info,
             )
             message = "Filter updated successfully"
         else:
@@ -192,6 +193,12 @@ def get_group_filters(
             fundamental_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in fundamental_columns]
             valuation_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in valuation_columns]
 
+        technical_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
+        fundamental_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.FUNDAMENTAL)
+        valuation_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.VALUATION)
+        dividend_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.DIVIDEND)
+        custom_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
+
         if group_id == -1:
             return GroupFilterResponse(
                 id=-1,
@@ -207,8 +214,15 @@ def get_group_filters(
                     "valuation": valuation_columns,
                     "dividend": dividend_columns,
                     "custom": []
-                },            
+                }, 
+                sort_info= {
+                    CategoryEnum.TECHNICAL: technical_sort_info,
+                    CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
+                    CategoryEnum.VALUATION: valuation_sort_info,
+                    CategoryEnum.CUSTOM: custom_sort_info,
+                }           
             )
+            
 
         group_filters = screener_etf_service.get_group_filters(group_id)
         stock_filters = group_filters["stock_filters"]
@@ -243,6 +257,13 @@ def get_group_filters(
                 "valuation": valuation_columns,
                 "dividend": dividend_columns,
                 "custom": custom_factor_filters
+            },
+            sort_info= {
+                CategoryEnum.TECHNICAL: technical_sort_info,
+                CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
+                CategoryEnum.VALUATION: valuation_sort_info,
+                CategoryEnum.DIVIDEND: dividend_sort_info,
+                CategoryEnum.CUSTOM: custom_sort_info,
             },
             has_custom=group_filters["has_custom"],
         )
@@ -300,17 +321,7 @@ def update_group_name(group_id: int, name: str, screener_etf_service: ScreenerET
     except Exception as e:
         logger.error(f"Error updating group name: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/columns", response_model=ColumnsResponse)
-def get_columns(
-    category: Optional[ETFCategoryEnum] = None,
-    id: Optional[int] = None,
-    screener_etf_service: ScreenerETFService = Depends(ScreenerETFService),
-):
-    result = screener_etf_service.get_columns(category=category, group_id=id)
-    return ColumnsResponse(columns=result)
-
+    
 
 @router.get("/parquet/{ctry}")
 def update_parquet(ctry: Literal["KR", "US"], screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
