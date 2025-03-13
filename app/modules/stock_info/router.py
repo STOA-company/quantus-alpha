@@ -65,15 +65,15 @@ async def get_combined(
         logger.error(f"Error fetching indicators: {e}")
         indicators = None
 
-    # try:
-    summary = await summary_service.get_price_data_summary(ctry, ticker, lang)
-    logger.info("Successfully fetched summary")
-    # except Exception as e:
-    #     logger.error(f"Error fetching summary: {e}")
-    #     summary = None
+    try:
+        summary = await summary_service.get_price_data_summary(ctry, ticker, lang)
+        logger.info("Successfully fetched summary")
+    except Exception as e:
+        logger.error(f"Error fetching summary: {e}")
+        summary = None
 
     try:
-        latest = news_service.get_latest_news(ticker=ticker)
+        latest = news_service.get_latest_news(ticker=ticker, lang=lang)
         logger.info("Successfully fetched latest news")
     except Exception as e:
         logger.error(f"Error fetching latest news: {e}")
