@@ -1,15 +1,14 @@
-from datetime import datetime
 import json
 from app.core.redis import redis_client
 from app.database.crud import database
 from typing import Literal
+
 
 class FactorsCache:
     def __init__(self, asset_type: Literal["stock", "etf"] = "stock"):
         self.redis = redis_client()
         self.factors_key = f"{asset_type}_factors"
         self.asset_type = asset_type
-
 
     def get_configs(self) -> dict:
         cached = self.redis.get(self.factors_key)
@@ -20,7 +19,6 @@ class FactorsCache:
         configs = json.loads(cached)
 
         return configs
-
 
     def _update_configs(self) -> dict:
         condition = {}
@@ -45,15 +43,12 @@ class FactorsCache:
                 "min_value": factor.min_value,
                 "max_value": factor.max_value,
             }
-        
 
         self.redis.set(self.factors_key, json.dumps(configs))
-
 
     def force_update(self) -> dict:
         self.clear_cache()
         self._update_configs()
-
 
     def clear_cache(self) -> None:
         self.redis.delete(self.factors_key)

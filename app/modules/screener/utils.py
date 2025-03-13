@@ -3,11 +3,11 @@ from app.database.crud import database
 from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
-from app.modules.screener.schemas import MarketEnum
+from app.modules.screener.stock.schemas import MarketEnum
 from app.common.constants import NEED_TO_MULTIPLY_100, FACTOR_MAP, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
 import numpy as np
 from app.cache.factors import factors_cache
-from app.modules.screener_etf.enum import ETFMarketEnum
+from app.modules.screener.etf.enum import ETFMarketEnum
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.models.models_factors import CategoryEnum
 import logging
@@ -15,21 +15,22 @@ from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.date_utils import is_holiday
 from datetime import datetime, timedelta
 from Aws.logic.s3 import upload_file_to_bucket
-from app.utils.etf_utils import ETFDataLoader
+from app.modules.screener.etf.utils import ETFDataLoader
+from pandas.api.types import is_numeric_dtype
 
 logger = logging.getLogger(__name__)
 
 notifier = SlackNotifier()
 
 
-class FactorUtils:
+class ScreenerUtils:
     def __init__(self):
         self.db = database
         self.lang = "kr"
         self.etf_factor_loader = ETFDataLoader()
 
     def get_factors(self, market: MarketEnum) -> List[dict]:
-        factors = self.db._select(table="factors")
+        factors = self.db._select(table="factors", is_stock=True)
         # 시장별 팩터 최소/최대값 계산
         market_data = self.get_df_from_parquet(market)
 
@@ -58,7 +59,6 @@ class FactorUtils:
 
         return result
 
-
     def get_etf_factors(self, market: ETFMarketEnum) -> List[dict]:
         factors = self.db._select(table="factors", is_etf=True)
         # 시장별 팩터 최소/최대값 계산
@@ -69,8 +69,11 @@ class FactorUtils:
             factor_name = factor.factor
 
             if factor_name in market_data.columns:
-                min_value = market_data[factor_name].min()
-                max_value = market_data[factor_name].max()
+                min_value = None
+                max_value = None
+                if is_numeric_dtype(market_data[factor_name]):
+                    min_value = floor_to_integer(market_data[factor_name].min())
+                    max_value = ceil_to_integer(market_data[factor_name].max())
 
                 result.append(
                     {
@@ -79,8 +82,8 @@ class FactorUtils:
                         "unit": str(factor.unit).lower(),
                         "category": str(factor.category).lower(),
                         "direction": factor.sort_direction,
-                        "min_value": floor_to_integer(min_value),
-                        "max_value": ceil_to_integer(max_value),
+                        "min_value": min_value,
+                        "max_value": max_value,
                     }
                 )
 
@@ -89,18 +92,25 @@ class FactorUtils:
 
         return result
 
-    def get_default_columns(self, category: Optional[CategoryEnum] = None, is_stock: Optional[bool] = True) -> List[str]:
+    def get_default_columns(self, category: Optional[CategoryEnum] = None) -> List[str]:
         base_columns = ["score", "sector", "market"]
-        
+
         if not category:
             return base_columns
-            
+
         additional_columns = {
             CategoryEnum.TECHNICAL: ["beta", "rsi_14", "sharpe", "momentum_6", "vol"],
             CategoryEnum.FUNDAMENTAL: ["roe", "fscore", "deptRatio", "operating_income", "z_score"],
-            CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"]
+            CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"],
+            CategoryEnum.DIVIDEND: [
+                "dividend_count",
+                "total_fee",
+                "last_dividend_per_share",
+                "dividend_growth_rate_5y",
+                "risk_rating",
+            ],
         }
-        
+
         return [*base_columns, *additional_columns.get(category, [])]
 
     def process_kr_factor_data(self):
@@ -317,7 +327,7 @@ class FactorUtils:
             elif market_filter == ETFMarketEnum.KR:
                 filtered_df = filtered_df[filtered_df["country"] == "kr"]
             elif market_filter in [ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
-                filtered_df = filtered_df[filtered_df["market"] == market_filter.value]
+                filtered_df = filtered_df[filtered_df["market"] == market_filter]
 
         if custom_filters:
             for filter in custom_filters:
@@ -458,4 +468,4 @@ class FactorUtils:
         upload_file_to_bucket(file_path, "alpha-finder-factors", obj_path)
 
 
-factor_utils = FactorUtils()
+screener_utils = ScreenerUtils()

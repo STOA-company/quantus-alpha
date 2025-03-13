@@ -2,7 +2,7 @@ import os
 from typing import Literal
 from Aws.logic.s3 import upload_file_to_bucket
 from app.utils.date_utils import now_kr, now_us
-from app.utils.etf_utils import (
+from app.modules.screener.etf.utils import (
     ETFDataDownloader,
     ETFDataLoader,
     ETFDataMerger,

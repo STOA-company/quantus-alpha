@@ -46,6 +46,7 @@ MARKET_MAP = {
     "NAS": "나스닥",
     "NYS": "뉴욕 증권 거래소",
     "AMS": "아멕스",
+    "BATS": "바츠",
 }
 
 MARKET_MAP_EN = {
@@ -62,6 +63,7 @@ MARKET_KOREAN_TO_ENGLISH_MAP = {
     "나스닥": "NASDAQ",
     "뉴욕 증권 거래소": "NYSE",
     "아멕스": "AMS",
+    "바츠": "BATS",
 }
 
 FACTOR_MAP = {
@@ -152,6 +154,7 @@ FACTOR_MAP = {
     "tax_type": "세금 유형",
     "is_hedge": "헤지 여부",
     "last_dividend_date": "최근 배당일",
+    "risk_rating": "위험 등급",
     "ctry": "국 가",  # 띄어쓰기 제거시 에러 발생함
 }
 

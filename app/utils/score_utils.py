@@ -97,7 +97,6 @@ class ScoreUtils:
         # 정렬 및 반환
         return score_df.sort_values("score", ascending=False)
 
-
     @time_it
     def calculate_factor_score(self, df: pd.DataFrame) -> pd.DataFrame:
         if df.empty:
@@ -113,6 +112,7 @@ class ScoreUtils:
 
         # NaN -> 중앙값
         for col in numeric_columns:
+            df_copy[col] = pd.to_numeric(df_copy[col], errors="coerce")
             df_copy[col] = df_copy[col].fillna(df_copy[col].median())
 
         n_rows = len(df_copy)
@@ -125,24 +125,23 @@ class ScoreUtils:
             if not config:
                 continue
 
-            series = df_copy[col]
             ascending = config.get("direction") == "ASC"
             min_value = config.get("min_value")
             max_value = config.get("max_value")
 
-            outlier_mask = pd.Series(False, index=series.index)
+            outlier_mask = pd.Series(False, index=df_copy.index)
             if min_value is not None:
-                outlier_mask = series < min_value
+                outlier_mask = df_copy[col] < min_value
             if max_value is not None:
-                outlier_mask = series > max_value
-            
+                outlier_mask = df_copy[col] > max_value
+
             if outlier_mask.any():
                 if ascending:
-                    series.loc[outlier_mask] = float('inf')
+                    df_copy.loc[outlier_mask, col] = float("inf")
                 else:
-                    series.loc[outlier_mask] = float('-inf')
-                
-            ranks = series.rank(method="min", ascending=ascending)
+                    df_copy.loc[outlier_mask, col] = float("-inf")
+
+            ranks = df_copy[col].rank(method="min", ascending=ascending)
             max_ranks_per_factor.append(ranks.max())  # 해당 팩터의 최대 순위(꼴등) 저장
 
             factor_ranks = np.column_stack((factor_ranks, ranks.values))

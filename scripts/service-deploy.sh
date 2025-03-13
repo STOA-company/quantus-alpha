@@ -133,7 +133,8 @@ echo "Removing existing container for $target_service if it exists..."
 docker-compose rm -f $target_service
 
 echo "Building and starting new $target_service container..."
-ENV=$ENV docker-compose -f docker-compose.yml --env-file $ENV_FILE up -d --no-deps --build $target_service
+docker-compose -f docker-compose.yml build --no-cache $target_service
+ENV=$ENV docker-compose -f docker-compose.yml --env-file $ENV_FILE up -d --no-deps $target_service
 
 echo "Waiting for container to initialize..."
 sleep 10
