@@ -928,6 +928,7 @@ class ETFDataLoader:
             df["country"] = "kr"
         else:
             raise ValueError(f"Invalid market: {market_filter}")
+        
         return df
 
     def load_morningstar(self, is_expense: bool = True, is_rating: bool = True):

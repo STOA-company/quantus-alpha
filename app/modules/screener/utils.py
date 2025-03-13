@@ -16,7 +16,7 @@ from app.utils.date_utils import is_holiday
 from datetime import datetime, timedelta
 from Aws.logic.s3 import upload_file_to_bucket
 from app.modules.screener.etf.utils import ETFDataLoader
-
+from pandas.api.types import is_numeric_dtype
 logger = logging.getLogger(__name__)
 
 notifier = SlackNotifier()
@@ -69,8 +69,11 @@ class ScreenerUtils:
             factor_name = factor.factor
 
             if factor_name in market_data.columns:
-                min_value = market_data[factor_name].min()
-                max_value = market_data[factor_name].max()
+                min_value = None
+                max_value = None
+                if is_numeric_dtype(market_data[factor_name]):
+                    min_value = floor_to_integer(market_data[factor_name].min())
+                    max_value = ceil_to_integer(market_data[factor_name].max())
 
                 result.append(
                     {
@@ -79,8 +82,8 @@ class ScreenerUtils:
                         "unit": str(factor.unit).lower(),
                         "category": str(factor.category).lower(),
                         "direction": factor.sort_direction,
-                        "min_value": floor_to_integer(min_value),
-                        "max_value": ceil_to_integer(max_value),
+                        "min_value": min_value,
+                        "max_value": max_value,
                     }
                 )
 
@@ -89,7 +92,7 @@ class ScreenerUtils:
 
         return result
 
-    def get_default_columns(self, category: Optional[CategoryEnum] = None, is_stock: Optional[bool] = True) -> List[str]:
+    def get_default_columns(self, category: Optional[CategoryEnum] = None) -> List[str]:
         base_columns = ["score", "sector", "market"]
         
         if not category:
