@@ -620,8 +620,7 @@ class FinancialService:
             logger.error(f"Error getting latest quarter: {e}")
             raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-    @staticmethod
-    def get_kr_name_by_ticker(db: Session, ticker: str) -> Optional[str]:
+    def get_name_by_ticker(self, ticker: str, lang: TranslateCountry) -> Optional[str]:
         """
         ticker로 StockInformation 테이블에서 한글로 된 기업이름 조회
 
@@ -634,11 +633,11 @@ class FinancialService:
         if ticker.endswith("-US"):
             ticker = ticker[:-3]
 
-        query = select(StockInformation.kr_name).where(StockInformation.ticker == ticker)
-        result = db.execute(query)
-        kr_name = result.scalar_one_or_none()
+        column = "kr_name" if lang == TranslateCountry.KO else "en_name"
 
-        return kr_name
+        name = self.db._select(table="stock_information", columns=[column], ticker=ticker)
+
+        return name[0][0]
 
     # 섹터 조회
     def get_sector_by_ticker(self, ticker: str) -> Optional[str]:

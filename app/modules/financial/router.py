@@ -131,12 +131,13 @@ def get_finpos_analysis(
 def get_financial_ratio(
     request: Request,
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+    lang: Annotated[TranslateCountry, Query(description="언어, 예시: KO, EN")] = TranslateCountry.KO,
     financial_service: FinancialService = Depends(get_financial_service),
     db: Session = Depends(db.get_db),
 ) -> BaseResponse[RatioResponse]:
     try:
         ctry = check_ticker_country_len_3(ticker).upper()
-        company_name = financial_service.get_kr_name_by_ticker(db=db, ticker=ticker)
+        company_name = financial_service.get_name_by_ticker(ticker=ticker, lang=lang)
         dept_ratio = financial_service.get_debt_ratio(ctry=ctry, ticker=ticker, db=db)
         liquidity_ratio = financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker, db=db)
         interest_coverage_ratio = financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker, db=db)
