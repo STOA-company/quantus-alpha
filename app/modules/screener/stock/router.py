@@ -100,11 +100,11 @@ def get_filtered_stocks(
         return result
 
     except CustomException as e:
-        logger.error(f"Error getting filtered stocks: {e}")
+        logger.exception(f"Error getting filtered stocks: {e}")
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
     except Exception as e:
-        logger.error(f"Error getting filtered stocks: {e}")
+        logger.exception(f"Error getting filtered stocks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -140,7 +140,7 @@ def get_filtered_stocks_count(
         return result
 
     except Exception as e:
-        logger.error(f"Error getting filtered stocks: {e}")
+        logger.exception(f"Error getting filtered stocks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -186,7 +186,7 @@ def get_groups(
         groups = screener_service.get_groups(current_user.id)
         return [GroupMetaData(id=group["id"], name=group["name"], type=group["type"]) for group in groups]
     except Exception as e:
-        logger.error(f"Error getting groups: {e}")
+        logger.exception(f"Error getting groups: {e}")
         return []
 
 
@@ -225,10 +225,10 @@ async def create_or_update_group(
         if is_success:
             return {"message": message}
     except CustomException as e:
-        logger.error(f"Error creating group: {e}")
+        logger.exception(f"Error creating group: {e}")
         raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
-        logger.error(f"Error creating group: {e}")
+        logger.exception(f"Error creating group: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -337,7 +337,7 @@ def delete_group(group_id: int, screener_service: ScreenerStockService = Depends
         else:
             raise HTTPException(status_code=500, detail="Failed to delete filter")
     except Exception as e:
-        logger.error(f"Error deleting group: {e}")
+        logger.exception(f"Error deleting group: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -353,7 +353,7 @@ def reorder_groups(groups: List[int], screener_service: ScreenerStockService = D
         else:
             raise HTTPException(status_code=500, detail="Failed to reorder groups")
     except Exception as e:
-        logger.error(f"Error reordering groups: {e}")
+        logger.exception(f"Error reordering groups: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -366,10 +366,10 @@ def update_group_name(group_id: int, name: str, screener_service: ScreenerStockS
         updated_group_name = screener_service.update_group_name(group_id, name)
         return {"message": f"Group name updated to {updated_group_name}"}
     except CustomException as e:
-        logger.error(f"Error updating group name: {e}")
+        logger.exception(f"Error updating group name: {e}")
         raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
-        logger.error(f"Error updating group name: {e}")
+        logger.exception(f"Error updating group name: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -386,5 +386,5 @@ def update_parquet(country: str):
         factors_cache.force_update()
         return {"message": "Parquet updated successfully"}
     except Exception as e:
-        logger.error(f"Error updating parquet: {e}")
+        logger.exception(f"Error updating parquet: {e}")
         raise HTTPException(status_code=500, detail=str(e))
