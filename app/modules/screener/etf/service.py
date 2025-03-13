@@ -104,7 +104,7 @@ class ScreenerETFService(BaseScreenerService):
         if columns is None:
             columns = []
         
-        non_numeric_columns = [FACTOR_MAP[col] for col in NON_NUMERIC_COLUMNS_ETF]
+        non_numeric_columns = [col for col in NON_NUMERIC_COLUMNS_ETF]
 
         if sort_by not in columns and sort_by not in non_numeric_columns:
             raise CustomException(status_code=400, message="sort_by must be in columns")
@@ -183,29 +183,35 @@ class ScreenerETFService(BaseScreenerService):
         """
         return self.get_filtered_etfs(**kwargs)
     
-    def _filter_etfs(self, df_etfs: pd.DataFrame, filtered_etf: FilteredETF):
+    def _filter_etfs(
+        self,
+        df_etfs: pd.DataFrame,
+        market_filter: ETFMarketEnum,
+        custom_filters: Optional[List[Dict]] = None,
+        factor_filters: Optional[List[str]] = None,
+    ):
         """
         ETF 필터링
         """
         # 종목 필터 - 기본 필터
-        if filtered_etf.market_filter:
+        if market_filter:
             # if filtered_etf.market_filter == ETFMarketEnum.US:
             #     df_etfs = df_etfs[df_etfs["country"] == "us"]
             # if filtered_etf.market_filter in [ETFMarketEnum.KR]:
             #     df_etfs = df_etfs[df_etfs["market"] == "KRX"]
-            if filtered_etf.market_filter in [ETFMarketEnum.NYSE, ETFMarketEnum.NASDAQ, ETFMarketEnum.BATS]:
-                df_etfs = df_etfs[df_etfs["market"] == filtered_etf.market_filter.value]
+            if market_filter in [ETFMarketEnum.NYSE, ETFMarketEnum.NASDAQ, ETFMarketEnum.BATS]:
+                df_etfs = df_etfs[df_etfs["market"] == market_filter.value]
 
         # 종목 필터 - 커스텀 필터링
         custom_filters = []
-        if filtered_etf.custom_filters:
+        if custom_filters:
             custom_filters = [
                 {
                     "factor": REVERSE_FACTOR_MAP[condition.factor],
                     "above": condition.above,
                     "below": condition.below,
                 }
-                for condition in filtered_etf.custom_filters
+                for condition in custom_filters
             ]
             for filter in custom_filters:
                 if filter["factor"] not in df_etfs.columns:
@@ -220,25 +226,31 @@ class ScreenerETFService(BaseScreenerService):
         # 컬럼 필터
         required_columns = [col for col in ETF_DEFAULT_SCREENER_COLUMNS if col in df_etfs.columns]
 
-        if filtered_etf.factor_filters is not None:
-            reversed_factors = [REVERSE_FACTOR_MAP[col] for col in filtered_etf.factor_filters]
+        if factor_filters is not None:
+            reversed_factors = [REVERSE_FACTOR_MAP[col] for col in factor_filters]
             reversed_factors = [col for col in reversed_factors if col in df_etfs.columns]
             required_columns = required_columns + [col for col in reversed_factors if col not in required_columns]
 
         df_etfs = df_etfs[required_columns]
 
         return df_etfs
-
-    def get_filtered_data_count(self, filtered_etf: FilteredETF):
+    
+    def get_filtered_data_count(
+        self,
+        market_filter: Optional[ETFMarketEnum] = None,
+        sector_filter: Optional[List[str]] = None,
+        custom_filters: Optional[List[Dict]] = None,
+        columns: Optional[List[str]] = None,
+    ) -> int:
         """
         필터링된 ETF 개수 조회
         """
         etf_loader = ETFDataLoader()
-        df_etfs = etf_loader.load_etf_factors(filtered_etf.market_filter.value)
+        df_etfs = etf_loader.load_etf_factors(market_filter)
 
-        df_etfs = self._filter_etfs(df_etfs, filtered_etf)
+        filtered_df = self._filter_etfs(df_etfs, market_filter, custom_filters, columns)
 
-        return df_etfs.shape[0]
+        return len(filtered_df)
 
     def update_parquet(self, ctry: Literal["KR", "US"]):
         """

@@ -52,8 +52,6 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
         if filtered_etf.sort_by:
             sort_by = reverse_factor_map[filtered_etf.sort_by]
 
-        print("request_columns: ", request_columns)
-
         etfs_data, total_count = screener_etf_service.get_filtered_data(
             market_filter=filtered_etf.market_filter,
             custom_filters=custom_filters,
@@ -85,9 +83,25 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
 def get_filtered_etfs_count(
     filtered_etf: FilteredETF, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)
 ):
-    result = screener_etf_service.get_filtered_data_count(filtered_etf=filtered_etf)
-    return {"count": result}
+    custom_filters = []
+    if filtered_etf.custom_filters:
+        custom_filters = [
+            {
+                "factor": REVERSE_FACTOR_MAP[condition.factor],
+                "above": condition.above,
+                "below": condition.below,
+            }
+            for condition in filtered_etf.custom_filters
+        ]
 
+    total_count = screener_etf_service.get_filtered_data_count(
+        market_filter=filtered_etf.market_filter, 
+        custom_filters=custom_filters, 
+        sector_filter=None,
+        columns=[REVERSE_FACTOR_MAP[column] for column in filtered_etf.factor_filters]
+    )
+    
+    return {"count": total_count}
 
 @router.post("/download", response_model=Dict)
 def download_filtered_etfs(
