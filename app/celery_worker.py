@@ -26,7 +26,7 @@ from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_sta
 
 from app.utils.date_utils import check_market_status, is_business_day
 from app.utils.stock_utils import kr_stock_utils, us_stock_utils
-from app.utils.factor_utils import factor_utils
+from app.modules.screener.utils import screener_utils
 from app.batches.run_dividend import insert_dividend
 
 
@@ -494,7 +494,7 @@ def update_us_stock_parquet():
     """미국 주식 파일 업데이트"""
     notifier_1d.notify_info("update_us_stock_parquet process started")
     try:
-        factor_utils.process_us_factor_data()
+        screener_utils.process_us_factor_data()
         notifier_1d.notify_success("update_us_stock_parquet process completed")
     except Exception as e:
         notifier_1d.notify_error(f"update_us_stock_parquet process failed: {str(e)}")
@@ -506,7 +506,7 @@ def update_kr_stock_parquet():
     """한국 주식 파일 업데이트"""
     notifier_1d.notify_info("update_kr_stock_parquet process started")
     try:
-        factor_utils.process_kr_factor_data()
+        screener_utils.process_kr_factor_data()
         notifier_1d.notify_success("update_kr_stock_parquet process completed")
     except Exception as e:
         notifier_1d.notify_error(f"update_kr_stock_parquet process failed: {str(e)}")

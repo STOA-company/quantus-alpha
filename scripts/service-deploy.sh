@@ -37,10 +37,10 @@ echo "Changing to project directory..."
 cd ~/quantus-alpha || exit 1
 
 # Git 작업
-echo "Fetching latest changes..."
-git fetch origin || exit 1
-git checkout $BRANCH || exit 1
-git pull origin $BRANCH || exit 1
+# echo "Fetching latest changes..."
+# git fetch origin || exit 1
+# git checkout $BRANCH || exit 1
+# git pull origin $BRANCH || exit 1
 
 # Poetry install
 echo "Installing dependencies with Poetry..."
@@ -133,7 +133,8 @@ echo "Removing existing container for $target_service if it exists..."
 docker-compose rm -f $target_service
 
 echo "Building and starting new $target_service container..."
-ENV=$ENV docker-compose -f docker-compose.yml --env-file $ENV_FILE up -d --no-deps --build $target_service
+docker-compose -f docker-compose.yml build --no-cache $target_service
+ENV=$ENV docker-compose -f docker-compose.yml --env-file $ENV_FILE up -d --no-deps $target_service
 
 echo "Waiting for container to initialize..."
 sleep 10

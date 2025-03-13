@@ -1,5 +1,5 @@
 from app.middlewares.slack_error import add_slack_middleware
-from fastapi import FastAPI, HTTPException, Security, Query, Path
+from fastapi import FastAPI, HTTPException, Security
 from app.core.config import get_database_config, settings
 from app.api import routers
 from app.core.exception import handler
@@ -9,6 +9,9 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.logging.config import configure_logging
 from app.middlewares.trusted_hosts import get_current_username
+import logging
+
+logger = logging.getLogger(__name__)
 
 configure_logging()
 
@@ -89,7 +92,7 @@ async def health_check():
 
         # 메타데이터 확인
         tables = database.meta_data.tables.keys()
-
+        
         return HealthCheckResponse(
             status_code=200,
             database="connected",

@@ -31,7 +31,7 @@ from app.common.mapping import (
     multiplier_map,
     replication_map,
 )
-from app.modules.screener_etf.enum import ETFMarketEnum
+from app.modules.screener.etf.enum import ETFMarketEnum
 
 
 class ETFFactorExtractor:

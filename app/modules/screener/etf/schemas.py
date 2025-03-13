@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from app.modules.screener.schemas import FilterCondition
+from app.modules.screener.stock.schemas import FilterCondition
 from .enum import ETFMarketEnum
 from typing import Optional, List
 
