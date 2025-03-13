@@ -9,6 +9,7 @@ from app.common.constants import KST, USE, UTC
 from app.database.crud import database
 from app.utils.date_utils import now_utc, check_market_status
 from app.kispy.manager import KISAPIManager
+import yfinance as yf
 
 
 def kr_run_stock_indices_batch():
@@ -419,9 +420,116 @@ def _is_market_open(ticker: str) -> bool:
         return check_market_status("KR")
 
 
-# if __name__ == "__main__":
+def get_yf_index_data(ticker_symbol: str, yf_symbol: str):
+    """
+    Yahoo Finance API를 사용하여 주가지수 분봉 데이터를 가져오는 함수
+
+    Args:
+        ticker_symbol (str): DB에 저장할 티커 심볼 (예: 'SP500', 'NASDAQ')
+        yf_symbol (str): Yahoo Finance 티커 심볼 (예: '^GSPC', '^IXIC')
+    """
+    try:
+        # yfinance Ticker 객체 생성
+        index = yf.Ticker(yf_symbol)
+
+        # 시작 시간과 종료 시간 설정 (1일치 데이터)
+        end_date = datetime.datetime.now().date()
+        start_date = end_date - datetime.timedelta(days=1)
+
+        # 분봉 데이터 가져오기
+        df = index.history(start=start_date, end=end_date, interval="1m")
+
+        # 인덱스를 컬럼으로 변환
+        df = df.reset_index()
+
+        # 컬럼 이름 변경
+        df = df.rename(
+            columns={
+                "Datetime": "date",
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Close": "close",
+                "Volume": "volume",
+            }
+        )
+
+        # 전일 종가 가져오기 (2일 전부터 데이터를 가져와서 전일 종가 확보)
+        prev_day_data = index.history(
+            start=end_date - datetime.timedelta(days=5),  # 주말, 공휴일 고려하여 5일 전부터
+            end=start_date,
+            interval="1d",
+        )
+
+        if not prev_day_data.empty:
+            prev_close = prev_day_data["Close"].iloc[-1]  # 가장 최근 종가
+
+            # 변화량과 변동률 계산 (전일 종가 기준)
+            df["change"] = df["close"] - prev_close
+            df["change_rate"] = (df["change"] / prev_close) * 100
+        else:
+            # 전일 데이터를 가져올 수 없는 경우 기존 방식으로 계산
+            logging.warning(f"Could not fetch previous day data for {ticker_symbol}, using intraday changes")
+            df["change"] = df["close"] - df["close"].shift(1)
+            df["change_rate"] = (df["change"] / df["close"].shift(1)) * 100
+            df.loc[0, "change"] = 0
+            df.loc[0, "change_rate"] = 0
+
+        # 시간대 처리 (Yahoo Finance는 이미 시간대 정보가 포함되어 있음)
+        # 바로 UTC로 변환
+        df["date"] = pd.to_datetime(df["date"])
+        if df["date"].dt.tz is not None:
+            # 이미 시간대 정보가 있는 경우 변환만 수행
+            df["date"] = df["date"].dt.tz_convert("UTC")
+        else:
+            # 시간대 정보가 없는 경우 미국 동부 시간으로 가정하고 변환
+            df["date"] = df["date"].dt.tz_localize("America/New_York").dt.tz_convert("UTC")
+
+        # 필요한 컬럼만 선택하고 DB 저장 형식에 맞게 재구성
+        df["ticker"] = ticker_symbol
+        df = df[["ticker", "date", "open", "high", "low", "close", "volume", "change", "change_rate"]]
+
+        # 기존 데이터 확인
+        existing_data = database._select(
+            table="stock_indices_1m",
+            columns=["ticker", "date"],
+            ticker=ticker_symbol,
+            date__gte=df["date"].min(),
+            date__lte=df["date"].max(),
+        )
+
+        # 기존 데이터의 (ticker, date) 조합을 set으로 생성
+        existing_keys = {(row[0], row[1].strftime("%Y-%m-%d %H:%M:%S")) for row in existing_data}
+
+        # 새로운 데이터만 필터링
+        new_records = []
+        for record in df.to_dict("records"):
+            key = (record["ticker"], record["date"].strftime("%Y-%m-%d %H:%M:%S"))
+            if key not in existing_keys:
+                new_records.append(record)
+
+        # 새로운 데이터만 insert
+        if new_records:
+            try:
+                database._insert(table="stock_indices_1m", sets=new_records)
+                logging.info(f"Inserted {len(new_records)} new records for {ticker_symbol} using Yahoo Finance")
+            except Exception as e:
+                logging.error(f"Failed to insert data: {str(e)}")
+                raise
+        else:
+            logging.info(f"No new data to insert for {ticker_symbol}")
+
+        return len(df)
+
+    except Exception as e:
+        logging.error(f"Error fetching {ticker_symbol} data from Yahoo Finance: {str(e)}")
+        raise
+
+
+if __name__ == "__main__":
+    get_yf_index_data("NASDAQ", "^IXIC")
 # logging.info("Starting US market batch job from command line")
 # kr_run_stock_indices_batch()
 
-# get_stock_indices_data("KOSPI")
-# get_stock_indices_data("KOSDAQ")
+# get_stock_indices_data("NASDAQ")
+# get_stock_indices_data("SP500")
