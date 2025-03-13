@@ -5,6 +5,7 @@ from sqlalchemy.orm import relationship
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
 
+
 class ScreenerGroup(ServiceBase, BaseMixin):
     __tablename__ = "screener_groups"
 

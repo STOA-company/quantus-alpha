@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from Aws.logic.s3 import upload_file_to_bucket
 from app.modules.screener.etf.utils import ETFDataLoader
 from pandas.api.types import is_numeric_dtype
+
 logger = logging.getLogger(__name__)
 
 notifier = SlackNotifier()
@@ -58,7 +59,6 @@ class ScreenerUtils:
 
         return result
 
-
     def get_etf_factors(self, market: ETFMarketEnum) -> List[dict]:
         factors = self.db._select(table="factors", is_etf=True)
         # 시장별 팩터 최소/최대값 계산
@@ -94,17 +94,23 @@ class ScreenerUtils:
 
     def get_default_columns(self, category: Optional[CategoryEnum] = None) -> List[str]:
         base_columns = ["score", "sector", "market"]
-        
+
         if not category:
             return base_columns
-            
+
         additional_columns = {
             CategoryEnum.TECHNICAL: ["beta", "rsi_14", "sharpe", "momentum_6", "vol"],
             CategoryEnum.FUNDAMENTAL: ["roe", "fscore", "deptRatio", "operating_income", "z_score"],
             CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"],
-            CategoryEnum.DIVIDEND: ["dividend_count", "total_fee", "last_dividend_per_share", "dividend_growth_rate_5y", "risk_rating"]
+            CategoryEnum.DIVIDEND: [
+                "dividend_count",
+                "total_fee",
+                "last_dividend_per_share",
+                "dividend_growth_rate_5y",
+                "risk_rating",
+            ],
         }
-        
+
         return [*base_columns, *additional_columns.get(category, [])]
 
     def process_kr_factor_data(self):

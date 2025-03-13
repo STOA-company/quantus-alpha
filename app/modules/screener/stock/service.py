@@ -9,19 +9,20 @@ from app.modules.screener.utils import screener_utils
 from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, FACTOR_MAP_EN, UNIT_MAP
 from app.core.exception.custom import CustomException
 from app.modules.screener.base import BaseScreenerService
+
 logger = logging.getLogger(__name__)
 
 
 class ScreenerStockService(BaseScreenerService):
     """주식 스크리너 서비스 클래스"""
-    
+
     def __init__(self):
         super().__init__()
-        
+
     def _is_stock(self) -> bool:
         """주식 관련 서비스임을 표시"""
         return True
-    
+
     def get_factors(self, market: Optional[MarketEnum] = None):
         """
         팩터 정보 조회
@@ -45,7 +46,7 @@ class ScreenerStockService(BaseScreenerService):
                 else:
                     unit = UNIT_MAP[factor["unit"]]
                     type = "slider"
-                    
+
                 result.append(
                     {
                         "factor": factor["factor"],
@@ -64,7 +65,7 @@ class ScreenerStockService(BaseScreenerService):
         except Exception as e:
             logger.exception(f"Error in get_factors: {e}")
             raise e
-    
+
     def get_filtered_stocks(
         self,
         market_filter: Optional[MarketEnum] = None,
@@ -159,13 +160,13 @@ class ScreenerStockService(BaseScreenerService):
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks_with_description: {e}")
             raise e
-    
+
     def get_filtered_data(self, **kwargs):
         """
         필터링된 데이터 조회 (BaseScreenerService 추상 메서드 구현)
         """
         return self.get_filtered_stocks(**kwargs)
-        
+
     def get_available_sectors(self, lang: str = "kr") -> List[str]:
         """
         사용 가능한 섹터 목록 조회
@@ -179,7 +180,7 @@ class ScreenerStockService(BaseScreenerService):
         sectors = list(set(kr_sectors + us_sectors))
 
         return sectors
-    
+
     def get_filtered_data_count(
         self,
         market_filter: Optional[MarketEnum] = None,
