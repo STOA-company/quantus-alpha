@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.crud import database
 from app.database.conn import db
 from app.models.models_stock import StockInformation
-from app.modules.common.enum import FinancialCountry
+from app.modules.common.enum import FinancialCountry, TranslateCountry
 from app.modules.common.services import CommonService, get_common_service
 from app.modules.financial.crud import FinancialCrud
 from app.modules.financial.schemas import (
@@ -157,6 +157,7 @@ class FinancialService:
         self,
         ctry: str,
         ticker: str,
+        lang: TranslateCountry,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         db: Session = Depends(db.get_db),
@@ -179,7 +180,7 @@ class FinancialService:
                 raise InvalidCountryException()
 
             # 정보 조회
-            company_name, sector, tickers = await self.get_stock_info_by_ticker(ticker)
+            company_name, sector, tickers = await self.get_stock_info_by_ticker(ticker, lang)
 
             if not sector:
                 logger.warning(f"No sector information found for ticker {ticker}")
@@ -663,14 +664,15 @@ class FinancialService:
 
         return [row.ticker for row in result] if result else []
 
-    async def get_stock_info_by_ticker(self, ticker: str):
+    async def get_stock_info_by_ticker(self, ticker: str, lang: TranslateCountry):
         """한 번의 쿼리로 stock 관련 정보 조회"""
         try:
             clean_ticker = ticker[:-3] if ticker.endswith("-US") else ticker
+            name = "kr_name" if lang == TranslateCountry.KO else "en_name"
 
             # 1. 기본 회사 정보 조회
             base_result = self.db._select(
-                table="stock_information", columns=["kr_name", "sector_2", "ticker"], ticker=clean_ticker, limit=1
+                table="stock_information", columns=[name, "sector_2", "ticker"], ticker=clean_ticker, limit=1
             )
             if not base_result:
                 return clean_ticker, None, [ticker]
