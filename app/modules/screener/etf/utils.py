@@ -2148,6 +2148,15 @@ class ETFDataMerger:
 
         df_merged = df_merged.rename(columns={"ticker": "Code", "kr_name": "Name", "en_name": "Name"})
 
+        # 숫자로 변환 가능한 문자열을 숫자로 변환
+        for col in df_merged.columns:
+            # Code, Name 등 명시적으로 문자열인 컬럼은 제외
+            if col not in ["Code", "Name"]:
+                # 데이터 타입이 object인 경우에만 변환 시도
+                if df_merged[col].dtype == 'object':
+                    # pd.to_numeric 함수를 사용하여 변환 가능한 값만 숫자로 변환
+                    df_merged[col] = pd.to_numeric(df_merged[col], errors='ignore')
+
         return df_merged
 
 
