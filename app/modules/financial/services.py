@@ -668,22 +668,25 @@ class FinancialService:
         try:
             clean_ticker = ticker[:-3] if ticker.endswith("-US") else ticker
             name = "kr_name" if lang == TranslateCountry.KO else "en_name"
+            sector = "sector_ko" if lang == TranslateCountry.KO else "sector_2"
 
             # 1. 기본 회사 정보 조회
             base_result = self.db._select(
-                table="stock_information", columns=[name, "sector_2", "ticker"], ticker=clean_ticker, limit=1
+                table="stock_information", columns=[name, sector, "ticker"], ticker=clean_ticker, limit=1
             )
             if not base_result:
                 return clean_ticker, None, [ticker]
 
-            company_name, sector, _ = base_result[0]
+            company_name, company_sector, _ = base_result[0]
 
             # 2. 동일 섹터의 다른 티커 조회
-            if sector:
+            if company_sector:
+                condition = {}
+                condition[sector] = company_sector
                 sector_result = self.db._select(
                     table="stock_information",
                     columns=["ticker"],
-                    sector_2=sector,
+                    **condition,
                 )
                 sector_tickers = [row.ticker for row in sector_result]
             else:
@@ -692,7 +695,7 @@ class FinancialService:
             # None 체크 및 기본값 설정
             company_name = company_name if company_name else clean_ticker
 
-            return company_name, sector, sector_tickers
+            return company_name, company_sector, sector_tickers
 
         except Exception as e:
             logger.error(f"Error in get_stock_info_by_ticker: {e}")
