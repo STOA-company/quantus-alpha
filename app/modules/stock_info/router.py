@@ -2,7 +2,7 @@ import logging
 import random
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.modules.common.enum import FearAndGreedIndex
+from app.modules.common.enum import FearAndGreedIndex, TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.news.old_services import NewsService, get_news_service
@@ -12,7 +12,6 @@ from app.modules.stock_info.schemas import FearGreedIndexItem, FearGreedIndexRes
 from .services import StockInfoService, get_stock_info_service
 from app.database.conn import db
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.modules.common.enum import Country
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ async def get_indicators(
 @router.get("/combined", summary="종목 정보, 지표, 기업 정보 전체 조회")
 async def get_combined(
     ticker: str,
-    lang: Country = Country.KR,
+    lang: TranslateCountry = TranslateCountry.KO,
     stock_service: StockInfoService = Depends(get_stock_info_service),
     summary_service: PriceService = Depends(get_price_service),
     news_service: NewsService = Depends(get_news_service),
@@ -66,12 +65,12 @@ async def get_combined(
         logger.error(f"Error fetching indicators: {e}")
         indicators = None
 
-    try:
-        summary = await summary_service.get_price_data_summary(ctry, ticker, lang)
-        logger.info("Successfully fetched summary")
-    except Exception as e:
-        logger.error(f"Error fetching summary: {e}")
-        summary = None
+    # try:
+    summary = await summary_service.get_price_data_summary(ctry, ticker, lang)
+    logger.info("Successfully fetched summary")
+    # except Exception as e:
+    #     logger.error(f"Error fetching summary: {e}")
+    #     summary = None
 
     try:
         latest = news_service.get_latest_news(ticker=ticker)
