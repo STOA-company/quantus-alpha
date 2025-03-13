@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Response
-from typing import List, Dict, Optional
+from typing import List, Dict
 import io
 from app.modules.screener.stock.service import ScreenerStockService
 from app.modules.screener.stock.schemas import (
@@ -232,12 +232,10 @@ async def create_or_update_group(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
 @router.get("/groups/{group_id}", response_model=GroupFilterResponse)
 def get_group_filters(
-    group_id: int = -1, 
-    lang: str = "kr",
-    screener_service: ScreenerStockService = Depends(ScreenerStockService)):
+    group_id: int = -1, lang: str = "kr", screener_service: ScreenerStockService = Depends(ScreenerStockService)
+):
     """
     필터 목록 조회
     """
@@ -255,7 +253,7 @@ def get_group_filters(
         fundamental_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.FUNDAMENTAL)
         valuation_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.VALUATION)
         custom_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
-        
+
         if group_id == -1:
             all_sectors = screener_service.get_available_sectors()
             return GroupFilterResponse(
@@ -265,20 +263,20 @@ def get_group_filters(
                 has_custom=False,
                 sector_filter=all_sectors,
                 custom_filters=[],
-                factor_filters= {
+                factor_filters={
                     "technical": technical_columns,
                     "fundamental": fundamental_columns,
                     "valuation": valuation_columns,
-                    "custom": []
+                    "custom": [],
                 },
-                sort_info= {
+                sort_info={
                     CategoryEnum.TECHNICAL: technical_sort_info,
                     CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
                     CategoryEnum.VALUATION: valuation_sort_info,
                     CategoryEnum.CUSTOM: custom_sort_info,
-                }
+                },
             )
-        
+
         group_filters = screener_service.get_group_filters(group_id)
         stock_filters = group_filters["stock_filters"]
 
@@ -310,9 +308,9 @@ def get_group_filters(
                 "technical": technical_columns,
                 "fundamental": fundamental_columns,
                 "valuation": valuation_columns,
-                "custom": custom_factor_filters
+                "custom": custom_factor_filters,
             },
-            sort_info= {
+            sort_info={
                 CategoryEnum.TECHNICAL: technical_sort_info,
                 CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
                 CategoryEnum.VALUATION: valuation_sort_info,

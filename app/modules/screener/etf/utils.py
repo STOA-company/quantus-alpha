@@ -928,7 +928,7 @@ class ETFDataLoader:
             df["country"] = "kr"
         else:
             raise ValueError(f"Invalid market: {market_filter}")
-        
+
         if "volatility" in df.columns:
             df.rename(columns={"volatility": "risk_rating"}, inplace=True)
         return df
@@ -2153,9 +2153,9 @@ class ETFDataMerger:
             # Code, Name 등 명시적으로 문자열인 컬럼은 제외
             if col not in ["Code", "Name"]:
                 # 데이터 타입이 object인 경우에만 변환 시도
-                if df_merged[col].dtype == 'object':
+                if df_merged[col].dtype == "object":
                     # pd.to_numeric 함수를 사용하여 변환 가능한 값만 숫자로 변환
-                    df_merged[col] = pd.to_numeric(df_merged[col], errors='ignore')
+                    df_merged[col] = pd.to_numeric(df_merged[col], errors="ignore")
 
         return df_merged
 

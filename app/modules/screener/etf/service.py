@@ -17,33 +17,24 @@ from app.common.constants import (
 from app.core.exception.base import CustomException
 from app.core.logging.config import get_logger
 from app.modules.screener.etf.enum import ETFMarketEnum
-from app.modules.screener.etf.schemas import FilteredETF
 from app.modules.screener.base import BaseScreenerService
 from app.utils.date_utils import get_business_days
 from app.utils.score_utils import etf_score_utils
 from app.modules.screener.utils import screener_utils
 from app.cache.factors import etf_factors_cache
-from app.modules.screener.etf.utils import (
-    ETFDataLoader,
-    ETFDataPreprocessor,
-    ETFFactorExtractor,
-    ETFDataMerger,
-    ETFDataDownloader,
-    KRXDownloader,
-)
 
 logger = get_logger(__name__)
 
 
 class ScreenerETFService(BaseScreenerService):
     """ETF 스크리너 서비스 클래스"""
-    
+
     def __init__(self):
         super().__init__()
-    
+
     def _is_stock(self) -> bool:
         return False
-    
+
     def get_factors(self, market: ETFMarketEnum):
         """
         ETF 팩터 정보 조회
@@ -67,7 +58,7 @@ class ScreenerETFService(BaseScreenerService):
                 else:
                     unit = UNIT_MAP[factor["unit"]]
                     type = "slider"
-                    
+
                 result.append(
                     {
                         "factor": factor["factor"],
@@ -86,7 +77,7 @@ class ScreenerETFService(BaseScreenerService):
         except Exception as e:
             logger.exception(f"Error in get_factors: {e}")
             raise e
-    
+
     def get_filtered_etfs(
         self,
         market_filter: Optional[ETFMarketEnum] = None,
@@ -103,7 +94,7 @@ class ScreenerETFService(BaseScreenerService):
         """
         if columns is None:
             columns = []
-        
+
         non_numeric_columns = [col for col in NON_NUMERIC_COLUMNS_ETF]
 
         if sort_by not in columns and sort_by not in non_numeric_columns:
@@ -115,8 +106,8 @@ class ScreenerETFService(BaseScreenerService):
         # 점수 계산
         scored_df = etf_score_utils.calculate_factor_score(filtered_df)
         if scored_df.empty:
-            return [], 0 
-        
+            return [], 0
+
         # 병합
         merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
         # 정렬
@@ -124,7 +115,7 @@ class ScreenerETFService(BaseScreenerService):
         # 페이징
         total_count = len(sorted_df)
         sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit + 1]
-        
+
         factors = etf_factors_cache.get_configs()
         result = []
 
@@ -136,7 +127,7 @@ class ScreenerETFService(BaseScreenerService):
                     ordered_columns.append(mapped_col)
         else:
             ordered_columns = ["Code", "Name", "manager", "score", "country"]
-        
+
         selected_columns = ordered_columns.copy()
 
         sorted_df = sorted_df[selected_columns]
@@ -176,13 +167,13 @@ class ScreenerETFService(BaseScreenerService):
             mapped_result.append(mapped_item)
 
         return mapped_result, total_count
-    
+
     def get_filtered_data(self, **kwargs):
         """
         필터링된 데이터 조회 (BaseScreenerService 추상 메서드 구현)
         """
         return self.get_filtered_etfs(**kwargs)
-    
+
     def _filter_etfs(
         self,
         df_etfs: pd.DataFrame,
@@ -234,7 +225,7 @@ class ScreenerETFService(BaseScreenerService):
         df_etfs = df_etfs[required_columns]
 
         return df_etfs
-    
+
     def get_filtered_data_count(
         self,
         market_filter: Optional[ETFMarketEnum] = None,

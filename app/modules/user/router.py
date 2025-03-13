@@ -56,6 +56,7 @@ async def signup(
         "access_token_hash": access_token_hash,
     }
 
+
 @router.post("/screener-init")
 async def screener_init(user_id: int, service: UserService = Depends(get_user_service)):
     await service.screener_init(user_id=user_id)

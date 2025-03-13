@@ -57,10 +57,10 @@ add_slack_middleware(
     webhook_url="https://hooks.slack.com/services/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",
     mention_usernames=["고경민", "김광윤"],  # 알림을 받을 사용자 이름 (SlackNotifier.SLACK_USER_IDS에 정의된)
     include_traceback=True,
-    include_request_body=False,  
+    include_request_body=False,
     error_status_codes=[500, 503],  # 이 상태 코드들에 대해 알림 발송
     environment=settings.ENV,
-    notify_environments=["stage"],  
+    notify_environments=["stage"],
 )
 
 app.add_middleware(
@@ -92,7 +92,7 @@ async def health_check():
 
         # 메타데이터 확인
         tables = database.meta_data.tables.keys()
-        
+
         return HealthCheckResponse(
             status_code=200,
             database="connected",

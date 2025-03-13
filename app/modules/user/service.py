@@ -411,7 +411,7 @@ class UserService:
             logger.info(f"Token deleted: {access_token_hash}")
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
-        
+
     async def screener_init(self, user_id: int):
         screener_service = ScreenerStockService()
         all_sectors = screener_service.get_available_sectors()

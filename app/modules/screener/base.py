@@ -1,40 +1,32 @@
-import datetime
-import io
-import os
-import pandas as pd
-import numpy as np
 import asyncio
-import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
-from app.database.crud import database, database_service
+from app.database.crud import database_service
 from app.modules.screener.stock.schemas import MarketEnum, SortInfo
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
 from app.modules.screener.utils import screener_utils
 from app.common.constants import (
-    FACTOR_MAP, 
+    FACTOR_MAP,
     REVERSE_FACTOR_MAP,
 )
 from app.core.exception.base import CustomException
 from app.core.logging.config import get_logger
-from app.database.crud import database_service
-from abc import ABC, abstractmethod
-from typing import List, Dict
 
 logger = get_logger(__name__)
 
 
 class BaseScreenerService(ABC):
     """기본 스크리너 서비스 추상 클래스"""
+
     MAX_GROUPS = 10  # 최대 그룹 수 제한
-    
+
     def __init__(self):
         self.database = database_service
         self.lang = "kr"
-        
+
     def get_groups(self, user_id: str, type: str = "STOCK") -> List[Dict]:
         """
         사용자의 그룹 목록 조회
@@ -54,15 +46,17 @@ class BaseScreenerService(ABC):
         except Exception as e:
             logger.error(f"Error in get_groups: {e}")
             raise e
-    
+
     def get_group_filters(self, group_id: int) -> Dict:
         """
         그룹 필터 조회
         """
         try:
-            group = self.database._select(table="screener_groups", id=group_id)            
+            group = self.database._select(table="screener_groups", id=group_id)
             stock_filters = self.database._select(table="screener_stock_filters", group_id=group_id)
-            custom_factor_filters = self.database._select(table="screener_factor_filters", group_id=group_id, category=CategoryEnum.CUSTOM)
+            custom_factor_filters = self.database._select(
+                table="screener_factor_filters", group_id=group_id, category=CategoryEnum.CUSTOM
+            )
             custom_factor_filters = sorted(custom_factor_filters, key=lambda x: x.order)
             has_custom = len(custom_factor_filters) > 0
 
@@ -109,8 +103,10 @@ class BaseScreenerService(ABC):
         except Exception as e:
             logger.error(f"Error in reorder_groups: {e}")
             raise e
-    
-    async def reorder_factor_filters(self, group_id: int, category: CategoryEnum = CategoryEnum.CUSTOM, factor_filters: List[str] = []) -> bool:
+
+    async def reorder_factor_filters(
+        self, group_id: int, category: CategoryEnum = CategoryEnum.CUSTOM, factor_filters: List[str] = []
+    ) -> bool:
         """
         팩터 필터 순서 변경
         """
@@ -118,21 +114,23 @@ class BaseScreenerService(ABC):
             self.database._delete(table="screener_factor_filters", group_id=group_id, category=category)
             insert_tasks = []
             for idx, factor in enumerate(factor_filters):
-                insert_tasks.append(self.database.insert_wrapper(
-                    table="screener_factor_filters",
-                    sets={
-                        "group_id": group_id,
-                        "factor": REVERSE_FACTOR_MAP[factor],
-                        "order": idx + 1,
-                        "category": category,
-                    },
-                ))
+                insert_tasks.append(
+                    self.database.insert_wrapper(
+                        table="screener_factor_filters",
+                        sets={
+                            "group_id": group_id,
+                            "factor": REVERSE_FACTOR_MAP[factor],
+                            "order": idx + 1,
+                            "category": category,
+                        },
+                    )
+                )
             await asyncio.gather(*insert_tasks)
             return True
         except Exception as e:
             logger.exception(f"Error in reorder_factor_filters: {e}")
             raise e
-    
+
     def get_columns(self, group_id: int = -1, category: CategoryEnum = CategoryEnum.TECHNICAL) -> List[str]:
         """
         컬럼 목록 조회
@@ -142,7 +140,9 @@ class BaseScreenerService(ABC):
                 default_columns = screener_utils.get_default_columns(category=category)
                 return [FACTOR_MAP[column] for column in default_columns]
 
-            factor_filters = self.database._select(table="screener_factor_filters", columns=["factor", "order"], group_id=group_id, category=category)
+            factor_filters = self.database._select(
+                table="screener_factor_filters", columns=["factor", "order"], group_id=group_id, category=category
+            )
             factor_filters = sorted(factor_filters, key=lambda x: x.order)
 
             return [FACTOR_MAP[factor_filter.factor] for factor_filter in factor_filters]
@@ -150,7 +150,7 @@ class BaseScreenerService(ABC):
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
             raise e
-    
+
     def update_group_name(self, group_id: int, name: str) -> str:
         """
         그룹 이름 변경
@@ -169,7 +169,7 @@ class BaseScreenerService(ABC):
         except Exception as e:
             logger.error(f"Error in update_group_name: {e}")
             raise e
-    
+
     def validate_group(self, group_ids: List[int]) -> bool:
         """
         그룹 유효성 검사
@@ -180,14 +180,14 @@ class BaseScreenerService(ABC):
             raise CustomException(status_code=400, detail="Groups has duplicate values")
         if any(group_id <= 0 for group_id in group_ids):
             raise CustomException(status_code=400, detail="Groups has negative values")
-    
+
     def get_group_length(self, user_id: int) -> int:
         """
         그룹 수 조회
         """
         groups = self.database._select(table="screener_groups", columns=["id"], user_id=user_id)
         return len(groups)
-    
+
     def check_owner(self, group_id: Union[int, List[int]], user_id: int) -> bool:
         """
         그룹 소유자 확인
@@ -203,7 +203,7 @@ class BaseScreenerService(ABC):
                 return False
             group_user_id = int(groups[0].user_id)
             return group_user_id == user_id
-    
+
     def get_sort_info(self, group_id: int, category: CategoryEnum) -> SortInfo:
         """
         정렬 정보 조회
@@ -213,7 +213,7 @@ class BaseScreenerService(ABC):
             return SortInfo(sort_by=FACTOR_MAP[sort_infos[0].sort_by], ascending=sort_infos[0].ascending)
         else:
             return SortInfo(sort_by="스코어", ascending=False)
-    
+
     async def create_default_factor_filters(self, group_id: int, type: StockType) -> bool:
         """
         기본 팩터 필터 생성
@@ -228,67 +228,147 @@ class BaseScreenerService(ABC):
 
             if type == StockType.STOCK:
                 for idx, factor in enumerate(technical):
-                    insert_tasks.append(self.database.insert_wrapper(
-                        table="screener_factor_filters", 
-                        sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.TECHNICAL}
-                    ))
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_factor_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": factor,
+                                "order": idx + 1,
+                                "category": CategoryEnum.TECHNICAL,
+                            },
+                        )
+                    )
                 for idx, factor in enumerate(fundamental):
-                    insert_tasks.append(self.database.insert_wrapper(
-                        table="screener_factor_filters", 
-                        sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.FUNDAMENTAL}
-                    ))
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_factor_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": factor,
+                                "order": idx + 1,
+                                "category": CategoryEnum.FUNDAMENTAL,
+                            },
+                        )
+                    )
 
                 for idx, factor in enumerate(valuation):
-                    insert_tasks.append(self.database.insert_wrapper(
-                        table="screener_factor_filters", 
-                        sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.VALUATION}
-                    ))
-                
-                insert_tasks.append(self.database.insert_wrapper(
-                    table="screener_sort_infos", sets={"group_id": group_id, "category": CategoryEnum.TECHNICAL, "sort_by": "score", "ascending": False, "type": StockType.STOCK}
-                ))
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_factor_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": factor,
+                                "order": idx + 1,
+                                "category": CategoryEnum.VALUATION,
+                            },
+                        )
+                    )
 
-                insert_tasks.append(self.database.insert_wrapper(
-                    table="screener_sort_infos", sets={"group_id": group_id, "category": CategoryEnum.FUNDAMENTAL, "sort_by": "score", "ascending": False, "type": StockType.STOCK}
-                ))
-                insert_tasks.append(self.database.insert_wrapper(
-                    table="screener_sort_infos", sets={"group_id": group_id, "category": CategoryEnum.VALUATION, "sort_by": "score", "ascending": False, "type": StockType.STOCK}
-                ))
-            
+                insert_tasks.append(
+                    self.database.insert_wrapper(
+                        table="screener_sort_infos",
+                        sets={
+                            "group_id": group_id,
+                            "category": CategoryEnum.TECHNICAL,
+                            "sort_by": "score",
+                            "ascending": False,
+                            "type": StockType.STOCK,
+                        },
+                    )
+                )
+
+                insert_tasks.append(
+                    self.database.insert_wrapper(
+                        table="screener_sort_infos",
+                        sets={
+                            "group_id": group_id,
+                            "category": CategoryEnum.FUNDAMENTAL,
+                            "sort_by": "score",
+                            "ascending": False,
+                            "type": StockType.STOCK,
+                        },
+                    )
+                )
+                insert_tasks.append(
+                    self.database.insert_wrapper(
+                        table="screener_sort_infos",
+                        sets={
+                            "group_id": group_id,
+                            "category": CategoryEnum.VALUATION,
+                            "sort_by": "score",
+                            "ascending": False,
+                            "type": StockType.STOCK,
+                        },
+                    )
+                )
+
             elif type == StockType.ETF:
                 technical.remove("sector")
                 technical.remove("beta")
                 dividend.remove("sector")
                 for idx, factor in enumerate(technical):
-                    insert_tasks.append(self.database.insert_wrapper(
-                        table="screener_factor_filters", 
-                        sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.TECHNICAL}
-                    ))
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_factor_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": factor,
+                                "order": idx + 1,
+                                "category": CategoryEnum.TECHNICAL,
+                            },
+                        )
+                    )
                 for idx, factor in enumerate(dividend):
-                    insert_tasks.append(self.database.insert_wrapper(
-                        table="screener_factor_filters", 
-                        sets={"group_id": group_id, "factor": factor, "order": idx + 1, "category": CategoryEnum.DIVIDEND}
-                    ))
-            
-                insert_tasks.append(self.database.insert_wrapper(
-                    table="screener_sort_infos", sets={"group_id": group_id, "category": CategoryEnum.TECHNICAL, "sort_by": "score", "ascending": False, "type": StockType.ETF}
-                ))
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_factor_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": factor,
+                                "order": idx + 1,
+                                "category": CategoryEnum.DIVIDEND,
+                            },
+                        )
+                    )
 
-                insert_tasks.append(self.database.insert_wrapper(
-                    table="screener_sort_infos", sets={"group_id": group_id, "category": CategoryEnum.DIVIDEND, "sort_by": "score", "ascending": False, "type": StockType.ETF}
-                ))
+                insert_tasks.append(
+                    self.database.insert_wrapper(
+                        table="screener_sort_infos",
+                        sets={
+                            "group_id": group_id,
+                            "category": CategoryEnum.TECHNICAL,
+                            "sort_by": "score",
+                            "ascending": False,
+                            "type": StockType.ETF,
+                        },
+                    )
+                )
+
+                insert_tasks.append(
+                    self.database.insert_wrapper(
+                        table="screener_sort_infos",
+                        sets={
+                            "group_id": group_id,
+                            "category": CategoryEnum.DIVIDEND,
+                            "sort_by": "score",
+                            "ascending": False,
+                            "type": StockType.ETF,
+                        },
+                    )
+                )
 
             else:
                 raise CustomException(status_code=400, message="Invalid type")
 
             await asyncio.gather(*insert_tasks)
-            
+
             return True
         except Exception as e:
             logger.error(f"Error in create_default_factor_filters: {e}")
             self.database._delete(table="screener_factor_filters", group_id=group_id)
             raise e
-    
+
     async def create_group(
         self,
         user_id: int,
@@ -327,29 +407,35 @@ class BaseScreenerService(ABC):
 
             # 종목 필터
             if market_filter:
-                insert_tasks.append(self.database.insert_wrapper(
-                    table="screener_stock_filters",
-                    sets={"group_id": group_id, "factor": "market", "value": market_filter},
-                ))
+                insert_tasks.append(
+                    self.database.insert_wrapper(
+                        table="screener_stock_filters",
+                        sets={"group_id": group_id, "factor": "market", "value": market_filter},
+                    )
+                )
 
             if sector_filter:
                 for sector in sector_filter:
-                    insert_tasks.append(self.database.insert_wrapper(
-                        table="screener_stock_filters",
-                        sets={"group_id": group_id, "factor": "sector", "value": sector},
-                    ))
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_stock_filters",
+                            sets={"group_id": group_id, "factor": "sector", "value": sector},
+                        )
+                    )
 
             if custom_filters:
                 for condition in custom_filters:
-                    insert_tasks.append(self.database.insert_wrapper(
-                        table="screener_stock_filters",
-                        sets={
-                            "group_id": group_id,
-                            "factor": REVERSE_FACTOR_MAP[condition.factor],
-                            "above": condition.above,
-                            "below": condition.below,
-                        },
-                    ))
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_stock_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                "above": condition.above,
+                                "below": condition.below,
+                            },
+                        )
+                    )
 
             await asyncio.gather(*insert_tasks)
 
@@ -361,7 +447,7 @@ class BaseScreenerService(ABC):
 
             logger.error(f"Error in create_group: {e}")
             raise e
-    
+
     async def update_group(
         self,
         group_id: int,
@@ -400,37 +486,43 @@ class BaseScreenerService(ABC):
                 self.database._delete(table="screener_stock_filters", group_id=group_id)
 
             if market_filter:
-                insert_tasks.append(self.database.insert_wrapper(
-                    table="screener_stock_filters",
-                    sets={
-                        "group_id": group_id,
-                        "factor": "market",
-                        "value": market_filter,
-                    },
-                ))
+                insert_tasks.append(
+                    self.database.insert_wrapper(
+                        table="screener_stock_filters",
+                        sets={
+                            "group_id": group_id,
+                            "factor": "market",
+                            "value": market_filter,
+                        },
+                    )
+                )
 
             if sector_filter:
                 for sector in sector_filter:
-                    insert_tasks.append(self.database.insert_wrapper(
-                        table="screener_stock_filters",
-                        sets={
-                            "group_id": group_id,
-                            "factor": "sector",
-                            "value": sector,
-                        },
-                    ))
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_stock_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": "sector",
+                                "value": sector,
+                            },
+                        )
+                    )
 
             if custom_filters:
                 for condition in custom_filters:
-                    insert_tasks.append(self.database.insert_wrapper(
-                        table="screener_stock_filters",
-                        sets={
-                            "group_id": group_id,
-                            "factor": REVERSE_FACTOR_MAP[condition.factor],
-                            "above": condition.above,
-                            "below": condition.below,
-                        },
-                    ))
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_stock_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                "above": condition.above,
+                                "below": condition.below,
+                            },
+                        )
+                    )
 
             # 팩터 필터
             if factor_filters:
@@ -440,11 +532,11 @@ class BaseScreenerService(ABC):
             if sort_info:
                 for category, sort_info in sort_info.items():
                     self.database._update(
-                        table="screener_sort_infos", 
-                        group_id=group_id, 
-                        category=category, 
-                        type=type, 
-                        sets={"sort_by": REVERSE_FACTOR_MAP[sort_info.sort_by], "ascending": sort_info.ascending}
+                        table="screener_sort_infos",
+                        group_id=group_id,
+                        category=category,
+                        type=type,
+                        sets={"sort_by": REVERSE_FACTOR_MAP[sort_info.sort_by], "ascending": sort_info.ascending},
                     )
 
             await asyncio.gather(*insert_tasks)

@@ -1,17 +1,22 @@
 import io
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.batches.run_etf_screener import run_etf_screener_data
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
-from app.modules.screener.stock.schemas import ColumnsResponse, FactorResponse, GroupFilter, GroupFilterResponse, GroupMetaData
-from app.modules.screener.etf.enum import ETFCategoryEnum, ETFMarketEnum
+from app.modules.screener.stock.schemas import FactorResponse, GroupFilter, GroupFilterResponse, GroupMetaData
+from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.etf.schemas import FilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
 from app.utils.oauth_utils import get_current_user
 from app.core.logging.config import get_logger
-from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP, MARKET_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN
+from app.common.constants import (
+    FACTOR_KOREAN_TO_ENGLISH_MAP,
+    MARKET_KOREAN_TO_ENGLISH_MAP,
+    REVERSE_FACTOR_MAP,
+    REVERSE_FACTOR_MAP_EN,
+)
 from app.core.exception.base import CustomException
 
 router = APIRouter()
@@ -97,13 +102,14 @@ def get_filtered_etfs_count(
         ]
 
     total_count = screener_etf_service.get_filtered_data_count(
-        market_filter=filtered_etf.market_filter, 
-        custom_filters=custom_filters, 
+        market_filter=filtered_etf.market_filter,
+        custom_filters=custom_filters,
         sector_filter=None,
-        columns=[REVERSE_FACTOR_MAP[column] for column in filtered_etf.factor_filters]
+        columns=[REVERSE_FACTOR_MAP[column] for column in filtered_etf.factor_filters],
     )
-    
+
     return {"count": total_count}
+
 
 @router.post("/download", response_model=Dict)
 def download_filtered_etfs(
@@ -219,18 +225,13 @@ def get_group_filters(
                 has_custom=False,
                 sector_filter=[],
                 custom_filters=[],
-                factor_filters= {
-                    "technical": technical_columns,
-                    "dividend": dividend_columns,
-                    "custom": []
-                }, 
-                sort_info= {
+                factor_filters={"technical": technical_columns, "dividend": dividend_columns, "custom": []},
+                sort_info={
                     CategoryEnum.TECHNICAL: technical_sort_info,
                     CategoryEnum.DIVIDEND: dividend_sort_info,
                     CategoryEnum.CUSTOM: custom_sort_info,
-                }           
+                },
             )
-            
 
         group_filters = screener_etf_service.get_group_filters(group_id)
         stock_filters = group_filters["stock_filters"]
@@ -262,9 +263,9 @@ def get_group_filters(
             factor_filters={
                 "technical": technical_columns,
                 "dividend": dividend_columns,
-                "custom": custom_factor_filters
+                "custom": custom_factor_filters,
             },
-            sort_info= {
+            sort_info={
                 CategoryEnum.TECHNICAL: technical_sort_info,
                 CategoryEnum.DIVIDEND: dividend_sort_info,
                 CategoryEnum.CUSTOM: custom_sort_info,
@@ -325,7 +326,7 @@ def update_group_name(group_id: int, name: str, screener_etf_service: ScreenerET
     except Exception as e:
         logger.error(f"Error updating group name: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 
 @router.get("/parquet/{ctry}")
 def update_parquet(ctry: Literal["KR", "US"], screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
