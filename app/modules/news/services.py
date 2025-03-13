@@ -676,25 +676,18 @@ class NewsService:
             columns=["ticker"],
             **{"en_name": stock_info[0][1]},
         )
+        condition = {
+            "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "is_exist": True,
+            "is_related": True,
+            "lang": lang,
+        }
         if len(duplicate_stock_info) == 2:
             unique_tickers = [info[0] for info in duplicate_stock_info]
-            condition = {
-                "ticker__in": unique_tickers,
-                "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-                "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-                "is_exist": True,
-                "is_related": True,
-                "lang": lang,
-            }
+            condition["ticker__in"] = unique_tickers
         else:
-            condition = {
-                "ticker": ticker,
-                "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-                "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-                "is_exist": True,
-                "is_related": True,
-                "lang": lang,
-            }
+            condition["ticker"] = ticker
 
         df_news = pd.DataFrame(
             self.db._select(
@@ -737,24 +730,24 @@ class NewsService:
         df_news["date"] = pd.to_datetime(df_news["date"]).dt.tz_localize(utc).dt.tz_convert(kst)
         df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
 
-        df_price = pd.DataFrame(
-            self.db._select(
-                table="stock_trend",
-                columns=["ticker", "current_price"],
-                **{"ticker": ticker},
-            )
-        )
+        # df_price = pd.DataFrame(
+        #     self.db._select(
+        #         table="stock_trend",
+        #         columns=["ticker", "current_price"],
+        #         **{"ticker": ticker},
+        #     )
+        # )
 
         df_news["price_impact"] = 0.0
-        if not df_price.empty:
-            df_price["current_price"] = df_price["current_price"].fillna(0.0)
+        # if not df_price.empty:
+        #     df_price["current_price"] = df_price["current_price"].fillna(0.0)
 
-            df_news = pd.merge(df_news, df_price, on="ticker", how="left")
+        #     df_news = pd.merge(df_news, df_price, on="ticker", how="left")
 
-            df_news["price_impact"] = (
-                (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100
-            )
-            df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
+        #     df_news["price_impact"] = (
+        #         (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100
+        #     )
+        #     df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
 
         data = []
         for _, row in df_news.iterrows():
