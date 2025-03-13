@@ -46,6 +46,7 @@ MARKET_MAP = {
     "NAS": "나스닥",
     "NYS": "뉴욕 증권 거래소",
     "AMS": "아멕스",
+    "BATS": "바츠",
 }
 
 MARKET_KOREAN_TO_ENGLISH_MAP = {
@@ -54,6 +55,7 @@ MARKET_KOREAN_TO_ENGLISH_MAP = {
     "나스닥": "NASDAQ",
     "뉴욕 증권 거래소": "NYSE",
     "아멕스": "AMS",
+    "바츠": "BATS",
 }
 
 FACTOR_MAP = {

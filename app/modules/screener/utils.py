@@ -102,7 +102,7 @@ class ScreenerUtils:
             CategoryEnum.TECHNICAL: ["beta", "rsi_14", "sharpe", "momentum_6", "vol"],
             CategoryEnum.FUNDAMENTAL: ["roe", "fscore", "deptRatio", "operating_income", "z_score"],
             CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"],
-            CategoryEnum.DIVIDEND: ["dividend_count", "last_dividend_date", "last_dividend_per_share", "dividend_growth_rate_5y", "risk_rating"]
+            CategoryEnum.DIVIDEND: ["dividend_count", "total_fee", "last_dividend_per_share", "dividend_growth_rate_5y", "risk_rating"]
         }
         
         return [*base_columns, *additional_columns.get(category, [])]
@@ -321,7 +321,7 @@ class ScreenerUtils:
             elif market_filter == ETFMarketEnum.KR:
                 filtered_df = filtered_df[filtered_df["country"] == "kr"]
             elif market_filter in [ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
-                filtered_df = filtered_df[filtered_df["market"] == market_filter.value]
+                filtered_df = filtered_df[filtered_df["market"] == market_filter]
 
         if custom_filters:
             for filter in custom_filters:
