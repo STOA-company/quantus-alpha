@@ -200,7 +200,7 @@ class ScreenerETFService(BaseScreenerService):
             # if filtered_etf.market_filter in [ETFMarketEnum.KR]:
             #     df_etfs = df_etfs[df_etfs["market"] == "KRX"]
             if market_filter in [ETFMarketEnum.NYSE, ETFMarketEnum.NASDAQ, ETFMarketEnum.BATS]:
-                df_etfs = df_etfs[df_etfs["market"] == market_filter.value]
+                df_etfs = df_etfs[df_etfs["market"] == market_filter.value.upper()]
 
         # 종목 필터 - 커스텀 필터링
         custom_filters = []
@@ -245,10 +245,8 @@ class ScreenerETFService(BaseScreenerService):
         """
         필터링된 ETF 개수 조회
         """
-        etf_loader = ETFDataLoader()
-        df_etfs = etf_loader.load_etf_factors(market_filter)
-
-        filtered_df = self._filter_etfs(df_etfs, market_filter, custom_filters, columns)
+        etfs = screener_utils.filter_etfs(market_filter, custom_filters)
+        filtered_df = screener_utils.get_filtered_etfs_df(market_filter, etfs, columns)
 
         return len(filtered_df)
 
