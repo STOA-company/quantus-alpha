@@ -49,8 +49,10 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
                 request_columns.append(column)
 
         sort_by = "score"
-        if filtered_etf.sort_by:
-            sort_by = reverse_factor_map[filtered_etf.sort_by]
+        ascending = False
+        if filtered_etf.sort_info:
+            sort_by = reverse_factor_map[filtered_etf.sort_info.sort_by]
+            ascending = filtered_etf.sort_info.ascending
 
         etfs_data, total_count = screener_etf_service.get_filtered_data(
             market_filter=filtered_etf.market_filter,
@@ -59,7 +61,7 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
             limit=filtered_etf.limit,
             offset=filtered_etf.offset,
             sort_by=sort_by,
-            ascending=filtered_etf.ascending,
+            ascending=ascending,
             lang=filtered_etf.lang,
         )
 

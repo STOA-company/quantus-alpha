@@ -130,19 +130,19 @@ class ScoreUtils:
             min_value = config.get("min_value")
             max_value = config.get("max_value")
 
-            outlier_mask = pd.Series(False, index=series.index)
+            outlier_mask = pd.Series(False, index=df_copy.index)
             if min_value is not None:
-                outlier_mask = series < min_value
+                outlier_mask = df_copy[col] < min_value
             if max_value is not None:
-                outlier_mask = series > max_value
-            
+                outlier_mask = df_copy[col] > max_value
+
             if outlier_mask.any():
                 if ascending:
-                    series.loc[outlier_mask] = float('inf')
+                    df_copy.loc[outlier_mask, col] = float('inf')
                 else:
-                    series.loc[outlier_mask] = float('-inf')
-                
-            ranks = series.rank(method="min", ascending=ascending)
+                    df_copy.loc[outlier_mask, col] = float('-inf')
+
+            ranks = df_copy[col].rank(method="min", ascending=ascending)
             max_ranks_per_factor.append(ranks.max())  # 해당 팩터의 최대 순위(꼴등) 저장
 
             factor_ranks = np.column_stack((factor_ranks, ranks.values))
