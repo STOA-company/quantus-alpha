@@ -425,7 +425,7 @@ class BaseScreenerService(ABC):
                     if sort_info.sort_by:
                         self.database._update(table="screener_sort_infos", group_id=group_id, category=category, sets={"sort_by": REVERSE_FACTOR_MAP[sort_info.sort_by]})
                     if sort_info.ascending:
-                        self.database._update(table="screener_sort_infos", group_id=group_id, category=category, sets={"ascending": sort_info.get("ascending")})
+                        self.database._update(table="screener_sort_infos", group_id=group_id, category=category, sets={"ascending": sort_info.ascending})
 
             await asyncio.gather(*insert_tasks)
 
