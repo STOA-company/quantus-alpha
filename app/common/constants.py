@@ -144,6 +144,7 @@ FACTOR_MAP = {
     "tax_type": "세금 유형",
     "is_hedge": "헤지 여부",
     "last_dividend_date": "최근 배당일",
+    "risk_rating": "위험 등급",
     "ctry": "국 가",  # 띄어쓰기 제거시 에러 발생함
 }
 

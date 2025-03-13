@@ -63,7 +63,7 @@ def get_filtered_stocks(
                 for condition in filtered_stocks.custom_filters
             ]
 
-        request_columns = ["Code", "Name", "country", "score"]
+        request_columns = ["Code", "Name", "country"]
         reverse_factor_map = REVERSE_FACTOR_MAP
         if filtered_stocks.lang == "en":
             reverse_factor_map = REVERSE_FACTOR_MAP_EN

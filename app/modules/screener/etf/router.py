@@ -39,7 +39,7 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
                 for condition in filtered_etf.custom_filters
             ]
 
-        request_columns = ["Code", "Name", "manager", "score", "country"]
+        request_columns = ["Code", "Name", "manager", "country"]
         reverse_factor_map = REVERSE_FACTOR_MAP
         if filtered_etf.lang == "en":
             reverse_factor_map = REVERSE_FACTOR_MAP_EN
@@ -184,18 +184,13 @@ def get_group_filters(
     """
     try:
         technical_columns = screener_etf_service.get_columns(group_id, CategoryEnum.TECHNICAL)
-        fundamental_columns = screener_etf_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL)
-        valuation_columns = screener_etf_service.get_columns(group_id, CategoryEnum.VALUATION)
         dividend_columns = screener_etf_service.get_columns(group_id, CategoryEnum.DIVIDEND)
 
         if lang == "en":
             technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
-            fundamental_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in fundamental_columns]
-            valuation_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in valuation_columns]
+            dividend_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in dividend_columns]
 
         technical_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
-        fundamental_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.FUNDAMENTAL)
-        valuation_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.VALUATION)
         dividend_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.DIVIDEND)
         custom_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
 
@@ -210,15 +205,12 @@ def get_group_filters(
                 custom_filters=[],
                 factor_filters= {
                     "technical": technical_columns,
-                    "fundamental": fundamental_columns,
-                    "valuation": valuation_columns,
                     "dividend": dividend_columns,
                     "custom": []
                 }, 
                 sort_info= {
                     CategoryEnum.TECHNICAL: technical_sort_info,
-                    CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
-                    CategoryEnum.VALUATION: valuation_sort_info,
+                    CategoryEnum.DIVIDEND: dividend_sort_info,
                     CategoryEnum.CUSTOM: custom_sort_info,
                 }           
             )
@@ -253,15 +245,11 @@ def get_group_filters(
             custom_filters=custom_filters,
             factor_filters={
                 "technical": technical_columns,
-                "fundamental": fundamental_columns,
-                "valuation": valuation_columns,
                 "dividend": dividend_columns,
                 "custom": custom_factor_filters
             },
             sort_info= {
                 CategoryEnum.TECHNICAL: technical_sort_info,
-                CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
-                CategoryEnum.VALUATION: valuation_sort_info,
                 CategoryEnum.DIVIDEND: dividend_sort_info,
                 CategoryEnum.CUSTOM: custom_sort_info,
             },
