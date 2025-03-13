@@ -98,7 +98,8 @@ class ScreenerUtils:
         additional_columns = {
             CategoryEnum.TECHNICAL: ["beta", "rsi_14", "sharpe", "momentum_6", "vol"],
             CategoryEnum.FUNDAMENTAL: ["roe", "fscore", "deptRatio", "operating_income", "z_score"],
-            CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"]
+            CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"],
+            CategoryEnum.DIVIDEND: ["dividend_count", "last_dividend_date", "last_dividend_per_share", "dividend_growth_rate_5y", "risk_rating"]
         }
         
         return [*base_columns, *additional_columns.get(category, [])]
