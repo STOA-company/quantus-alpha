@@ -197,7 +197,8 @@ class ScreenerUtils:
 
         result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_us_active.parquet", dir="port/")
         df = pd.read_parquet(io.BytesIO(result))
-        df["Code"] = df["Code"].str.replace("-US", "")
+
+        df["merge_code"] = df["Code"].str.replace("-US", "")
 
         stock_information = self.db._select(
             "stock_information",
@@ -215,15 +216,17 @@ class ScreenerUtils:
             ctry="us",
         )
         stock_info_df = pd.DataFrame(stock_information)
-        stock_info_df = stock_info_df.rename(columns={"ticker": "Code"})
+        stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
         stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
         stock_info_df["sector_en"] = stock_info_df["sector_2"].fillna("Other")
 
         # INNER JOIN
-        df = pd.merge(df, stock_info_df, on="Code", how="inner")
+        df = pd.merge(df, stock_info_df, on="merge_code", how="inner")
         df["Name"] = df["kr_name"]
         df["Name_en"] = df["en_name"]
-        df = df.drop(["kr_name", "en_name"], axis=1)
+        df = df.drop(["merge_code", "kr_name", "en_name"], axis=1)
+
+        df["Code"] = df["Code"].str.replace("-US", "")
 
         df["country"] = "us"
 
@@ -295,33 +298,32 @@ class ScreenerUtils:
         custom_filters: Optional[List[Dict]] = None,
     ) -> List[str]:
         df = self.get_df_from_parquet(market_filter)
-        filtered_df = df.copy()
 
         # 종목 필터링
         if market_filter:
             if market_filter == MarketEnum.US:
-                filtered_df = filtered_df[filtered_df["country"] == "us"]
+                df = df[df["country"] == "us"]
             elif market_filter == MarketEnum.KR:
-                filtered_df = filtered_df[filtered_df["country"] == "kr"]
+                df = df[df["country"] == "kr"]
             elif market_filter == MarketEnum.SNP500:
-                filtered_df = filtered_df[filtered_df["is_snp_500"] == 1]
+                df = df[df["is_snp_500"] == 1]
             elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSDAQ, MarketEnum.KOSPI]:
-                filtered_df = filtered_df[filtered_df["market"] == market_filter.value]
+                df = df[df["market"] == market_filter.value]
 
         if sector_filter:
-            filtered_df = filtered_df[filtered_df["sector"].isin(sector_filter)]
+            df = df[df["sector"].isin(sector_filter)]
 
         if custom_filters:
             for filter in custom_filters:
                 factor = filter["factor"]
-                if factor not in filtered_df.columns:
+                if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
                 if filter["above"] is not None:
-                    filtered_df = filtered_df[filtered_df[factor] >= filter["above"]]
+                    df = df[df[factor] >= filter["above"]]
                 if filter["below"] is not None:
-                    filtered_df = filtered_df[filtered_df[factor] <= filter["below"]]
+                    df = df[df[factor] <= filter["below"]]
 
-        stock_codes = filtered_df["Code"].tolist()
+        stock_codes = df["Code"].tolist()
         return stock_codes
 
     def filter_etfs(
