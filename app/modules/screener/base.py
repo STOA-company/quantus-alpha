@@ -140,7 +140,10 @@ class BaseScreenerService(ABC):
         try:
             if group_id == -1:
                 default_columns = screener_utils.get_default_columns(category=category, type=type)
-                return [FACTOR_MAP[column] for column in default_columns]
+                result = [FACTOR_MAP[column] for column in default_columns]
+                if category == CategoryEnum.DIVIDEND:
+                    result.remove("총 수수료")
+                return result
 
             factor_filters = self.database._select(
                 table="screener_factor_filters", columns=["factor", "order"], group_id=group_id, category=category
