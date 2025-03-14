@@ -2,7 +2,7 @@ import logging
 from fastapi import Request, HTTPException
 from requests import Session
 from app.core.exception.handler import exception_handler
-from app.modules.common.enum import FinancialCountry
+from app.modules.common.enum import FinancialCountry, TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from fastapi import APIRouter, Depends, Query
 from app.database.conn import db
@@ -28,8 +28,8 @@ router = APIRouter()
     summary="실적 부분 조회 api",
 )
 async def get_income_performance_data(
-    request: Request,
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+    lang: Annotated[TranslateCountry, Query(description="언어, 예시: KO, EN")] = TranslateCountry.KO,
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
@@ -39,7 +39,7 @@ async def get_income_performance_data(
         ctry = await async_check_ticker_country_len_3(ticker)
         ctry = ctry.upper()
         return await financial_service.get_income_performance_data(
-            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, db=db
+            ctry=ctry, ticker=ticker, lang=lang, start_date=start_date, end_date=end_date, db=db
         )
     except HTTPException as http_error:
         logger.error(
@@ -131,12 +131,13 @@ def get_finpos_analysis(
 def get_financial_ratio(
     request: Request,
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
+    lang: Annotated[TranslateCountry, Query(description="언어, 예시: KO, EN")] = TranslateCountry.KO,
     financial_service: FinancialService = Depends(get_financial_service),
     db: Session = Depends(db.get_db),
 ) -> BaseResponse[RatioResponse]:
     try:
         ctry = check_ticker_country_len_3(ticker).upper()
-        company_name = financial_service.get_kr_name_by_ticker(db=db, ticker=ticker)
+        company_name = financial_service.get_name_by_ticker(ticker=ticker, lang=lang)
         dept_ratio = financial_service.get_debt_ratio(ctry=ctry, ticker=ticker, db=db)
         liquidity_ratio = financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker, db=db)
         interest_coverage_ratio = financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker, db=db)

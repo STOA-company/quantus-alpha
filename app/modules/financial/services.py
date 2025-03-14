@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.crud import database
 from app.database.conn import db
 from app.models.models_stock import StockInformation
-from app.modules.common.enum import FinancialCountry
+from app.modules.common.enum import FinancialCountry, TranslateCountry
 from app.modules.common.services import CommonService, get_common_service
 from app.modules.financial.crud import FinancialCrud
 from app.modules.financial.schemas import (
@@ -157,6 +157,7 @@ class FinancialService:
         self,
         ctry: str,
         ticker: str,
+        lang: TranslateCountry,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         db: Session = Depends(db.get_db),
@@ -179,7 +180,7 @@ class FinancialService:
                 raise InvalidCountryException()
 
             # 정보 조회
-            company_name, sector, tickers = await self.get_stock_info_by_ticker(ticker)
+            company_name, sector, tickers = await self.get_stock_info_by_ticker(ticker, lang)
 
             if not sector:
                 logger.warning(f"No sector information found for ticker {ticker}")
@@ -619,8 +620,7 @@ class FinancialService:
             logger.error(f"Error getting latest quarter: {e}")
             raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-    @staticmethod
-    def get_kr_name_by_ticker(db: Session, ticker: str) -> Optional[str]:
+    def get_name_by_ticker(self, ticker: str, lang: TranslateCountry) -> Optional[str]:
         """
         ticker로 StockInformation 테이블에서 한글로 된 기업이름 조회
 
@@ -633,11 +633,11 @@ class FinancialService:
         if ticker.endswith("-US"):
             ticker = ticker[:-3]
 
-        query = select(StockInformation.kr_name).where(StockInformation.ticker == ticker)
-        result = db.execute(query)
-        kr_name = result.scalar_one_or_none()
+        column = "kr_name" if lang == TranslateCountry.KO else "en_name"
 
-        return kr_name
+        name = self.db._select(table="stock_information", columns=[column], ticker=ticker)
+
+        return name[0][0]
 
     # 섹터 조회
     def get_sector_by_ticker(self, ticker: str) -> Optional[str]:
@@ -663,26 +663,30 @@ class FinancialService:
 
         return [row.ticker for row in result] if result else []
 
-    async def get_stock_info_by_ticker(self, ticker: str):
+    async def get_stock_info_by_ticker(self, ticker: str, lang: TranslateCountry):
         """한 번의 쿼리로 stock 관련 정보 조회"""
         try:
             clean_ticker = ticker[:-3] if ticker.endswith("-US") else ticker
+            name = "kr_name" if lang == TranslateCountry.KO else "en_name"
+            sector = "sector_ko" if lang == TranslateCountry.KO else "sector_2"
 
             # 1. 기본 회사 정보 조회
             base_result = self.db._select(
-                table="stock_information", columns=["kr_name", "sector_2", "ticker"], ticker=clean_ticker, limit=1
+                table="stock_information", columns=[name, sector, "ticker"], ticker=clean_ticker, limit=1
             )
             if not base_result:
                 return clean_ticker, None, [ticker]
 
-            company_name, sector, _ = base_result[0]
+            company_name, company_sector, _ = base_result[0]
 
             # 2. 동일 섹터의 다른 티커 조회
-            if sector:
+            if company_sector:
+                condition = {}
+                condition[sector] = company_sector
                 sector_result = self.db._select(
                     table="stock_information",
                     columns=["ticker"],
-                    sector_2=sector,
+                    **condition,
                 )
                 sector_tickers = [row.ticker for row in sector_result]
             else:
@@ -691,7 +695,7 @@ class FinancialService:
             # None 체크 및 기본값 설정
             company_name = company_name if company_name else clean_ticker
 
-            return company_name, sector, sector_tickers
+            return company_name, company_sector, sector_tickers
 
         except Exception as e:
             logger.error(f"Error in get_stock_info_by_ticker: {e}")

@@ -81,7 +81,7 @@ def news_detail(
 @router.get("/renewal/detail/v2", summary="상세 페이지 뉴스", response_model=NewsResponse[List[NewsDetailItemV2]])
 def news_detail_v2(
     ticker: Annotated[str, Query(..., description="종목 코드, 예시: AAPL, A110090")],
-    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: KO, EN")] = None,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
     date: Annotated[str, Query(description="시작 날짜, YYYYMMDD")] = None,
     end_date: Annotated[str, Query(description="종료 날짜, YYYYMMDD")] = None,
     page: Annotated[int, Query(description="페이지 번호, 기본값: 1")] = 1,

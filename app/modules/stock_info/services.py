@@ -4,7 +4,7 @@ import pandas as pd
 from sqlalchemy import select
 from app.database.crud import database, JoinInfo
 from app.models.models_stock import StockInformation
-from app.modules.common.enum import StabilityStatus, StabilityType
+from app.modules.common.enum import StabilityStatus, StabilityType, TranslateCountry
 from app.modules.stock_info.mapping import STABILITY_INFO
 from app.modules.stock_info.schemas import Indicators, SimilarStock, StockInfo
 from app.core.logging.config import get_logger
@@ -162,7 +162,7 @@ class StockInfoService:
 
         return related_sectors
 
-    def get_similar_stocks(self, ticker: str) -> List[SimilarStock]:
+    def get_similar_stocks(self, ticker: str, lang: TranslateCountry) -> List[SimilarStock]:
         """
         연관 종목 조회
 
@@ -173,37 +173,45 @@ class StockInfoService:
         Returns:
             List[SimilarStock]: 연관 종목 리스트
         """
-        ticker_sector = self.db._select(table="stock_information", columns=["sector_2"], **{"ticker": ticker})
+        ticker_sector = self.db._select(table="stock_information", columns=["sector_2", "ctry"], **{"ticker": ticker})
         if not ticker_sector:
             raise HTTPException(status_code=404, detail=f"Stock not found: {ticker}")
+        ctry = ticker_sector[0].ctry
 
         similar_tickers = self.db._select(
             table="stock_information",
             columns=["ticker"],
             limit=6,
-            **{"sector_2": ticker_sector[0].sector_2, "ticker__not": ticker, "is_activate": True},
+            **{"sector_2": ticker_sector[0].sector_2, "ticker__not": ticker, "is_activate": True, "ctry": ctry},
         )
         similar_tickers = [ticker.ticker for ticker in similar_tickers]
 
+        if lang == TranslateCountry.KO:
+            columns = ["ticker", "kr_name", "ctry", "current_price", "change_rt"]
+        elif lang == TranslateCountry.EN:
+            columns = ["ticker", "en_name", "ctry", "current_price", "change_rt"]
+
         similar_stocks_data = self.db._select(
             table="stock_trend",
-            columns=["ticker", "kr_name", "ctry", "current_price", "change_rt"],
+            columns=columns,
             join_info=JoinInfo(
                 primary_table="stock_trend",
                 secondary_table="stock_information",
                 primary_column="ticker",
                 secondary_column="ticker",
                 columns=["is_delisted", "is_trading_stopped"],
+                secondary_condition={"is_delisted": 0, "is_trading_stopped": 0},
             ),
-            **{"ticker__in": similar_tickers, "is_delisted": 0, "is_trading_stopped": 0},
+            **{"ticker__in": similar_tickers},
         )
 
         similar_stocks = []
         for stock in similar_stocks_data:
+            name = stock.kr_name if lang == TranslateCountry.KO else stock.en_name
             similar_stocks.append(
                 SimilarStock(
                     ticker=stock.ticker,
-                    name=stock.kr_name,
+                    name=name,
                     ctry=stock.ctry,
                     current_price=stock.current_price,
                     current_price_rate=stock.change_rt,
@@ -288,4 +296,4 @@ def get_stock_info_service() -> StockInfoService:
 
 if __name__ == "__main__":
     stock_info_service = get_stock_info_service()
-    print(stock_info_service.get_similar_stocks("AAPL"))
+    print(stock_info_service.get_similar_stocks("AAPL", "en"))

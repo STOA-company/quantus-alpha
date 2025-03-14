@@ -1,6 +1,6 @@
 from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, String, Text
 from app.models.models_base import Base
-from sqlalchemy.schema import Index
+from sqlalchemy.schema import Index, UniqueConstraint
 
 
 class Disclosure(Base):
@@ -15,9 +15,11 @@ class Disclosure(Base):
         Index("idx_ticker_date", "ticker", "date", unique=False),
         # 종목 단일 조회
         Index("idx_ticker", "ticker", unique=False),
+        # filing_id와 lang의 조합으로 unique 제약조건 추가
+        UniqueConstraint("filing_id", "lang", name="uq_filing_id_lang"),
     )
     id = Column(BigInteger, nullable=False, primary_key=True, unique=True, autoincrement=True, comment="ID")
-    filing_id = Column(String(255), nullable=True, unique=True, comment="파일링 ID")
+    filing_id = Column(String(255), nullable=True, comment="파일링 ID")
     ticker = Column(String(20), nullable=False, comment="종목 티커")
     ko_name = Column(String(100), nullable=True, comment="종목 한글명")
     en_name = Column(String(100), nullable=True, comment="종목 영문명")
@@ -38,3 +40,4 @@ class Disclosure(Base):
     that_time_price = Column(Float, nullable=True, comment="해당 시간 종가")
     is_top_story = Column(Boolean, nullable=True, comment="주요 소식 선정 여부")
     is_exist = Column(Boolean, nullable=True, comment="DB 존재 여부")
+    lang = Column(String(20), nullable=True, comment="언어")

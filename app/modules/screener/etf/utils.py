@@ -71,8 +71,10 @@ class ETFFactorExtractor:
             # 국가별 단위 조정
             if ctry == "KR":
                 df_sort["marketCap"] = df_sort["MktCap"] / 100_000_000  # 단위 조정 / 원 -> 억원
+                df_sort["거래대금"] = df_sort["거래대금"] / 100_000_000  # 단위 조정 / 원 -> 억원
             else:
                 df_sort["marketCap"] = df_sort["MktCap"] / 1_000  # 단위 조정 / 달러 -> 천달러
+                df_sort["거래대금"] = df_sort["거래대금"] / 1_000  # 단위 조정 / 달러 -> 천달러
         else:
             # MktCap이 없는 경우 대체 계산 (NumShrs가 있는 경우)
             if "NumShrs" in df_sort.columns:
@@ -1118,8 +1120,7 @@ class ETFDividendFactorExtractor:
             total_payments = sum(yearly_counts)
             avg_yearly_payments = total_payments / data_years
 
-            # 소수점 1자리로 반올림하여 반환
-            return round(avg_yearly_payments, 1)
+            return avg_yearly_payments
         else:
             # payment_date가 datetime 타입이 아닌 경우
             return 0
@@ -1342,7 +1343,7 @@ class ETFDataPreprocessor:
         df_select = df_select.rename(
             columns={
                 "expense_ratio": "total_fee",
-                "star_rating": "volatility",
+                "star_rating": "risk_rating",
                 "company_name": "manager",
             }
         )
@@ -1451,7 +1452,6 @@ class ETFDataPreprocessor:
         for col in numeric_columns:
             if col in df_select.columns and df_select[col] is not None:
                 df_select[col] = pd.to_numeric(df_select[col], errors="coerce")
-                df_select[col] = df_select[col].apply(lambda x: round(x, 2) if pd.notnull(x) else x)
 
         return df_select
 
@@ -1495,7 +1495,6 @@ class ETFDataPreprocessor:
         for col in numeric_columns:
             if col in df_select.columns and df_select[col] is not None:
                 df_select[col] = pd.to_numeric(df_select[col], errors="coerce")
-                df_select[col] = df_select[col].apply(lambda x: round(x, 2) if pd.notnull(x) else x)
 
         return df_select
 
@@ -1504,7 +1503,7 @@ class ETFDataPreprocessor:
         정보 데이터 전처리
         """
         if ctry == "KR":
-            return None
+            return df
         elif ctry == "US":
             country = "us"  # noqa
         else:
@@ -2148,6 +2147,7 @@ class ETFDataMerger:
             )
 
         df_merged = df_merged.rename(columns={"ticker": "Code", "kr_name": "Name", "en_name": "Name"})
+        df_merged["market"] = np.where(df_merged["market"] == "NYS", "NYSE", df_merged["market"])
 
         # 숫자로 변환 가능한 문자열을 숫자로 변환
         for col in df_merged.columns:

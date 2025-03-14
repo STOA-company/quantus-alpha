@@ -2,15 +2,13 @@ import json
 from datetime import datetime
 from typing import Dict
 
-import numpy as np
 import pandas as pd
 from app.core.exception.custom import DataNotFoundException
 from app.database.crud import JoinInfo, database
 from app.core.logging.config import get_logger
 from app.modules.common.enum import TranslateCountry
-from app.modules.common.utils import check_ticker_country_len_3
-from app.utils.ctry_utils import check_ticker_country_len_2
-from .mapping import document_type_mapping
+from app.modules.common.utils import check_ticker_country_len_2, check_ticker_country_len_3
+from .mapping import CATEGORY_TYPE_MAPPING_EN, DOCUMENT_TYPE_MAPPING, DOCUMENT_TYPE_MAPPING_EN, FORM_TYPE_MAPPING
 
 
 logger = get_logger(__name__)
@@ -147,7 +145,7 @@ class DisclosureService:
 
             items.append(
                 {
-                    "title": row.company_name + " " + document_type_mapping.get(row.form_type, row.form_type),
+                    "title": row.company_name + " " + DOCUMENT_TYPE_MAPPING.get(row.form_type, row.form_type),
                     "date": date_str,
                     "emotion": analysis_data.market_impact.lower() if analysis_data else None,
                     "impact_reason": translated_data.impact_reason
@@ -185,14 +183,8 @@ class DisclosureService:
 
         df = df.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
 
-        df["emotion"] = np.where(
-            df["emotion"] == "POSITIVE",
-            "positive",
-            np.where(
-                df["emotion"] == "NEGATIVE", "negative", np.where(df["emotion"] == "NEUTRAL", "neutral", df["emotion"])
-            ),
-        )
-        df["ctry"] = np.where(df["ctry"] == "KR", "kr", np.where(df["ctry"] == "US", "us", df["ctry"]))
+        df["emotion"] = df["emotion"].str.lower()
+        df["ctry"] = df["ctry"].str.lower()
 
         return df
 
@@ -206,7 +198,7 @@ class DisclosureService:
             "neutral_count": int(emotion_counts.get("neutral", 0)),
         }
 
-    async def renewal_disclosure(self, ticker: str, date: str, page: int, size: int):
+    async def renewal_disclosure(self, ticker: str, date: str, page: int, size: int, lang: TranslateCountry):
         if not date:
             year = datetime.now().strftime("%Y")
         elif len(date) == 8:
@@ -216,14 +208,30 @@ class DisclosureService:
 
         ctry = check_ticker_country_len_2(ticker)
 
+        if lang == TranslateCountry.KO:
+            name = "ko_name"
+            lang = "ko-KR"
+            document_type_mapping = DOCUMENT_TYPE_MAPPING
+
+            def category_type_mapping(x):
+                return x
+        elif lang == TranslateCountry.EN:
+            name = "en_name"
+            document_type_mapping = FORM_TYPE_MAPPING if ctry == "kr" else DOCUMENT_TYPE_MAPPING_EN
+            lang = "en-US"
+
+            def category_type_mapping(x):
+                return CATEGORY_TYPE_MAPPING_EN.get(x, x)
+        else:
+            raise ValueError("Invalid language")
+
         df_disclosure = pd.DataFrame(
             self.db._select(
                 table="disclosure_information",
                 columns=[
                     "id",
                     "ticker",
-                    "ko_name",
-                    "en_name",
+                    name,
                     "ctry",
                     "date",
                     "url",
@@ -235,7 +243,7 @@ class DisclosureService:
                     "category_type",
                     "that_time_price",
                 ],
-                **{"ticker": ticker, "date__like": f"{year}%"},
+                **{"ticker": ticker, "date__like": f"{year}%", "lang": lang, "is_exist": 1},
             )
         )
 
@@ -245,12 +253,12 @@ class DisclosureService:
         df_disclosure = self._process_dataframe_disclosure(df_disclosure)
         df_disclosure["date"] = pd.to_datetime(df_disclosure["date"]).dt.tz_localize("UTC").dt.tz_convert("Asia/Seoul")
 
-        current_price = self.db._select(table="stock_trend", columns=["ticker", "current_price"], **{"ticker": ticker})
+        # current_price = self.db._select(table="stock_trend", columns=["ticker", "current_price"], **{"ticker": ticker})
         df_disclosure["price_impact"] = 0.00
-        if current_price:
-            df_disclosure["price_impact"] = round(
-                (df_disclosure["that_time_price"] - current_price[0][1]) / current_price[0][1] * 100, 2
-            )
+        # if current_price:
+        #     df_disclosure["price_impact"] = round(
+        #         (df_disclosure["that_time_price"] - current_price[0][1]) / current_price[0][1] * 100, 2
+        #     )
 
         total_count = len(df_disclosure)
         total_pages = (total_count + size - 1) // size
@@ -269,17 +277,16 @@ class DisclosureService:
         )
 
         data = []
-
         for _, row in df_disclosure.iterrows():
-            form_type = (
-                document_type_mapping.get(row["form_type"], row["form_type"]) if ctry == "us" else row["form_type"]
+            form_type = document_type_mapping.get(row["form_type"], row["form_type"])
+            res_name = row.get(name, "") or ""
+            category_type = (
+                "[" + category_type_mapping(row["category_type"]) + "]" if row.get("category_type", "") else ""
             )
-            ko_name = row.get("ko_name", "") or ""
-            category_type = "[" + row.get("category_type", "") + "]" if row.get("category_type", "") else ""
             data.append(
                 {
                     "id": row["id"],
-                    "title": f"{ko_name} {form_type} {category_type}".strip(),
+                    "title": f"{res_name} {form_type} {category_type}".strip(),
                     "date": row["date"],
                     "emotion": row["emotion"],
                     "impact_reason": row["impact_reason"],

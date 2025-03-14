@@ -153,14 +153,14 @@ def run_etf_screener_data(ctry: Literal["KR", "US", "ALL"] = "ALL"):
         "ETFDividendFactorExtractor": dividend_factor_extractor,
     }
 
-    # 1. 데이터 다운로드
-    print(f"\n1. {ctry} 데이터 다운로드 시작")
-    slack_notifier.notify_info(f"1. {ctry} 데이터 다운로드 시작")
-
     if ctry == "KR":
         date = now_kr(is_date=True)
     elif ctry == "US":
         date = now_us(is_date=True)
+
+    # 1. 데이터 다운로드
+    print(f"\n1. {ctry} 데이터 다운로드 시작")
+    slack_notifier.notify_info(f"1. {ctry} 데이터 다운로드 시작")
 
     if ctry == "ALL":
         execute_selected_method(["가격_한국", "가격_미국", "배당_한국", "배당_미국"], class_instances)
@@ -243,13 +243,14 @@ def run_etf_screener_data(ctry: Literal["KR", "US", "ALL"] = "ALL"):
     try:
         print("데이터 s3에 업로드 중...")
         slack_notifier.notify_info("데이터 s3에 업로드 중...")
+        date_YYYYMMDD = date.strftime("%Y%m%d")
 
         if ctry == "KR":
             file_path = "parquet/kr_etf_factors.parquet"
-            obj_path = f"etf/kr/kr_etf_factors_{date}.parquet"
+            obj_path = f"etf/kr/kr_etf_factors_{date_YYYYMMDD}.parquet"
         elif ctry == "US":
             file_path = "parquet/us_etf_factors.parquet"
-            obj_path = f"etf/us/us_etf_factors_{date}.parquet"
+            obj_path = f"etf/us/us_etf_factors_{date_YYYYMMDD}.parquet"
 
         upload_file_to_bucket(file_path, "alpha-finder-factors", obj_path)
         print("데이터 s3에 업로드 완료")
@@ -262,3 +263,4 @@ def run_etf_screener_data(ctry: Literal["KR", "US", "ALL"] = "ALL"):
 
 if __name__ == "__main__":
     run_etf_screener_data("US")
+    run_etf_screener_data("KR")

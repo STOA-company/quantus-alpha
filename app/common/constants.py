@@ -49,6 +49,14 @@ MARKET_MAP = {
     "BATS": "바츠",
 }
 
+MARKET_MAP_EN = {
+    "KOSPI": "KOSPI",
+    "KOSDAQ": "KOSDAQ",
+    "NAS": "NASDAQ",
+    "NYS": "NYSE",
+    "AMS": "AMS",
+}
+
 MARKET_KOREAN_TO_ENGLISH_MAP = {
     "코스피": "KOSPI",
     "코스닥": "KOSDAQ",

@@ -7,6 +7,7 @@ import numpy as np
 from sqlalchemy import text
 from app.common.constants import KST, UTC
 from app.core.exception.custom import DataNotFoundException
+from app.modules.common.enum import TranslateCountry
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.news.schemas import LatestNewsResponse, NewsItem, TopStoriesResponse
 from Aws.common.configs import s3_client
@@ -251,13 +252,13 @@ class NewsService:
             **emotion_counts,
         }
 
-    def get_latest_news(self, ticker: str) -> LatestNewsResponse:
+    def get_latest_news(self, ticker: str, lang: TranslateCountry) -> LatestNewsResponse:
         """최신 뉴스와 공시 데이터 중 최신 데이터 조회"""
         # 1. 공시 데이터 조회
-        disclosure_info = self._get_disclosure_data(ticker)
+        disclosure_info = self._get_disclosure_data(ticker, lang)
 
         # 2. 뉴스 데이터 조회
-        news_info = self._get_news_data(ticker)
+        news_info = self._get_news_data(ticker, lang)
 
         # 3. 날짜 비교하여 최신 데이터 선택
         result = self._select_latest_data(disclosure_info, news_info)
@@ -288,15 +289,23 @@ class NewsService:
             logger.error(f"Error parsing key points: {str(e)}")
             return str(key_points)
 
-    def _get_disclosure_data(self, ticker: str) -> Optional[Dict]:
+    def _get_disclosure_data(self, ticker: str, lang: TranslateCountry) -> Optional[Dict]:
         """공시 데이터 조회 및 분석 데이터 함께 반환"""
+        condition = {"ticker": ticker, "is_exist": True}
+        columns = ["date", "summary", "key_points"]
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+        elif lang == TranslateCountry.EN:
+            condition["lang"] = "en-US"
+
         disclosure_data = self.db._select(
             table="disclosure_information",
-            columns=["date", "summary", "key_points"],
+            columns=columns,
             order="date",
             ascending=False,
             limit=1,
-            **dict(ticker=ticker, is_exist=True),
+            **condition,
         )
         if disclosure_data:
             date = disclosure_data[0][0]
@@ -306,7 +315,7 @@ class NewsService:
         else:
             return None
 
-    def _get_news_data(self, ticker: str) -> Optional[Dict]:
+    def _get_news_data(self, ticker: str, lang: TranslateCountry) -> Optional[Dict]:
         """뉴스 데이터 조회"""
         ticker_en_name = self.db._select(
             table="stock_information",
@@ -319,18 +328,21 @@ class NewsService:
             **dict(en_name=ticker_en_name[0][0]),
         )
         tickers = [info[0] for info in duplicate_ticker]
+
+        condition = {
+            "is_exist": True,
+            "is_related": True,
+        }
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+        elif lang == TranslateCountry.EN:
+            condition["lang"] = "en-US"
+
         if len(tickers) == 2:
-            condition = {
-                "ticker__in": tickers,
-                "is_exist": True,
-                "is_related": True,
-            }
+            condition["ticker__in"] = tickers
         else:
-            condition = {
-                "ticker": ticker,
-                "is_exist": True,
-                "is_related": True,
-            }
+            condition["ticker"] = ticker
 
         news_data = self.db._select(
             table="news_analysis",
