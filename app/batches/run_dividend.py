@@ -3,7 +3,7 @@ import time
 import pandas as pd
 from app.common.constants import ETF_DATA_DIR
 from app.database.crud import database
-from app.utils.etf_utils import ETFDataDownloader
+from app.modules.screener.etf.utils import ETFDataDownloader
 
 
 def insert_dividend(ctry: str, type: str):
