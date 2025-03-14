@@ -11,12 +11,15 @@ class ScreenerGroup(ServiceBase, BaseMixin):
 
     id = Column(Integer, primary_key=True, index=True)
     order = Column(Integer, nullable=False)
-    user_id = Column(String(50), nullable=True, index=True)  # 추천 필터의 경우 None
+    user_id = Column(
+        ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=True, index=True
+    )  # 추천 필터의 경우 None
     name = Column(String(100), nullable=False)
     type = Column(Enum(StockType), nullable=False, default=StockType.STOCK)
 
     stock_filters = relationship("ScreenerStockFilter", back_populates="group", cascade="all, delete-orphan")
     factor_filters = relationship("ScreenerFactorFilter", back_populates="group", cascade="all, delete-orphan")
+    sort_info = relationship("ScreenerSortInfo", back_populates="group", cascade="all, delete-orphan")
 
     __table_args__ = (UniqueConstraint("user_id", "name", "type", name="uix_user_group_name_type"),)
 
@@ -61,3 +64,5 @@ class ScreenerSortInfo(ServiceBase, BaseMixin):
     type = Column(Enum(StockType), nullable=False, default=StockType.STOCK)
     sort_by = Column(String(50), nullable=False, default="score")
     ascending = Column(Boolean, nullable=True, default=False)
+
+    group = relationship("ScreenerGroup", back_populates="sort_info")

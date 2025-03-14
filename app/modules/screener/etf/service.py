@@ -6,12 +6,10 @@ import numpy as np
 import pandas as pd
 from Aws.logic.s3 import get_data_from_bucket
 from app.common.constants import (
-    ETF_DEFAULT_SCREENER_COLUMNS,
     FACTOR_MAP,
     FACTOR_MAP_EN,
     NON_NUMERIC_COLUMNS_ETF,
     PARQUET_DIR,
-    REVERSE_FACTOR_MAP,
     UNIT_MAP,
 )
 from app.core.exception.base import CustomException
@@ -144,16 +142,23 @@ class ScreenerETFService(BaseScreenerService):
                 elif col == "score":
                     etf_data[col] = float(row[col])
                 elif col in row:
-                    if pd.isna(row[col]) or np.isinf(row[col]):
-                        etf_data[col] = {"value": "", "unit": ""}
-                    else:
-                        value, unit = screener_utils.convert_unit_and_value(
-                            market_filter,
-                            float(row[col]),
-                            factors[col].get("unit", "") if col in factors else "",
-                            lang,
-                        )
-                        etf_data[col] = {"value": value, "unit": unit}
+                    if col in row:
+                        if isinstance(row[col], (int, float)):  # 값이 숫자인지 확인
+                            if pd.isna(row[col]) or np.isinf(row[col]):
+                                etf_data[col] = {"value": "", "unit": ""}
+                            else:
+                                value, unit = screener_utils.convert_unit_and_value(
+                                    market_filter,
+                                    float(row[col]),
+                                    factors[col].get("unit", "") if col in factors else "",
+                                    lang,
+                                )
+                                etf_data[col] = {"value": value, "unit": unit}
+                        else:  # 숫자가 아닌 타입 처리
+                            if pd.isna(row[col]):
+                                etf_data[col] = {"value": "", "unit": ""}
+                            else:
+                                etf_data[col] = {"value": str(row[col]), "unit": ""}
 
             result.append(etf_data)
 
@@ -173,58 +178,6 @@ class ScreenerETFService(BaseScreenerService):
         필터링된 데이터 조회 (BaseScreenerService 추상 메서드 구현)
         """
         return self.get_filtered_etfs(**kwargs)
-
-    def _filter_etfs(
-        self,
-        df_etfs: pd.DataFrame,
-        market_filter: ETFMarketEnum,
-        custom_filters: Optional[List[Dict]] = None,
-        factor_filters: Optional[List[str]] = None,
-    ):
-        """
-        ETF 필터링
-        """
-        # 종목 필터 - 기본 필터
-        if market_filter:
-            # if filtered_etf.market_filter == ETFMarketEnum.US:
-            #     df_etfs = df_etfs[df_etfs["country"] == "us"]
-            # if filtered_etf.market_filter in [ETFMarketEnum.KR]:
-            #     df_etfs = df_etfs[df_etfs["market"] == "KRX"]
-            if market_filter in [ETFMarketEnum.NYSE, ETFMarketEnum.NASDAQ, ETFMarketEnum.BATS]:
-                df_etfs = df_etfs[df_etfs["market"] == market_filter.value.upper()]
-
-        # 종목 필터 - 커스텀 필터링
-        custom_filters = []
-        if custom_filters:
-            custom_filters = [
-                {
-                    "factor": REVERSE_FACTOR_MAP[condition.factor],
-                    "above": condition.above,
-                    "below": condition.below,
-                }
-                for condition in custom_filters
-            ]
-            for filter in custom_filters:
-                if filter["factor"] not in df_etfs.columns:
-                    raise ValueError(f"팩터 '{filter['factor']}'가 데이터에 존재하지 않습니다.")
-
-                if filter["above"] is not None:
-                    df_etfs = df_etfs[df_etfs[filter["factor"]] >= filter["above"]]
-
-                if filter["below"] is not None:
-                    df_etfs = df_etfs[df_etfs[filter["factor"]] <= filter["below"]]
-
-        # 컬럼 필터
-        required_columns = [col for col in ETF_DEFAULT_SCREENER_COLUMNS if col in df_etfs.columns]
-
-        if factor_filters is not None:
-            reversed_factors = [REVERSE_FACTOR_MAP[col] for col in factor_filters]
-            reversed_factors = [col for col in reversed_factors if col in df_etfs.columns]
-            required_columns = required_columns + [col for col in reversed_factors if col not in required_columns]
-
-        df_etfs = df_etfs[required_columns]
-
-        return df_etfs
 
     def get_filtered_data_count(
         self,

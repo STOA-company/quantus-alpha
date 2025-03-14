@@ -5,12 +5,11 @@ class ETFMarketEnum(str, Enum):
     KR = "kr"
     US = "us"
     NYSE = "nyse"
-    NASDAQ = "nasdaq"
+    NASDAQ = "nas"
     BATS = "bats"
 
 
 class ETFCategoryEnum(str, Enum):
     TECHNICAL = "technical"
-    FUNDAMENTAL = "fundamental"
-    VALUATION = "valuation"
+    DIVIDEND = "dividend"
     CUSTOM = "custom"

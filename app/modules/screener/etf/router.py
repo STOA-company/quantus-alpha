@@ -25,9 +25,16 @@ logger = get_logger(__name__)
 
 @router.get("/factors/{market}", response_model=List[FactorResponse])
 def get_factors(market: ETFMarketEnum, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
-    factors = screener_etf_service.get_factors(market=market)
-    result = [FactorResponse(**factor) for factor in factors]
-    return result
+    """
+    모든 팩터 조회
+    """
+    try:
+        factors = screener_etf_service.get_factors(market)
+        result = [FactorResponse(**factor) for factor in factors]
+        return result
+    except Exception as e:
+        logger.error(f"Error getting factors: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("", response_model=Dict)
@@ -144,13 +151,20 @@ def download_filtered_etfs(
 
 @router.get("/groups", response_model=List[GroupMetaData])
 def get_groups(
-    current_user: str = Depends(get_current_user), screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)
+    current_user: str = Depends(get_current_user),
+    screener_service: ScreenerETFService = Depends(ScreenerETFService),
 ):
-    if current_user.id is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    groups = screener_etf_service.get_groups(current_user.id, type="ETF")
-    return [GroupMetaData(id=group["id"], name=group["name"], type=group["type"]) for group in groups]
+    """
+    저장된 필터 목록 조회
+    """
+    try:
+        if current_user is None:
+            return []
+        groups = screener_service.get_groups(current_user.id, type=StockType.ETF)
+        return [GroupMetaData(id=group["id"], name=group["name"], type=group["type"]) for group in groups]
+    except Exception as e:
+        logger.exception(f"Error getting groups: {e}")
+        return []
 
 
 @router.post("/groups", response_model=Dict)
@@ -205,8 +219,8 @@ def get_group_filters(
     필터 목록 조회
     """
     try:
-        technical_columns = screener_etf_service.get_columns(group_id, CategoryEnum.TECHNICAL)
-        dividend_columns = screener_etf_service.get_columns(group_id, CategoryEnum.DIVIDEND)
+        technical_columns = screener_etf_service.get_columns(group_id, CategoryEnum.TECHNICAL, type=StockType.ETF)
+        dividend_columns = screener_etf_service.get_columns(group_id, CategoryEnum.DIVIDEND, type=StockType.ETF)
 
         if lang == "en":
             technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]

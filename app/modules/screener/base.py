@@ -27,7 +27,7 @@ class BaseScreenerService(ABC):
         self.database = database_service
         self.lang = "kr"
 
-    def get_groups(self, user_id: str, type: str = "STOCK") -> List[Dict]:
+    def get_groups(self, user_id: str, type: Optional[StockType] = StockType.STOCK) -> List[Dict]:
         """
         사용자의 그룹 목록 조회
         """
@@ -131,13 +131,15 @@ class BaseScreenerService(ABC):
             logger.exception(f"Error in reorder_factor_filters: {e}")
             raise e
 
-    def get_columns(self, group_id: int = -1, category: CategoryEnum = CategoryEnum.TECHNICAL) -> List[str]:
+    def get_columns(
+        self, group_id: int = -1, category: CategoryEnum = CategoryEnum.TECHNICAL, type: Optional[StockType] = None
+    ) -> List[str]:
         """
         컬럼 목록 조회
         """
         try:
             if group_id == -1:
-                default_columns = screener_utils.get_default_columns(category=category)
+                default_columns = screener_utils.get_default_columns(category=category, type=type)
                 return [FACTOR_MAP[column] for column in default_columns]
 
             factor_filters = self.database._select(
