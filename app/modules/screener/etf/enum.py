@@ -5,7 +5,7 @@ class ETFMarketEnum(str, Enum):
     KR = "kr"
     US = "us"
     NYSE = "nyse"
-    NASDAQ = "nasdaq"
+    NASDAQ = "nas"
     BATS = "bats"
 
 

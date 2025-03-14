@@ -327,7 +327,7 @@ class ScreenerUtils:
             elif market_filter == ETFMarketEnum.KR:
                 filtered_df = filtered_df[filtered_df["country"] == "kr"]
             elif market_filter in [ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
-                filtered_df = filtered_df[filtered_df["market"] == market_filter]
+                filtered_df = filtered_df[filtered_df["market"] == market_filter.value.upper()]
 
         if custom_filters:
             for filter in custom_filters:
@@ -469,3 +469,8 @@ class ScreenerUtils:
 
 
 screener_utils = ScreenerUtils()
+
+
+if __name__ == "__main__":
+    df = screener_utils.get_df_from_parquet(MarketEnum.US)
+    print(df["market"].unique())
