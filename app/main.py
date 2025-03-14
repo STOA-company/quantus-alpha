@@ -52,15 +52,21 @@ origins = [
     "https://live.alphafinder.dev",
 ]
 
+stage_webhook_url = "https://hooks.slack.com/services/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"
+dev_webhook_url = "https://hooks.slack.com/services/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"
+if settings.ENV == "stage":
+    webhook_url = stage_webhook_url
+else:
+    webhook_url = dev_webhook_url
+
 add_slack_middleware(
     app=app,
-    webhook_url="https://hooks.slack.com/services/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",
-    mention_usernames=["고경민", "김광윤"],  # 알림을 받을 사용자 이름 (SlackNotifier.SLACK_USER_IDS에 정의된)
+    webhook_url=webhook_url,
     include_traceback=True,
     include_request_body=False,
     error_status_codes=[500, 503],  # 이 상태 코드들에 대해 알림 발송
     environment=settings.ENV,
-    notify_environments=["stage"],
+    notify_environments=["stage", "dev"],
 )
 
 app.add_middleware(
@@ -122,3 +128,11 @@ async def get_redoc_documentation(username: str = Security(get_current_username)
         openapi_url=app.openapi_url,
         title=app.title + " - ReDoc",
     )
+
+
+@app.get("/error_test/{num}")
+def test(num: int):
+    if num != 0:
+        return num / 0
+    else:
+        return num / 1
