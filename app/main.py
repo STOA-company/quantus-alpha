@@ -63,7 +63,7 @@ add_slack_middleware(
     app=app,
     webhook_url=webhook_url,
     include_traceback=True,
-    include_request_body=False,
+    include_request_body=True,
     error_status_codes=[500, 503],  # 이 상태 코드들에 대해 알림 발송
     environment=settings.ENV,
     notify_environments=["stage", "dev"],
@@ -130,9 +130,26 @@ async def get_redoc_documentation(username: str = Security(get_current_username)
     )
 
 
+@app.get("/error_test")
+def query_test(num: int):
+    return num / 0
+
+
 @app.get("/error_test/{num}")
-def test(num: int):
+def parameter_test(num: int):
     if num != 0:
         return num / 0
     else:
         return num / 1
+
+
+class TestRequest(BaseModel):
+    num: int
+
+
+@app.post("/error_test")
+def request_test(request: TestRequest):
+    if request.num != 0:
+        return request.num / 0
+    else:
+        return request.num / 1

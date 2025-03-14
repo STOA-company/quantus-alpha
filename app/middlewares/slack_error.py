@@ -35,6 +35,17 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> JSONResponse:
         try:
+            # Create a copy of the request body before processing
+            body = None
+            if self.include_request_body:
+                body = await request.body()
+
+                # Create a new request with the same body
+                async def receive():
+                    return {"type": "http.request", "body": body}
+
+                request._receive = receive
+
             response = await call_next(request)
 
             # 설정된 에러 상태 코드 발생 시에도 슬랙 알림 전송
@@ -44,6 +55,7 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
                     status_code=response.status_code,
                     exception=None,
                     message=f"Error response with status code: {response.status_code}",
+                    request_body=body,  # Pass the saved body
                 )
 
             return response
@@ -61,6 +73,7 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
                     message=f"{exc.error_code or 'ERROR'}: {exc.message}",
                     extra_data=exc.extra,
                     exception_type="CustomException",
+                    request_body=body,  # Pass the saved body
                 )
 
             # 예외를 다시 발생시켜 FastAPI의 기본 예외 처리기가 처리하도록 함
@@ -78,6 +91,7 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
                     exception=exc,
                     message=f"Unhandled exception: {str(exc)}",
                     exception_type=type(exc).__name__,
+                    request_body=body,  # Pass the saved body
                 )
 
             # 예외를 다시 발생시켜 FastAPI의 기본 예외 처리기가 처리하도록 함
@@ -91,6 +105,7 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
         message: Any = None,
         extra_data: Optional[Dict[str, Any]] = None,
         exception_type: str = "Exception",
+        request_body: Optional[bytes] = None,  # Add this parameter
     ) -> None:
         """슬랙으로 에러 알림을 전송합니다."""
         try:
@@ -106,21 +121,6 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
             # 실제 요청 경로(path parameters 값 포함)
             if "path" in scope:
                 actual_path = scope["path"]
-
-            # 요청 본문 (설정된 경우만)
-            request_body = None
-            if self.include_request_body:
-                try:
-                    body_bytes = await request.body()
-                    try:
-                        # JSON으로 파싱 시도
-                        request_body = await request.json()
-                        request_body = str(request_body)
-                    except:  # noqa: E722
-                        # 실패하면 텍스트로 처리
-                        request_body = body_bytes.decode()
-                except Exception:  # noqa: E722
-                    request_body = "Could not parse request body"
 
             # 에러 세부 정보 구성
             error_details = []
@@ -140,9 +140,21 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
             elif extra_data:
                 error_details.append(f"*추가 정보*: {str(extra_data)}")
 
-            # 에러 본문 정보 추가 (설정된 경우만)
-            if request_body:
-                error_details.append(f"*요청 본문*:\n```{request_body}```")
+            # 요청 본문 (설정된 경우만)
+            if self.include_request_body and request_body:
+                try:
+                    body_str = request_body.decode()
+                    try:
+                        # JSON으로 파싱 시도
+                        import json
+
+                        request_body_json = json.loads(body_str)
+                        request_body = json.dumps(request_body_json, indent=2, ensure_ascii=False)
+                    except:  # noqa
+                        request_body = body_str
+                    error_details.append(f"*요청 본문*:\n{request_body}")
+                except Exception as e:
+                    error_details.append(f"*요청 본문*: Could not decode request body: {str(e)}")
 
             # 에러 메시지 처리
             if isinstance(message, dict):
