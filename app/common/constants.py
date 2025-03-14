@@ -57,6 +57,17 @@ MARKET_MAP_EN = {
     "AMS": "AMS",
 }
 
+
+ETF_MARKET_MAP = {"BATS": "바츠", "NYSE": "뉴욕 증권 거래소", "NAS": "나스닥", "KRX": "한국 거래소"}
+
+
+ETF_MARKET_MAP_EN = {
+    "BATS": "BATS",
+    "NYSE": "NYSE",
+    "NASDAQ": "NASDAQ",
+    "KRX": "KRX",
+}
+
 MARKET_KOREAN_TO_ENGLISH_MAP = {
     "코스피": "KOSPI",
     "코스닥": "KOSDAQ",

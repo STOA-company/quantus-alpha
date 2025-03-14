@@ -11,12 +11,7 @@ from app.modules.screener.etf.schemas import FilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
 from app.utils.oauth_utils import get_current_user
 from app.core.logging.config import get_logger
-from app.common.constants import (
-    FACTOR_KOREAN_TO_ENGLISH_MAP,
-    MARKET_KOREAN_TO_ENGLISH_MAP,
-    REVERSE_FACTOR_MAP,
-    REVERSE_FACTOR_MAP_EN,
-)
+from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN, ETF_MARKET_MAP
 from app.core.exception.base import CustomException
 
 router = APIRouter()
@@ -79,9 +74,10 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
 
         has_next = filtered_etf.offset * filtered_etf.limit + filtered_etf.limit < total_count
 
-        if filtered_etf.lang == "en":
+        print("ETF", etfs_data[0].keys())
+        if filtered_etf.lang == "kr":
             for etf in etfs_data:
-                etf["Market"] = MARKET_KOREAN_TO_ENGLISH_MAP[etf["Market"]]
+                etf["시장"] = ETF_MARKET_MAP[etf["시장"]]
 
         result = {"data": etfs_data, "has_next": has_next}
         return result
