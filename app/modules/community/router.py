@@ -189,12 +189,13 @@ async def get_comments(
     post_id: int,
     offset: int = Query(0, description="조회 시작 위치"),
     limit: int = Query(10, description="조회할 댓글 수"),
+    lang: Optional[TranslateCountry] = Query(TranslateCountry.KO, description="언어 설정 (ko/en)"),
     community_service: CommunityService = Depends(get_community_service),
     current_user: Optional[AlphafinderUser] = Depends(get_current_user),
 ):
     """댓글 목록 조회"""
     comments, has_more = await community_service.get_comments(
-        current_user=current_user, post_id=post_id, offset=offset, limit=limit
+        current_user=current_user, post_id=post_id, offset=offset, limit=limit, lang=lang
     )
 
     return CommentListResponse(status_code=200, message="댓글 목록을 조회하였습니다.", has_more=has_more, data=comments)

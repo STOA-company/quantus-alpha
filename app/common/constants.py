@@ -383,3 +383,6 @@ ETF_FACTOR_LIST = [
     "is_hedge",
 ]
 FACTOR_MAP_ETF = {v: k for k, v in FACTOR_MAP.items() if k in ETF_FACTOR_LIST}
+
+UNKNOWN_USER_KO = "(알 수 없는 유저)"
+UNKNOWN_USER_EN = "(Unknown User)"
