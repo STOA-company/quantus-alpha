@@ -197,8 +197,7 @@ class ScreenerUtils:
 
         result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_us_active.parquet", dir="port/")
         df = pd.read_parquet(io.BytesIO(result))
-
-        df["merge_code"] = df["Code"].str.replace("-US", "")
+        df["Code"] = df["Code"].str.replace("-US", "")
 
         stock_information = self.db._select(
             "stock_information",
@@ -216,15 +215,15 @@ class ScreenerUtils:
             ctry="us",
         )
         stock_info_df = pd.DataFrame(stock_information)
-        stock_info_df = stock_info_df.rename(columns={"ticker": "merge_code"})
+        stock_info_df = stock_info_df.rename(columns={"ticker": "Code"})
         stock_info_df["sector"] = stock_info_df["sector_ko"].fillna("기타")
         stock_info_df["sector_en"] = stock_info_df["sector_2"].fillna("Other")
 
         # INNER JOIN
-        df = pd.merge(df, stock_info_df, on="merge_code", how="inner")
+        df = pd.merge(df, stock_info_df, on="Code", how="inner")
         df["Name"] = df["kr_name"]
         df["Name_en"] = df["en_name"]
-        df = df.drop(["merge_code", "kr_name", "en_name"], axis=1)
+        df = df.drop(["kr_name", "en_name"], axis=1)
 
         df["country"] = "us"
 
