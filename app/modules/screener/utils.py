@@ -226,6 +226,8 @@ class ScreenerUtils:
         df["Name_en"] = df["en_name"]
         df = df.drop(["merge_code", "kr_name", "en_name"], axis=1)
 
+        df["Code"] = df["Code"].str.replace("-US", "")
+
         df["country"] = "us"
 
         # NAN 값 처리
@@ -289,49 +291,39 @@ class ScreenerUtils:
 
         return df
 
-    @time_it
     def filter_stocks(
         self,
         market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
     ) -> List[str]:
-        # 원본 데이터를 불러옴
         df = self.get_df_from_parquet(market_filter)
 
-        # 불리언 마스크를 생성
-        mask = pd.Series(True, index=df.index)
-
-        # 시장 필터링
+        # 종목 필터링
         if market_filter:
             if market_filter == MarketEnum.US:
-                mask &= df["country"] == "us"
+                df = df[df["country"] == "us"]
             elif market_filter == MarketEnum.KR:
-                mask &= df["country"] == "kr"
+                df = df[df["country"] == "kr"]
             elif market_filter == MarketEnum.SNP500:
-                mask &= df["is_snp_500"] == 1
+                df = df[df["is_snp_500"] == 1]
             elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSDAQ, MarketEnum.KOSPI]:
-                mask &= df["market"] == market_filter.value
+                df = df[df["market"] == market_filter.value]
 
-        # 섹터 필터링
         if sector_filter:
-            mask &= df["sector"].isin(sector_filter)
+            df = df[df["sector"].isin(sector_filter)]
 
-        # 사용자 정의 필터링
         if custom_filters:
             for filter in custom_filters:
                 factor = filter["factor"]
                 if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
-
                 if filter["above"] is not None:
-                    mask &= df[factor] >= filter["above"]
-
+                    df = df[df[factor] >= filter["above"]]
                 if filter["below"] is not None:
-                    mask &= df[factor] <= filter["below"]
+                    df = df[df[factor] <= filter["below"]]
 
-        # 마스크를 한 번에 적용하여 필터링
-        stock_codes = df.loc[mask, "Code"].tolist()
+        stock_codes = df["Code"].tolist()
         return stock_codes
 
     def filter_etfs(

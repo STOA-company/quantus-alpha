@@ -158,7 +158,7 @@ class ScreenerStockService(BaseScreenerService):
             return mapped_result, total_count
 
         except Exception as e:
-            logger.error(f"Error in get_filtered_stocks_with_description: {e}")
+            logger.error(f"Error in get_filtered_stocks: {e}")
             raise e
 
     def get_filtered_data(self, **kwargs):
