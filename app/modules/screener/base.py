@@ -27,7 +27,7 @@ class BaseScreenerService(ABC):
         self.database = database_service
         self.lang = "kr"
 
-    def get_groups(self, user_id: str, type: str = "STOCK") -> List[Dict]:
+    def get_groups(self, user_id: str, type: Optional[StockType] = StockType.STOCK) -> List[Dict]:
         """
         사용자의 그룹 목록 조회
         """

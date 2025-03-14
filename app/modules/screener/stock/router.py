@@ -20,7 +20,7 @@ from app.common.constants import (
     FACTOR_KOREAN_TO_ENGLISH_MAP,
     MARKET_KOREAN_TO_ENGLISH_MAP,
 )
-from app.modules.screener.stock.schemas import MarketEnum
+from app.modules.screener.stock.schemas import MarketEnum, StockType
 from app.core.exception.custom import CustomException
 
 logger = logging.getLogger(__name__)
@@ -177,13 +177,14 @@ def download_filtered_stocks(
 
 @router.get("/groups", response_model=List[GroupMetaData])
 def get_groups(
-    current_user: str = Depends(get_current_user), screener_service: ScreenerStockService = Depends(ScreenerStockService)
+    current_user: str = Depends(get_current_user),
+    screener_service: ScreenerStockService = Depends(ScreenerStockService),
 ):
     """
     저장된 필터 목록 조회
     """
     try:
-        groups = screener_service.get_groups(current_user.id)
+        groups = screener_service.get_groups(current_user.id, type=StockType.STOCK)
         return [GroupMetaData(id=group["id"], name=group["name"], type=group["type"]) for group in groups]
     except Exception as e:
         logger.exception(f"Error getting groups: {e}")

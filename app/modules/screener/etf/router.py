@@ -145,10 +145,17 @@ def download_filtered_etfs(
 @router.get("/groups", response_model=List[GroupMetaData])
 def get_groups(
     current_user: str = Depends(get_current_user),
-    screener_etf_service: ScreenerETFService = Depends(ScreenerETFService),
+    screener_service: ScreenerETFService = Depends(ScreenerETFService),
 ):
-    groups = screener_etf_service.get_groups(current_user.id, type=StockType.ETF)
-    return [GroupMetaData(id=group["id"], name=group["name"], type=group["type"]) for group in groups]
+    """
+    저장된 필터 목록 조회
+    """
+    try:
+        groups = screener_service.get_groups(current_user.id, type=StockType.ETF)
+        return [GroupMetaData(id=group["id"], name=group["name"], type=group["type"]) for group in groups]
+    except Exception as e:
+        logger.exception(f"Error getting groups: {e}")
+        return []
 
 
 @router.post("/groups", response_model=Dict)
