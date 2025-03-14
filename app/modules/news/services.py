@@ -9,7 +9,12 @@ import pytz
 from sqlalchemy import text
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.enum import TranslateCountry
-from app.modules.disclosure.mapping import CATEGORY_TYPE_MAPPING_EN, DOCUMENT_TYPE_MAPPING, DOCUMENT_TYPE_MAPPING_EN
+from app.modules.disclosure.mapping import (
+    CATEGORY_TYPE_MAPPING_EN,
+    DOCUMENT_TYPE_MAPPING,
+    DOCUMENT_TYPE_MAPPING_EN,
+    FORM_TYPE_MAPPING,
+)
 
 import numpy as np
 import pandas as pd
@@ -119,29 +124,24 @@ class NewsService:
         condition = {"is_exist": True}
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
-        news_condition = condition.copy()
-        disclosure_condition = condition.copy()
-
-        news_condition["is_related"] = True
 
         if lang == TranslateCountry.KO:
             # 뉴스 데이터
-            news_condition["lang"] = "ko-KR"
-            # 공시 데이터
-            summary = "summary"
-            impact_reason = "impact_reason"
-            key_points = "key_points"
+            condition["lang"] = "ko-KR"
+
             news_name = "kr_name"
             disclosure_name = "ko_name"
         else:
             # 뉴스 데이터
-            news_condition["lang"] = "en-US"
-            # 공시 데이터
-            summary = "en_summary"
-            impact_reason = "en_impact_reason"
-            key_points = "en_key_points"
+            condition["lang"] = "en-US"
+
             news_name = "en_name"
             disclosure_name = "en_name"
+
+        news_condition = condition.copy()
+        disclosure_condition = condition.copy()
+
+        news_condition["is_related"] = True
 
         change_rate_column = "change_rt"
 
@@ -202,9 +202,9 @@ class NewsService:
                     "ctry",
                     "date",
                     "url",
-                    summary,
-                    impact_reason,
-                    key_points,
+                    "summary",
+                    "impact_reason",
+                    "key_points",
                     "emotion",
                     "form_type",
                     "category_type",
@@ -258,6 +258,10 @@ class NewsService:
 
                 def category_type_mapping(x):
                     return x
+
+                def form_type_mapping(x):
+                    return x
+
             elif lang == TranslateCountry.EN:
                 document_type_mapping = DOCUMENT_TYPE_MAPPING_EN
                 name = "en_name"
@@ -265,9 +269,16 @@ class NewsService:
                 def category_type_mapping(x):
                     return CATEGORY_TYPE_MAPPING_EN.get(x, x)
 
+                def form_type_mapping(x):
+                    return FORM_TYPE_MAPPING.get(x.strip().split()[0], x)
+
             result = []
             for _, row in df.iterrows():
-                form_type = document_type_mapping.get(row["form_type"], row["form_type"])
+                form_type = (
+                    form_type_mapping(row["form_type"])
+                    if row["ctry"] == "kr"
+                    else document_type_mapping.get(row["form_type"], row["form_type"])
+                )
                 category = "[" + category_type_mapping(row["category_type"]) + "]" if row.get("category_type", "") else ""
 
                 result.append(
@@ -276,10 +287,10 @@ class NewsService:
                         date=row["date"],
                         ctry=row["ctry"],
                         ticker=row["ticker"],
-                        title=f"{row[name]} {form_type} {category}",
-                        summary=row["summary"] if lang == TranslateCountry.KO else row["en_summary"],
-                        impact_reason=row["impact_reason"] if lang == TranslateCountry.KO else row["en_impact_reason"],
-                        key_points=row["key_points"] if lang == TranslateCountry.KO else row["en_key_points"],
+                        title=f"{row[name]} {form_type} {category}".strip(),
+                        summary=row["summary"],
+                        impact_reason=row["impact_reason"],
+                        key_points=row["key_points"],
                         emotion=row["emotion"],
                         name=row[name],
                         change_rate=row["change_rate"],
@@ -378,23 +389,18 @@ class NewsService:
         if lang == TranslateCountry.KO:
             # 뉴스 데이터
             news_condition["lang"] = "ko-KR"
-            # 공시 데이터
-            summary = "summary"
-            impact_reason = "impact_reason"
-            key_points = "key_points"
+            disclosure_condition["lang"] = "ko-KR"
+
             news_name = "kr_name"
             disclosure_name = "ko_name"
-            document_type_mapping = DOCUMENT_TYPE_MAPPING
         else:
             # 뉴스 데이터
             news_condition["lang"] = "en-US"
-            # 공시 데이터
-            summary = "en_summary"
-            impact_reason = "en_impact_reason"
-            key_points = "en_key_points"
+            disclosure_condition["lang"] = "en-US"
+
             news_name = "en_name"
             disclosure_name = "en_name"
-            document_type_mapping = DOCUMENT_TYPE_MAPPING_EN
+
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
             self.db._select(
@@ -433,9 +439,9 @@ class NewsService:
                     disclosure_name,
                     "ctry",
                     "date",
-                    summary,
-                    impact_reason,
-                    key_points,
+                    "summary",
+                    "impact_reason",
+                    "key_points",
                     "emotion",
                     "form_type",
                     "that_time_price",
@@ -451,12 +457,37 @@ class NewsService:
                     columns={"en_summary": "summary", "en_impact_reason": "impact_reason", "en_key_points": "key_points"}
                 )
             df_disclosure = self._process_dataframe_disclosure(df_disclosure)
-            df_disclosure["title"] = (
-                df_disclosure[disclosure_name]
-                + " "
-                + df_disclosure["form_type"].map(document_type_mapping).fillna(df_disclosure["form_type"])
-            )
-            df_disclosure.drop(columns=["form_type"], inplace=True)
+
+            # 공시의 form_type 매핑 로직 수정
+            # 각 행에 적용할 함수 정의
+            def get_form_type_mapping(row):
+                ctry = row["ctry"]
+
+                # 조건에 따라 적절한 매핑 선택
+                if ctry == "kr":
+                    if lang == TranslateCountry.KO:
+                        # 한국 공시, 한국어: 원본 그대로 사용
+                        return row["form_type"]
+                    else:
+                        # 한국 공시, 영어: DOCUMENT_TYPE_MAPPING_EN 사용
+                        return FORM_TYPE_MAPPING.get(row["form_type"].strip().split()[0], row["form_type"])
+                else:  # ctry == "us"
+                    if lang == TranslateCountry.KO:
+                        # 미국 공시, 한국어: DOCUMENT_TYPE_MAPPING 사용
+                        return DOCUMENT_TYPE_MAPPING.get(row["form_type"], row["form_type"])
+                    else:
+                        # 미국 공시, 영어: DOCUMENT_TYPE_MAPPING_EN 사용
+                        return DOCUMENT_TYPE_MAPPING_EN.get(row["form_type"], row["form_type"])
+
+            print(f"df_disclosure: {df_disclosure}")
+
+            # 각 행에 함수 적용하여 매핑된 form_type 생성
+            df_disclosure["mapped_form_type"] = df_disclosure.apply(get_form_type_mapping, axis=1)
+
+            # 제목 생성에 매핑된 form_type 사용
+            df_disclosure["title"] = df_disclosure[disclosure_name] + " " + df_disclosure["mapped_form_type"]
+
+            df_disclosure.drop(columns=["form_type", "mapped_form_type"], inplace=True)
             df_disclosure["type"] = "disclosure"
 
         # 데이터 통합 및 정렬

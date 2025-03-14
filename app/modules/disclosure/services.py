@@ -7,8 +7,8 @@ from app.core.exception.custom import DataNotFoundException
 from app.database.crud import JoinInfo, database
 from app.core.logging.config import get_logger
 from app.modules.common.enum import TranslateCountry
-from app.modules.common.utils import check_ticker_country_len_3
-from .mapping import CATEGORY_TYPE_MAPPING_EN, DOCUMENT_TYPE_MAPPING, DOCUMENT_TYPE_MAPPING_EN
+from app.modules.common.utils import check_ticker_country_len_2, check_ticker_country_len_3
+from .mapping import CATEGORY_TYPE_MAPPING_EN, DOCUMENT_TYPE_MAPPING, DOCUMENT_TYPE_MAPPING_EN, FORM_TYPE_MAPPING
 
 
 logger = get_logger(__name__)
@@ -206,18 +206,18 @@ class DisclosureService:
         else:
             year = date
 
-        # ctry = check_ticker_country_len_2(ticker)
+        ctry = check_ticker_country_len_2(ticker)
 
         if lang == TranslateCountry.KO:
             name = "ko_name"
-            document_type_mapping = DOCUMENT_TYPE_MAPPING
             lang = "ko-KR"
+            document_type_mapping = DOCUMENT_TYPE_MAPPING
 
             def category_type_mapping(x):
                 return x
         elif lang == TranslateCountry.EN:
             name = "en_name"
-            document_type_mapping = DOCUMENT_TYPE_MAPPING_EN
+            document_type_mapping = FORM_TYPE_MAPPING if ctry == "kr" else DOCUMENT_TYPE_MAPPING_EN
             lang = "en-US"
 
             def category_type_mapping(x):
@@ -286,7 +286,7 @@ class DisclosureService:
             data.append(
                 {
                     "id": row["id"],
-                    "title": f"{res_name} {form_type} {category_type}",
+                    "title": f"{res_name} {form_type} {category_type}".strip(),
                     "date": row["date"],
                     "emotion": row["emotion"],
                     "impact_reason": row["impact_reason"],
