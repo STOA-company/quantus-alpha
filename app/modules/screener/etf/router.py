@@ -26,6 +26,7 @@ def get_factors(market: ETFMarketEnum, screener_etf_service: ScreenerETFService 
     try:
         factors = screener_etf_service.get_factors(market)
         result = [FactorResponse(**factor) for factor in factors]
+        result = [factor_response for factor_response in result if factor_response.factor != "총 수수료"]
         return result
     except Exception as e:
         logger.error(f"Error getting factors: {e}")
