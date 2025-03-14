@@ -25,7 +25,6 @@ from app.database.crud import database, JoinInfo
 from app.utils.ctry_utils import check_ticker_country_len_2
 from app.common.constants import KST, UTC
 from app.utils.date_utils import now_utc
-from app.utils.test_utils import time_it
 
 
 class NewsService:
@@ -132,7 +131,8 @@ class NewsService:
             summary = "summary"
             impact_reason = "impact_reason"
             key_points = "key_points"
-            name = "kr_name"
+            news_name = "kr_name"
+            disclosure_name = "ko_name"
         else:
             # 뉴스 데이터
             news_condition["lang"] = "en-US"
@@ -140,7 +140,8 @@ class NewsService:
             summary = "en_summary"
             impact_reason = "en_impact_reason"
             key_points = "en_key_points"
-            name = "en_name"
+            news_name = "en_name"
+            disclosure_name = "en_name"
 
         change_rate_column = "change_rt"
 
@@ -175,7 +176,7 @@ class NewsService:
                 [
                     "id",
                     "ticker",
-                    name,
+                    news_name,
                     "ctry",
                     "date",
                     "title",
@@ -197,7 +198,7 @@ class NewsService:
                 [
                     "id",
                     "ticker",
-                    name,
+                    disclosure_name,
                     "ctry",
                     "date",
                     "url",
@@ -217,20 +218,20 @@ class NewsService:
             df_news = news_future.result()
             df_disclosure = disclosure_future.result()
 
-        news_data = [] if df_news.empty else self._process_price_data(self._process_dataframe_news(df_news))
+        news_data = [] if df_news.empty else self._process_price_data(df=self._process_dataframe_news(df_news), lang=lang)
 
         disclosure_data = (
             []
             if df_disclosure.empty
             else self._process_price_data(
-                self._process_dataframe_disclosure(df_disclosure), is_disclosure=True, lang=lang
+                self._process_dataframe_disclosure(df_disclosure), lang=lang, is_disclosure=True
             )
         )
 
         return news_data, disclosure_data
 
     def _process_price_data(
-        self, df: pd.DataFrame, is_disclosure: bool = False, lang: TranslateCountry | None = None
+        self, df: pd.DataFrame, lang: TranslateCountry, is_disclosure: bool = False
     ) -> List[Union[NewsRenewalItem, DisclosureRenewalItem]]:
         if df.empty:
             return []
@@ -253,7 +254,7 @@ class NewsService:
         if is_disclosure:
             if lang == TranslateCountry.KO:
                 document_type_mapping = DOCUMENT_TYPE_MAPPING
-                name = "kr_name"
+                name = "ko_name"
 
                 def category_type_mapping(x):
                     return x
@@ -288,6 +289,7 @@ class NewsService:
                 )
             return result
 
+        news_name = "kr_name" if lang == TranslateCountry.KO else "en_name"
         return [
             NewsRenewalItem(
                 id=row["id"],
@@ -298,7 +300,7 @@ class NewsService:
                 impact_reason=row["impact_reason"],
                 key_points=row["key_points"],
                 emotion=row["emotion"],
-                name=row["kr_name"],
+                name=row[news_name],
                 change_rate=row["change_rate"],
                 price_impact=row["price_impact"],
                 ticker=row["ticker"],
@@ -306,7 +308,6 @@ class NewsService:
             for _, row in df.iterrows()
         ]
 
-    @time_it
     def top_stories(self, request: Request, lang: TranslateCountry | None = None):
         viewed_stories = set()
         if request.cookies.get("viewed_stories"):
