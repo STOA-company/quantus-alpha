@@ -142,16 +142,23 @@ class ScreenerETFService(BaseScreenerService):
                 elif col == "score":
                     etf_data[col] = float(row[col])
                 elif col in row:
-                    if pd.isna(row[col]) or np.isinf(row[col]):
-                        etf_data[col] = {"value": "", "unit": ""}
-                    else:
-                        value, unit = screener_utils.convert_unit_and_value(
-                            market_filter,
-                            float(row[col]),
-                            factors[col].get("unit", "") if col in factors else "",
-                            lang,
-                        )
-                        etf_data[col] = {"value": value, "unit": unit}
+                    if col in row:
+                        if isinstance(row[col], (int, float)):  # 값이 숫자인지 확인
+                            if pd.isna(row[col]) or np.isinf(row[col]):
+                                etf_data[col] = {"value": "", "unit": ""}
+                            else:
+                                value, unit = screener_utils.convert_unit_and_value(
+                                    market_filter,
+                                    float(row[col]),
+                                    factors[col].get("unit", "") if col in factors else "",
+                                    lang,
+                                )
+                                etf_data[col] = {"value": value, "unit": unit}
+                        else:  # 숫자가 아닌 타입 처리
+                            if pd.isna(row[col]):
+                                etf_data[col] = {"value": "", "unit": ""}
+                            else:
+                                etf_data[col] = {"value": str(row[col]), "unit": ""}
 
             result.append(etf_data)
 
