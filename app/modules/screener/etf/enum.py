@@ -11,6 +11,5 @@ class ETFMarketEnum(str, Enum):
 
 class ETFCategoryEnum(str, Enum):
     TECHNICAL = "technical"
-    FUNDAMENTAL = "fundamental"
-    VALUATION = "valuation"
+    DIVIDEND = "dividend"
     CUSTOM = "custom"

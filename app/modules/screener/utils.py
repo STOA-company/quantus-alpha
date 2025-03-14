@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from Aws.logic.s3 import upload_file_to_bucket
 from app.modules.screener.etf.utils import ETFDataLoader
 from pandas.api.types import is_numeric_dtype
+from app.models.models_base import StockType
 
 logger = logging.getLogger(__name__)
 
@@ -92,14 +93,23 @@ class ScreenerUtils:
 
         return result
 
-    def get_default_columns(self, category: Optional[CategoryEnum] = None) -> List[str]:
+    def get_default_columns(
+        self,
+        category: Optional[CategoryEnum] = None,
+        type: Optional[StockType] = None,
+    ) -> List[str]:
         base_columns = ["score", "sector", "market"]
+
+        if type == StockType.ETF:
+            base_columns.remove("sector")
 
         if not category:
             return base_columns
 
         additional_columns = {
-            CategoryEnum.TECHNICAL: ["beta", "rsi_14", "sharpe", "momentum_6", "vol"],
+            CategoryEnum.TECHNICAL: ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
+            if type == StockType.STOCK
+            else ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"],
             CategoryEnum.FUNDAMENTAL: ["roe", "fscore", "deptRatio", "operating_income", "z_score"],
             CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"],
             CategoryEnum.DIVIDEND: [
