@@ -18,8 +18,7 @@ from app.batches.run_stock_trend import (
 from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_stock_indices_batch, get_stock_indices_data
 from app.utils.date_utils import get_session_checker, is_us_market_open_or_recently_closed, now_kr
 from app.batches.run_disclosure import (
-    renewal_kr_run_disclosure_batch,
-    renewal_us_run_disclosure_batch,
+    run_disclosure_batch,
 )
 from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
 from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_stat_cls_code_batch
@@ -211,7 +210,7 @@ def kr_disclosure_batch():
     """한국 공시 배치"""
     notifier.notify_info("KR_disclosure_batch process started")
     try:
-        renewal_kr_run_disclosure_batch()
+        run_disclosure_batch(ctry="KR")
         notifier.notify_success("KR_disclosure_batch process completed")
     except Exception as e:
         notifier.notify_error(f"KR_disclosure_batch process failed: {str(e)}", "고경민")
@@ -223,7 +222,7 @@ def us_disclosure_batch():
     """미국 공시 배치"""
     notifier.notify_info("US_disclosure_batch process started")
     try:
-        renewal_us_run_disclosure_batch()
+        run_disclosure_batch(ctry="US")
         notifier.notify_success("US_disclosure_batch process completed")
     except Exception as e:
         notifier.notify_error(f"US_disclosure_batch process failed: {str(e)}", "고경민")
@@ -252,59 +251,6 @@ def us_news_renewal():
     except Exception as e:
         notifier.notify_error(f"US_news_renewal process failed: {str(e)}", "고경민")
         raise
-
-
-# @CELERY_APP.task(name="kr_top_stories", ignore_result=True) # TODO:: 250311 주요소식 선정 중단 / 문제 없을 시 아예 삭제
-# def kr_top_stories():
-#     """한국 주요 소식 선정"""
-#     notifier.notify_info("KR_top_stories process started")
-
-#     has_error = False
-
-#     try:
-#         kr_run_disclosure_is_top_story()
-#     except Exception as e:
-#         has_error = True
-#         error_msg = f"KR disclosure top story failed: {str(e)}"
-#         notifier.notify_error(error_msg, "고경민")
-#         logging.error(error_msg)
-
-#     try:
-#         renewal_kr_run_news_is_top_story()
-#     except Exception as e:
-#         has_error = True
-#         error_msg = f"KR news top story failed: {str(e)}"
-#         notifier.notify_error(error_msg, "고경민")
-#         logging.error(error_msg)
-
-#     if not has_error:
-#         notifier.notify_success("KR_top_stories process completed")
-
-
-# @CELERY_APP.task(name="us_top_stories", ignore_result=True)
-# def us_top_stories():
-#     """미국 주요 소식 선정"""
-#     notifier.notify_info("US_top_stories process started")
-#     has_error = False
-
-#     try:
-#         us_run_disclosure_is_top_story()
-#     except Exception as e:
-#         has_error = True
-#         error_msg = f"US disclosure top story failed: {str(e)}"
-#         notifier.notify_error(error_msg, "고경민")
-#         logging.error(error_msg)
-
-#     try:
-#         renewal_us_run_news_is_top_story()
-#     except Exception as e:
-#         has_error = True
-#         error_msg = f"US news top story failed: {str(e)}"
-#         notifier.notify_error(error_msg, "고경민")
-#         logging.error(error_msg)
-
-#     if not has_error:
-#         notifier.notify_success("US_top_stories process completed")
 
 
 @CELERY_APP.task(name="memory-status", ignore_result=True)
