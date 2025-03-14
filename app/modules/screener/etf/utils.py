@@ -1341,7 +1341,7 @@ class ETFDataPreprocessor:
         df_select = df_select.rename(
             columns={
                 "expense_ratio": "total_fee",
-                "star_rating": "volatility",
+                "star_rating": "risk_rating",
                 "company_name": "manager",
             }
         )
@@ -1503,7 +1503,7 @@ class ETFDataPreprocessor:
         정보 데이터 전처리
         """
         if ctry == "KR":
-            return None
+            return df
         elif ctry == "US":
             country = "us"  # noqa
         else:
@@ -2147,6 +2147,7 @@ class ETFDataMerger:
             )
 
         df_merged = df_merged.rename(columns={"ticker": "Code", "kr_name": "Name", "en_name": "Name"})
+        df_merged["market"] = np.where(df_merged["market"] == "NYS", "NYSE", df_merged["market"])
 
         # 숫자로 변환 가능한 문자열을 숫자로 변환
         for col in df_merged.columns:
