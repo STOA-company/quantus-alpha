@@ -532,41 +532,15 @@ class BaseScreenerService(ABC):
                     await self.reorder_factor_filters(group_id, category, factors)
 
             if sort_info:
-                # 디버깅을 위한 로깅 추가
-                print(f"Type: {type}, Type value: {type.value if hasattr(type, 'value') else type}")
-
-                for category_key, sort_data in sort_info.items():  # 변수명 변경하여 충돌 방지
-                    print(f"Updating sort info for category: {category_key}, sort_data: {sort_data}, type: {type}")
-
-                    # 먼저 레코드 존재 여부 확인
-                    existing = self.database._select(
-                        table="screener_sort_infos", group_id=group_id, category=category_key, type=type
+                for category, sort_data in sort_info.items():
+                    print(f"category: {category}, sort_data: {sort_data}")
+                    self.database._update(
+                        table="screener_sort_infos",
+                        group_id=group_id,
+                        category=category,
+                        type=type,
+                        sets={"sort_by": REVERSE_FACTOR_MAP[sort_data.sort_by], "ascending": sort_data.ascending},
                     )
-
-                    if existing:
-                        # 업데이트 수행
-                        result = self.database._update(
-                            table="screener_sort_infos",
-                            group_id=group_id,
-                            category=category_key,
-                            type=type,
-                            sets={"sort_by": REVERSE_FACTOR_MAP[sort_data.sort_by], "ascending": sort_data.ascending},
-                        )
-                        print(f"Update result: {result}")
-                    else:
-                        # 레코드가 없으면 삽입
-                        print("No existing record found, inserting new record")
-                        insert_result = await self.database.insert_wrapper(
-                            table="screener_sort_infos",
-                            sets={
-                                "group_id": group_id,
-                                "category": category_key,
-                                "type": type,
-                                "sort_by": REVERSE_FACTOR_MAP[sort_data.sort_by],
-                                "ascending": sort_data.ascending,
-                            },
-                        )
-                        print(f"Insert result: {insert_result}")
 
             await asyncio.gather(*insert_tasks)
 

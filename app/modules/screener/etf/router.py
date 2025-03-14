@@ -183,6 +183,7 @@ async def create_or_update_group(
                 factor_filters=group_filter.factor_filters,
                 category=group_filter.category,
                 sort_info=group_filter.sort_info,
+                type=group_filter.type,
             )
             message = "Filter updated successfully"
         else:
