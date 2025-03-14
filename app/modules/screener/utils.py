@@ -18,6 +18,7 @@ from Aws.logic.s3 import upload_file_to_bucket
 from app.modules.screener.etf.utils import ETFDataLoader
 from pandas.api.types import is_numeric_dtype
 from app.modules.screener.stock.schemas import StockType
+from app.utils.test_utils import time_it
 
 logger = logging.getLogger(__name__)
 
@@ -106,10 +107,12 @@ class ScreenerUtils:
         if not category:
             return base_columns
 
+        technical_columns = ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
+        if type == StockType.ETF:
+            technical_columns = ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"]
+
         additional_columns = {
-            CategoryEnum.TECHNICAL: ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
-            if type == StockType.STOCK
-            else ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"],
+            CategoryEnum.TECHNICAL: technical_columns,
             CategoryEnum.FUNDAMENTAL: ["roe", "fscore", "deptRatio", "operating_income", "z_score"],
             CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"],
             CategoryEnum.DIVIDEND: [
@@ -286,40 +289,49 @@ class ScreenerUtils:
 
         return df
 
+    @time_it
     def filter_stocks(
         self,
         market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
     ) -> List[str]:
+        # 원본 데이터를 불러옴
         df = self.get_df_from_parquet(market_filter)
-        filtered_df = df.copy()
 
-        # 종목 필터링
+        # 불리언 마스크를 생성
+        mask = pd.Series(True, index=df.index)
+
+        # 시장 필터링
         if market_filter:
             if market_filter == MarketEnum.US:
-                filtered_df = filtered_df[filtered_df["country"] == "us"]
+                mask &= df["country"] == "us"
             elif market_filter == MarketEnum.KR:
-                filtered_df = filtered_df[filtered_df["country"] == "kr"]
+                mask &= df["country"] == "kr"
             elif market_filter == MarketEnum.SNP500:
-                filtered_df = filtered_df[filtered_df["is_snp_500"] == 1]
+                mask &= df["is_snp_500"] == 1
             elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSDAQ, MarketEnum.KOSPI]:
-                filtered_df = filtered_df[filtered_df["market"] == market_filter.value]
+                mask &= df["market"] == market_filter.value
 
+        # 섹터 필터링
         if sector_filter:
-            filtered_df = filtered_df[filtered_df["sector"].isin(sector_filter)]
+            mask &= df["sector"].isin(sector_filter)
 
+        # 사용자 정의 필터링
         if custom_filters:
             for filter in custom_filters:
                 factor = filter["factor"]
-                if factor not in filtered_df.columns:
+                if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
-                if filter["above"] is not None:
-                    filtered_df = filtered_df[filtered_df[factor] >= filter["above"]]
-                if filter["below"] is not None:
-                    filtered_df = filtered_df[filtered_df[factor] <= filter["below"]]
 
-        stock_codes = filtered_df["Code"].tolist()
+                if filter["above"] is not None:
+                    mask &= df[factor] >= filter["above"]
+
+                if filter["below"] is not None:
+                    mask &= df[factor] <= filter["below"]
+
+        # 마스크를 한 번에 적용하여 필터링
+        stock_codes = df.loc[mask, "Code"].tolist()
         return stock_codes
 
     def filter_etfs(
@@ -328,30 +340,30 @@ class ScreenerUtils:
         custom_filters: Optional[List[Dict]] = None,
     ) -> List[str]:
         df = self.etf_factor_loader.load_etf_factors(market_filter)
-        filtered_df = df.copy()
 
         # 종목 필터링
         if market_filter:
             if market_filter == ETFMarketEnum.US:
-                filtered_df = filtered_df[filtered_df["country"] == "us"]
+                df = df[df["country"] == "us"]
             elif market_filter == ETFMarketEnum.KR:
-                filtered_df = filtered_df[filtered_df["country"] == "kr"]
+                df = df[df["country"] == "kr"]
             elif market_filter in [ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
-                filtered_df = filtered_df[filtered_df["market"] == market_filter.value.upper()]
+                df = df[df["market"] == market_filter.value.upper()]
 
         if custom_filters:
             for filter in custom_filters:
                 factor = filter["factor"]
-                if factor not in filtered_df.columns:
+                if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
                 if filter["above"] is not None:
-                    filtered_df = filtered_df[filtered_df[factor] >= filter["above"]]
+                    df = df[df[factor] >= filter["above"]]
                 if filter["below"] is not None:
-                    filtered_df = filtered_df[filtered_df[factor] <= filter["below"]]
+                    df = df[df[factor] <= filter["below"]]
 
-        etf_tickers = filtered_df["Code"].tolist()
+        etf_tickers = df["Code"].tolist()
         return etf_tickers
 
+    @time_it
     def get_filtered_stocks_df(
         self, market_filter: MarketEnum, codes: List[str], columns: Optional[List[str]] = None
     ) -> pd.DataFrame:

@@ -184,6 +184,8 @@ def get_groups(
     저장된 필터 목록 조회
     """
     try:
+        if current_user is None:
+            return []
         groups = screener_service.get_groups(current_user.id, type=StockType.STOCK)
         return [GroupMetaData(id=group["id"], name=group["name"], type=group["type"]) for group in groups]
     except Exception as e:
