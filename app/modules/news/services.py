@@ -9,7 +9,12 @@ import pytz
 from sqlalchemy import text
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.enum import TranslateCountry
-from app.modules.disclosure.mapping import document_type_mapping
+from app.modules.disclosure.mapping import (
+    CATEGORY_TYPE_MAPPING_EN,
+    DOCUMENT_TYPE_MAPPING,
+    DOCUMENT_TYPE_MAPPING_EN,
+    FORM_TYPE_MAPPING,
+)
 
 import numpy as np
 import pandas as pd
@@ -25,7 +30,6 @@ from app.database.crud import database, JoinInfo
 from app.utils.ctry_utils import check_ticker_country_len_2
 from app.common.constants import KST, UTC
 from app.utils.date_utils import now_utc
-from app.utils.test_utils import time_it
 
 
 class NewsService:
@@ -120,25 +124,24 @@ class NewsService:
         condition = {"is_exist": True}
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
+
+        if lang == TranslateCountry.KO:
+            # 뉴스 데이터
+            condition["lang"] = "ko-KR"
+
+            news_name = "kr_name"
+            disclosure_name = "ko_name"
+        else:
+            # 뉴스 데이터
+            condition["lang"] = "en-US"
+
+            news_name = "en_name"
+            disclosure_name = "en_name"
+
         news_condition = condition.copy()
         disclosure_condition = condition.copy()
 
         news_condition["is_related"] = True
-
-        if lang == TranslateCountry.KO:
-            # 뉴스 데이터
-            news_condition["lang"] = "ko-KR"
-            # 공시 데이터
-            summary = "summary"
-            impact_reason = "impact_reason"
-            key_points = "key_points"
-        else:
-            # 뉴스 데이터
-            news_condition["lang"] = "en-US"
-            # 공시 데이터
-            summary = "en_summary"
-            impact_reason = "en_impact_reason"
-            key_points = "en_key_points"
 
         change_rate_column = "change_rt"
 
@@ -173,8 +176,7 @@ class NewsService:
                 [
                     "id",
                     "ticker",
-                    "kr_name",
-                    "en_name",
+                    news_name,
                     "ctry",
                     "date",
                     "title",
@@ -196,14 +198,13 @@ class NewsService:
                 [
                     "id",
                     "ticker",
-                    "ko_name",
-                    "en_name",
+                    disclosure_name,
                     "ctry",
                     "date",
                     "url",
-                    summary,
-                    impact_reason,
-                    key_points,
+                    "summary",
+                    "impact_reason",
+                    "key_points",
                     "emotion",
                     "form_type",
                     "category_type",
@@ -217,20 +218,20 @@ class NewsService:
             df_news = news_future.result()
             df_disclosure = disclosure_future.result()
 
-        news_data = [] if df_news.empty else self._process_price_data(self._process_dataframe_news(df_news))
+        news_data = [] if df_news.empty else self._process_price_data(df=self._process_dataframe_news(df_news), lang=lang)
 
         disclosure_data = (
             []
             if df_disclosure.empty
             else self._process_price_data(
-                self._process_dataframe_disclosure(df_disclosure), is_disclosure=True, lang=lang
+                self._process_dataframe_disclosure(df_disclosure), lang=lang, is_disclosure=True
             )
         )
 
         return news_data, disclosure_data
 
     def _process_price_data(
-        self, df: pd.DataFrame, is_disclosure: bool = False, lang: TranslateCountry | None = None
+        self, df: pd.DataFrame, lang: TranslateCountry, is_disclosure: bool = False
     ) -> List[Union[NewsRenewalItem, DisclosureRenewalItem]]:
         if df.empty:
             return []
@@ -251,27 +252,55 @@ class NewsService:
         df["change_rate"] = df[change_rate_column].round(2)
 
         if is_disclosure:
-            return [
-                DisclosureRenewalItem(
-                    id=row["id"],
-                    date=row["date"],
-                    ctry=row["ctry"],
-                    ticker=row["ticker"],
-                    title=f"{row['ko_name']} {document_type_mapping.get(row['form_type'], row['form_type'])} [{row['category_type']}]"
-                    if row["category_type"]
-                    else f"{row['ko_name']} {document_type_mapping.get(row['form_type'], row['form_type'])}",
-                    summary=row["summary"] if lang == TranslateCountry.KO else row["en_summary"],
-                    impact_reason=row["impact_reason"] if lang == TranslateCountry.KO else row["en_impact_reason"],
-                    key_points=row["key_points"] if lang == TranslateCountry.KO else row["en_key_points"],
-                    emotion=row["emotion"],
-                    name=row["ko_name"],
-                    change_rate=row["change_rate"],
-                    price_impact=row["price_impact"],
-                    document_url=row["url"],
-                )
-                for _, row in df.iterrows()
-            ]
+            if lang == TranslateCountry.KO:
+                document_type_mapping = DOCUMENT_TYPE_MAPPING
+                name = "ko_name"
 
+                def category_type_mapping(x):
+                    return x
+
+                def form_type_mapping(x):
+                    return x
+
+            elif lang == TranslateCountry.EN:
+                document_type_mapping = DOCUMENT_TYPE_MAPPING_EN
+                name = "en_name"
+
+                def category_type_mapping(x):
+                    return CATEGORY_TYPE_MAPPING_EN.get(x, x)
+
+                def form_type_mapping(x):
+                    return FORM_TYPE_MAPPING.get(x.strip().split()[0], x)
+
+            result = []
+            for _, row in df.iterrows():
+                form_type = (
+                    form_type_mapping(row["form_type"])
+                    if row["ctry"] == "kr"
+                    else document_type_mapping.get(row["form_type"], row["form_type"])
+                )
+                category = "[" + category_type_mapping(row["category_type"]) + "]" if row.get("category_type", "") else ""
+
+                result.append(
+                    DisclosureRenewalItem(
+                        id=row["id"],
+                        date=row["date"],
+                        ctry=row["ctry"],
+                        ticker=row["ticker"],
+                        title=f"{row[name]} {form_type} {category}".strip(),
+                        summary=row["summary"],
+                        impact_reason=row["impact_reason"],
+                        key_points=row["key_points"],
+                        emotion=row["emotion"],
+                        name=row[name],
+                        change_rate=row["change_rate"],
+                        price_impact=row["price_impact"],
+                        document_url=row["url"],
+                    )
+                )
+            return result
+
+        news_name = "kr_name" if lang == TranslateCountry.KO else "en_name"
         return [
             NewsRenewalItem(
                 id=row["id"],
@@ -282,7 +311,7 @@ class NewsService:
                 impact_reason=row["impact_reason"],
                 key_points=row["key_points"],
                 emotion=row["emotion"],
-                name=row["kr_name"],
+                name=row[news_name],
                 change_rate=row["change_rate"],
                 price_impact=row["price_impact"],
                 ticker=row["ticker"],
@@ -290,7 +319,6 @@ class NewsService:
             for _, row in df.iterrows()
         ]
 
-    @time_it
     def top_stories(self, request: Request, lang: TranslateCountry | None = None):
         viewed_stories = set()
         if request.cookies.get("viewed_stories"):
@@ -361,17 +389,17 @@ class NewsService:
         if lang == TranslateCountry.KO:
             # 뉴스 데이터
             news_condition["lang"] = "ko-KR"
-            # 공시 데이터
-            summary = "summary"
-            impact_reason = "impact_reason"
-            key_points = "key_points"
+            disclosure_condition["lang"] = "ko-KR"
+
+            news_name = "kr_name"
+            disclosure_name = "ko_name"
         else:
             # 뉴스 데이터
             news_condition["lang"] = "en-US"
-            # 공시 데이터
-            summary = "en_summary"
-            impact_reason = "en_impact_reason"
-            key_points = "en_key_points"
+            disclosure_condition["lang"] = "en-US"
+
+            news_name = "en_name"
+            disclosure_name = "en_name"
 
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
@@ -380,8 +408,7 @@ class NewsService:
                 columns=[
                     "id",
                     "ticker",
-                    "kr_name",
-                    "en_name",
+                    news_name,
                     "ctry",
                     "date",
                     "title",
@@ -399,7 +426,8 @@ class NewsService:
         if not df_news.empty:
             df_news = self._process_dataframe_news(df_news)
             df_news["type"] = "news"
-            df_news = df_news.rename(columns={"kr_name": "ko_name"})
+            if lang == TranslateCountry.KO:
+                df_news = df_news.rename(columns={"kr_name": "ko_name"})
 
         # 공시 데이터 수집
         df_disclosure = pd.DataFrame(
@@ -408,13 +436,12 @@ class NewsService:
                 columns=[
                     "id",
                     "ticker",
-                    "ko_name",
-                    "en_name",
+                    disclosure_name,
                     "ctry",
                     "date",
-                    summary,
-                    impact_reason,
-                    key_points,
+                    "summary",
+                    "impact_reason",
+                    "key_points",
                     "emotion",
                     "form_type",
                     "that_time_price",
@@ -430,12 +457,37 @@ class NewsService:
                     columns={"en_summary": "summary", "en_impact_reason": "impact_reason", "en_key_points": "key_points"}
                 )
             df_disclosure = self._process_dataframe_disclosure(df_disclosure)
-            df_disclosure["title"] = (
-                df_disclosure["ko_name"]
-                + " "
-                + df_disclosure["form_type"].map(document_type_mapping).fillna(df_disclosure["form_type"])
-            )
-            df_disclosure.drop(columns=["form_type"], inplace=True)
+
+            # 공시의 form_type 매핑 로직 수정
+            # 각 행에 적용할 함수 정의
+            def get_form_type_mapping(row):
+                ctry = row["ctry"]
+
+                # 조건에 따라 적절한 매핑 선택
+                if ctry == "kr":
+                    if lang == TranslateCountry.KO:
+                        # 한국 공시, 한국어: 원본 그대로 사용
+                        return row["form_type"]
+                    else:
+                        # 한국 공시, 영어: DOCUMENT_TYPE_MAPPING_EN 사용
+                        return FORM_TYPE_MAPPING.get(row["form_type"].strip().split()[0], row["form_type"])
+                else:  # ctry == "us"
+                    if lang == TranslateCountry.KO:
+                        # 미국 공시, 한국어: DOCUMENT_TYPE_MAPPING 사용
+                        return DOCUMENT_TYPE_MAPPING.get(row["form_type"], row["form_type"])
+                    else:
+                        # 미국 공시, 영어: DOCUMENT_TYPE_MAPPING_EN 사용
+                        return DOCUMENT_TYPE_MAPPING_EN.get(row["form_type"], row["form_type"])
+
+            print(f"df_disclosure: {df_disclosure}")
+
+            # 각 행에 함수 적용하여 매핑된 form_type 생성
+            df_disclosure["mapped_form_type"] = df_disclosure.apply(get_form_type_mapping, axis=1)
+
+            # 제목 생성에 매핑된 form_type 사용
+            df_disclosure["title"] = df_disclosure[disclosure_name] + " " + df_disclosure["mapped_form_type"]
+
+            df_disclosure.drop(columns=["form_type", "mapped_form_type"], inplace=True)
             df_disclosure["type"] = "disclosure"
 
         # 데이터 통합 및 정렬
@@ -664,8 +716,7 @@ class NewsService:
 
         ctry = check_ticker_country_len_2(ticker)
 
-        stock_info_columns = ["ticker", "en_name"]
-        stock_info_columns.append("is_kospi_200" if ctry == "kr" else "is_snp_500")
+        stock_info_columns = ["ticker", "en_name", "is_pub"]
         stock_info = self.db._select(
             table="stock_information",
             columns=stock_info_columns,
@@ -676,25 +727,18 @@ class NewsService:
             columns=["ticker"],
             **{"en_name": stock_info[0][1]},
         )
+        condition = {
+            "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "is_exist": True,
+            "is_related": True,
+            "lang": lang,
+        }
         if len(duplicate_stock_info) == 2:
             unique_tickers = [info[0] for info in duplicate_stock_info]
-            condition = {
-                "ticker__in": unique_tickers,
-                "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-                "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-                "is_exist": True,
-                "is_related": True,
-                "lang": lang,
-            }
+            condition["ticker__in"] = unique_tickers
         else:
-            condition = {
-                "ticker": ticker,
-                "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-                "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-                "is_exist": True,
-                "is_related": True,
-                "lang": lang,
-            }
+            condition["ticker"] = ticker
 
         df_news = pd.DataFrame(
             self.db._select(
@@ -717,7 +761,7 @@ class NewsService:
             )
         )
         if df_news.empty:
-            if stock_info[0][-1]:
+            if stock_info[0].is_pub:
                 emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
                 return [], 0, 0, 0, emotion_count, ctry
             else:
@@ -737,24 +781,24 @@ class NewsService:
         df_news["date"] = pd.to_datetime(df_news["date"]).dt.tz_localize(utc).dt.tz_convert(kst)
         df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
 
-        df_price = pd.DataFrame(
-            self.db._select(
-                table="stock_trend",
-                columns=["ticker", "current_price"],
-                **{"ticker": ticker},
-            )
-        )
+        # df_price = pd.DataFrame(
+        #     self.db._select(
+        #         table="stock_trend",
+        #         columns=["ticker", "current_price"],
+        #         **{"ticker": ticker},
+        #     )
+        # )
 
         df_news["price_impact"] = 0.0
-        if not df_price.empty:
-            df_price["current_price"] = df_price["current_price"].fillna(0.0)
+        # if not df_price.empty:
+        #     df_price["current_price"] = df_price["current_price"].fillna(0.0)
 
-            df_news = pd.merge(df_news, df_price, on="ticker", how="left")
+        #     df_news = pd.merge(df_news, df_price, on="ticker", how="left")
 
-            df_news["price_impact"] = (
-                (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100
-            )
-            df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
+        #     df_news["price_impact"] = (
+        #         (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100
+        #     )
+        #     df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
 
         data = []
         for _, row in df_news.iterrows():

@@ -3,10 +3,11 @@ from app.database.crud import database
 from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
-from app.modules.screener.schemas import MarketEnum
+from app.modules.screener.stock.schemas import MarketEnum
 from app.common.constants import NEED_TO_MULTIPLY_100, FACTOR_MAP, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
 import numpy as np
 from app.cache.factors import factors_cache
+from app.modules.screener.etf.enum import ETFMarketEnum
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.models.models_factors import CategoryEnum
 import logging
@@ -14,19 +15,24 @@ from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.date_utils import is_holiday
 from datetime import datetime, timedelta
 from Aws.logic.s3 import upload_file_to_bucket
+from app.modules.screener.etf.utils import ETFDataLoader
+from pandas.api.types import is_numeric_dtype
+from app.modules.screener.stock.schemas import StockType
+from app.utils.test_utils import time_it
 
 logger = logging.getLogger(__name__)
 
 notifier = SlackNotifier()
 
 
-class FactorUtils:
+class ScreenerUtils:
     def __init__(self):
         self.db = database
         self.lang = "kr"
+        self.etf_factor_loader = ETFDataLoader()
 
-    def get_factors(self, market: MarketEnum, is_stock: Optional[bool] = True) -> List[dict]:
-        factors = self.db._select(table="factors", is_stock=is_stock)
+    def get_factors(self, market: MarketEnum) -> List[dict]:
+        factors = self.db._select(table="factors", is_stock=True)
         # 시장별 팩터 최소/최대값 계산
         market_data = self.get_df_from_parquet(market)
 
@@ -55,16 +61,70 @@ class FactorUtils:
 
         return result
 
-    def get_columns(self, category: Optional[CategoryEnum] = None, is_stock: Optional[bool] = True) -> List[str]:
-        db_columns = self.db._select(table="factors", columns=["factor"], category=category, is_stock=is_stock)
+    def get_etf_factors(self, market: ETFMarketEnum) -> List[dict]:
+        factors = self.db._select(table="factors", is_etf=True)
+        # 시장별 팩터 최소/최대값 계산
+        market_data = self.etf_factor_loader.load_etf_factors(market.value)
 
-        result = ["market", "sector", "score"]
-        for column_tuple in db_columns:
-            column_name = column_tuple[0]
+        result = []
+        for factor in factors:
+            factor_name = factor.factor
 
-            result.append(column_name)
+            if factor_name in market_data.columns:
+                min_value = None
+                max_value = None
+                if is_numeric_dtype(market_data[factor_name]):
+                    min_value = floor_to_integer(market_data[factor_name].min())
+                    max_value = ceil_to_integer(market_data[factor_name].max())
+
+                result.append(
+                    {
+                        "factor": FACTOR_MAP[factor_name],
+                        "description": factor.description,
+                        "unit": str(factor.unit).lower(),
+                        "category": str(factor.category).lower(),
+                        "direction": factor.sort_direction,
+                        "min_value": min_value,
+                        "max_value": max_value,
+                    }
+                )
+
+            else:
+                raise ValueError(f"팩터 '{factor_name}'가 데이터에 존재하지 않습니다.")
 
         return result
+
+    def get_default_columns(
+        self,
+        category: Optional[CategoryEnum] = None,
+        type: Optional[StockType] = None,
+    ) -> List[str]:
+        base_columns = ["score", "sector", "market"]
+
+        if type == StockType.ETF:
+            base_columns.remove("sector")
+
+        if not category:
+            return base_columns
+
+        technical_columns = ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
+        if type == StockType.ETF:
+            technical_columns = ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"]
+
+        additional_columns = {
+            CategoryEnum.TECHNICAL: technical_columns,
+            CategoryEnum.FUNDAMENTAL: ["roe", "fscore", "deptRatio", "operating_income", "z_score"],
+            CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"],
+            CategoryEnum.DIVIDEND: [
+                "dividend_count",
+                "total_fee",
+                "last_dividend_per_share",
+                "dividend_growth_rate_5y",
+                "risk_rating",
+            ],
+        }
+
+        return [*base_columns, *additional_columns.get(category, [])]
 
     def process_kr_factor_data(self):
         output_file = "parquet/kr_stock_factors.parquet"
@@ -166,6 +226,8 @@ class FactorUtils:
         df["Name_en"] = df["en_name"]
         df = df.drop(["merge_code", "kr_name", "en_name"], axis=1)
 
+        df["Code"] = df["Code"].str.replace("-US", "")
+
         df["country"] = "us"
 
         # NAN 값 처리
@@ -236,35 +298,64 @@ class FactorUtils:
         custom_filters: Optional[List[Dict]] = None,
     ) -> List[str]:
         df = self.get_df_from_parquet(market_filter)
-        filtered_df = df.copy()
 
         # 종목 필터링
         if market_filter:
             if market_filter == MarketEnum.US:
-                filtered_df = filtered_df[filtered_df["country"] == "us"]
+                df = df[df["country"] == "us"]
             elif market_filter == MarketEnum.KR:
-                filtered_df = filtered_df[filtered_df["country"] == "kr"]
+                df = df[df["country"] == "kr"]
             elif market_filter == MarketEnum.SNP500:
-                filtered_df = filtered_df[filtered_df["is_snp_500"] == 1]
+                df = df[df["is_snp_500"] == 1]
             elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSDAQ, MarketEnum.KOSPI]:
-                filtered_df = filtered_df[filtered_df["market"] == market_filter.value]
+                df = df[df["market"] == market_filter.value]
 
         if sector_filter:
-            filtered_df = filtered_df[filtered_df["sector"].isin(sector_filter)]
+            df = df[df["sector"].isin(sector_filter)]
 
         if custom_filters:
             for filter in custom_filters:
                 factor = filter["factor"]
-                if factor not in filtered_df.columns:
+                if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
                 if filter["above"] is not None:
-                    filtered_df = filtered_df[filtered_df[factor] >= filter["above"]]
+                    df = df[df[factor] >= filter["above"]]
                 if filter["below"] is not None:
-                    filtered_df = filtered_df[filtered_df[factor] <= filter["below"]]
+                    df = df[df[factor] <= filter["below"]]
 
-        stock_codes = filtered_df["Code"].tolist()
+        stock_codes = df["Code"].tolist()
         return stock_codes
 
+    def filter_etfs(
+        self,
+        market_filter: Optional[ETFMarketEnum] = None,
+        custom_filters: Optional[List[Dict]] = None,
+    ) -> List[str]:
+        df = self.etf_factor_loader.load_etf_factors(market_filter)
+
+        # 종목 필터링
+        if market_filter:
+            if market_filter == ETFMarketEnum.US:
+                df = df[df["country"] == "us"]
+            elif market_filter == ETFMarketEnum.KR:
+                df = df[df["country"] == "kr"]
+            elif market_filter in [ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
+                df = df[df["market"] == market_filter.value.upper()]
+
+        if custom_filters:
+            for filter in custom_filters:
+                factor = filter["factor"]
+                if factor not in df.columns:
+                    raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
+                if filter["above"] is not None:
+                    df = df[df[factor] >= filter["above"]]
+                if filter["below"] is not None:
+                    df = df[df[factor] <= filter["below"]]
+
+        etf_tickers = df["Code"].tolist()
+        return etf_tickers
+
+    @time_it
     def get_filtered_stocks_df(
         self, market_filter: MarketEnum, codes: List[str], columns: Optional[List[str]] = None
     ) -> pd.DataFrame:
@@ -275,6 +366,20 @@ class FactorUtils:
             required_columns.remove("score")
 
         df = self.get_df_from_parquet(market_filter)
+        filtered_df = df[df["Code"].isin(codes)][required_columns]
+
+        return filtered_df
+
+    def get_filtered_etfs_df(
+        self, market_filter: ETFMarketEnum, codes: List[str], columns: Optional[List[str]] = None
+    ) -> pd.DataFrame:
+        if columns is None:
+            columns = []
+        required_columns = columns.copy()
+        if "score" in required_columns:
+            required_columns.remove("score")
+
+        df = self.etf_factor_loader.load_etf_factors(market_filter)
         filtered_df = df[df["Code"].isin(codes)][required_columns]
 
         return filtered_df
@@ -377,4 +482,9 @@ class FactorUtils:
         upload_file_to_bucket(file_path, "alpha-finder-factors", obj_path)
 
 
-factor_utils = FactorUtils()
+screener_utils = ScreenerUtils()
+
+
+if __name__ == "__main__":
+    df = screener_utils.get_df_from_parquet(MarketEnum.US)
+    print(df["market"].unique())

@@ -76,6 +76,7 @@ def check_ticker_country_len_3(ticker: str):
     # 미국 주식은 위의 패턴에 해당하지 않는 모든 경우
     return "usa"
 
+
 async def async_check_ticker_country_len_3(ticker: str):
     # 한국 주식 패턴 체크 (A + 6자리 숫자)
     try:

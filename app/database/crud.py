@@ -383,6 +383,14 @@ class BaseDatabase:
             logging.error(f"Error in bulk update operation: {str(e)}")
             raise
 
+    async def insert_wrapper(self, table: str, sets: dict | list):
+        """INSERT 쿼리 실행"""
+        try:
+            return self._insert(table, sets)
+        except Exception as e:
+            logging.error(f"Error in insert operation: {str(e)}")
+            raise
+
 
 class Database(BaseDatabase):
     def __init__(self):

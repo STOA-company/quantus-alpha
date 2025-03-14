@@ -1,5 +1,8 @@
 import os
-from app.utils.etf_utils import (
+from typing import Literal
+from Aws.logic.s3 import upload_file_to_bucket
+from app.utils.date_utils import now_kr, now_us
+from app.modules.screener.etf.utils import (
     ETFDataDownloader,
     ETFDataLoader,
     ETFDataMerger,
@@ -7,7 +10,6 @@ from app.utils.etf_utils import (
     ETFFactorExtractor,
 )
 from app.common.constants import ETF_DATA_DIR, PARQUET_DIR
-
 
 # 데이터 타입에 따른 다운로드 함수 매핑
 DATA_MAPPING = {
@@ -51,7 +53,7 @@ DATA_MAPPING = {
     "데이터_합치_미국": {
         "class": "ETFDataMerger",
         "method": "merge_data",
-        "params": {"ctry": "US", "factor": True, "dividend_factor": True, "info": True},
+        "params": {"ctry": "US", "factor": True, "dividend_factor": True, "info": True, "morningstar": True},
     },
 }
 
@@ -121,14 +123,19 @@ def execute_all_methods(class_instances):
     return execute_selected_method(get_available_data_types(), class_instances)
 
 
-def run_etf_screener_data():
+def run_etf_screener_data(ctry: Literal["KR", "US", "ALL"] = "ALL"):
     """
     메인 함수
     1. 가격, 배당 데이터 다운로드
     2. 가격, 배당 데이터로부터 팩터 데이터 추출
     3. 팩터 데이터와 다른 데이터를 합쳐 하나의 팩터 데이터로 추출
     """
-    print("ETF 데이터 처리 스크립트를 시작합니다.")
+    print(f"{ctry} ETF 데이터 처리 스크립트를 시작합니다.")
+    from app.core.extra.SlackNotifier import SlackNotifier
+
+    slack_notifier = SlackNotifier(
+        webhook_url="https://hooks.slack.com/services/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"
+    )
 
     # 클래스 인스턴스 생성
     downloader = ETFDataDownloader()
@@ -146,57 +153,114 @@ def run_etf_screener_data():
         "ETFDividendFactorExtractor": dividend_factor_extractor,
     }
 
-    # 1. 데이터 다운로드
-    print("\n1. 데이터 다운로드 시작")
+    if ctry == "KR":
+        date = now_kr(is_date=True)
+    elif ctry == "US":
+        date = now_us(is_date=True)
 
-    # 한국과 미국 ETF 데이터 다운로드
-    downloaded_data = execute_selected_method(  # noqa
-        ["가격_한국", "가격_미국", "배당_한국", "배당_미국"], class_instances
-    )
+    # 1. 데이터 다운로드
+    print(f"\n1. {ctry} 데이터 다운로드 시작")
+    slack_notifier.notify_info(f"1. {ctry} 데이터 다운로드 시작")
+
+    if ctry == "ALL":
+        execute_selected_method(["가격_한국", "가격_미국", "배당_한국", "배당_미국"], class_instances)
+    elif ctry == "KR":
+        execute_selected_method(["가격_한국", "배당_한국"], class_instances)
+    elif ctry == "US":
+        execute_selected_method(["가격_미국", "배당_미국"], class_instances)
 
     print("데이터 다운로드 완료")
-
+    slack_notifier.notify_info("데이터 다운로드 완료")
     # 2. 팩터 데이터 추출
-    print("\n2. 팩터 데이터 추출 시작")
+    print(f"\n2. {ctry} 팩터 데이터 추출 시작")
 
     # 한국 ETF 팩터 추출
-    print("한국, 미국 ETF 팩터 추출 중...")
-
-    kr_factors = execute_selected_method(["가격_팩터_추출_한국", "배당_팩터_추출_한국"], class_instances)
-    # 미국 ETF 팩터 추출
-    us_factors = execute_selected_method(["가격_팩터_추출_미국", "배당_팩터_추출_미국"], class_instances)
+    print(f"{ctry} ETF 팩터 추출 중...")
+    slack_notifier.notify_info(f"{ctry} ETF 팩터 추출 중...")
+    if ctry == "ALL":
+        factors = execute_selected_method(
+            ["가격_팩터_추출_한국", "배당_팩터_추출_한국", "가격_팩터_추출_미국", "배당_팩터_추출_미국"], class_instances
+        )
+    elif ctry == "KR":
+        factors = execute_selected_method(["가격_팩터_추출_한국", "배당_팩터_추출_한국"], class_instances)
+    elif ctry == "US":
+        factors = execute_selected_method(["가격_팩터_추출_미국", "배당_팩터_추출_미국"], class_instances)
 
     # 한국 ETF 팩터 저장
-    for key, df in kr_factors.items():
+    for key, df in factors.items():
         if key == "가격_팩터_추출_한국":
             df.to_parquet(os.path.join(ETF_DATA_DIR, "kr_etf_factor.parquet"), index=False)
         elif key == "배당_팩터_추출_한국":
             df.to_parquet(os.path.join(ETF_DATA_DIR, "kr_etf_dividend_factor.parquet"), index=False)
-    # 미국 ETF 팩터 저장
-    for key, df in us_factors.items():
-        if key == "가격_팩터_추출_미국":
+        elif key == "가격_팩터_추출_미국":
             df.to_parquet(os.path.join(ETF_DATA_DIR, "us_etf_factor.parquet"), index=False)
         elif key == "배당_팩터_추출_미국":
             df.to_parquet(os.path.join(ETF_DATA_DIR, "us_etf_dividend_factor.parquet"), index=False)
-    print("한국, 미국 ETF 팩터 추출 완료")
+    print(f"{ctry} ETF 팩터 추출 완료")
+    slack_notifier.notify_info(f"{ctry} ETF 팩터 추출 완료")
 
     # 3. 데이터 합치기
-    print("\n3. 데이터 합치기 시작")
+    print(f"\n3. {ctry} 데이터 합치기 시작")
+    slack_notifier.notify_info(f"{ctry} 데이터 합치기 시작")
+    kr_merged = None
+    us_merged = None
 
-    # 한국 ETF 데이터 합치기
-    print("한국 ETF 데이터 합치는 중...")
-    kr_merged = execute_selected_method(["데이터_합치_한국"], class_instances)
-    kr_merged["데이터_합치_한국"].to_parquet(os.path.join(PARQUET_DIR, "kr_etf_factors.parquet"), index=False)
-    print("한국 ETF 데이터 합치기 완료")
+    if ctry == "ALL":
+        # 한국 ETF 데이터 합치기
+        print("한국 ETF 데이터 합치는 중...")
+        kr_merged = execute_selected_method(["데이터_합치_한국"], class_instances)
+        kr_merged["데이터_합치_한국"].to_parquet(os.path.join(PARQUET_DIR, "kr_etf_factors.parquet"), index=False)
+        print("한국 ETF 데이터 합치기 완료")
 
-    # 미국 ETF 데이터 합치기
-    print("미국 ETF 데이터 합치는 중...")
-    us_merged = execute_selected_method(["데이터_합치_미국"], class_instances)
-    us_merged["데이터_합치_미국"].to_parquet(os.path.join(PARQUET_DIR, "us_etf_factors.parquet"), index=False)
-    print("미국 ETF 데이터 합치기 완료")
+        # 미국 ETF 데이터 합치기
+        print("미국 ETF 데이터 합치는 중...")
+        us_merged = execute_selected_method(["데이터_합치_미국"], class_instances)
+        us_merged["데이터_합치_미국"].to_parquet(os.path.join(PARQUET_DIR, "us_etf_factors.parquet"), index=False)
+        print("미국 ETF 데이터 합치기 완료")
+    elif ctry == "KR":
+        # 한국 ETF 데이터 합치기
+        print("한국 ETF 데이터 합치는 중...")
+        kr_merged = execute_selected_method(["데이터_합치_한국"], class_instances)
+        kr_merged["데이터_합치_한국"].to_parquet(os.path.join(PARQUET_DIR, "kr_etf_factors.parquet"), index=False)
+        print("한국 ETF 데이터 합치기 완료")
+    elif ctry == "US":
+        # 미국 ETF 데이터 합치기
+        print("미국 ETF 데이터 합치는 중...")
+        us_merged = execute_selected_method(["데이터_합치_미국"], class_instances)
+        us_merged["데이터_합치_미국"].to_parquet(os.path.join(PARQUET_DIR, "us_etf_factors.parquet"), index=False)
+        print("미국 ETF 데이터 합치기 완료")
+        slack_notifier.notify_info("미국 ETF 데이터 합치기 완료")
+
+    str_date = date.strftime("%Y-%m-%d")
+    if kr_merged is not None:
+        message = f'\n{str_date} 한국 ETF 팩터 추출 완료 \n*SUCCESS:{kr_merged["데이터_합치_한국"].shape[0]}ETF \n kr_merged: {kr_merged["데이터_합치_한국"]}\n\n```'
+        slack_notifier.notify_info(message)
+    if us_merged is not None:
+        message = f'\n{str_date} 미국 ETF 팩터 추출 완료 \n*SUCCESS:{us_merged["데이터_합치_미국"].shape[0]}ETF \n us_merged: {us_merged["데이터_합치_미국"]}\n\n```'
+        slack_notifier.notify_info(message)
+
+    # 데이터 s3에 업로드
+    try:
+        print("데이터 s3에 업로드 중...")
+        slack_notifier.notify_info("데이터 s3에 업로드 중...")
+        date_YYYYMMDD = date.strftime("%Y%m%d")
+
+        if ctry == "KR":
+            file_path = "parquet/kr_etf_factors.parquet"
+            obj_path = f"etf/kr/kr_etf_factors_{date_YYYYMMDD}.parquet"
+        elif ctry == "US":
+            file_path = "parquet/us_etf_factors.parquet"
+            obj_path = f"etf/us/us_etf_factors_{date_YYYYMMDD}.parquet"
+
+        upload_file_to_bucket(file_path, "alpha-finder-factors", obj_path)
+        print("데이터 s3에 업로드 완료")
+        slack_notifier.notify_info("데이터 s3에 업로드 완료")
+    except Exception as e:
+        slack_notifier.notify_error(error=e, user_name="고경민")
 
     print("\n모든 작업이 완료되었습니다.")
 
 
 if __name__ == "__main__":
-    run_etf_screener_data()
+    run_etf_screener_data("US")
+    run_etf_screener_data("KR")

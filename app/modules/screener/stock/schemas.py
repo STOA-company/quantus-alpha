@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from app.models.models_factors import CategoryEnum
 from app.models.models_screener import StockType
-from typing import Optional, List
+from typing import Optional, List, Dict
 from enum import Enum
 
 
@@ -40,25 +40,35 @@ class GroupMetaData(BaseModel):
     type: Optional[StockType] = StockType.STOCK
 
 
+class SortInfo(BaseModel):
+    sort_by: Optional[str] = None
+    ascending: Optional[bool] = None
+
+
 class GroupFilter(BaseModel):
     id: Optional[int] = None
     name: Optional[str] = None
     type: Optional[StockType] = StockType.STOCK
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
+    category: Optional[CategoryEnum] = None
     custom_filters: Optional[List[FilterCondition]] = None
-    factor_filters: Optional[List[str]] = None
+    factor_filters: Optional[Dict[str, List[str]]] = None
+    sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None
+
+
+class GroupFilterResponse(GroupFilter):
+    has_custom: bool = False
 
 
 class FilteredStocks(BaseModel):
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
-    columns: Optional[List[str]] = None
+    factor_filters: Optional[List[str]] = None
     limit: Optional[int] = 50
     offset: Optional[int] = 0
-    sort_by: Optional[str] = None
-    ascending: Optional[bool] = False
+    sort_info: Optional[SortInfo] = None
     lang: Optional[str] = "kr"
 
 

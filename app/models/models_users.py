@@ -1,6 +1,6 @@
 from sqlalchemy import ForeignKey, String, BigInteger, UniqueConstraint
 from sqlalchemy.dialects.mysql import LONGTEXT
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.models_base import ServiceBase, BaseMixin
 
 
@@ -14,6 +14,8 @@ class AlphafinderUser(BaseMixin, ServiceBase):
     nickname: Mapped[String] = mapped_column(String(length=100), nullable=False)
     profile_image: Mapped[String] = mapped_column(LONGTEXT, nullable=True)
     image_format: Mapped[String] = mapped_column(String(length=20), nullable=True)
+
+    groups = relationship("ScreenerGroup", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, nickname={self.nickname!r}, email={self.email!r})"

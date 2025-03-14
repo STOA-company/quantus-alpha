@@ -1,6 +1,7 @@
 from typing import List
 from app.database.crud import database, JoinInfo
 from app.database.conn import db
+from app.modules.common.enum import TranslateCountry
 from app.modules.trending.schemas import TrendingStockRequest, TrendingStock, TrendingType
 
 
@@ -18,7 +19,12 @@ class TrendingService:
             case TrendingType.AMT:
                 return f"volume_change_{request.period.value}"
 
-    def get_trending_stocks(self, request: TrendingStockRequest) -> List[TrendingStock]:
+    def get_trending_stocks(
+        self, request: TrendingStockRequest, lang: TranslateCountry | None = None
+    ) -> List[TrendingStock]:
+        if lang is None:
+            lang = TranslateCountry.KO
+
         order = self._get_trending_type(request)
         ascending = True if request.type == TrendingType.DOWN else False
 
@@ -31,11 +37,18 @@ class TrendingService:
 
         activate_tickers = [row[0] for row in activate_tickers_data]
 
+        if lang == TranslateCountry.KO:
+            name = "kr_name"
+        elif lang == TranslateCountry.EN:
+            name = "en_name"
+        else:
+            name = "kr_name"  # noqa
+
         trending_stocks = self.database._select(
             table="stock_trend",
             columns=[
                 "ticker",
-                "kr_name",
+                name,
                 "current_price",
                 "last_updated",
                 f"change_{request.period.value}",
@@ -62,8 +75,8 @@ class TrendingService:
                 num=idx,
                 ticker=stock._mapping["ticker"],
                 name="Temp_name"
-                if stock._mapping["kr_name"] is None
-                else f"{stock._mapping['kr_name']} ({stock._mapping['ticker']})",
+                if stock._mapping[name] is None
+                else f"{stock._mapping[name]} ({stock._mapping['ticker']})",
                 current_price=0.0 if stock._mapping["current_price"] is None else stock._mapping["current_price"],
                 current_price_rate=0.0
                 if stock._mapping[f"change_{request.period.value}"] is None

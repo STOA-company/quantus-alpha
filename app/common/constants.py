@@ -12,6 +12,31 @@ NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6
 
 NON_NUMERIC_COLUMNS = ["Code", "Name", "market", "sector", "country", "score", "Name_en", "sector_en"]
 
+NON_NUMERIC_COLUMNS_ETF = [
+    "Code",
+    "country",
+    "score",
+    "ticker",
+    "ctry",
+    "kr_name",
+    "en_name",
+    "Name",
+    "market",
+    "listing_date",
+    "base_index_name",
+    "replication_method",
+    "base_asset_classification",
+    "manager",
+    "tax_type",
+    "is_hedge",
+    "last_dividend_date",
+    "manager",
+    "tax_type",
+    "is_hedge",
+]
+
+ETF_DEFAULT_SCREENER_COLUMNS = ["ticker", "market", "kr_name", "en_name"]
+
 UNIT_MAP = {"percentage": "%", "times": "회", "score": "점", "multiple": "배", "ratio": ""}
 UNIT_MAP_EN = {"percentage": "%", "times": "", "score": "", "multiple": "", "ratio": ""}
 
@@ -21,6 +46,26 @@ MARKET_MAP = {
     "NAS": "나스닥",
     "NYS": "뉴욕 증권 거래소",
     "AMS": "아멕스",
+    "BATS": "바츠",
+}
+
+MARKET_MAP_EN = {
+    "KOSPI": "KOSPI",
+    "KOSDAQ": "KOSDAQ",
+    "NAS": "NASDAQ",
+    "NYS": "NYSE",
+    "AMS": "AMS",
+}
+
+
+ETF_MARKET_MAP = {"BATS": "바츠", "NYSE": "뉴욕 증권 거래소", "NAS": "나스닥", "KRX": "한국 거래소"}
+
+
+ETF_MARKET_MAP_EN = {
+    "BATS": "BATS",
+    "NYSE": "NYSE",
+    "NASDAQ": "NASDAQ",
+    "KRX": "KRX",
 }
 
 MARKET_KOREAN_TO_ENGLISH_MAP = {
@@ -29,11 +74,15 @@ MARKET_KOREAN_TO_ENGLISH_MAP = {
     "나스닥": "NASDAQ",
     "뉴욕 증권 거래소": "NYSE",
     "아멕스": "AMS",
+    "바츠": "BATS",
 }
 
 FACTOR_MAP = {
     "Code": "티커",
+    "ticker": "티 커",  # 띄어쓰기 제거시 에러 발생함
     "Name": "종목명",
+    "kr_name": "종목명(한)",
+    "en_name": "종목명(영)",
     "country": "국가",
     "market": "시장",
     "sector": "산업",
@@ -93,6 +142,31 @@ FACTOR_MAP = {
     "por_ttm": "POR (TTM)",
     "psr": "PSR",
     "psr_ttm": "PSR (TTM)",
+    ########################################################
+    # ETF
+    ########################################################
+    "dividend_count": "5년 연평균 배당 횟수",
+    "last_dividend_per_share": "최근 주당 배당금",
+    "recent_dividend_yield": "직전 년도 배당 수익률",
+    "dividend_growth_rate_3y": "배당 성장률 (3년)",
+    "dividend_growth_rate_5y": "배당 성장률 (5년)",
+    "total_fee": "총 수수료",
+    "ba_absolute_spread": "Bid-Ask 절대 스프레드",
+    "ba_relative_spread": "Bid-Ask 상대 스프레드",
+    "ba_spread_20d_avg": "20일 평균 Bid-Ask 스프레드",
+    "ba_spread_20d_std": "20일 표준 편차 Bid-Ask 스프레드",
+    "ba_spread_1d_change": "1일 변화 Bid-Ask 스프레드",
+    "ba_spread_20d_change": "20일 변화 Bid-Ask 스프레드",
+    "listing_date": "상장일",
+    "base_index_name": "기준 지수",
+    "replication_method": "복제 방법",
+    "base_asset_classification": "기본 자산 분류",
+    "manager": "운용사",
+    "tax_type": "세금 유형",
+    "is_hedge": "헤지 여부",
+    "last_dividend_date": "최근 배당일",
+    "risk_rating": "위험 등급",
+    "ctry": "국 가",  # 띄어쓰기 제거시 에러 발생함
 }
 
 FACTOR_MAP_EN = {
@@ -157,6 +231,21 @@ FACTOR_MAP_EN = {
     "por_ttm": "POR (TTM)",
     "psr": "PSR",
     "psr_ttm": "PSR (TTM)",
+    ########################################################
+    # ETF
+    ########################################################
+    "dividend_count": "5Y avg dividend frequency",
+    "last_dividend_per_share": "Last dividend per share",
+    "recent_dividend_yield": "Last annual dividend yield",
+    "dividend_growth_rate_3y": "Dividend growth (3Y)",
+    "dividend_growth_rate_5y": "Dividend growth (5Y)",
+    "total_fee": "Total fee",
+    "ba_absolute_spread": "Bid-Ask absolute spread",
+    "ba_relative_spread": "Bid-Ask relative spread",
+    "ba_spread_20d_avg": "20D avg Bid-Ask spread",
+    "ba_spread_20d_std": "20D std dev Bid-Ask spread",
+    "ba_spread_1d_change": "1D change Bid-Ask spread",
+    "ba_spread_20d_change": "20D change Bid-Ask spread",
 }
 
 FACTOR_KOREAN_TO_ENGLISH_MAP = {
@@ -237,6 +326,7 @@ MORNINGSTAR_DIR = "check_data/etf_morningstar"
 
 ETF_FACTOR_LIST = [
     "ticker",
+    "Code",
     "date",
     "open",
     "high",
@@ -289,6 +379,7 @@ ETF_FACTOR_LIST = [
     "market",
     "kr_name",
     "en_name",
+    "Name",
     "listing_date",
     "base_index_name",
     "tracking_multiplier",
@@ -303,3 +394,6 @@ ETF_FACTOR_LIST = [
     "is_hedge",
 ]
 FACTOR_MAP_ETF = {v: k for k, v in FACTOR_MAP.items() if k in ETF_FACTOR_LIST}
+
+UNKNOWN_USER_KO = "(알 수 없는 유저)"
+UNKNOWN_USER_EN = "(Unknown User)"

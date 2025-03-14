@@ -31,7 +31,7 @@ from app.common.mapping import (
     multiplier_map,
     replication_map,
 )
-from app.modules.screener_etf.enum import ETFMarketEnum
+from app.modules.screener.etf.enum import ETFMarketEnum
 
 
 class ETFFactorExtractor:
@@ -71,8 +71,10 @@ class ETFFactorExtractor:
             # 국가별 단위 조정
             if ctry == "KR":
                 df_sort["marketCap"] = df_sort["MktCap"] / 100_000_000  # 단위 조정 / 원 -> 억원
+                df_sort["거래대금"] = df_sort["거래대금"] / 100_000_000  # 단위 조정 / 원 -> 억원
             else:
                 df_sort["marketCap"] = df_sort["MktCap"] / 1_000  # 단위 조정 / 달러 -> 천달러
+                df_sort["거래대금"] = df_sort["거래대금"] / 1_000  # 단위 조정 / 달러 -> 천달러
         else:
             # MktCap이 없는 경우 대체 계산 (NumShrs가 있는 경우)
             if "NumShrs" in df_sort.columns:
@@ -459,61 +461,122 @@ class ETFDataDownloader:
             raise ValueError("ctry must be 'US' or 'KR'")
         if ctry == "US":
             query = """
+            WITH DSINFO AS (
+                SELECT infocode
+                FROM DS2CtryQtInfo
+                WHERE Region = 'us'
+                AND StatusCode IN ('A', 'S')
+                AND TypeCode = 'ET'  -- ET :ETF, EQ: 주
+            ),
+            DSSUM AS (
+                SELECT D.INFOCODE,
+                    D.EFFECTIVEDATE,
+                    D.PayDate,
+                    SUM(D.DIVRATE) AS DSSUM
+                FROM DS2DIV D WITH (INDEX(DS2Div_1))
+                INNER JOIN DSINFO I ON D.INFOCODE = I.INFOCODE
+                WHERE D.EFFECTIVEDATE BETWEEN '2020-01-01' AND GETDATE()
+                GROUP BY D.INFOCODE, D.EFFECTIVEDATE, D.PayDate
+            ),
+            DSSUMADJ AS (
+                SELECT A.INFOCODE,
+                    A.ADJDATE,
+                    A.CUMADJFACTOR,
+                    C.EFFECTIVEDATE,
+                    C.DSSUM AS UNADJ_DIV,
+                    C.PayDate,
+                    ROW_NUMBER() OVER(PARTITION BY A.INFOCODE ORDER BY A.ADJDATE) AS RN
+                FROM DS2ADJ A WITH (INDEX(DS2Adj_1))
+                INNER JOIN DSSUM C ON C.INFOCODE = A.INFOCODE
+                                AND C.EFFECTIVEDATE BETWEEN A.ADJDATE AND ISNULL(A.ENDADJDATE, GETDATE())
+                WHERE A.ADJDATE BETWEEN '1993-01-01' AND GETDATE()
+                AND A.ADJTYPE = '2'
+            ),
+            LatestTicker AS (
+                SELECT
+                    InfoCode,
+                    Ticker,
+                    ROW_NUMBER() OVER (PARTITION BY InfoCode ORDER BY EndDate DESC) AS rn
+                FROM Ds2MnemChg
+            )
             SELECT
-                c.Ticker as 'ticker',
-                d.Desc_,
-                a.DivRate as 'per_share', a.PayDate as 'payment_date', a.EffectiveDate as 'ex_date'
-            from DS2Div a
-            join DS2CtryQtInfo b
-                on b.InfoCode = a.InfoCode
-            JOIN
-                Ds2MnemChg c
-                ON c.InfoCode  = a.InfoCode
-                AND c.EndDate = (
-                    SELECT MAX(EndDate)
-                    FROM Ds2MnemChg
-                    WHERE InfoCode = a.InfoCode
-                )
-            JOIN
-                DS2XRef d ON a.DivTypeCode = d.Code AND d.Type_ = 8
-            where b.Region = 'us'
-                and b.TypeCode ='ET'
-                and b.StatusCode != 'D'
-                and c.EndDate >= '2025-01-01'
-                and (a.LicFlag = 1 or a.LicFlag = 128)
-                and a.ISOCurrCode = 'USD'
-            order by Ticker,PayDate
-            ;
+                T.Ticker as 'ticker',
+                A.EFFECTIVEDATE as 'ex_date',
+                A.UNADJ_DIV,
+                A.PayDate as 'payment_date',
+                CASE
+                    WHEN A.EFFECTIVEDATE <> A.ADJDATE THEN A.CUMADJFACTOR
+                    ELSE B.CUMADJFACTOR
+                END as 'adj_factor',
+                CASE
+                    WHEN A.EFFECTIVEDATE <> A.ADJDATE THEN A.CUMADJFACTOR * A.UNADJ_DIV
+                    ELSE A.UNADJ_DIV * B.CUMADJFACTOR
+                END AS 'per_share'
+            FROM DSSUMADJ AS A
+            LEFT OUTER JOIN DSSUMADJ AS B ON A.INFOCODE = B.INFOCODE AND A.RN - 1 = B.RN
+            LEFT OUTER JOIN LatestTicker T ON T.InfoCode = A.INFOCODE AND T.rn = 1
+            WHERE A.EFFECTIVEDATE IS NOT NULL
+            ORDER BY T.Ticker, A.EFFECTIVEDATE;
             """
         if ctry == "KR":
             query = """
+            WITH DSINFO AS (
+                SELECT infocode, DsLocalCode
+                FROM DS2CtryQtInfo
+                WHERE Region = 'kr'
+                AND StatusCode IN ('A', 'S')
+                AND TypeCode = 'ET'
+            ),
+            DSSUM AS (
+                SELECT D.INFOCODE,
+                    D.EFFECTIVEDATE,
+                    D.PayDate,
+                    SUM(D.DIVRATE) AS DSSUM
+                FROM DS2DIV D WITH (INDEX(DS2Div_1))
+                INNER JOIN DSINFO I ON D.INFOCODE = I.INFOCODE
+                WHERE D.EFFECTIVEDATE BETWEEN '2020-01-01' AND GETDATE()
+                GROUP BY D.INFOCODE, D.EFFECTIVEDATE, D.PayDate
+            ),
+            DSSUMADJ AS (
+                SELECT A.INFOCODE,
+                    A.ADJDATE,
+                    A.CUMADJFACTOR,
+                    C.EFFECTIVEDATE,
+                    C.DSSUM AS UNADJ_DIV,
+                    C.PayDate,
+                    ROW_NUMBER() OVER(PARTITION BY A.INFOCODE ORDER BY A.ADJDATE) AS RN
+                FROM DS2ADJ A WITH (INDEX(DS2Adj_1))
+                INNER JOIN DSSUM C ON C.INFOCODE = A.INFOCODE
+                                AND C.EFFECTIVEDATE BETWEEN A.ADJDATE AND ISNULL(A.ENDADJDATE, GETDATE())
+                WHERE A.ADJDATE BETWEEN '1993-01-01' AND GETDATE()
+                AND A.ADJTYPE = '2'
+            ),
+            LatestTicker AS (
+                SELECT
+                    InfoCode,
+                    Ticker,
+                    ROW_NUMBER() OVER (PARTITION BY InfoCode ORDER BY EndDate DESC) AS rn
+                FROM Ds2MnemChg
+            )
             SELECT
-                d.Desc_,
-                a.DivRate as 'per_share', a.PayDate as 'payment_date', a.EffectiveDate as 'ex_date',
-                b.DsLocalCode as 'ticker', b.DsQtName, b.Region,
-                e.Close_ as 'price',
-                f.PrimExchIntCode
-            from DS2Div a
-            join DS2CtryQtInfo b
-                on b.InfoCode = a.InfoCode
-            JOIN
-                DS2XRef d
-                ON a.DivTypeCode = d.Code AND d.Type_ = 8
-            JOIN
-                vw_Ds2Pricing e
-                ON e.InfoCode = b.InfoCode
-                AND e.MarketDate = a.EffectiveDate
-            JOIN
-                vw_Ds2SecInfo f
-                ON f.InfoCode = b.InfoCode
-            where b.Region = 'KR'
-                and b.TypeCode ='ET'
-                and b.StatusCode != 'D'
-                and a.LicFlag = 8
-                and a.ISOCurrCode = 'KRW'
-                and e.MarketDate >='2020-01-01'
-                and e.AdjType = 2
-            order by b.DsLocalCode, a.PayDate
+                C.DsLocalCode as 'ticker',
+                A.EFFECTIVEDATE as 'ex_date',
+                A.UNADJ_DIV,
+                A.PayDate as 'payment_date',
+                CASE
+                    WHEN A.EFFECTIVEDATE <> A.ADJDATE THEN A.CUMADJFACTOR
+                    ELSE B.CUMADJFACTOR
+                END as 'adj_factor',
+                CASE
+                    WHEN A.EFFECTIVEDATE <> A.ADJDATE THEN A.CUMADJFACTOR * A.UNADJ_DIV
+                    ELSE A.UNADJ_DIV * B.CUMADJFACTOR
+                END AS 'per_share'
+            FROM DSSUMADJ AS A
+            LEFT OUTER JOIN DSSUMADJ AS B ON A.INFOCODE = B.INFOCODE AND A.RN - 1 = B.RN
+            LEFT OUTER JOIN DSINFO AS C ON A.INFOCODE = C.INFOCODE
+            LEFT OUTER JOIN LatestTicker T ON T.InfoCode = A.INFOCODE AND T.rn = 1
+            WHERE A.EFFECTIVEDATE IS NOT NULL
+            ORDER BY T.Ticker, A.EFFECTIVEDATE;
             """
         df = self._get_refinitiv_data(query)
 
@@ -617,7 +680,7 @@ class ETFDataDownloader:
         df = self._get_refinitiv_data(query)
         list_db_tickers = self._get_db_tickers_list(ctry)
         if ctry == "KR":
-            list_db_tickers = [self.kr_pattern.sub("A", ticker) for ticker in list_db_tickers]
+            list_db_tickers = [self.kr_pattern.sub("K", ticker) for ticker in list_db_tickers]
         df = df[df["Ticker"].isin(list_db_tickers)]
         if download:
             if ctry == "KR":
@@ -861,10 +924,16 @@ class ETFDataLoader:
         df = pd.DataFrame()
         if market_filter in [ETFMarketEnum.US, ETFMarketEnum.NYSE, ETFMarketEnum.NASDAQ, ETFMarketEnum.BATS]:
             df = pd.read_parquet(os.path.join(self.parquet_dir, "us_etf_factors.parquet"))
+            df["country"] = "us"
         elif market_filter == ETFMarketEnum.KR:
             df = pd.read_parquet(os.path.join(self.parquet_dir, "kr_etf_factors.parquet"))
+            df["country"] = "kr"
         else:
             raise ValueError(f"Invalid market: {market_filter}")
+
+        if "volatility" in df.columns:
+            df.rename(columns={"volatility": "risk_rating"}, inplace=True)
+
         return df
 
     def load_morningstar(self, is_expense: bool = True, is_rating: bool = True):
@@ -1051,8 +1120,7 @@ class ETFDividendFactorExtractor:
             total_payments = sum(yearly_counts)
             avg_yearly_payments = total_payments / data_years
 
-            # 소수점 1자리로 반올림하여 반환
-            return round(avg_yearly_payments, 1)
+            return avg_yearly_payments
         else:
             # payment_date가 datetime 타입이 아닌 경우
             return 0
@@ -1191,7 +1259,7 @@ class ETFDataPreprocessor:
         select_columns_base = [
             "단축코드",
             "한글종목약명",
-            "영문종목명",
+            # "영문종목명",
             "상장일_y",
             "기초지수명",
             "추적배수",
@@ -1209,7 +1277,7 @@ class ETFDataPreprocessor:
             columns={
                 "단축코드": "ticker",
                 "한글종목약명": "kr_name",
-                "영문종목명": "en_name",
+                # "영문종목명": "en_name",
                 "상장일_y": "listing_date",
                 "기초지수명": "base_index_name",
                 "추적배수": "tracking_multiplier",
@@ -1275,7 +1343,7 @@ class ETFDataPreprocessor:
         df_select = df_select.rename(
             columns={
                 "expense_ratio": "total_fee",
-                "star_rating": "volatility",
+                "star_rating": "risk_rating",
                 "company_name": "manager",
             }
         )
@@ -1384,7 +1452,6 @@ class ETFDataPreprocessor:
         for col in numeric_columns:
             if col in df_select.columns and df_select[col] is not None:
                 df_select[col] = pd.to_numeric(df_select[col], errors="coerce")
-                df_select[col] = df_select[col].apply(lambda x: round(x, 2) if pd.notnull(x) else x)
 
         return df_select
 
@@ -1428,7 +1495,6 @@ class ETFDataPreprocessor:
         for col in numeric_columns:
             if col in df_select.columns and df_select[col] is not None:
                 df_select[col] = pd.to_numeric(df_select[col], errors="coerce")
-                df_select[col] = df_select[col].apply(lambda x: round(x, 2) if pd.notnull(x) else x)
 
         return df_select
 
@@ -1437,7 +1503,7 @@ class ETFDataPreprocessor:
         정보 데이터 전처리
         """
         if ctry == "KR":
-            return None
+            return df
         elif ctry == "US":
             country = "us"  # noqa
         else:
@@ -2071,13 +2137,26 @@ class ETFDataMerger:
             df_merged = df_krx if df_merged is None else pd.merge(df_merged, df_krx, on="ticker", how="left")
         if morningstar:
             # 데이터 가져오기
-            df_morningstar = self.loader.load_morningstar(ctry)
+            df_morningstar = self.loader.load_morningstar(is_expense=True, is_rating=True)
             # 데이터 전처리
             df_morningstar = self.preprocessor.morningstar_data_preprocess(df_morningstar, ctry)
             # 데이터 합치기
+
             df_merged = (
                 df_morningstar if df_merged is None else pd.merge(df_merged, df_morningstar, on="ticker", how="left")
             )
+
+        df_merged = df_merged.rename(columns={"ticker": "Code", "kr_name": "Name", "en_name": "Name"})
+        df_merged["market"] = np.where(df_merged["market"] == "NYS", "NYSE", df_merged["market"])
+
+        # 숫자로 변환 가능한 문자열을 숫자로 변환
+        for col in df_merged.columns:
+            # Code, Name 등 명시적으로 문자열인 컬럼은 제외
+            if col not in ["Code", "Name"]:
+                # 데이터 타입이 object인 경우에만 변환 시도
+                if df_merged[col].dtype == "object":
+                    # pd.to_numeric 함수를 사용하여 변환 가능한 값만 숫자로 변환
+                    df_merged[col] = pd.to_numeric(df_merged[col], errors="ignore")
 
         return df_merged
 
@@ -2085,7 +2164,8 @@ class ETFDataMerger:
 # 사용 예시
 if __name__ == "__main__":
     downloader = ETFDataDownloader()
-    downloader.dwonload_etf_price(ctry="KR", download=True)
+    downloader.download_etf_dividend(ctry="KR", download=True)
+    downloader.download_etf_dividend(ctry="US", download=True)
 
     # try:
     #     # 크롤러 초기화 (데이터베이스 연결 없이)

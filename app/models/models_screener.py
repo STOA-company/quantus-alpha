@@ -1,8 +1,9 @@
 from app.models.models_base import ServiceBase, BaseMixin
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Enum, Boolean
 from sqlalchemy.schema import Index
 from sqlalchemy.orm import relationship
 from app.enum.type import StockType
+from app.models.models_factors import CategoryEnum
 
 
 class ScreenerGroup(ServiceBase, BaseMixin):
@@ -10,12 +11,15 @@ class ScreenerGroup(ServiceBase, BaseMixin):
 
     id = Column(Integer, primary_key=True, index=True)
     order = Column(Integer, nullable=False)
-    user_id = Column(String(50), nullable=True, index=True)  # 추천 필터의 경우 None
+    user_id = Column(
+        ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=True, index=True
+    )  # 추천 필터의 경우 None
     name = Column(String(100), nullable=False)
     type = Column(Enum(StockType), nullable=False, default=StockType.STOCK)
 
     stock_filters = relationship("ScreenerStockFilter", back_populates="group", cascade="all, delete-orphan")
     factor_filters = relationship("ScreenerFactorFilter", back_populates="group", cascade="all, delete-orphan")
+    sort_info = relationship("ScreenerSortInfo", back_populates="group", cascade="all, delete-orphan")
 
     __table_args__ = (UniqueConstraint("user_id", "name", "type", name="uix_user_group_name_type"),)
 
@@ -46,5 +50,19 @@ class ScreenerFactorFilter(ServiceBase, BaseMixin):
     group_id = Column(Integer, ForeignKey("screener_groups.id", ondelete="CASCADE"), nullable=False)
     factor = Column(String(50), nullable=False)
     order = Column(Integer, nullable=False)
+    category = Column(Enum(CategoryEnum), default=CategoryEnum.CUSTOM, nullable=False)
 
     group = relationship("ScreenerGroup", back_populates="factor_filters")
+
+
+class ScreenerSortInfo(ServiceBase, BaseMixin):
+    __tablename__ = "screener_sort_infos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey("screener_groups.id", ondelete="CASCADE"), nullable=False)
+    category = Column(Enum(CategoryEnum), nullable=False)
+    type = Column(Enum(StockType), nullable=False, default=StockType.STOCK)
+    sort_by = Column(String(50), nullable=False, default="score")
+    ascending = Column(Boolean, nullable=True, default=False)
+
+    group = relationship("ScreenerGroup", back_populates="sort_info")

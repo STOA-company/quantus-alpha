@@ -8,7 +8,7 @@ from app.models.models_news import News
 from app.models.models_stock_indices import StockIndices
 from app.models.models_disclosure import Disclosure
 from app.models.models_users import AlphafinderUser, UserStockInterest
-from app.models.models_screener import ScreenerStockFilter, ScreenerFactorFilter, ScreenerGroup
+from app.models.models_screener import ScreenerStockFilter, ScreenerFactorFilter, ScreenerGroup, ScreenerSortInfo
 from app.models.models_etf import etf_us_1d, etf_kr_1d
 
 # from app.models.models_payments import AlphafinderLicense, AlphafinderMembership, AlphafinderPaymentHistory
@@ -41,6 +41,7 @@ __all__ = [
     "ScreenerStockFilter",
     "ScreenerFactorFilter",
     "ScreenerGroup",
+    "ScreenerSortInfo",
     # "AlphafinderLicense",
     # "AlphafinderMembership",
     # "AlphafinderPaymentHistory",

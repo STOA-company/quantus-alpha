@@ -2,7 +2,7 @@ import logging
 import random
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.modules.common.enum import FearAndGreedIndex
+from app.modules.common.enum import FearAndGreedIndex, TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.news.old_services import NewsService, get_news_service
@@ -12,7 +12,6 @@ from app.modules.stock_info.schemas import FearGreedIndexItem, FearGreedIndexRes
 from .services import StockInfoService, get_stock_info_service
 from app.database.conn import db
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.modules.common.enum import Country
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ async def get_indicators(
 @router.get("/combined", summary="종목 정보, 지표, 기업 정보 전체 조회")
 async def get_combined(
     ticker: str,
-    lang: Country = Country.KR,
+    lang: TranslateCountry = TranslateCountry.KO,
     stock_service: StockInfoService = Depends(get_stock_info_service),
     summary_service: PriceService = Depends(get_price_service),
     news_service: NewsService = Depends(get_news_service),
@@ -74,7 +73,7 @@ async def get_combined(
         summary = None
 
     try:
-        latest = news_service.get_latest_news(ticker=ticker)
+        latest = news_service.get_latest_news(ticker=ticker, lang=lang)
         logger.info("Successfully fetched latest news")
     except Exception as e:
         logger.error(f"Error fetching latest news: {e}")
@@ -106,9 +105,10 @@ async def get_combined(
 @router.get("/similar", summary="연관 종목 조회")
 def get_similar_stocks(
     ticker: str,
+    lang: TranslateCountry = TranslateCountry.KO,
     service: StockInfoService = Depends(get_stock_info_service),
 ):
-    data = service.get_similar_stocks(ticker)
+    data = service.get_similar_stocks(ticker, lang)
     return BaseResponse(status_code=200, message="연관 종목을 성공적으로 조회했습니다.", data=data)
 
 

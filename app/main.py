@@ -1,3 +1,4 @@
+from app.middlewares.slack_error import add_slack_middleware
 from fastapi import FastAPI, HTTPException, Security
 from app.core.config import get_database_config, settings
 from app.api import routers
@@ -8,6 +9,9 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.logging.config import configure_logging
 from app.middlewares.trusted_hosts import get_current_username
+import logging
+
+logger = logging.getLogger(__name__)
 
 configure_logging()
 
@@ -18,6 +22,7 @@ app = FastAPI(
     swagger_ui_parameters={
         "persistAuthorization": True,  # 인증 정보 유지
         "defaultModelsExpandDepth": -1,  # 모델 확장 깊이 설정 / -1은 축소
+        "docExpansion": "none",
     },
     docs_url=None,
     redoc_url=None,
@@ -46,6 +51,23 @@ origins = [
     "https://stage.alphafinder.dev",
     "https://live.alphafinder.dev",
 ]
+
+stage_webhook_url = "https://hooks.slack.com/services/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"
+dev_webhook_url = "https://hooks.slack.com/services/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"
+if settings.ENV == "stage":
+    webhook_url = stage_webhook_url
+else:
+    webhook_url = dev_webhook_url
+
+add_slack_middleware(
+    app=app,
+    webhook_url=webhook_url,
+    include_traceback=True,
+    include_request_body=True,
+    error_status_codes=[500, 503],  # 이 상태 코드들에 대해 알림 발송
+    environment=settings.ENV,
+    notify_environments=["stage", "dev"],
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -106,3 +128,28 @@ async def get_redoc_documentation(username: str = Security(get_current_username)
         openapi_url=app.openapi_url,
         title=app.title + " - ReDoc",
     )
+
+
+@app.get("/error_test")
+def query_test(num: int):
+    return num / 0
+
+
+@app.get("/error_test/{num}")
+def parameter_test(num: int):
+    if num != 0:
+        return num / 0
+    else:
+        return num / 1
+
+
+class TestRequest(BaseModel):
+    num: int
+
+
+@app.post("/error_test")
+def request_test(request: TestRequest):
+    if request.num != 0:
+        return request.num / 0
+    else:
+        return request.num / 1

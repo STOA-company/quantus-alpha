@@ -8,13 +8,11 @@ from fastapi import Request
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
-from sqlalchemy import select
 
 from sse_starlette import EventSourceResponse
-from app.common.constants import KST
-from app.models.models_stock import StockInformation
+from app.common.constants import KST, MARKET_MAP_EN, MARKET_MAP
 from app.modules.common.cache import MemoryCache
-from app.modules.common.enum import Country, Frequency
+from app.modules.common.enum import Country, Frequency, TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.price.schemas import PriceDataItem, PriceSummaryItem, RealTimePriceDataItem, ResponsePriceDataItem
@@ -22,9 +20,7 @@ from app.database.crud import database, JoinInfo
 from app.database.conn import db
 from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import contry_mapping
-from app.utils.data_utils import remove_parentheses
 from app.utils.date_utils import check_market_status
-from app.common.constants import MARKET_MAP
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -613,7 +609,7 @@ class PriceService:
             },
         )
 
-    async def get_price_data_summary(self, ctry: str, ticker: str, lang: Country) -> PriceSummaryItem:
+    async def get_price_data_summary(self, ctry: str, ticker: str, lang: TranslateCountry) -> PriceSummaryItem:
         """
         종목 요약 데이터 조회
         """
@@ -636,10 +632,11 @@ class PriceService:
             last_day_close = None
             market_cap = None
 
-        sector = await self._get_sector_by_ticker(ticker, lang) or ""
-        name = self._get_us_ticker_name(ticker) or ""
-        market = self._get_market(ticker, lang) or ""
-        name = remove_parentheses(name) or ""
+        sector, name, market = self._get_sector_name_market(ticker, lang)
+        sector = sector or ""
+        name = name or ""
+        market = market or ""
+        market = MARKET_MAP[market] if lang == TranslateCountry.KO else MARKET_MAP_EN[market]
         is_market_close = check_market_status(ctry.upper())
 
         response_data = {
@@ -726,39 +723,17 @@ class PriceService:
         # 가장 최근 날짜를 제외한 첫 번째 데이터의 종가를 반환
         return float(sorted_df.iloc[1]["Close"])
 
-    def _get_market(self, ticker: str, lang: Country) -> str:
+    def _get_sector_name_market(self, ticker: str, lang: TranslateCountry) -> Tuple[str, str, str]:
         """
-        종목 시장 조회
+        종목 섹터, 이름, 시장 조회
         """
-        if lang == Country.KR:
-            result = self.database._select(table="stock_information", columns=["market"], ticker=ticker)
-            return MARKET_MAP[result[0].market] if result else None
-        else:
-            result = self.database._select(table="stock_information", columns=["market"], ticker=ticker)
-            return MARKET_MAP[result[0].market] if result else None
-
-    async def _get_sector_by_ticker(self, ticker: str, lang: Country) -> str:
-        """
-        종목 섹터 조회
-        """
-        db = self._async_db
-        if lang == Country.KR:
-            query = select(StockInformation.sector_ko).where(
-                StockInformation.ticker == ticker, StockInformation.is_activate
-            )
-        else:
-            query = select(StockInformation.sector_2).where(
-                StockInformation.ticker == ticker, StockInformation.is_activate
-            )
-        result = await db.execute_async_query(query)
-        return result.scalar() or None
-
-    def _get_us_ticker_name(self, ticker: str) -> str:
-        """
-        US 종목 이름 조회
-        """
-        result = self.database._select(table="stock_information", columns=["kr_name"], ticker=ticker, is_activate=True)
-        return result[0].kr_name if result else None
+        if lang == TranslateCountry.KO:
+            columns = ["sector_ko", "kr_name", "market"]
+        elif lang == TranslateCountry.EN:
+            columns = ["sector_2", "en_name", "market"]
+        data = self.database._select(table="stock_information", columns=columns, ticker=ticker, is_activate=True)
+        sector, name, market = data[0][0], data[0][1], data[0][2]
+        return sector, name, market
 
     async def _get_market_cap(self, ctry: str, ticker: str) -> float:
         """
