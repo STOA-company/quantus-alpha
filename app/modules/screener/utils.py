@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from Aws.logic.s3 import upload_file_to_bucket
 from app.modules.screener.etf.utils import ETFDataLoader
 from pandas.api.types import is_numeric_dtype
-from app.models.models_base import StockType
+from app.modules.screener.stock.schemas import StockType
 
 logger = logging.getLogger(__name__)
 
