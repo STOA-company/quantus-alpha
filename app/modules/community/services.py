@@ -19,6 +19,7 @@ from .schemas import (
 )
 from typing import List, Optional, Tuple
 from app.database.crud import database, database_service
+from app.common.constants import UNKNOWN_USER_KO, UNKNOWN_USER_EN
 
 
 class CommunityService:
@@ -160,7 +161,7 @@ class CommunityService:
                 image_format=post.get("image_format"),
             )
             if post["nickname"]
-            else UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None, image_format=None)
+            else UserInfo(id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None)
         )
 
         # 4. ResponsePost 객체 생성 및 반환
@@ -311,7 +312,9 @@ class CommunityService:
                         image_format=post.get("image_format"),
                     )
                     if post["nickname"]
-                    else UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None, image_format=None)
+                    else UserInfo(
+                        id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None
+                    )
                 ),
             )
             for post in posts
@@ -456,7 +459,12 @@ class CommunityService:
         return True
 
     async def get_comments(
-        self, current_user: Optional[AlphafinderUser], post_id: int, offset: int = 0, limit: int = 20
+        self,
+        current_user: Optional[AlphafinderUser],
+        post_id: int,
+        offset: int = 0,
+        limit: int = 20,
+        lang: TranslateCountry = TranslateCountry.KO,
     ) -> Tuple[List[CommentItem], bool]:
         """댓글 목록 조회"""
         current_user_id = current_user[0] if current_user else None
@@ -513,7 +521,7 @@ class CommunityService:
         child_result = self.db._execute(text(child_query), {"parent_ids": parent_ids, "current_user_id": current_user_id})
         child_comments = child_result.mappings().all()
 
-        def create_user_info(comment):
+        def create_user_info(comment, lang: TranslateCountry):
             """사용자 정보 생성 (탈퇴한 사용자 처리)"""
             if comment["user_id"] and comment["nickname"]:
                 return UserInfo(
@@ -524,7 +532,7 @@ class CommunityService:
                 )
             return UserInfo(
                 id=0,
-                nickname="(알 수 없는 유저)",
+                nickname=self._get_unknown_user_nickname(lang),
                 profile_image=None,
                 image_format=None,
             )
@@ -546,7 +554,7 @@ class CommunityService:
                     is_changed=child["created_at"] != child["updated_at"],
                     is_liked=child["is_liked"],
                     is_mine=child["user_id"] == current_user_id if current_user_id else False,
-                    user_info=create_user_info(child),
+                    user_info=create_user_info(child, lang=lang),
                     sub_comments=[],
                 )
             )
@@ -563,7 +571,7 @@ class CommunityService:
                 is_changed=comment["created_at"] != comment["updated_at"],
                 is_liked=comment["is_liked"],
                 is_mine=comment["user_id"] == current_user_id if current_user_id else False,
-                user_info=create_user_info(comment),
+                user_info=create_user_info(comment, lang=lang),
                 sub_comments=child_map.get(comment["id"], []),
             )
             for comment in parent_comments
@@ -842,6 +850,10 @@ class CommunityService:
         """카테고리 리스트 조회"""
         categories = self.db._select(table="categories", columns=["id", "name"])
         return [CategoryResponse(id=category[0], name=category[1]) for category in categories]
+
+    def _get_unknown_user_nickname(self, lang: TranslateCountry) -> str:
+        """언어에 따른 알 수 없는 사용자 닉네임 반환"""
+        return UNKNOWN_USER_KO if lang == TranslateCountry.KO else UNKNOWN_USER_EN
 
 
 def get_community_service() -> CommunityService:
