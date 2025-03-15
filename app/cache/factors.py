@@ -51,7 +51,7 @@ class FactorsCache:
         self._update_configs()
 
         results = {}
-        for asset_type in self.asset_types:
+        for asset_type in self.asset_type:
             self.clear_cache()
             results[f"{self.asset_type}"] = self._update_configs()
 
