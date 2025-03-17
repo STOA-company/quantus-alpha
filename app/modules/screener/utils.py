@@ -520,8 +520,8 @@ class ScreenerUtils:
         # 원화 -> 달러 변환
         usd_value = krw_value / exchange_rate
 
-        # 달러 -> 천만 달러 단위로 변환
-        usd_value_in_ten_million = usd_value / 10000000
+        # 달러 -> 천달러 단위로 변환
+        usd_value_in_ten_million = usd_value / 1000
 
         return usd_value_in_ten_million
 
