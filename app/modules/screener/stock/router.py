@@ -383,6 +383,7 @@ def update_parquet(country: str):
             screener_utils.process_us_factor_data()
         else:
             raise HTTPException(status_code=400, detail="Invalid country")
+        screener_utils.process_global_factor_data()
         screener_utils.archive_parquet(country)
         factors_cache.force_update()
         return {"message": "Parquet updated successfully"}

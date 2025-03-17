@@ -19,6 +19,7 @@ from app.modules.screener.etf.utils import ETFDataLoader
 from pandas.api.types import is_numeric_dtype
 from app.modules.screener.stock.schemas import StockType
 from app.utils.test_utils import time_it
+from app.kispy.manager import KISAPIManager
 
 logger = logging.getLogger(__name__)
 
@@ -270,10 +271,42 @@ class ScreenerUtils:
 
         df_result.to_parquet(output_file)
 
+    def process_global_factor_data(self):
+        big_price_columns = [
+            "gross_profit",
+            "gross_profit_ttm",
+            "marketCap",
+            "median_trade",
+            "operating_income",
+            "operating_income_ttm",
+            "rev",
+            "rev_ttm",
+        ]
+        small_price_columns = ["close"]
+
+        manager = KISAPIManager()
+        exchange_rate = manager.get_api().get_exchange_rates()
+        kr_df = self.get_df_from_parquet(MarketEnum.KR)
+        for column in big_price_columns:
+            kr_df[column] = self.convert_krw_billion_to_usd(kr_df[column], exchange_rate)
+        for column in small_price_columns:
+            kr_df[column] = kr_df[column] / exchange_rate
+
+        us_df = self.get_df_from_parquet(MarketEnum.US)
+
+        kr_df["country"] = "kr"
+        us_df["country"] = "us"
+
+        df = pd.concat([kr_df, us_df])
+
+        df.to_parquet("parquet/global_stock_factors.parquet")
+
     def get_df_from_parquet(self, market_filter: MarketEnum) -> pd.DataFrame:
         df = None
         if market_filter:
-            if market_filter in [MarketEnum.US, MarketEnum.NASDAQ, MarketEnum.SNP500]:
+            if market_filter == MarketEnum.ALL:
+                df = pd.read_parquet("parquet/global_stock_factors.parquet")
+            elif market_filter in [MarketEnum.US, MarketEnum.NASDAQ, MarketEnum.SNP500]:
                 df = pd.read_parquet("parquet/us_stock_factors.parquet")
             elif market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
                 df = pd.read_parquet("parquet/kr_stock_factors.parquet")
@@ -301,11 +334,7 @@ class ScreenerUtils:
 
         # 종목 필터링
         if market_filter:
-            if market_filter == MarketEnum.US:
-                df = df[df["country"] == "us"]
-            elif market_filter == MarketEnum.KR:
-                df = df[df["country"] == "kr"]
-            elif market_filter == MarketEnum.SNP500:
+            if market_filter == MarketEnum.SNP500:
                 df = df[df["is_snp_500"] == 1]
             elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSDAQ, MarketEnum.KOSPI]:
                 df = df[df["market"] == market_filter.value]
@@ -481,10 +510,20 @@ class ScreenerUtils:
 
         upload_file_to_bucket(file_path, "alpha-finder-factors", obj_path)
 
+    def convert_krw_billion_to_usd(self, value: float, exchange_rate: float = 1400) -> float:
+        if exchange_rate <= 0:
+            raise ValueError("환율은 0보다 커야 합니다.")
+
+        # 1억원 = 100,000,000원
+        krw_value = value * 100000000
+
+        # 원화 -> 달러 변환
+        usd_value = krw_value / exchange_rate
+
+        # 달러 -> 천만 달러 단위로 변환
+        usd_value_in_ten_million = usd_value / 10000000
+
+        return usd_value_in_ten_million
+
 
 screener_utils = ScreenerUtils()
-
-
-if __name__ == "__main__":
-    df = screener_utils.get_df_from_parquet(MarketEnum.US)
-    print(df["market"].unique())

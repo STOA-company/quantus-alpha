@@ -12,6 +12,7 @@ class MarketEnum(str, Enum):
     NASDAQ = "나스닥"
     KOSPI = "코스피"
     KOSDAQ = "코스닥"
+    ALL = "all"
 
 
 class FactorResponse(BaseModel):
