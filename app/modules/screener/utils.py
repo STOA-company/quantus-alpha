@@ -117,8 +117,8 @@ class ScreenerUtils:
             CategoryEnum.FUNDAMENTAL: ["roe", "fscore", "deptRatio", "operating_income", "z_score"],
             CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"],
             CategoryEnum.DIVIDEND: [
+                "recent_dividend_yield",
                 "dividend_count",
-                "total_fee",
                 "last_dividend_per_share",
                 "dividend_growth_rate_5y",
                 "risk_rating",
