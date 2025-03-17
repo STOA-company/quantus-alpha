@@ -63,7 +63,7 @@ class GroupFilterResponse(GroupFilter):
 
 
 class FilteredStocks(BaseModel):
-    market_filter: Optional[MarketEnum] = MarketEnum.US
+    market_filter: Optional[MarketEnum] = MarketEnum.ALL
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
     factor_filters: Optional[List[str]] = None
