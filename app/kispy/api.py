@@ -534,8 +534,10 @@ class KISAPI(BaseAPI):
 
             if yesterday_rate == 0:
                 logger.warning("No yesterday's exchange rate found.")
+                return today_rate
 
-            return {"yesterday_rate": yesterday_rate, "today_rate": today_rate, "date": datetime.now().strftime("%Y%m%d")}
+            else:
+                return yesterday_rate
 
         except Exception as e:
             logger.error(f"Error fetching exchange rates: {str(e)}")
