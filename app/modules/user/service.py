@@ -418,7 +418,37 @@ class UserService:
         await screener_service.create_group(user_id=user_id, sector_filter=all_sectors)
         await screener_service.create_group(user_id=user_id, type=StockType.ETF)
 
+    def get_interest(self, user_id: int):
+        interests = self.db._select(table="user_stock_interest", user_id=user_id)
+        if not interests:
+            return []
+        return [interest["ticker"] for interest in interests]
+
+    def add_interest(self, user_id: int, tickers: List[str]):
+        for ticker in tickers:
+            stock = self.db._select(table="user_stock_interest", user_id=user_id, ticker=ticker, limit=1)
+            if stock:
+                raise HTTPException(status_code=400, detail="이미 관심 종목에 추가되어 있습니다.")
+            self.db._insert(table="user_stock_interest", sets={"user_id": user_id, "ticker": ticker})
+
+    def delete_interest(self, user_id: int, ticker: str):
+        stock = self.db._select(table="user_stock_interest", user_id=user_id, ticker=ticker, limit=1)
+        if not stock:
+            raise HTTPException(status_code=404, detail="관심 종목에 추가되지 않은 종목입니다.")
+        return self.db._delete(table="user_stock_interest", user_id=user_id, ticker=ticker)
+
 
 def get_user_service() -> UserService:
     """UserService 의존성 주입을 위한 팩토리 함수"""
     return UserService()
+
+
+if __name__ == "__main__":
+    from app.utils.oauth_utils import create_jwt_token, create_refresh_token
+    from datetime import timedelta
+
+    service = UserService()
+    access_token = create_jwt_token(206, timedelta(minutes=1000000000))
+    refresh_token = create_refresh_token(206)
+    access_token_hash = service.store_token(access_token, refresh_token)
+    print(access_token_hash)

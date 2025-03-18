@@ -15,7 +15,7 @@ from app.utils.oauth_utils import (
 )
 from app.utils.image_utils import convert_file_to_base64
 import json
-from typing import Optional
+from typing import Optional, List
 from jose import JWTError
 
 router = APIRouter()
@@ -179,3 +179,36 @@ async def get_user_comments(
     return InfiniteScrollResponse(
         status_code=200, message="사용자 댓글 목록을 조회하였습니다.", has_more=has_more, data=comments
     )
+
+
+@router.get("/interest")
+def get_interest(
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: UserService = Depends(get_user_service),
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    return service.get_interest(current_user.id)
+
+
+@router.post("/interest")
+def add_interest(
+    tickers: List[str],
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: UserService = Depends(get_user_service),
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return service.add_interest(current_user.id, tickers)
+
+
+@router.delete("/interest")
+def delete_interest(
+    ticker: str,
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: UserService = Depends(get_user_service),
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return service.delete_interest(current_user.id, ticker)
