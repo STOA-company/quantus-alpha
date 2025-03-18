@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from app.modules.screener.stock.schemas import MarketEnum
 from app.modules.screener.utils import screener_utils
-from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, FACTOR_MAP_EN, UNIT_MAP
+from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, UNIT_MAP
 from app.core.exception.custom import CustomException
 from app.modules.screener.base import BaseScreenerService
 
@@ -142,20 +142,7 @@ class ScreenerStockService(BaseScreenerService):
 
                 result.append(stock_data)
 
-            factor_map = FACTOR_MAP
-            if lang == "en":
-                factor_map = FACTOR_MAP_EN
-
-            mapped_result = []
-            for item in result:
-                mapped_item = {}
-                for key in ordered_columns:
-                    if key in item:
-                        mapped_key = factor_map.get(key, key)
-                        mapped_item[mapped_key] = item[key]
-                mapped_result.append(mapped_item)
-
-            return mapped_result, total_count
+            return result, total_count
 
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks: {e}")
