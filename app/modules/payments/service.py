@@ -26,5 +26,5 @@ class PaymentService:
         self.db._update(
             table="alphafinder_user",
             sets={"is_subscribed": True, "subscription_end": datetime.now().date() + timedelta(days=period)},
-            where={"id": user_id},
+            id=user_id,
         )
