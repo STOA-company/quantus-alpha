@@ -4,7 +4,7 @@ from app.modules.payments.schema import TossPaymentReceipt
 from app.models.models_users import AlphafinderUser
 from app.utils.oauth_utils import get_current_user
 
-router = APIRouter(prefix="/payments")
+router = APIRouter()
 
 
 @router.get("/toss")
