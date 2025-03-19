@@ -13,7 +13,7 @@ class PaymentService:
         # payment_method = get_payment_method(payment_key)
         self.db._insert(
             table="toss_payment_history",
-            data={
+            sets={
                 "payment_key": payment_key,
                 "order_id": order_id,
                 "amount": amount,
