@@ -1,5 +1,5 @@
 from app.core.config import settings
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.database.crud import database_service
 # from app.utils.payment_utils import get_payment_method
 
@@ -22,9 +22,9 @@ class PaymentService:
             },
         )
 
-    def user_subscription_update(self, user_id: int, timedelta: int):
+    def user_subscription_update(self, user_id: int, period: int):
         self.db._update(
             table="alphafinder_user",
-            data={"is_subscribed": True, "subscription_end": datetime.now().date() + timedelta(days=timedelta)},
+            data={"is_subscribed": True, "subscription_end": datetime.now().date() + timedelta(days=period)},
             where={"id": user_id},
         )
