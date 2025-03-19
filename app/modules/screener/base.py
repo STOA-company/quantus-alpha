@@ -8,10 +8,6 @@ from app.modules.screener.etf.enum import ETFMarketEnum
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
 from app.modules.screener.utils import screener_utils
-from app.common.constants import (
-    FACTOR_MAP,
-    REVERSE_FACTOR_MAP,
-)
 from app.core.exception.base import CustomException
 from app.core.logging.config import get_logger
 
@@ -64,14 +60,14 @@ class BaseScreenerService(ABC):
                 "name": group[0].name,
                 "stock_filters": [
                     {
-                        "factor": FACTOR_MAP[stock_filter.factor],
+                        "factor": stock_filter.factor,
                         "value": stock_filter.value if stock_filter.value else None,
                         "above": stock_filter.above if stock_filter.above else None,
                         "below": stock_filter.below if stock_filter.below else None,
                     }
                     for stock_filter in stock_filters
                 ],
-                "custom_factor_filters": [FACTOR_MAP[factor_filter.factor] for factor_filter in custom_factor_filters],
+                "custom_factor_filters": [factor_filter.factor for factor_filter in custom_factor_filters],
                 "has_custom": has_custom,
             }
         except Exception as e:
@@ -119,7 +115,7 @@ class BaseScreenerService(ABC):
                         table="screener_factor_filters",
                         sets={
                             "group_id": group_id,
-                            "factor": REVERSE_FACTOR_MAP[factor],
+                            "factor": factor,
                             "order": idx + 1,
                             "category": category,
                         },
@@ -140,7 +136,7 @@ class BaseScreenerService(ABC):
         try:
             if group_id == -1:
                 default_columns = screener_utils.get_default_columns(category=category, type=type)
-                result = [FACTOR_MAP[column] for column in default_columns]
+                result = default_columns
                 return result
 
             factor_filters = self.database._select(
@@ -148,7 +144,7 @@ class BaseScreenerService(ABC):
             )
             factor_filters = sorted(factor_filters, key=lambda x: x.order)
 
-            return [FACTOR_MAP[factor_filter.factor] for factor_filter in factor_filters]
+            return [factor_filter.factor for factor_filter in factor_filters]
 
         except Exception as e:
             logger.error(f"Error in get_columns: {e}")
@@ -213,9 +209,9 @@ class BaseScreenerService(ABC):
         """
         sort_infos = self.database._select(table="screener_sort_infos", group_id=group_id, category=category)
         if sort_infos:
-            return SortInfo(sort_by=FACTOR_MAP[sort_infos[0].sort_by], ascending=sort_infos[0].ascending)
+            return SortInfo(sort_by=sort_infos[0].sort_by, ascending=sort_infos[0].ascending)
         else:
-            return SortInfo(sort_by="스코어", ascending=False)
+            return SortInfo(sort_by="score", ascending=False)
 
     async def create_default_factor_filters(self, group_id: int, type: StockType) -> bool:
         """
@@ -433,7 +429,7 @@ class BaseScreenerService(ABC):
                             table="screener_stock_filters",
                             sets={
                                 "group_id": group_id,
-                                "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                "factor": condition.factor,
                                 "above": condition.above,
                                 "below": condition.below,
                             },
@@ -520,7 +516,7 @@ class BaseScreenerService(ABC):
                             table="screener_stock_filters",
                             sets={
                                 "group_id": group_id,
-                                "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                "factor": condition.factor,
                                 "above": condition.above,
                                 "below": condition.below,
                             },
@@ -540,7 +536,7 @@ class BaseScreenerService(ABC):
                         group_id=group_id,
                         category=category,
                         type=type,
-                        sets={"sort_by": REVERSE_FACTOR_MAP[sort_data.sort_by], "ascending": sort_data.ascending},
+                        sets={"sort_by": sort_data.sort_by, "ascending": sort_data.ascending},
                     )
 
             await asyncio.gather(*insert_tasks)
