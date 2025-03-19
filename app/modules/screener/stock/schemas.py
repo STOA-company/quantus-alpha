@@ -22,6 +22,7 @@ class FactorCodeValue(BaseModel):
 
 class FactorResponse(BaseModel):
     factor: str
+    display: str
     description: str
     unit: str
     category: CategoryEnum

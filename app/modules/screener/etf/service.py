@@ -9,6 +9,8 @@ from app.common.constants import (
     NON_NUMERIC_COLUMNS_ETF,
     PARQUET_DIR,
     UNIT_MAP,
+    FACTOR_MAP,
+    FACTOR_MAP_EN,
 )
 from app.core.exception.base import CustomException
 from app.core.logging.config import get_logger
@@ -31,7 +33,7 @@ class ScreenerETFService(BaseScreenerService):
     def _is_stock(self) -> bool:
         return False
 
-    def get_factors(self, market: ETFMarketEnum):
+    def get_factors(self, market: ETFMarketEnum, lang: str = "kr"):
         """
         ETF 팩터 정보 조회
         """
@@ -55,9 +57,11 @@ class ScreenerETFService(BaseScreenerService):
                     unit = UNIT_MAP[factor["unit"]]
                     type = "slider"
 
+                factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
                 result.append(
                     {
                         "factor": factor["factor"],
+                        "display": factor_map[factor["factor"]],
                         "description": factor["description"],
                         "unit": unit,
                         "category": factor["category"],
@@ -115,6 +119,8 @@ class ScreenerETFService(BaseScreenerService):
         factors = etf_factors_cache.get_configs()
         result = []
 
+        factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
+
         for _, row in sorted_df.iterrows():
             # 기본으로 표시될 컬럼들
             etf_data = {}
@@ -123,14 +129,14 @@ class ScreenerETFService(BaseScreenerService):
             for col in sorted_df.columns:
                 if col in NON_NUMERIC_COLUMNS_ETF:
                     if col in row:
-                        etf_data[col] = row[col]
+                        etf_data[col] = {"display": factor_map[col], "value": row[col], "unit": ""}
                 elif col == "score":
-                    etf_data[col] = float(row[col])
+                    etf_data[col] = {"display": factor_map["score"], "value": float(row[col]), "unit": ""}
                 elif col in row:
                     if col in row:
                         if isinstance(row[col], (int, float)):  # 값이 숫자인지 확인
                             if pd.isna(row[col]) or np.isinf(row[col]):
-                                etf_data[col] = {"value": "", "unit": ""}
+                                etf_data[col] = {"display": factor_map[col], "value": "", "unit": ""}
                             else:
                                 value, unit = screener_utils.convert_unit_and_value(
                                     market_filter,
@@ -138,12 +144,12 @@ class ScreenerETFService(BaseScreenerService):
                                     factors[col].get("unit", "") if col in factors else "",
                                     lang,
                                 )
-                                etf_data[col] = {"value": value, "unit": unit}
+                                etf_data[col] = {"display": factor_map[col], "value": value, "unit": unit}
                         else:  # 숫자가 아닌 타입 처리
                             if pd.isna(row[col]):
-                                etf_data[col] = {"value": "", "unit": ""}
+                                etf_data[col] = {"display": factor_map[col], "value": "", "unit": ""}
                             else:
-                                etf_data[col] = {"value": str(row[col]), "unit": ""}
+                                etf_data[col] = {"display": factor_map[col], "value": str(row[col]), "unit": ""}
 
             result.append(etf_data)
 

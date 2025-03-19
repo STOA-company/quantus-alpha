@@ -391,6 +391,11 @@ class ScreenerUtils:
         if columns is None:
             columns = []
         required_columns = columns.copy()
+        if "sector" in required_columns:
+            required_columns.append("sector_en")
+        if "Name" in required_columns:
+            required_columns.append("Name_en")
+
         if "score" in required_columns:
             required_columns.remove("score")
 
