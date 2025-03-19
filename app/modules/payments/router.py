@@ -7,7 +7,7 @@ from app.utils.oauth_utils import get_current_user
 router = APIRouter()
 
 
-@router.get("/toss")
+@router.post("/toss")
 def get_toss_payments_receipt(
     toss_payment_receipt: TossPaymentReceipt,
     current_user: AlphafinderUser = Depends(get_current_user),
