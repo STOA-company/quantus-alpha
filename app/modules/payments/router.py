@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from app.modules.payments.service import PaymentService
 from app.modules.payments.schema import TossPaymentReceipt
 from app.models.models_users import AlphafinderUser
@@ -18,12 +18,8 @@ def confirm_toss_payments(
     )
 
     amount = toss_payment_receipt.amount
-    period = 0
+    period = 365
     if amount == 19000:
         period = 30
-    elif amount == 190000:
-        period = 365
-    else:
-        raise HTTPException(status_code=400, detail="Invalid price")
     payment_service.user_subscription_update(current_user.id, period)
     return {"status": "success"}
