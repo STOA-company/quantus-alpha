@@ -47,7 +47,7 @@ class ScreenerUtils:
 
                 result.append(
                     {
-                        "factor": FACTOR_MAP[factor_name],
+                        "factor": factor_name,
                         "description": factor.description,
                         "unit": str(factor.unit).lower(),
                         "category": str(factor.category).lower(),

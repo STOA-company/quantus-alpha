@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from app.modules.screener.stock.schemas import MarketEnum
 from app.modules.screener.utils import screener_utils
-from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, UNIT_MAP
+from app.common.constants import NON_NUMERIC_COLUMNS, UNIT_MAP
 from app.core.exception.custom import CustomException
 from app.modules.screener.base import BaseScreenerService
 
@@ -106,23 +106,12 @@ class ScreenerStockService(BaseScreenerService):
             factors = factors_cache.get_configs()
             result = []
 
-            if columns:
-                ordered_columns = []
-                for col in columns:
-                    mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
-                    if mapped_col not in ordered_columns:
-                        ordered_columns.append(mapped_col)
-            else:
-                ordered_columns = ["Code", "Name", "score", "country"]
-
-            selected_columns = ordered_columns.copy()
-
-            sorted_df = sorted_df[selected_columns]
+            sorted_df = sorted_df[columns]
 
             for _, row in sorted_df.iterrows():
                 stock_data = {}
 
-                for col in selected_columns:
+                for col in columns:
                     if col in NON_NUMERIC_COLUMNS:
                         if col in row:
                             stock_data[col] = row[col]

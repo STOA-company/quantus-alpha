@@ -7,6 +7,7 @@ from app.modules.screener.stock.schemas import (
     FilteredStocks,
     GroupFilter,
     GroupFilterResponse,
+    FactorCodeValue,
 )
 import logging
 from app.utils.oauth_utils import get_current_user
@@ -222,57 +223,75 @@ def get_group_filters(
         valuation_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.VALUATION)
         custom_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
 
-        if group_id == -1:
-            all_sectors = screener_service.get_available_sectors()
-            return GroupFilterResponse(
-                id=-1,
-                name="기본",
-                market_filter=MarketEnum.US,
-                has_custom=False,
-                sector_filter=all_sectors,
-                custom_filters=[],
-                factor_filters={
-                    "technical": technical_columns,
-                    "fundamental": fundamental_columns,
-                    "valuation": valuation_columns,
-                    "custom": [],
-                },
-                sort_info={
-                    CategoryEnum.TECHNICAL: technical_sort_info,
-                    CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
-                    CategoryEnum.VALUATION: valuation_sort_info,
-                    CategoryEnum.CUSTOM: custom_sort_info,
-                },
-            )
-
-        group_filters = screener_service.get_group_filters(group_id)
-        stock_filters = group_filters["stock_filters"]
-
-        market_filter = None
-        sector_filter = []
+        group_name = "기본"
+        market_filter = MarketEnum.US
+        has_custom = False
+        custom_factor_filters = []
         custom_filters = []
 
-        for stock_filter in stock_filters:
-            if stock_filter["factor"] == "시장":
-                market_filter = stock_filter["value"]
-            elif stock_filter["factor"] == "산업":
-                sector_filter.append(stock_filter["value"])
-            else:
-                custom_filters.append(stock_filter)
+        if group_id == -1:
+            sector_filter = screener_service.get_available_sectors()
+        else:
+            group_filters = screener_service.get_group_filters(group_id)
+            stock_filters = group_filters["stock_filters"]
 
-        custom_factor_filters = group_filters["custom_factor_filters"]
+            group_name = group_filters["name"]
+            has_custom = group_filters["has_custom"]
+            custom_factor_filters = group_filters["custom_factor_filters"]
+
+            sector_filter = []
+            for stock_filter in stock_filters:
+                if stock_filter["factor"] == "market":
+                    market_filter = stock_filter["value"]
+                elif stock_filter["factor"] == "sector":
+                    sector_filter.append(stock_filter["value"])
+                else:
+                    custom_filters.append(stock_filter)
+
+        technical = []
+        fundamental = []
+        valuation = []
+        custom = []
+
+        factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
+
+        for column in technical_columns:
+            technical.append(FactorCodeValue(code=column, value=factor_map[column]))
+
+        for column in fundamental_columns:
+            fundamental.append(FactorCodeValue(code=column, value=factor_map[column]))
+
+        for column in valuation_columns:
+            valuation.append(FactorCodeValue(code=column, value=factor_map[column]))
+
+        for column in custom_factor_filters:
+            custom.append(FactorCodeValue(code=column, value=factor_map[column]))
+
+        technical_sort_info.sort_by = FactorCodeValue(
+            code=technical_sort_info.sort_by, value=factor_map[technical_sort_info.sort_by]
+        )
+        fundamental_sort_info.sort_by = FactorCodeValue(
+            code=fundamental_sort_info.sort_by, value=factor_map[fundamental_sort_info.sort_by]
+        )
+        valuation_sort_info.sort_by = FactorCodeValue(
+            code=valuation_sort_info.sort_by, value=factor_map[valuation_sort_info.sort_by]
+        )
+        custom_sort_info.sort_by = FactorCodeValue(
+            code=custom_sort_info.sort_by, value=factor_map[custom_sort_info.sort_by]
+        )
 
         return GroupFilterResponse(
             id=group_id,
-            name=group_filters["name"],
+            name=group_name,
             market_filter=market_filter,
+            has_custom=has_custom,
             sector_filter=sector_filter,
             custom_filters=custom_filters,
             factor_filters={
-                "technical": technical_columns,
-                "fundamental": fundamental_columns,
-                "valuation": valuation_columns,
-                "custom": custom_factor_filters,
+                "technical": technical,
+                "fundamental": fundamental,
+                "valuation": valuation,
+                "custom": custom,
             },
             sort_info={
                 CategoryEnum.TECHNICAL: technical_sort_info,
@@ -280,7 +299,6 @@ def get_group_filters(
                 CategoryEnum.VALUATION: valuation_sort_info,
                 CategoryEnum.CUSTOM: custom_sort_info,
             },
-            has_custom=group_filters["has_custom"],
         )
     except Exception as e:
         logger.exception(f"Error getting group filters: {e}")
