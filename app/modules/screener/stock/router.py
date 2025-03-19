@@ -27,12 +27,14 @@ router = APIRouter()
 
 
 @router.get("/factors/{market}", response_model=List[FactorResponse])
-def get_factors(market: MarketEnum, screener_service: ScreenerStockService = Depends(ScreenerStockService)):
+def get_factors(
+    market: MarketEnum, lang: str = "kr", screener_service: ScreenerStockService = Depends(ScreenerStockService)
+):
     """
     모든 팩터 조회
     """
     try:
-        factors = screener_service.get_factors(market)
+        factors = screener_service.get_factors(market, lang)
         result = [FactorResponse(**factor) for factor in factors]
         return result
     except Exception as e:
@@ -86,17 +88,6 @@ def get_filtered_stocks(
         )
 
         has_next = filtered_stocks.offset * filtered_stocks.limit + filtered_stocks.limit < total_count
-
-        factor_map = FACTOR_MAP if filtered_stocks.lang == "kr" else FACTOR_MAP_EN
-        for stock in stocks_data:
-            keys = list(stock.keys())
-            for key in keys:
-                if key in factor_map:
-                    stock[factor_map[key]] = stock[key]
-
-            for key in keys:
-                if key in factor_map:
-                    del stock[key]
 
         result = {"data": stocks_data, "has_next": has_next}
         return result
@@ -224,7 +215,7 @@ def get_group_filters(
         custom_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
 
         group_name = "기본"
-        market_filter = MarketEnum.US
+        market_filter = MarketEnum.ALL
         has_custom = False
         custom_factor_filters = []
         custom_filters = []

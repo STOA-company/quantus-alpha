@@ -25,12 +25,14 @@ logger = get_logger(__name__)
 
 
 @router.get("/factors/{market}", response_model=List[FactorResponse])
-def get_factors(market: ETFMarketEnum, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
+def get_factors(
+    market: ETFMarketEnum, lang: str = "kr", screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)
+):
     """
     모든 팩터 조회
     """
     try:
-        factors = screener_etf_service.get_factors(market)
+        factors = screener_etf_service.get_factors(market, lang)
         result = [FactorResponse(**factor) for factor in factors]
         result = [factor_response for factor_response in result if factor_response.factor != "총 수수료"]
         return result
@@ -77,17 +79,6 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
         )
 
         has_next = filtered_etf.offset * filtered_etf.limit + filtered_etf.limit < total_count
-
-        factor_map = FACTOR_MAP if filtered_etf.lang == "kr" else FACTOR_MAP_EN
-        for etf in etfs_data:
-            keys = list(etf.keys())
-            for key in keys:
-                if key in factor_map:
-                    etf[factor_map[key]] = etf[key]
-
-            for key in keys:
-                if key in factor_map:
-                    del etf[key]
 
         result = {"data": etfs_data, "has_next": has_next}
         return result
