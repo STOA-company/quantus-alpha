@@ -9,7 +9,7 @@ class PaymentService:
         self.toss_secret_key = settings.TOSS_SECRET_KEY
         self.db = database_service
 
-    def store_toss_payments_history(self, payment_key: str, order_id: str, amount: str, user_id: int):
+    def store_toss_payments_history(self, payment_key: str, order_id: str, amount: int, user_id: int):
         # payment_method = get_payment_method(payment_key)
         self.db._insert(
             table="toss_payment_history",
