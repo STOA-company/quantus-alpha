@@ -6,8 +6,6 @@ import numpy as np
 import pandas as pd
 from Aws.logic.s3 import get_data_from_bucket
 from app.common.constants import (
-    FACTOR_MAP,
-    FACTOR_MAP_EN,
     NON_NUMERIC_COLUMNS_ETF,
     PARQUET_DIR,
     UNIT_MAP,
@@ -117,19 +115,6 @@ class ScreenerETFService(BaseScreenerService):
         factors = etf_factors_cache.get_configs()
         result = []
 
-        if columns:
-            ordered_columns = []
-            for col in columns:
-                mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
-                if mapped_col not in ordered_columns:
-                    ordered_columns.append(mapped_col)
-        else:
-            ordered_columns = ["Code", "Name", "manager", "score", "country"]
-
-        selected_columns = ordered_columns.copy()
-
-        sorted_df = sorted_df[selected_columns]
-
         for _, row in sorted_df.iterrows():
             # 기본으로 표시될 컬럼들
             etf_data = {}
@@ -162,16 +147,7 @@ class ScreenerETFService(BaseScreenerService):
 
             result.append(etf_data)
 
-        mapped_result = []
-        factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
-        for item in result:
-            mapped_item = {}
-            for key, value in item.items():
-                mapped_key = factor_map.get(key, key)
-                mapped_item[mapped_key] = value
-            mapped_result.append(mapped_item)
-
-        return mapped_result, total_count
+        return result, total_count
 
     def get_filtered_data(self, **kwargs):
         """

@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.stock.schemas import MarketEnum
-from app.common.constants import NEED_TO_MULTIPLY_100, FACTOR_MAP, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
+from app.common.constants import NEED_TO_MULTIPLY_100, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
 import numpy as np
 from app.cache.factors import factors_cache
 from app.modules.screener.etf.enum import ETFMarketEnum
@@ -47,7 +47,7 @@ class ScreenerUtils:
 
                 result.append(
                     {
-                        "factor": FACTOR_MAP[factor_name],
+                        "factor": factor_name,
                         "description": factor.description,
                         "unit": str(factor.unit).lower(),
                         "category": str(factor.category).lower(),
@@ -80,7 +80,7 @@ class ScreenerUtils:
 
                 result.append(
                     {
-                        "factor": FACTOR_MAP[factor_name],
+                        "factor": factor_name,
                         "description": factor.description,
                         "unit": str(factor.unit).lower(),
                         "category": str(factor.category).lower(),
