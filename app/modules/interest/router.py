@@ -31,25 +31,10 @@ def get_news_leaderboard(
     service: InterestService = Depends(get_interest_service),
 ):
     redis = NewsLeaderboard()
-    tickers = service.get_interest_tickers(group_id)
+    ticker_infos = service.get_interest_tickers(group_id)
+    tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     data = redis.get_leaderboard(lang=lang, tickers=tickers)
     return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
-
-
-@router.get("/{group_id}")
-def get_interest(
-    group_id: int,
-    lang: Literal["ko", "en"] = "ko",
-    offset: int = 0,
-    limit: Optional[int] = 50,
-    current_user: AlphafinderUser = Depends(get_current_user),
-    service: InterestService = Depends(get_interest_service),
-) -> InterestResponse:
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    interests = service.get_interest(group_id, lang, offset, limit)
-    data = [InterestTable.from_dict(interest) for interest in interests["data"]]
-    return InterestResponse(has_next=interests["has_next"], data=data)
 
 
 @router.post("/")
@@ -60,7 +45,10 @@ def add_interest(
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    return service.add_interest(request.group_id, request.ticker)
+    is_added = service.add_interest(request.group_id, request.ticker)
+    if not is_added:
+        raise HTTPException(status_code=400, detail="관심 종목에 추가되지 않았습니다.")
+    return {"message": f"관심 종목에 {request.ticker}가 추가되었습니다."}
 
 
 @router.delete("/")
@@ -72,7 +60,10 @@ def delete_interest(
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    return service.delete_interest(group_id, tickers)
+    is_deleted = service.delete_interest(group_id, tickers)
+    if not is_deleted:
+        raise HTTPException(status_code=400, detail="관심 종목에 삭제되지 않았습니다.")
+    return {"message": f"관심 종목에서 {', '.join(tickers)}가 삭제되었습니다."}
 
 
 @router.get("/columns")
@@ -112,7 +103,8 @@ def interest_news(
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
 ):
-    tickers = service.get_interest_tickers(group_id)
+    ticker_infos = service.get_interest_tickers(group_id)
+    tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     news_data, disclosure_data = news_service.get_renewal_data(lang=lang, tickers=tickers)
 
     response_data = NewsRenewalResponse(news=news_data, disclosure=disclosure_data)
@@ -128,6 +120,32 @@ def top_stories(
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
 ):
-    tickers = service.get_interest_tickers(group_id)
+    ticker_infos = service.get_interest_tickers(group_id)
+    tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     data = news_service.top_stories(request=request, tickers=tickers, lang=lang)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
+
+
+@router.get("/{group_id}/tickers")
+def get_interest_tickers(
+    group_id: int,
+    service: InterestService = Depends(get_interest_service),
+):
+    ticker_infos = service.get_interest_tickers(group_id)
+    return [{"ticker": ticker_info["ticker"], "name": ticker_info["name"]} for ticker_info in ticker_infos]
+
+
+@router.get("/{group_id}")
+def get_interest(
+    group_id: int,
+    lang: Literal["ko", "en"] = "ko",
+    offset: int = 0,
+    limit: Optional[int] = 50,
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: InterestService = Depends(get_interest_service),
+) -> InterestResponse:
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    interests = service.get_interest(group_id, lang, offset, limit)
+    data = [InterestTable.from_dict(interest) for interest in interests["data"]]
+    return InterestResponse(has_next=interests["has_next"], data=data)

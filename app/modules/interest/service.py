@@ -63,13 +63,19 @@ class InterestService:
         interests = self.db._select(table="user_stock_interest", group_id=group_id)
         if not interests:
             return []
-        return [interest.ticker for interest in interests]
+        return [{"ticker": interest.ticker, "name": interest.name} for interest in interests]
 
     def add_interest(self, group_id: int, ticker: str):
         stock = self.db._select(table="user_stock_interest", group_id=group_id, ticker=ticker, limit=1)
         if stock:
             raise HTTPException(status_code=400, detail="이미 관심 종목에 추가되어 있습니다.")
-        return self.db._insert(table="user_stock_interest", sets={"group_id": group_id, "ticker": ticker})
+        self.db._insert(table="user_stock_interest", sets={"group_id": group_id, "ticker": ticker})
+
+        confirm = self.db._select(table="user_stock_interest", group_id=group_id, ticker=ticker, limit=1)
+        if not confirm:
+            return False
+
+        return True
 
     def delete_interest(self, group_id: int, tickers: List[str]):
         for ticker in tickers:
@@ -77,6 +83,8 @@ class InterestService:
             if not stock:
                 raise HTTPException(status_code=404, detail="관심 종목에 추가되지 않은 종목입니다.")
             self.db._delete(table="user_stock_interest", group_id=group_id, ticker=ticker)
+
+        return True
 
     def get_interest_group(self, user_id: int):
         groups = self.db._select(table="interest_group", user_id=user_id)
@@ -126,8 +134,6 @@ class InterestService:
             return (float(number / 1000000000), "B$")
         else:
             return (float(number / 1000000000000), "T$")
-
-    from typing import List, Dict, Any, Union, Tuple
 
 
 def get_interest_service() -> InterestService:
