@@ -10,7 +10,7 @@ from app.modules.stock_info.schemas import Indicators, SimilarStock, StockInfo
 from app.core.logging.config import get_logger
 from app.modules.common.utils import contry_mapping
 from typing import Dict
-from app.cache.leaderboard import Leaderboard
+from app.cache.leaderboard import StockLeaderboard
 
 logger = get_logger(__name__)
 
@@ -283,7 +283,7 @@ class StockInfoService:
         return sector_metrics
 
     def increment_search_score(self, ticker: str) -> None:
-        redis = Leaderboard()
+        redis = StockLeaderboard()
         stock_info = self.db._select(table="stock_information", columns=["kr_name", "en_name"], **{"ticker": ticker})
         kr_name = stock_info[0].kr_name
         en_name = stock_info[0].en_name

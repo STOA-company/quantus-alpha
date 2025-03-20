@@ -9,6 +9,7 @@ from app.modules.news.services import get_news_service, NewsService
 from app.modules.news.schemas import NewsRenewalResponse, TopStoriesResponse
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.enum import TranslateCountry
+from app.cache.leaderboard import NewsLeaderboard
 
 router = APIRouter()
 
@@ -117,3 +118,12 @@ def top_stories(
     tickers = service.get_interest_tickers(group_id)
     data = news_service.top_stories(request=request, tickers=tickers, lang=lang)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
+
+
+@router.get("/news-leaderboard")
+def get_news_leaderboard(
+    lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
+):
+    redis = NewsLeaderboard()
+    data = redis.get_leaderboard(lang=lang)
+    return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)

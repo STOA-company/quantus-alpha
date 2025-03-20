@@ -105,3 +105,13 @@ def news_detail_v2(
         neutral_count=emotion_count.get("neutral", 0),
         ctry=ctry,
     )
+
+
+@router.post("/increase_search_count", summary="뉴스 검색 증가")
+def increase_search_count(
+    news_id: int,
+    ticker: str,
+    news_service: NewsService = Depends(get_news_service),
+):
+    news_service.increase_search_count(news_id=news_id, ticker=ticker)
+    return BaseResponse(status_code=200, message="Successfully increased search count")
