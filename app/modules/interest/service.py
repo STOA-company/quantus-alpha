@@ -54,6 +54,12 @@ class InterestService:
         ]
         return table[offset : offset + limit]
 
+    def get_interest_tickers(self, group_id: int):
+        interests = self.db._select(table="user_stock_interest", group_id=group_id)
+        if not interests:
+            return []
+        return [interest.ticker for interest in interests]
+
     def add_interest(self, group_id: int, ticker: str):
         stock = self.db._select(table="user_stock_interest", group_id=group_id, ticker=ticker, limit=1)
         if stock:
@@ -115,6 +121,8 @@ class InterestService:
             return (float(number / 1000000000), "B$")
         else:
             return (float(number / 1000000000000), "T$")
+
+    from typing import List, Dict, Any, Union, Tuple
 
 
 def get_interest_service() -> InterestService:
