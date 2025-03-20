@@ -132,7 +132,10 @@ def get_interest_tickers(
     service: InterestService = Depends(get_interest_service),
 ):
     ticker_infos = service.get_interest_tickers(group_id)
-    return [{"ticker": ticker_info["ticker"], "name": ticker_info["name"]} for ticker_info in ticker_infos]
+    return [
+        {"ticker": ticker_info["ticker"], "name": ticker_info["name"], "country": ticker_info["country"]}
+        for ticker_info in ticker_infos
+    ]
 
 
 @router.get("/{group_id}")

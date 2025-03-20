@@ -59,11 +59,19 @@ class InterestService:
         table["data"] = table["data"][offset * limit : offset * limit + limit]
         return table
 
-    def get_interest_tickers(self, group_id: int):
-        interests = self.db._select(table="user_stock_interest", group_id=group_id)
-        if not interests:
+    def get_interest_tickers(self, group_id: int, lang: Literal["ko", "en"] = "ko"):
+        interests = self.db._select(table="user_stock_interest", columns=["ticker"], group_id=group_id)
+        stocks = self.data_db._select(
+            table="stock_trend",
+            columns=["ticker", "kr_name", "en_name", "ctry"],
+            ticker__in=[interest[0] for interest in interests],
+        )
+        if not stocks:
             return []
-        return [{"ticker": interest.ticker, "name": interest.name} for interest in interests]
+        return [
+            {"ticker": stock.ticker, "name": stock.kr_name if lang == "ko" else stock.en_name, "country": stock.ctry}
+            for stock in stocks
+        ]
 
     def add_interest(self, group_id: int, ticker: str):
         stock = self.db._select(table="user_stock_interest", group_id=group_id, ticker=ticker, limit=1)
