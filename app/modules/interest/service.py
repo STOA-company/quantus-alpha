@@ -19,40 +19,45 @@ class InterestService:
             columns=["ctry", "ticker", name_column, "current_price", "change_rt", "volume_change_rt", "volume_rt"],
             ticker__in=tickers,
         )
-        table = [
-            {
-                "ctry": row.ctry,
-                "ticker": row.ticker,
-                "name": row.kr_name if lang == "ko" else row.en_name,
-                "price": {
-                    "value": self.get_won_unit(row.current_price, lang)[0]
-                    if row.ctry == "kr"
-                    else self.get_dollar_unit(row.current_price)[0],
-                    "unit": self.get_won_unit(row.current_price, lang)[1]
-                    if row.ctry == "kr"
-                    else self.get_dollar_unit(row.current_price)[1],
-                },
-                "change": {
-                    "value": row.change_rt,
-                    "unit": "%",
-                    "sign": "plus" if row.change_rt > 0 else "minus",
-                },
-                "amount": {
-                    "value": self.get_won_unit(row.volume_change_rt, lang)[0]
-                    if row.ctry == "kr"
-                    else self.get_dollar_unit(row.volume_change_rt)[0],
-                    "unit": self.get_won_unit(row.volume_change_rt, lang)[1]
-                    if row.ctry == "kr"
-                    else self.get_dollar_unit(row.volume_change_rt)[1],
-                },
-                "volume": {
-                    "value": row.volume_rt,
-                    "unit": "주" if lang == "ko" else "shs",
-                },
-            }
-            for row in table
-        ]
-        return table[offset : offset + limit]
+        has_next = len(table) > offset * limit + limit
+        table = {
+            "has_next": has_next,
+            "data": [
+                {
+                    "ctry": row.ctry,
+                    "ticker": row.ticker,
+                    "name": row.kr_name if lang == "ko" else row.en_name,
+                    "price": {
+                        "value": self.get_won_unit(row.current_price, lang)[0]
+                        if row.ctry == "kr"
+                        else self.get_dollar_unit(row.current_price)[0],
+                        "unit": self.get_won_unit(row.current_price, lang)[1]
+                        if row.ctry == "kr"
+                        else self.get_dollar_unit(row.current_price)[1],
+                    },
+                    "change": {
+                        "value": row.change_rt,
+                        "unit": "%",
+                        "sign": "plus" if row.change_rt > 0 else "minus",
+                    },
+                    "amount": {
+                        "value": self.get_won_unit(row.volume_change_rt, lang)[0]
+                        if row.ctry == "kr"
+                        else self.get_dollar_unit(row.volume_change_rt)[0],
+                        "unit": self.get_won_unit(row.volume_change_rt, lang)[1]
+                        if row.ctry == "kr"
+                        else self.get_dollar_unit(row.volume_change_rt)[1],
+                    },
+                    "volume": {
+                        "value": row.volume_rt,
+                        "unit": "주" if lang == "ko" else "shs",
+                    },
+                }
+                for row in table
+            ],
+        }
+        table["data"] = table["data"][offset * limit : offset * limit + limit]
+        return table
 
     def get_interest_tickers(self, group_id: int):
         interests = self.db._select(table="user_stock_interest", group_id=group_id)

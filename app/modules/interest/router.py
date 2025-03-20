@@ -3,7 +3,7 @@ from typing import Literal, List, Optional, Annotated
 from app.utils.oauth_utils import get_current_user
 from app.models.models_users import AlphafinderUser
 from app.modules.interest.service import InterestService, get_interest_service
-from app.modules.interest.response import InterestResponse
+from app.modules.interest.response import InterestResponse, InterestTable
 from app.modules.interest.request import AddInterestRequest
 from app.modules.news.services import get_news_service, NewsService
 from app.modules.news.schemas import NewsRenewalResponse, TopStoriesResponse
@@ -31,11 +31,12 @@ def get_interest(
     limit: Optional[int] = 50,
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
-) -> List[InterestResponse]:
+) -> InterestResponse:
     if not current_user:
         raise HTTPException(status_code=401, detail="Unauthorized")
     interests = service.get_interest(group_id, lang, offset, limit)
-    return [InterestResponse.from_dict(interest) for interest in interests]
+    data = [InterestTable.from_dict(interest) for interest in interests["data"]]
+    return InterestResponse(has_next=interests["has_next"], data=data)
 
 
 @router.post("/")
