@@ -9,7 +9,7 @@ class InterestService:
         self.data_db = database
 
     def get_interest(self, group_id: int, lang: Literal["ko", "en"] = "ko", offset: int = 0, limit: int = 50):
-        interests = self.db._select(table="user_stock_interest", group_id=group_id)
+        interests = self.db._select(table="user_stock_interest", group_id=group_id, order="created_at", ascending=False)
         if not interests:
             return []
         tickers = [interest.ticker for interest in interests]
@@ -19,7 +19,15 @@ class InterestService:
             columns=["ctry", "ticker", name_column, "current_price", "change_rt", "volume_change_rt", "volume_rt"],
             ticker__in=tickers,
         )
-        has_next = len(table) > offset * limit + limit
+
+        sorted_table = []
+        for interest in interests:
+            for row in table:
+                if row.ticker == interest.ticker:
+                    sorted_table.append(row)
+                    break
+
+        has_next = len(sorted_table) > offset * limit + limit
         table = {
             "has_next": has_next,
             "data": [
@@ -53,7 +61,7 @@ class InterestService:
                         "unit": "주" if lang == "ko" else "shs",
                     },
                 }
-                for row in table
+                for row in sorted_table
             ],
         }
         table["data"] = table["data"][offset * limit : offset * limit + limit]
