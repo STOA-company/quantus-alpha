@@ -110,10 +110,31 @@ class InterestService:
         group = self.db._select(table="interest_group", user_id=user_id, name=name, limit=1)
         if group:
             raise HTTPException(status_code=400, detail="이미 존재하는 관심 그룹입니다.")
-        return self.db._insert(table="interest_group", sets={"user_id": user_id, "name": name})
+        try:
+            self.db._insert(table="interest_group", sets={"user_id": user_id, "name": name})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        return True
 
     def delete_interest_group(self, group_id: int):
-        return self.db._delete(table="interest_group", group_id=group_id)
+        try:
+            self.db._delete(table="interest_group", group_id=group_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        return True
+
+    def update_interest_group_name(self, group_id: int, name: str):
+        group = self.db._select(table="interest_group", id=group_id, limit=1)
+        if not group:
+            raise HTTPException(status_code=404, detail="관심 그룹이 존재하지 않습니다.")
+        if name == group[0].name:
+            raise HTTPException(status_code=400, detail="기존 이름과 동일합니다.")
+        try:
+            self.db._update(table="interest_group", id=group_id, sets={"name": name})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+        return True
 
     def get_won_unit(self, number, lang):
         if isinstance(number, str):
