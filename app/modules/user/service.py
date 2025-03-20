@@ -418,24 +418,10 @@ class UserService:
         await screener_service.create_group(user_id=user_id, sector_filter=all_sectors)
         await screener_service.create_group(user_id=user_id, type=StockType.ETF)
 
-    def get_interest(self, user_id: int):
-        interests = self.db._select(table="user_stock_interest", user_id=user_id)
-        if not interests:
-            return []
-        return [interest["ticker"] for interest in interests]
-
-    def add_interest(self, user_id: int, tickers: List[str]):
-        for ticker in tickers:
-            stock = self.db._select(table="user_stock_interest", user_id=user_id, ticker=ticker, limit=1)
-            if stock:
-                raise HTTPException(status_code=400, detail="이미 관심 종목에 추가되어 있습니다.")
-            self.db._insert(table="user_stock_interest", sets={"user_id": user_id, "ticker": ticker})
-
-    def delete_interest(self, user_id: int, ticker: str):
-        stock = self.db._select(table="user_stock_interest", user_id=user_id, ticker=ticker, limit=1)
-        if not stock:
-            raise HTTPException(status_code=404, detail="관심 종목에 추가되지 않은 종목입니다.")
-        return self.db._delete(table="user_stock_interest", user_id=user_id, ticker=ticker)
+    def interest_init(self, user_id: int):
+        groups = self.db._select(table="interest_group", user_id=user_id)
+        if not groups:
+            self.db._insert(table="interest_group", sets={"user_id": user_id, "name": "기본"})
 
 
 def get_user_service() -> UserService:
