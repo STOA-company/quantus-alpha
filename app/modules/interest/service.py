@@ -24,7 +24,7 @@ class InterestService:
             "has_next": has_next,
             "data": [
                 {
-                    "ctry": row.ctry,
+                    "country": row.ctry,
                     "ticker": row.ticker,
                     "name": row.kr_name if lang == "ko" else row.en_name,
                     "price": {
