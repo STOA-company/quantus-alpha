@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String, BigInteger, Boolean, Date
+from sqlalchemy import ForeignKey, String, BigInteger, Boolean, Date, UniqueConstraint
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.models_base import ServiceBase, BaseMixin
@@ -26,15 +26,36 @@ class AlphafinderUser(BaseMixin, ServiceBase):
         return f"User(id={self.id!r}, nickname={self.nickname!r}, email={self.email!r})"
 
 
+class InterestGroup(BaseMixin, ServiceBase):
+    __tablename__ = "interest_group"
+    __table_args__ = {"extend_existing": True}
+
+    id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[String] = mapped_column(String(length=100), nullable=False)
+    user_id: Mapped[BigInteger] = mapped_column(
+        BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=False
+    )
+
+    user = relationship("AlphafinderUser", back_populates="interest_groups")
+    user_stock_interests = relationship("UserStockInterest", back_populates="group")
+
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uix_user_id_name"),)
+
+
 class UserStockInterest(BaseMixin, ServiceBase):
     __tablename__ = "user_stock_interest"
     __table_args__ = {"extend_existing": True}
 
     id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[BigInteger] = mapped_column(
-        BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=True, index=True
+    group_id: Mapped[BigInteger] = mapped_column(
+        BigInteger, ForeignKey("interest_group.id", ondelete="CASCADE"), nullable=True, index=True
     )
     ticker: Mapped[String] = mapped_column(String(length=20), nullable=False)
+
+    user = relationship("AlphafinderUser", back_populates="user_stock_interests")
+    group = relationship("InterestGroup", back_populates="user_stock_interests")
+
+    __table_args__ = (UniqueConstraint("group_id", "ticker", name="uix_group_id_ticker"),)
 
 
 class AlphaFinderOAuthToken(BaseMixin, ServiceBase):

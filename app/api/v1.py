@@ -16,6 +16,7 @@ from app.modules.community.router import router as community_router
 from app.modules.screener.stock.router import router as screener_router
 from app.modules.screener.etf.router import router as screener_etf_router
 from app.modules.payments.router import router as payments_router
+from app.modules.interest.router import router as interest_router
 
 api_router = APIRouter()
 
@@ -36,3 +37,4 @@ api_router.include_router(community_router, prefix="/community", tags=["communit
 api_router.include_router(screener_router, prefix="/screener", tags=["screener"])
 api_router.include_router(screener_etf_router, prefix="/screener/etf", tags=["screener-etf"])
 api_router.include_router(payments_router, prefix="/payments", tags=["payments"])
+api_router.include_router(interest_router, prefix="/interest", tags=["interest"])
