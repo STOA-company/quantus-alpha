@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Literal, Optional, Dict, Any
+from typing import Literal, Optional, List
 
 
 class InterestItem(BaseModel):
@@ -8,7 +8,7 @@ class InterestItem(BaseModel):
     sign: Optional[Literal["plus", "minus"]] = None
 
 
-class InterestResponse(BaseModel):
+class InterestTable(BaseModel):
     ticker: str
     name: str
     price: InterestItem
@@ -17,5 +17,13 @@ class InterestResponse(BaseModel):
     volume: InterestItem
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "InterestResponse":
+    def from_dict(cls, data: dict):
+        # name이 항상 문자열인지 확인
+        if data.get("name") is None:
+            data["name"] = ""
         return cls(**data)
+
+
+class InterestResponse(BaseModel):
+    has_next: bool
+    data: List[InterestTable]
