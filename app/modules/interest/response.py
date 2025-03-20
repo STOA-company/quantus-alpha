@@ -10,6 +10,7 @@ class InterestItem(BaseModel):
 
 class InterestTable(BaseModel):
     ticker: str
+    country: str
     name: str
     price: InterestItem
     change: InterestItem
