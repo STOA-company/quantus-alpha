@@ -10,6 +10,9 @@ from app.modules.news.schemas import NewsRenewalResponse, TopStoriesResponse
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.enum import TranslateCountry
 from app.cache.leaderboard import NewsLeaderboard
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -43,12 +46,16 @@ def add_interest(
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
 ):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    is_added = service.add_interest(request.group_id, request.ticker)
-    if not is_added:
-        raise HTTPException(status_code=400, detail="관심 종목에 추가되지 않았습니다.")
-    return {"message": f"관심 종목에 {request.ticker}가 추가되었습니다."}
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        is_added = service.add_interest(request.group_id, request.ticker)
+        if not is_added:
+            raise HTTPException(status_code=400, detail="관심 종목에 추가되지 않았습니다.")
+        return {"message": f"관심 종목에 {request.ticker}가 추가되었습니다."}
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 @router.delete("/")
@@ -58,12 +65,16 @@ def delete_interest(
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
 ):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    is_deleted = service.delete_interest(group_id, tickers)
-    if not is_deleted:
-        raise HTTPException(status_code=400, detail="관심 종목에 삭제되지 않았습니다.")
-    return {"message": f"관심 종목에서 {', '.join(tickers)}가 삭제되었습니다."}
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        is_deleted = service.delete_interest(group_id, tickers)
+        if not is_deleted:
+            raise HTTPException(status_code=400, detail="관심 종목에 삭제되지 않았습니다.")
+        return {"message": f"관심 종목에서 {', '.join(tickers)}가 삭제되었습니다."}
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 @router.get("/columns")
@@ -80,9 +91,13 @@ def create_group(
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
 ):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return service.create_interest_group(current_user.id, name)
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        return service.create_interest_group(current_user.id, name)
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 @router.delete("/groups")
@@ -91,9 +106,32 @@ def delete_group(
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
 ):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return service.delete_interest_group(group_id)
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        return service.delete_interest_group(group_id)
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+
+@router.post("/name")
+def update_group_name(
+    group_id: int,
+    name: str,
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: InterestService = Depends(get_interest_service),
+):
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        is_updated = service.update_interest_group_name(group_id, name)
+        if not is_updated:
+            raise HTTPException(status_code=400, detail="관심 그룹 이름 수정에 실패했습니다.")
+        return {"message": f"관심 그룹 이름이 {name}으로 수정되었습니다."}
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 @router.get("/news/{group_id}", response_model=BaseResponse[NewsRenewalResponse])
