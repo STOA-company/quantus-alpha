@@ -8,12 +8,12 @@ class InterestService:
         self.db = database_service
         self.data_db = database
 
-    def get_interest(self, group_id: int, lang: Literal["kr", "en"] = "kr", offset: int = 0, limit: int = 50):
+    def get_interest(self, group_id: int, lang: Literal["ko", "en"] = "ko", offset: int = 0, limit: int = 50):
         interests = self.db._select(table="user_stock_interest", group_id=group_id)
         if not interests:
             return []
         tickers = [interest.ticker for interest in interests]
-        name_column = "kr_name" if lang == "kr" else "en_name"
+        name_column = "kr_name" if lang == "ko" else "en_name"
         table = self.data_db._select(
             table="stock_trend",
             columns=["ctry", "ticker", name_column, "current_price", "change_rt", "volume_change_rt", "volume_rt"],
@@ -23,7 +23,7 @@ class InterestService:
             {
                 "ctry": row.ctry,
                 "ticker": row.ticker,
-                "name": row.kr_name if lang == "kr" else row.en_name,
+                "name": row.kr_name if lang == "ko" else row.en_name,
                 "price": {
                     "value": self.get_won_unit(row.current_price, lang)[0]
                     if row.ctry == "kr"
@@ -47,7 +47,7 @@ class InterestService:
                 },
                 "volume": {
                     "value": row.volume_rt,
-                    "unit": "주" if lang == "kr" else "shs",
+                    "unit": "주" if lang == "ko" else "shs",
                 },
             }
             for row in table
@@ -90,7 +90,7 @@ class InterestService:
         if isinstance(number, str):
             number = int(number.replace(",", ""))
 
-        if lang == "kr":
+        if lang == "ko":
             if number < 100000000:  # 1억 미만
                 return (number, "원")
             elif number < 1000000000000:  # 1조 미만

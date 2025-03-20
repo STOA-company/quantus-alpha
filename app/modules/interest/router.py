@@ -26,7 +26,7 @@ def get_groups(
 @router.get("/{group_id}")
 def get_interest(
     group_id: int,
-    lang: Literal["kr", "en"] = "kr",
+    lang: Literal["ko", "en"] = "ko",
     offset: int = 0,
     limit: Optional[int] = 50,
     current_user: AlphafinderUser = Depends(get_current_user),
@@ -62,7 +62,7 @@ def delete_interest(
 
 
 @router.get("/columns")
-def get_columns(lang: Literal["kr", "en"] = "kr"):
+def get_columns(lang: Literal["ko", "en"] = "ko"):
     columns = ["티커", "종목명", "현재가", "등락율", "거래대금", "거래량"]
     if lang == "en":
         columns = ["Ticker", "Name", "Price", "Change", "Amount", "Volume"]
@@ -94,7 +94,7 @@ def delete_group(
 @router.get("/news/{group_id}", response_model=BaseResponse[NewsRenewalResponse])
 def interest_news(
     group_id: int,
-    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: kr, en")] = None,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
 ):
