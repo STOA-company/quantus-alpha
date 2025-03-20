@@ -2,7 +2,7 @@ from datetime import datetime, time, timedelta
 import json
 import math
 import re
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Optional
 
 from fastapi import Request, Response
 import pytz
@@ -116,12 +116,14 @@ class NewsService:
         return df
 
     def get_renewal_data(
-        self, ctry: str = None, lang: TranslateCountry | None = None
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
     ) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
         if lang is None:
             lang = TranslateCountry.KO
 
         condition = {"is_exist": True}
+        if tickers:
+            condition["ticker__in"] = tickers
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
 
