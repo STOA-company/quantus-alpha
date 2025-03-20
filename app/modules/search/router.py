@@ -6,7 +6,7 @@ from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import InfiniteScrollResponse
 from app.modules.search.schemas import CommunitySearchItem, SearchResponse
 from app.modules.search.service import SearchService, get_search_service
-from app.cache.leaderboard import Leaderboard
+from app.cache.leaderboard import StockLeaderboard
 
 router = APIRouter()
 
@@ -21,7 +21,7 @@ def search(
     db: Session = Depends(db.get_db),
 ) -> Union[SearchResponse, List[Dict]]:
     if not query:
-        redis = Leaderboard()
+        redis = StockLeaderboard()
         return redis.get_leaderboard(ctry)
     # limit + 1개를 요청하여 더 있는지 확인
     search_result = service.search(query, ctry, offset, limit + 1)

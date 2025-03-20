@@ -15,6 +15,7 @@ from app.modules.disclosure.mapping import (
     DOCUMENT_TYPE_MAPPING_EN,
     FORM_TYPE_MAPPING,
 )
+from app.cache.leaderboard import NewsLeaderboard
 
 import numpy as np
 import pandas as pd
@@ -899,6 +900,10 @@ class NewsService:
             summary2_list.append(s2)
 
         return pd.Series(summary1_list, index=summaries.index), pd.Series(summary2_list, index=summaries.index)
+
+    def increase_search_count(self, news_id: int, ticker: str) -> None:
+        redis = NewsLeaderboard()
+        redis.increment_score(news_id, ticker)
 
 
 def get_news_service() -> NewsService:

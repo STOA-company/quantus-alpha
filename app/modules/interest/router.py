@@ -9,6 +9,7 @@ from app.modules.news.services import get_news_service, NewsService
 from app.modules.news.schemas import NewsRenewalResponse, TopStoriesResponse
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.enum import TranslateCountry
+from app.cache.leaderboard import NewsLeaderboard
 
 router = APIRouter()
 
@@ -21,6 +22,18 @@ def get_groups(
     if not current_user:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return service.get_interest_group(current_user.id)
+
+
+@router.get("/news-leaderboard/{group_id}")
+def get_news_leaderboard(
+    group_id: int,
+    lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
+    service: InterestService = Depends(get_interest_service),
+):
+    redis = NewsLeaderboard()
+    tickers = service.get_interest_tickers(group_id)
+    data = redis.get_leaderboard(lang=lang, tickers=tickers)
+    return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
 
 
 @router.get("/{group_id}")
