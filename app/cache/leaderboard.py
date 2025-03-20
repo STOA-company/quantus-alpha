@@ -118,14 +118,12 @@ class NewsLeaderboard(BaseLeaderboard):
         for news_id, score in leaders:
             news_info = self.redis.hgetall(f"news:{news_id}")
             if news_info:
-                title = news_info["kr_title"] if lang == TranslateCountry.KO else news_info["en_title"]
                 if tickers:
                     if news_info["ticker"] in tickers:
                         result.append(
                             {
                                 "rank": start + len(result) + 1,
                                 "news_id": news_info["news_id"],
-                                "title": title,
                                 "score": int(score),
                                 "last_updated": news_info["last_updated"],
                             }
@@ -135,7 +133,6 @@ class NewsLeaderboard(BaseLeaderboard):
                         {
                             "rank": start + len(result) + 1,
                             "news_id": news_info["news_id"],
-                            "title": title,
                             "score": int(score),
                             "last_updated": news_info["last_updated"],
                         }

@@ -24,6 +24,18 @@ def get_groups(
     return service.get_interest_group(current_user.id)
 
 
+@router.get("/news-leaderboard/{group_id}")
+def get_news_leaderboard(
+    group_id: int,
+    lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
+    service: InterestService = Depends(get_interest_service),
+):
+    redis = NewsLeaderboard()
+    tickers = service.get_interest_tickers(group_id)
+    data = redis.get_leaderboard(lang=lang, tickers=tickers)
+    return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
+
+
 @router.get("/{group_id}")
 def get_interest(
     group_id: int,
@@ -118,12 +130,3 @@ def top_stories(
     tickers = service.get_interest_tickers(group_id)
     data = news_service.top_stories(request=request, tickers=tickers, lang=lang)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
-
-
-@router.get("/news-leaderboard")
-def get_news_leaderboard(
-    lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
-):
-    redis = NewsLeaderboard()
-    data = redis.get_leaderboard(lang=lang)
-    return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
