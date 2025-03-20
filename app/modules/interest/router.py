@@ -37,13 +37,14 @@ def add_interest(
 
 @router.delete("/")
 def delete_interest(
+    group_id: int,
     tickers: List[str],
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    return service.delete_interest(current_user.id, tickers)
+    return service.delete_interest(group_id, tickers)
 
 
 @router.get("/columns")
