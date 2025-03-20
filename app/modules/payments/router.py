@@ -14,12 +14,16 @@ def confirm_toss_payments(
     payment_service: PaymentService = Depends(PaymentService),
 ):
     payment_service.store_toss_payments_history(
-        toss_payment_receipt.payment_key, toss_payment_receipt.order_id, toss_payment_receipt.amount, current_user.id
+        toss_payment_receipt.payment_key,
+        toss_payment_receipt.order_id,
+        toss_payment_receipt.amount,
+        current_user.id,
+        current_user.email,
     )
 
     amount = toss_payment_receipt.amount
     period = 365
     if amount == 19000:
         period = 30
-    payment_service.user_subscription_update(current_user.id, period)
-    return {"status": "success"}
+    subscription_end = payment_service.user_subscription_update(current_user.id, period)
+    return {"subscription_end": subscription_end}

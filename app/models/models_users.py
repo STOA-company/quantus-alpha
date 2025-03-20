@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String, BigInteger, UniqueConstraint, Boolean, Date
+from sqlalchemy import ForeignKey, String, BigInteger, Boolean, Date
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.models_base import ServiceBase, BaseMixin
@@ -6,12 +6,11 @@ from app.models.models_base import ServiceBase, BaseMixin
 
 class AlphafinderUser(BaseMixin, ServiceBase):
     __tablename__ = "alphafinder_user"
-    __table_args__ = (UniqueConstraint("nickname"), {"extend_existing": True})
 
     id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     provider: Mapped[String] = mapped_column(String(length=100), nullable=False)
-    email: Mapped[String] = mapped_column(String(length=100), nullable=False)
-    nickname: Mapped[String] = mapped_column(String(length=100), nullable=False)
+    email: Mapped[String] = mapped_column(String(length=100), nullable=False, unique=True)
+    nickname: Mapped[String] = mapped_column(String(length=100), nullable=False, unique=True)
     profile_image: Mapped[String] = mapped_column(LONGTEXT, nullable=True)
     image_format: Mapped[String] = mapped_column(String(length=20), nullable=True)
     is_subscribed: Mapped[Boolean] = mapped_column(Boolean, nullable=False, default=False)
@@ -53,12 +52,11 @@ class TossPaymentHistory(BaseMixin, ServiceBase):
     __table_args__ = {"extend_existing": True}
 
     id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[BigInteger] = mapped_column(
-        BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=False
-    )
+    user_id: Mapped[BigInteger] = mapped_column(BigInteger, ForeignKey("alphafinder_user.id"), nullable=False)
+    email: Mapped[String] = mapped_column(String(length=100), nullable=False)
     payment_key: Mapped[String] = mapped_column(String(length=100), nullable=False)
     order_id: Mapped[String] = mapped_column(String(length=100), nullable=False)
     amount: Mapped[BigInteger] = mapped_column(BigInteger, nullable=False)
-    payment_method: Mapped[String] = mapped_column(String(length=100), nullable=False)
+    payment_method: Mapped[String] = mapped_column(String(length=100), nullable=True)
 
     user = relationship("AlphafinderUser", back_populates="toss_payment_history")

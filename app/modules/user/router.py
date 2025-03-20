@@ -107,6 +107,8 @@ def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
             nickname=current_user.nickname,
             profile_image=current_user.profile_image,
             image_format=current_user.image_format,
+            is_subscribed=current_user.is_subscribed,
+            subscription_end=current_user.subscription_end,
         )
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
