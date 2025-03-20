@@ -65,8 +65,6 @@ class Settings(BaseSettings):
     REFINITIV_USERNAME: str = os.getenv("REFINITIV_USERNAME", "")
     REFINITIV_PASSWORD: str = os.getenv("REFINITIV_PASSWORD", "")
 
-    TOSS_SECRET_KEY: str = os.getenv("TOSS_SECRET_KEY", "")
-
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
     else:
