@@ -321,7 +321,7 @@ class NewsService:
             for _, row in df.iterrows()
         ]
 
-    def top_stories(self, request: Request, lang: TranslateCountry | None = None):
+    def top_stories(self, request: Request, tickers: Optional[List[str]] = None, lang: TranslateCountry | None = None):
         viewed_stories = set()
         if request.cookies.get("viewed_stories"):
             cookie_data = request.cookies.get("viewed_stories", "[]")
@@ -336,48 +336,61 @@ class NewsService:
         current_datetime = now_utc()
         before_24_hours = current_datetime - timedelta(hours=24)
 
-        query_us = f"""
-            SELECT st.ticker, st.volume_change_rt, st.current_price, st.change_rt
-            FROM stock_trend st
-            JOIN (
-                SELECT DISTINCT ticker
-                FROM news_analysis
-                WHERE date >= '{before_24_hours}'
-            ) na ON st.ticker = na.ticker
-            WHERE ctry = 'US'
-            ORDER BY st.volume_change_rt DESC
-            LIMIT 6
-        """
-        top_stories_data_us = self.db._execute(text(query_us))
-        query_kr = f"""
-            SELECT st.ticker, st.volume_change_rt, st.current_price, st.change_rt
-            FROM stock_trend st
-            JOIN (
-                SELECT DISTINCT ticker
-                FROM news_analysis
-                WHERE date >= '{before_24_hours}'
-            ) na ON st.ticker = na.ticker
-            WHERE ctry = 'KR'
-            ORDER BY st.volume_change_rt DESC
-            LIMIT 5
-        """
-        top_stories_data_kr = self.db._execute(text(query_kr))
+        if tickers:
+            top_stories_tickers = tickers
 
-        # 티커 및 관련 데이터 추출
-        top_stories_tickers = []
-        ticker_to_price_data = {}
+            # 해당 티커의 가격 데이터 조회
+            price_data = self.db._select(
+                table="stock_trend", columns=["ticker", "current_price", "change_rt", "ctry"], ticker__in=tickers
+            )
 
-        for row in top_stories_data_us:
-            ticker = row[0]
-            if ticker not in top_stories_tickers:
-                top_stories_tickers.append(ticker)
-                ticker_to_price_data[ticker] = {"current_price": row[2], "change_rt": row[3]}
+            ticker_to_price_data = {}
+            for row in price_data:
+                ticker = row[0]
+                ticker_to_price_data[ticker] = {"current_price": row[1], "change_rt": row[2]}
+        else:
+            query_us = f"""
+                SELECT st.ticker, st.volume_change_rt, st.current_price, st.change_rt
+                FROM stock_trend st
+                JOIN (
+                    SELECT DISTINCT ticker
+                    FROM news_analysis
+                    WHERE date >= '{before_24_hours}'
+                ) na ON st.ticker = na.ticker
+                WHERE ctry = 'US'
+                ORDER BY st.volume_change_rt DESC
+                LIMIT 6
+            """
+            top_stories_data_us = self.db._execute(text(query_us))
+            query_kr = f"""
+                SELECT st.ticker, st.volume_change_rt, st.current_price, st.change_rt
+                FROM stock_trend st
+                JOIN (
+                    SELECT DISTINCT ticker
+                    FROM news_analysis
+                    WHERE date >= '{before_24_hours}'
+                ) na ON st.ticker = na.ticker
+                WHERE ctry = 'KR'
+                ORDER BY st.volume_change_rt DESC
+                LIMIT 5
+            """
+            top_stories_data_kr = self.db._execute(text(query_kr))
 
-        for row in top_stories_data_kr:
-            ticker = row[0]
-            if ticker not in top_stories_tickers:
-                top_stories_tickers.append(ticker)
-                ticker_to_price_data[ticker] = {"current_price": row[2], "change_rt": row[3]}
+            # 티커 및 관련 데이터 추출
+            top_stories_tickers = []
+            ticker_to_price_data = {}
+
+            for row in top_stories_data_us:
+                ticker = row[0]
+                if ticker not in top_stories_tickers:
+                    top_stories_tickers.append(ticker)
+                    ticker_to_price_data[ticker] = {"current_price": row[2], "change_rt": row[3]}
+
+            for row in top_stories_data_kr:
+                ticker = row[0]
+                if ticker not in top_stories_tickers:
+                    top_stories_tickers.append(ticker)
+                    ticker_to_price_data[ticker] = {"current_price": row[2], "change_rt": row[3]}
 
         if not top_stories_tickers:
             return []  # 빠른 반환
@@ -481,8 +494,6 @@ class NewsService:
                         # 미국 공시, 영어: DOCUMENT_TYPE_MAPPING_EN 사용
                         return DOCUMENT_TYPE_MAPPING_EN.get(row["form_type"], row["form_type"])
 
-            print(f"df_disclosure: {df_disclosure}")
-
             # 각 행에 함수 적용하여 매핑된 form_type 생성
             df_disclosure["mapped_form_type"] = df_disclosure.apply(get_form_type_mapping, axis=1)
 
@@ -502,7 +513,8 @@ class NewsService:
         elif not df_disclosure.empty:
             total_df = df_disclosure
 
-        # 종목 현재가 정보 추가 (미리 가져온 데이터 사용)
+        if total_df.empty:
+            return []
         unique_tickers = total_df["ticker"].unique().tolist()
         total_df["price_impact"] = 0.0
 
