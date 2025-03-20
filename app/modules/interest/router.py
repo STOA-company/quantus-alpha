@@ -13,6 +13,16 @@ from app.modules.common.enum import TranslateCountry
 router = APIRouter()
 
 
+@router.get("/groups")
+def get_groups(
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: InterestService = Depends(get_interest_service),
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return service.get_interest_group(current_user.id)
+
+
 @router.get("/{group_id}")
 def get_interest(
     group_id: int,
@@ -57,16 +67,6 @@ def get_columns(lang: Literal["kr", "en"] = "kr"):
     if lang == "en":
         columns = ["Ticker", "Name", "Price", "Change", "Amount", "Volume"]
     return columns
-
-
-@router.get("/groups")
-def get_groups(
-    current_user: AlphafinderUser = Depends(get_current_user),
-    service: InterestService = Depends(get_interest_service),
-):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return service.get_interest_group(current_user.id)
 
 
 @router.post("/groups")
