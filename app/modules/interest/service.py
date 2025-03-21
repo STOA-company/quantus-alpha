@@ -12,7 +12,7 @@ class InterestService:
         self.data_db = database
 
     def get_interest(self, group_id: int, lang: Literal["ko", "en"] = "ko", offset: int = 0, limit: int = 50):
-        interests = self.db._select(table="user_stock_interest", group_id=group_id, order="created_at", ascending=False)
+        interests = self.db._select(table="user_stock_interest", group_id=group_id, order="created_at", ascending=True)
         if not interests:
             return []
         tickers = [interest.ticker for interest in interests]
