@@ -189,6 +189,8 @@ class InterestService:
         redis = NewsLeaderboard()
         news_service = get_news_service()
         ticker_infos = self.get_interest_tickers(group_id)
+        if len(ticker_infos) == 0:
+            return []
         tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
         leaderboard_data = redis.get_leaderboard(tickers=tickers)[:5]
 
@@ -210,6 +212,8 @@ class InterestService:
         redis = DisclosureLeaderboard()
         news_service = get_news_service()
         ticker_infos = self.get_interest_tickers(group_id)
+        if len(ticker_infos) == 0:
+            return []
         tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
         leaderboard_data = redis.get_leaderboard(tickers=tickers)[:5]
 
