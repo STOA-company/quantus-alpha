@@ -107,11 +107,21 @@ def news_detail_v2(
     )
 
 
-@router.post("/increase_search_count", summary="뉴스 검색 증가")
-def increase_search_count(
+@router.post("/news_inquiry", summary="뉴스 조회수 증가")
+def increase_news_search_count(
     news_id: int,
     ticker: str,
     news_service: NewsService = Depends(get_news_service),
 ):
-    news_service.increase_search_count(news_id=news_id, ticker=ticker)
+    news_service.increase_news_search_count(news_id=news_id, ticker=ticker)
+    return BaseResponse(status_code=200, message="Successfully increased search count")
+
+
+@router.post("/disclosure_inquiry", summary="공시 조회수 증가")
+def increase_disclosure_search_count(
+    disclosure_id: int,
+    ticker: str,
+    news_service: NewsService = Depends(get_news_service),
+):
+    news_service.increase_disclosure_search_count(disclosure_id=disclosure_id, ticker=ticker)
     return BaseResponse(status_code=200, message="Successfully increased search count")

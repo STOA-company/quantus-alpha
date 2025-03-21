@@ -1,6 +1,9 @@
 from app.database.crud import database_service, database
 from fastapi import HTTPException
 from typing import List, Literal
+from app.cache.leaderboard import NewsLeaderboard, DisclosureLeaderboard
+from app.modules.news.schemas import NewsRenewalItem, DisclosureRenewalItem
+from app.modules.news.services import get_news_service
 
 
 class InterestService:
@@ -175,6 +178,50 @@ class InterestService:
     def get_interest_count(self, group_id: int):
         count = self.db._select(table="user_stock_interest", group_id=group_id)
         return len(count)
+
+    def get_interest_news_leaderboard(
+        self,
+        group_id: int,
+        lang: Literal["ko", "en"] = "ko",
+    ) -> List[NewsRenewalItem]:
+        redis = NewsLeaderboard()
+        news_service = get_news_service()
+        ticker_infos = self.get_interest_tickers(group_id)
+        tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
+        leaderboard_data = redis.get_leaderboard(tickers=tickers)[:5]
+
+        news_items = []
+        for item in leaderboard_data:
+            news_id = item.get("news_id")
+            if news_id:
+                news_item = news_service.get_news_by_id(news_id, lang)
+                if news_item:
+                    news_items.append(news_item)
+
+        return news_items
+
+    def get_interest_disclosure_leaderboard(
+        self,
+        group_id: int,
+        lang: Literal["ko", "en"] = "ko",
+    ) -> List[DisclosureRenewalItem]:
+        redis = DisclosureLeaderboard()
+        news_service = get_news_service()
+        ticker_infos = self.get_interest_tickers(group_id)
+        tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
+        leaderboard_data = redis.get_leaderboard(tickers=tickers)[:5]
+
+        # 리더보드 데이터를 기반으로 공시 아이템 조회 및 정렬
+        disclosure_items = []
+        for item in leaderboard_data:
+            print("ITEM", item)
+            disclosure_id = item.get("disclosure_id")
+            if disclosure_id:
+                disclosure_item = news_service.get_disclosure_by_id(disclosure_id, lang)
+                if disclosure_item:
+                    disclosure_items.append(disclosure_item)
+
+        return disclosure_items
 
 
 def get_interest_service() -> InterestService:
