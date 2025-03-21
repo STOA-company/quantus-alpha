@@ -15,7 +15,7 @@ from app.modules.disclosure.mapping import (
     DOCUMENT_TYPE_MAPPING_EN,
     FORM_TYPE_MAPPING,
 )
-from app.cache.leaderboard import NewsLeaderboard
+from app.cache.leaderboard import NewsLeaderboard, DisclosureLeaderboard
 
 import numpy as np
 import pandas as pd
@@ -257,6 +257,124 @@ class NewsService:
         )
 
         return disclosure_data
+
+    def get_news_by_id(self, news_id: int, lang: TranslateCountry | None = None) -> Optional[NewsRenewalItem]:
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        condition = {"is_exist": True}
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+            news_name = "kr_name"
+        else:
+            condition["lang"] = "en-US"
+            news_name = "en_name"
+
+        change_rate_column = "change_rt"
+
+        join_info = JoinInfo(  # noqa: E731
+            primary_table="news_analysis",
+            secondary_table="stock_trend",
+            primary_column="ticker",
+            secondary_column="ticker",
+            columns=["current_price", change_rate_column],
+            is_outer=True,
+        )
+
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_analysis",
+                columns=[
+                    "id",
+                    "ticker",
+                    news_name,
+                    "ctry",
+                    "date",
+                    "title",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "that_time_price",
+                    "current_price",
+                    "is_related",
+                    change_rate_column,
+                ],
+                join_info=join_info,
+                id=news_id,
+                **condition,
+            )
+        )
+
+        print("DF NEWS", df_news)
+
+        if df_news.empty:
+            return None
+
+        processed_df = self._process_dataframe_news(df_news)
+        news_items = self._process_price_data(df=processed_df, lang=lang)
+
+        return news_items[0] if news_items else None
+
+    def get_disclosure_by_id(
+        self, disclosure_id: int, lang: TranslateCountry | None = None
+    ) -> Optional[DisclosureRenewalItem]:
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        condition = {"is_exist": True, "id": disclosure_id}
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+            disclosure_name = "ko_name"
+        else:
+            condition["lang"] = "en-US"
+            disclosure_name = "en_name"
+
+        change_rate_column = "change_rt"
+
+        join_info = JoinInfo(  # noqa: E731
+            primary_table="disclosure_information",
+            secondary_table="stock_trend",
+            primary_column="ticker",
+            secondary_column="ticker",
+            columns=["current_price", change_rate_column],
+            is_outer=True,
+        )
+
+        df_disclosure = pd.DataFrame(
+            self.db._select(
+                table="disclosure_information",
+                columns=[
+                    "id",
+                    "ticker",
+                    disclosure_name,
+                    "ctry",
+                    "date",
+                    "url",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "form_type",
+                    "category_type",
+                    "that_time_price",
+                    "current_price",
+                    change_rate_column,
+                ],
+                join_info=join_info,
+                **condition,
+            )
+        )
+
+        if df_disclosure.empty:
+            return None
+
+        processed_df = self._process_dataframe_disclosure(df_disclosure)
+        disclosure_items = self._process_price_data(processed_df, lang=lang, is_disclosure=True)
+
+        return disclosure_items[0] if disclosure_items else None
 
     def _process_price_data(
         self, df: pd.DataFrame, lang: TranslateCountry, is_disclosure: bool = False
@@ -926,9 +1044,13 @@ class NewsService:
 
         return pd.Series(summary1_list, index=summaries.index), pd.Series(summary2_list, index=summaries.index)
 
-    def increase_search_count(self, news_id: int, ticker: str) -> None:
+    def increase_news_search_count(self, news_id: int, ticker: str) -> None:
         redis = NewsLeaderboard()
         redis.increment_score(news_id, ticker)
+
+    def increase_disclosure_search_count(self, disclosure_id: int, ticker: str) -> None:
+        redis = DisclosureLeaderboard()
+        redis.increment_score(disclosure_id, ticker)
 
 
 def get_news_service() -> NewsService:

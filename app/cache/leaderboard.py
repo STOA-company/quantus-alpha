@@ -107,9 +107,7 @@ class NewsLeaderboard(BaseLeaderboard):
         pipe.zincrby(self.DAILY_SEARCH_LEADERBOARD, 1, news_id)
         pipe.execute()
 
-    def get_leaderboard(
-        self, lang: TranslateCountry, tickers: Optional[List[str]] = None, start: int = 0, end: int = 4
-    ) -> List[Dict]:
+    def get_leaderboard(self, tickers: Optional[List[str]] = None, start: int = 0, end: int = 4) -> List[Dict]:
         """뉴스 리더보드 조회"""
         key = self.DAILY_SEARCH_LEADERBOARD
         leaders = self.redis.zrevrange(key, start, end, withscores=True)
@@ -142,4 +140,64 @@ class NewsLeaderboard(BaseLeaderboard):
 
     def reset_daily_leaderboard(self):
         """일일 뉴스 리더보드 초기화"""
+        super().reset_daily_leaderboard(self.DAILY_SEARCH_LEADERBOARD)
+
+
+class DisclosureLeaderboard(BaseLeaderboard):
+    """공시 검색 리더보드"""
+
+    def __init__(self):
+        super().__init__()
+        self.DAILY_SEARCH_LEADERBOARD = "daily_disclosure_search_leaderboard"
+
+    def increment_score(self, disclosure_id: int, ticker: str) -> None:
+        """공시 검색 횟수 증가"""
+        pipe = self.redis.pipeline()
+
+        disclosure_info_key = f"disclosure:{disclosure_id}"
+        pipe.hset(
+            disclosure_info_key,
+            mapping={
+                "disclosure_id": disclosure_id,
+                "ticker": ticker,
+                "last_updated": datetime.now().isoformat(),
+            },
+        )
+
+        pipe.zincrby(self.DAILY_SEARCH_LEADERBOARD, 1, disclosure_id)
+        pipe.execute()
+
+    def get_leaderboard(self, tickers: Optional[List[str]] = None, start: int = 0, end: int = 4) -> List[Dict]:
+        """공시 리더보드 조회"""
+        key = self.DAILY_SEARCH_LEADERBOARD
+        leaders = self.redis.zrevrange(key, start, end, withscores=True)
+
+        result = []
+        for disclosure_id, score in leaders:
+            disclosure_info = self.redis.hgetall(f"disclosure:{disclosure_id}")
+            if disclosure_info:
+                if tickers:
+                    if disclosure_info["ticker"] in tickers:
+                        result.append(
+                            {
+                                "rank": start + len(result) + 1,
+                                "disclosure_id": disclosure_info["disclosure_id"],
+                                "score": int(score),
+                                "last_updated": disclosure_info["last_updated"],
+                            }
+                        )
+                else:
+                    result.append(
+                        {
+                            "rank": start + len(result) + 1,
+                            "disclosure_id": disclosure_info["disclosure_id"],
+                            "score": int(score),
+                            "last_updated": disclosure_info["last_updated"],
+                        }
+                    )
+
+        return result
+
+    def reset_daily_leaderboard(self):
+        """일일 공시 리더보드 초기화"""
         super().reset_daily_leaderboard(self.DAILY_SEARCH_LEADERBOARD)

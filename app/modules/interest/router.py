@@ -9,7 +9,6 @@ from app.modules.news.services import get_news_service, NewsService
 from app.modules.news.schemas import TopStoriesResponse, InterestNewsResponse, InterestDisclosureResponse
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.enum import TranslateCountry
-from app.cache.leaderboard import NewsLeaderboard
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,10 +32,17 @@ def get_news_leaderboard(
     lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
     service: InterestService = Depends(get_interest_service),
 ):
-    redis = NewsLeaderboard()
-    ticker_infos = service.get_interest_tickers(group_id)
-    tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
-    data = redis.get_leaderboard(lang=lang, tickers=tickers)
+    data = service.get_interest_news_leaderboard(group_id, lang)
+    return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
+
+
+@router.get("/disclosure-leaderboard/{group_id}")
+def get_disclosure_leaderboard(
+    group_id: int,
+    lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
+    service: InterestService = Depends(get_interest_service),
+):
+    data = service.get_interest_disclosure_leaderboard(group_id, lang)
     return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
 
 
