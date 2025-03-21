@@ -4,7 +4,7 @@ from app.utils.oauth_utils import get_current_user
 from app.models.models_users import AlphafinderUser
 from app.modules.interest.service import InterestService, get_interest_service
 from app.modules.interest.response import InterestResponse, InterestTable
-from app.modules.interest.request import AddInterestRequest
+from app.modules.interest.request import AddInterestRequest, DeleteInterestRequest
 from app.modules.news.services import get_news_service, NewsService
 from app.modules.news.schemas import TopStoriesResponse, InterestNewsResponse, InterestDisclosureResponse
 from app.modules.common.schemas import BaseResponse
@@ -66,18 +66,17 @@ def add_interest(
 
 @router.delete("/")
 def delete_interest(
-    group_id: int,
-    tickers: List[str],
+    request: DeleteInterestRequest,
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
 ):
     try:
         if not current_user:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        is_deleted = service.delete_interest(group_id, tickers)
+        is_deleted = service.delete_interest(request.group_id, request.tickers)
         if not is_deleted:
             raise HTTPException(status_code=400, detail="관심 종목에 삭제되지 않았습니다.")
-        return {"message": f"관심 종목에서 {', '.join(tickers)}가 삭제되었습니다."}
+        return {"message": f"관심 종목에서 {', '.join(request.tickers)}가 삭제되었습니다."}
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=e.status_code, detail=e.detail)
