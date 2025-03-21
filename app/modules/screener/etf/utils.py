@@ -408,8 +408,20 @@ class ETFFactorExtractor:
         df["rolling_max_1y"] = df.groupby(["Ticker"])["Close_"].transform(lambda x: x.rolling(252, min_periods=1).max())
         df["drawdown_1y"] = (df["Close_"] / df["rolling_max_1y"] - 1) * 100
 
-        # 평균 거래대금
-        df["median_trade"] = df.groupby(["Ticker"])["거래대금"].transform(lambda x: x.rolling(20).median())
+        # 평균 거래대금을 1개월(약 21 영업일) 중앙값으로 변경
+        # 현재 날짜에서 1개월 전 날짜를 계산
+        today = df["MarketDate"].max()
+        one_m_ago = today - pd.DateOffset(months=1)
+
+        # 지난 1개월 데이터만 필터링
+        monthly_data = df[(df["MarketDate"] >= one_m_ago) & (df["MarketDate"] <= today)]
+
+        # 종목별 거래대금 중앙값 계산
+        median_trade = monthly_data.groupby(["Ticker"])["거래대금"].median().reset_index()
+        median_trade.rename(columns={"거래대금": "median_trade"}, inplace=True)
+
+        # 계산된 중앙값을 원본 데이터프레임에 병합
+        df = pd.merge(df, median_trade, how="left", on=["Ticker"])
 
         # 필요 없는 중간 계산 컬럼 제거
         df.drop(columns=["rolling_max_1y"], inplace=True)
@@ -2163,24 +2175,6 @@ class ETFDataMerger:
 
 # 사용 예시
 if __name__ == "__main__":
-    downloader = ETFDataDownloader()
-    downloader.download_etf_dividend(ctry="KR", download=True)
-    downloader.download_etf_dividend(ctry="US", download=True)
-
-    # try:
-    #     # 크롤러 초기화 (데이터베이스 연결 없이)
-    #     # headless=False로 설정하면 브라우저 창이 표시됨 (디버깅에 유용)
-    #     crawler = MorningstarETFCrawler(headless=False)
-
-    #     # 선택 1: ETF 별점 및 운용사 정보 수집
-    #     results, filename = crawler.get_etf_info("US", max_tickers=None)
-
-    #     # 선택 2: ETF 비용 비율 정보 수집
-    #     # results, filename = crawler.get_etf_expense_ratios("US", max_tickers=None)
-
-    #     print(f"크롤링 완료! 결과가 {filename}에 저장되었습니다.")
-
-    # finally:
-    #     # 예외 발생 여부와 관계없이 브라우저 종료
-    #     if "crawler" in locals():
-    #         crawler.close()
+    extractor = ETFFactorExtractor()
+    df = extractor.calculate_all_factors(ctry="KR")
+    df.to_parquet("test.parquet")
