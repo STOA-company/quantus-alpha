@@ -131,7 +131,7 @@ class InterestService:
         if not group:
             raise HTTPException(status_code=404, detail="관심 그룹이 존재하지 않습니다.")
         if name == group[0].name:
-            raise HTTPException(status_code=400, detail="기존 이름과 동일합니다.")
+            raise HTTPException(status_code=409, detail="기존 이름과 동일합니다.")
         try:
             self.db._update(table="interest_group", id=group_id, sets={"name": name})
         except Exception as e:
