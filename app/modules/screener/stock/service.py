@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from app.modules.screener.stock.schemas import MarketEnum
 from app.modules.screener.utils import screener_utils
-from app.common.constants import NON_NUMERIC_COLUMNS, UNIT_MAP, FACTOR_MAP, FACTOR_MAP_EN
+from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, FACTOR_MAP_EN, UNIT_MAP
 from app.core.exception.custom import CustomException
 from app.modules.screener.base import BaseScreenerService
 
@@ -23,7 +23,7 @@ class ScreenerStockService(BaseScreenerService):
         """주식 관련 서비스임을 표시"""
         return True
 
-    def get_factors(self, market: Optional[MarketEnum] = None, lang: str = "kr"):
+    def get_factors(self, market: Optional[MarketEnum] = None):
         """
         팩터 정보 조회
         """
@@ -47,11 +47,9 @@ class ScreenerStockService(BaseScreenerService):
                     unit = UNIT_MAP[factor["unit"]]
                     type = "slider"
 
-                factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
                 result.append(
                     {
                         "factor": factor["factor"],
-                        "display": factor_map[factor["factor"]],
                         "description": factor["description"],
                         "unit": unit,
                         "category": factor["category"],
@@ -70,10 +68,10 @@ class ScreenerStockService(BaseScreenerService):
 
     def get_filtered_stocks(
         self,
-        market_filter: Optional[MarketEnum] = MarketEnum.ALL,
+        market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
-        columns: Optional[List[str]] = [],
+        columns: Optional[List[str]] = None,
         limit: Optional[int] = 50,
         offset: Optional[int] = 0,
         sort_by: Optional[str] = "score",
@@ -84,16 +82,7 @@ class ScreenerStockService(BaseScreenerService):
         필터링된 주식 목록 조회
         """
         try:
-            if sort_by not in columns and sort_by not in [
-                "Code",
-                "Name",
-                "Name_en",
-                "country",
-                "market",
-                "sector",
-                "sector_en",
-                "score",
-            ]:
+            if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
 
             if sector_filter:
@@ -117,26 +106,31 @@ class ScreenerStockService(BaseScreenerService):
             factors = factors_cache.get_configs()
             result = []
 
-            if lang == "en":
-                sorted_df["sector"] = sorted_df["sector_en"] if "sector" in columns else None
-                sorted_df["Name"] = sorted_df["Name_en"] if "Name" in columns else None
+            if columns:
+                ordered_columns = []
+                for col in columns:
+                    mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
+                    if mapped_col not in ordered_columns:
+                        ordered_columns.append(mapped_col)
+            else:
+                ordered_columns = ["Code", "Name", "score", "country"]
 
-            sorted_df = sorted_df[columns]
+            selected_columns = ordered_columns.copy()
 
-            factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
+            sorted_df = sorted_df[selected_columns]
 
             for _, row in sorted_df.iterrows():
                 stock_data = {}
 
-                for col in columns:
+                for col in selected_columns:
                     if col in NON_NUMERIC_COLUMNS:
                         if col in row:
-                            stock_data[col] = {"display": factor_map[col], "value": row[col], "unit": ""}
+                            stock_data[col] = row[col]
                     elif col == "score":
-                        stock_data[col] = {"display": factor_map["score"], "value": float(row[col]), "unit": ""}
+                        stock_data[col] = {"value": float(row[col]), "unit": ""}
                     elif col in row:
                         if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
-                            stock_data[col] = {"display": factor_map[col], "value": "", "unit": ""}
+                            stock_data[col] = {"value": "", "unit": ""}
                         else:
                             value, unit = screener_utils.convert_unit_and_value(
                                 market_filter,
@@ -144,11 +138,24 @@ class ScreenerStockService(BaseScreenerService):
                                 factors[col].get("unit", "") if col in factors else "",
                                 lang,
                             )
-                            stock_data[col] = {"display": factor_map[col], "value": value, "unit": unit}
+                            stock_data[col] = {"value": value, "unit": unit}
 
                 result.append(stock_data)
 
-            return result, total_count
+            factor_map = FACTOR_MAP
+            if lang == "en":
+                factor_map = FACTOR_MAP_EN
+
+            mapped_result = []
+            for item in result:
+                mapped_item = {}
+                for key in ordered_columns:
+                    if key in item:
+                        mapped_key = factor_map.get(key, key)
+                        mapped_item[mapped_key] = item[key]
+                mapped_result.append(mapped_item)
+
+            return mapped_result, total_count
 
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks: {e}")
