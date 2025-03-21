@@ -5,19 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from app.batches.run_etf_screener import run_etf_screener_data
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
-from app.modules.screener.stock.schemas import (
-    FactorResponse,
-    GroupFilter,
-    GroupFilterResponse,
-    GroupMetaData,
-    FactorCodeValue,
-)
+from app.modules.screener.stock.schemas import FactorResponse, GroupFilter, GroupFilterResponse, GroupMetaData
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.etf.schemas import FilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
 from app.utils.oauth_utils import get_current_user
 from app.core.logging.config import get_logger
-from app.common.constants import FACTOR_MAP, FACTOR_MAP_EN
+from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN, ETF_MARKET_MAP
 from app.core.exception.base import CustomException
 
 router = APIRouter()
@@ -25,14 +19,12 @@ logger = get_logger(__name__)
 
 
 @router.get("/factors/{market}", response_model=List[FactorResponse])
-def get_factors(
-    market: ETFMarketEnum, lang: str = "kr", screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)
-):
+def get_factors(market: ETFMarketEnum, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
     """
     모든 팩터 조회
     """
     try:
-        factors = screener_etf_service.get_factors(market, lang)
+        factors = screener_etf_service.get_factors(market)
         result = [FactorResponse(**factor) for factor in factors]
         result = [factor_response for factor_response in result if factor_response.factor != "총 수수료"]
         return result
@@ -48,7 +40,7 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
         if filtered_etf.custom_filters:
             custom_filters = [
                 {
-                    "factor": condition.factor,
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
                     "above": condition.above,
                     "below": condition.below,
                 }
@@ -56,15 +48,18 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
             ]
 
         request_columns = ["Code", "Name", "manager", "country"]
+        reverse_factor_map = REVERSE_FACTOR_MAP
+        if filtered_etf.lang == "en":
+            reverse_factor_map = REVERSE_FACTOR_MAP_EN
 
-        for column in filtered_etf.factor_filters:
+        for column in [reverse_factor_map[column] for column in filtered_etf.factor_filters]:
             if column not in request_columns:
                 request_columns.append(column)
 
         sort_by = "score"
         ascending = False
         if filtered_etf.sort_info:
-            sort_by = filtered_etf.sort_info.sort_by
+            sort_by = reverse_factor_map[filtered_etf.sort_info.sort_by]
             ascending = filtered_etf.sort_info.ascending
 
         etfs_data, total_count = screener_etf_service.get_filtered_data(
@@ -79,6 +74,11 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
         )
 
         has_next = filtered_etf.offset * filtered_etf.limit + filtered_etf.limit < total_count
+
+        print("ETF", etfs_data[0].keys())
+        if filtered_etf.lang == "kr":
+            for etf in etfs_data:
+                etf["시장"] = ETF_MARKET_MAP[etf["시장"]]
 
         result = {"data": etfs_data, "has_next": has_next}
         return result
@@ -98,7 +98,7 @@ def get_filtered_etfs_count(
     if filtered_etf.custom_filters:
         custom_filters = [
             {
-                "factor": condition.factor,
+                "factor": REVERSE_FACTOR_MAP[condition.factor],
                 "above": condition.above,
                 "below": condition.below,
             }
@@ -109,7 +109,7 @@ def get_filtered_etfs_count(
         market_filter=filtered_etf.market_filter,
         custom_filters=custom_filters,
         sector_filter=None,
-        columns=filtered_etf.factor_filters,
+        columns=[REVERSE_FACTOR_MAP[column] for column in filtered_etf.factor_filters],
     )
 
     return {"count": total_count}
@@ -133,7 +133,7 @@ def download_filtered_etfs(
         market_filter=filtered_etf.market_filter,
         sector_filter=filtered_etf.sector_filter,
         custom_filters=custom_filters,
-        columns=filtered_etf.factor_filters,
+        columns=[REVERSE_FACTOR_MAP[column] for column in filtered_etf.factor_filters],
     )
 
     stream = io.StringIO()
@@ -220,79 +220,69 @@ def get_group_filters(
         technical_columns = screener_etf_service.get_columns(group_id, CategoryEnum.TECHNICAL, type=StockType.ETF)
         dividend_columns = screener_etf_service.get_columns(group_id, CategoryEnum.DIVIDEND, type=StockType.ETF)
 
+        if lang == "en":
+            technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
+            dividend_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in dividend_columns]
+
         technical_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
         dividend_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.DIVIDEND)
         custom_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
 
-        # 기본값 설정
-        group_name = "기본"
-        market_filter = ETFMarketEnum.US
-        has_custom = False
-        custom_factor_filters = []
-        custom_filters = []
+        if group_id == -1:
+            return GroupFilterResponse(
+                id=-1,
+                name="기본",
+                market_filter=ETFMarketEnum.US,
+                type=StockType.ETF,
+                has_custom=False,
+                sector_filter=[],
+                custom_filters=[],
+                factor_filters={"technical": technical_columns, "dividend": dividend_columns, "custom": []},
+                sort_info={
+                    CategoryEnum.TECHNICAL: technical_sort_info,
+                    CategoryEnum.DIVIDEND: dividend_sort_info,
+                    CategoryEnum.CUSTOM: custom_sort_info,
+                },
+            )
+
+        group_filters = screener_etf_service.get_group_filters(group_id)
+        stock_filters = group_filters["stock_filters"]
+
+        market_filter = None
         sector_filter = []
+        custom_filters = []
 
-        if group_id != -1:
-            group_filters = screener_etf_service.get_group_filters(group_id)
-            stock_filters = group_filters["stock_filters"]
+        for stock_filter in stock_filters:
+            if stock_filter["factor"] == "시장":
+                market_filter = stock_filter["value"]
+            elif stock_filter["factor"] == "산업":
+                continue
+            else:
+                custom_filters.append(stock_filter)
 
-            group_name = group_filters["name"]
-            has_custom = group_filters["has_custom"]
-            custom_factor_filters = group_filters["custom_factor_filters"]
+        custom_factor_filters = group_filters["custom_factor_filters"]
 
-            for stock_filter in stock_filters:
-                if stock_filter["factor"] == "시장":
-                    market_filter = stock_filter["value"]
-                elif stock_filter["factor"] == "산업":
-                    continue
-                else:
-                    custom_filters.append(stock_filter)
+        if lang == "en":
+            custom_factor_filters = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in custom_factor_filters]
 
-        technical = []
-        dividend = []
-        custom = []
-
-        factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
-
-        for column in technical_columns:
-            technical.append(FactorCodeValue(code=column, value=factor_map[column]))
-
-        for column in dividend_columns:
-            dividend.append(FactorCodeValue(code=column, value=factor_map[column]))
-
-        for column in custom_factor_filters:
-            custom.append(FactorCodeValue(code=column, value=factor_map[column]))
-
-        # sort_info 객체 변환
-        technical_sort_info.sort_by = FactorCodeValue(
-            code=technical_sort_info.sort_by, value=factor_map[technical_sort_info.sort_by]
-        )
-        dividend_sort_info.sort_by = FactorCodeValue(
-            code=dividend_sort_info.sort_by, value=factor_map[dividend_sort_info.sort_by]
-        )
-        custom_sort_info.sort_by = FactorCodeValue(
-            code=custom_sort_info.sort_by, value=factor_map[custom_sort_info.sort_by]
-        )
-
-        # 공통 리턴문
         return GroupFilterResponse(
             id=group_id,
-            name=group_name,
-            market_filter=market_filter,
+            name=group_filters["name"],
+            market_filter=market_filter if market_filter else ETFMarketEnum.US,
             type=StockType.ETF,
-            has_custom=has_custom,
             sector_filter=sector_filter,
             custom_filters=custom_filters,
             factor_filters={
-                "technical": technical,
-                "dividend": dividend,
-                "custom": custom,
+                "technical": technical_columns,
+                "dividend": dividend_columns,
+                "custom": custom_factor_filters,
             },
             sort_info={
                 CategoryEnum.TECHNICAL: technical_sort_info,
                 CategoryEnum.DIVIDEND: dividend_sort_info,
                 CategoryEnum.CUSTOM: custom_sort_info,
             },
+            has_custom=group_filters["has_custom"],
         )
     except Exception as e:
         logger.error(f"Error getting group filters: {e}")

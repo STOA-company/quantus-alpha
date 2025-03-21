@@ -6,11 +6,11 @@ import numpy as np
 import pandas as pd
 from Aws.logic.s3 import get_data_from_bucket
 from app.common.constants import (
+    FACTOR_MAP,
+    FACTOR_MAP_EN,
     NON_NUMERIC_COLUMNS_ETF,
     PARQUET_DIR,
     UNIT_MAP,
-    FACTOR_MAP,
-    FACTOR_MAP_EN,
 )
 from app.core.exception.base import CustomException
 from app.core.logging.config import get_logger
@@ -33,7 +33,7 @@ class ScreenerETFService(BaseScreenerService):
     def _is_stock(self) -> bool:
         return False
 
-    def get_factors(self, market: ETFMarketEnum, lang: str = "kr"):
+    def get_factors(self, market: ETFMarketEnum):
         """
         ETF 팩터 정보 조회
         """
@@ -57,11 +57,9 @@ class ScreenerETFService(BaseScreenerService):
                     unit = UNIT_MAP[factor["unit"]]
                     type = "slider"
 
-                factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
                 result.append(
                     {
                         "factor": factor["factor"],
-                        "display": factor_map[factor["factor"]],
                         "description": factor["description"],
                         "unit": unit,
                         "category": factor["category"],
@@ -119,7 +117,18 @@ class ScreenerETFService(BaseScreenerService):
         factors = etf_factors_cache.get_configs()
         result = []
 
-        factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
+        if columns:
+            ordered_columns = []
+            for col in columns:
+                mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
+                if mapped_col not in ordered_columns:
+                    ordered_columns.append(mapped_col)
+        else:
+            ordered_columns = ["Code", "Name", "manager", "score", "country"]
+
+        selected_columns = ordered_columns.copy()
+
+        sorted_df = sorted_df[selected_columns]
 
         for _, row in sorted_df.iterrows():
             # 기본으로 표시될 컬럼들
@@ -129,14 +138,14 @@ class ScreenerETFService(BaseScreenerService):
             for col in sorted_df.columns:
                 if col in NON_NUMERIC_COLUMNS_ETF:
                     if col in row:
-                        etf_data[col] = {"display": factor_map[col], "value": row[col], "unit": ""}
+                        etf_data[col] = row[col]
                 elif col == "score":
-                    etf_data[col] = {"display": factor_map["score"], "value": float(row[col]), "unit": ""}
+                    etf_data[col] = float(row[col])
                 elif col in row:
                     if col in row:
                         if isinstance(row[col], (int, float)):  # 값이 숫자인지 확인
                             if pd.isna(row[col]) or np.isinf(row[col]):
-                                etf_data[col] = {"display": factor_map[col], "value": "", "unit": ""}
+                                etf_data[col] = {"value": "", "unit": ""}
                             else:
                                 value, unit = screener_utils.convert_unit_and_value(
                                     market_filter,
@@ -144,16 +153,25 @@ class ScreenerETFService(BaseScreenerService):
                                     factors[col].get("unit", "") if col in factors else "",
                                     lang,
                                 )
-                                etf_data[col] = {"display": factor_map[col], "value": value, "unit": unit}
+                                etf_data[col] = {"value": value, "unit": unit}
                         else:  # 숫자가 아닌 타입 처리
                             if pd.isna(row[col]):
-                                etf_data[col] = {"display": factor_map[col], "value": "", "unit": ""}
+                                etf_data[col] = {"value": "", "unit": ""}
                             else:
-                                etf_data[col] = {"display": factor_map[col], "value": str(row[col]), "unit": ""}
+                                etf_data[col] = {"value": str(row[col]), "unit": ""}
 
             result.append(etf_data)
 
-        return result, total_count
+        mapped_result = []
+        factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
+        for item in result:
+            mapped_item = {}
+            for key, value in item.items():
+                mapped_key = factor_map.get(key, key)
+                mapped_item[mapped_key] = value
+            mapped_result.append(mapped_item)
+
+        return mapped_result, total_count
 
     def get_filtered_data(self, **kwargs):
         """

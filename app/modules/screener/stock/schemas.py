@@ -15,14 +15,8 @@ class MarketEnum(str, Enum):
     ALL = "all"
 
 
-class FactorCodeValue(BaseModel):
-    code: str
-    value: str
-
-
 class FactorResponse(BaseModel):
     factor: str
-    display: str
     description: str
     unit: str
     category: CategoryEnum
@@ -64,21 +58,12 @@ class GroupFilter(BaseModel):
     sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None
 
 
-class GroupFilterResponse(BaseModel):
-    id: Optional[int] = None
-    name: Optional[str] = None
-    type: Optional[StockType] = StockType.STOCK
-    market_filter: Optional[MarketEnum] = MarketEnum.US
-    sector_filter: Optional[List[str]] = None
-    category: Optional[CategoryEnum] = None
-    custom_filters: Optional[List[FilterCondition]] = None
-    factor_filters: Optional[Dict[str, List[FactorCodeValue]]] = None
-    sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None
+class GroupFilterResponse(GroupFilter):
     has_custom: bool = False
 
 
 class FilteredStocks(BaseModel):
-    market_filter: Optional[MarketEnum] = MarketEnum.ALL
+    market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
     factor_filters: Optional[List[str]] = None
