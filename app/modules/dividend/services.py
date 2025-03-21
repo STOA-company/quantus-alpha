@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from app.common.constants import UTC
 from app.modules.common.enum import Country, FinancialCountry
 from app.modules.dividend.schemas import DividendItem, DividendDetail, DividendYearResponse
@@ -195,7 +196,7 @@ class DividendService:
 
         # ticker가 없는 경우 체크
         if df1.empty:
-            raise Exception(f"없는 ticker입니다: {ticker}")
+            raise HTTPException(status_code=400, detail=f"없는 ticker입니다: {ticker}")
         # 시간 순으로 정렬
         df1["payment_date"] = pd.to_datetime(df1["payment_date"]).dt.strftime("%Y-%m-%d")
         df1["ex_date"] = pd.to_datetime(df1["ex_date"]).dt.strftime("%Y-%m-%d")
