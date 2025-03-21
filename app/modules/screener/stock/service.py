@@ -123,7 +123,7 @@ class ScreenerStockService(BaseScreenerService):
 
             sorted_df = sorted_df[columns]
 
-            factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
+            # factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
 
             for _, row in sorted_df.iterrows():
                 stock_data = {}
@@ -131,12 +131,15 @@ class ScreenerStockService(BaseScreenerService):
                 for col in columns:
                     if col in NON_NUMERIC_COLUMNS:
                         if col in row:
-                            stock_data[col] = {"display": factor_map[col], "value": row[col], "unit": ""}
+                            # stock_data[col] = {"display": factor_map[col], "value": row[col], "unit": ""}
+                            stock_data[col] = row[col]
                     elif col == "score":
-                        stock_data[col] = {"display": factor_map["score"], "value": float(row[col]), "unit": ""}
+                        # stock_data[col] = {"display": factor_map["score"], "value": float(row[col]), "unit": ""}
+                        stock_data[col] = {"value": float(row[col]), "unit": ""}
                     elif col in row:
                         if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
-                            stock_data[col] = {"display": factor_map[col], "value": "", "unit": ""}
+                            # stock_data[col] = {"display": factor_map[col], "value": "", "unit": ""}
+                            stock_data[col] = {"value": "", "unit": ""}
                         else:
                             value, unit = screener_utils.convert_unit_and_value(
                                 market_filter,
@@ -144,7 +147,8 @@ class ScreenerStockService(BaseScreenerService):
                                 factors[col].get("unit", "") if col in factors else "",
                                 lang,
                             )
-                            stock_data[col] = {"display": factor_map[col], "value": value, "unit": unit}
+                            # stock_data[col] = {"display": factor_map[col], "value": value, "unit": unit}
+                            stock_data[col] = {"value": value, "unit": unit}
 
                 result.append(stock_data)
 
