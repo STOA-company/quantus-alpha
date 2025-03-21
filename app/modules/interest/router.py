@@ -176,6 +176,15 @@ def get_interest_tickers(
     ]
 
 
+@router.get("/{group_id}/count")
+def get_interest_count(
+    group_id: int,
+    service: InterestService = Depends(get_interest_service),
+):
+    count = service.get_interest_count(group_id)
+    return {"count": count}
+
+
 @router.get("/{group_id}")
 def get_interest(
     group_id: int,
