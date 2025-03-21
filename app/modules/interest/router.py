@@ -149,6 +149,12 @@ def interest_news(
     service: InterestService = Depends(get_interest_service),
 ):
     ticker_infos = service.get_interest_tickers(group_id)
+    if len(ticker_infos) == 0:
+        return BaseResponse(
+            status_code=200,
+            message="Successfully retrieved news data",
+            data=InterestNewsResponse(news=[], has_next=False),
+        )
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     total_news_data = news_service.get_news(lang=lang, tickers=tickers)
     news_data = total_news_data[offset * limit : offset * limit + limit]
@@ -169,6 +175,12 @@ def interest_disclosure(
     service: InterestService = Depends(get_interest_service),
 ):
     ticker_infos = service.get_interest_tickers(group_id)
+    if len(ticker_infos) == 0:
+        return BaseResponse(
+            status_code=200,
+            message="Successfully retrieved news data",
+            data=InterestDisclosureResponse(disclosure=[], has_next=False),
+        )
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     total_disclosure_data = news_service.get_disclosure(lang=lang, tickers=tickers)
     disclosure_data = total_disclosure_data[offset * limit : offset * limit + limit]
@@ -188,6 +200,8 @@ def top_stories(
     service: InterestService = Depends(get_interest_service),
 ):
     ticker_infos = service.get_interest_tickers(group_id)
+    if len(ticker_infos) == 0:
+        return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     data = news_service.top_stories(request=request, tickers=tickers, lang=lang)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
