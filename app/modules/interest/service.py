@@ -106,7 +106,9 @@ class InterestService:
         return True
 
     def get_interest_group(self, user_id: int):
-        groups = self.db._select(table="interest_group", user_id=user_id)
+        groups = self.db._select(table="interest_group", user_id=user_id, order="created_at", ascending=True)
+        if not groups:
+            return []
         return [{"id": group.id, "name": group.name} for group in groups]
 
     def create_interest_group(self, user_id: int, name: str):
