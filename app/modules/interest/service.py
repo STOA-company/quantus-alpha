@@ -4,6 +4,8 @@ from typing import List, Literal
 from app.cache.leaderboard import NewsLeaderboard, DisclosureLeaderboard
 from app.modules.news.schemas import NewsRenewalItem, DisclosureRenewalItem
 from app.modules.news.services import get_news_service
+from app.core.exception.base import DuplicateException, NotFoundException
+from sqlalchemy.exc import IntegrityError
 
 
 class InterestService:
@@ -112,14 +114,18 @@ class InterestService:
         return [{"id": group.id, "name": group.name} for group in groups]
 
     def create_interest_group(self, user_id: int, name: str):
-        group = self.db._select(table="interest_group", user_id=user_id, name=name, limit=1)
-        if group:
-            raise HTTPException(status_code=400, detail="이미 존재하는 관심 그룹입니다.")
         try:
+            group = self.db._select(table="interest_group", user_id=user_id, name=name, limit=1)
+            if group:
+                raise DuplicateException(message="이미 존재하는 관심 그룹입니다.")
             self.db._insert(table="interest_group", sets={"user_id": user_id, "name": name})
+            return True
+        except IntegrityError:
+            raise HTTPException(status_code=409, detail="이미 사용 중인 그룹 이름입니다.")
+        except DuplicateException as e:
+            raise HTTPException(status_code=e.status_code, detail=e.message)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
-        return True
 
     def delete_interest_group(self, group_id: int):
         try:
@@ -129,17 +135,23 @@ class InterestService:
         return True
 
     def update_interest_group_name(self, group_id: int, name: str):
-        group = self.db._select(table="interest_group", id=group_id, limit=1)
-        if not group:
-            raise HTTPException(status_code=404, detail="관심 그룹이 존재하지 않습니다.")
-        if name == group[0].name:
-            raise HTTPException(status_code=409, detail="기존 이름과 동일합니다.")
         try:
+            group = self.db._select(table="interest_group", id=group_id, limit=1)
+            if not group:
+                raise NotFoundException(message="관심 그룹이 존재하지 않습니다.")
+            if name == group[0].name:
+                raise DuplicateException(message="기존 이름과 동일합니다.")
             self.db._update(table="interest_group", id=group_id, sets={"name": name})
+            return True
+
+        except NotFoundException as e:
+            raise HTTPException(status_code=e.status_code, detail=e.message)
+        except DuplicateException as e:
+            raise HTTPException(status_code=e.status_code, detail=e.message)
+        except IntegrityError:
+            raise HTTPException(status_code=409, detail="이미 사용 중인 그룹 이름입니다.")
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
-
-        return True
 
     def get_won_unit(self, number, lang):
         if isinstance(number, str):
