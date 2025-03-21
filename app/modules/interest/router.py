@@ -9,6 +9,7 @@ from app.modules.news.services import get_news_service, NewsService
 from app.modules.news.schemas import TopStoriesResponse, InterestNewsResponse, InterestDisclosureResponse
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.enum import TranslateCountry
+from app.core.exception.base import DuplicateException, NotFoundException
 import logging
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,9 @@ def create_group(
         if not current_user:
             raise HTTPException(status_code=401, detail="Unauthorized")
         return service.create_interest_group(current_user.id, name)
+    except DuplicateException as e:
+        logger.exception(e)
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=e.status_code, detail=e.detail)
@@ -130,10 +134,14 @@ def update_group_name(
     try:
         if not current_user:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        is_updated = service.update_interest_group_name(group_id, name)
-        if not is_updated:
-            raise HTTPException(status_code=400, detail="관심 그룹 이름 수정에 실패했습니다.")
+        service.update_interest_group_name(group_id, name)
         return {"message": f"관심 그룹 이름이 {name}으로 수정되었습니다."}
+    except NotFoundException as e:
+        logger.exception(e)
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except DuplicateException as e:
+        logger.exception(e)
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=e.status_code, detail=e.detail)
