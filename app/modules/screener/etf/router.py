@@ -79,7 +79,9 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
         print("ETF", etfs_data[0].keys())
         if filtered_etf.lang == "kr":
             for etf in etfs_data:
-                etf["시장"] = ETF_MARKET_MAP[etf["시장"]]
+                # 시장 키가 있는지 확인 후 처리
+                if "시장" in etf and etf["시장"] in ETF_MARKET_MAP:
+                    etf["시장"] = ETF_MARKET_MAP[etf["시장"]]
 
         result = {"data": etfs_data, "has_next": has_next}
         return result
