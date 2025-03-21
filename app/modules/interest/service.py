@@ -14,7 +14,7 @@ class InterestService:
     def get_interest(self, group_id: int, lang: Literal["ko", "en"] = "ko", offset: int = 0, limit: int = 50):
         interests = self.db._select(table="user_stock_interest", group_id=group_id, order="created_at", ascending=True)
         if not interests:
-            return []
+            return {"has_next": False, "data": []}
         tickers = [interest.ticker for interest in interests]
         name_column = "kr_name" if lang == "ko" else "en_name"
         table = self.data_db._select(
