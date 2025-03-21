@@ -301,6 +301,46 @@ class ScreenerUtils:
 
         df.to_parquet("parquet/global_stock_factors.parquet")
 
+    def process_global_etf_factor_data(self):
+        big_price_columns = [
+            "marketCap",
+            "median_trade",
+        ]
+        small_price_columns = ["ba_absolute_spread", "ba_relative_spread", "close", "last_dividend_per_share"]
+
+        manager = KISAPIManager()
+        exchange_rate = manager.get_api().get_exchange_rates()
+
+        kr_df = self.etf_factor_loader.load_etf_factors(ETFMarketEnum.KR)
+        us_df = self.etf_factor_loader.load_etf_factors(ETFMarketEnum.US)
+
+        for column in big_price_columns:
+            kr_df[column] = self.convert_krw_billion_to_usd(kr_df[column], exchange_rate)
+        for column in small_price_columns:
+            kr_df[column] = kr_df[column] / exchange_rate
+
+        kr_df["country"] = "kr"
+        us_df["country"] = "us"
+
+        # 문자열 형태의 숫자를 실수형으로 변환
+        if "total_fee" in kr_df.columns:
+            kr_df["total_fee"] = pd.to_numeric(kr_df["total_fee"], errors="coerce")
+
+        if "total_fee" in us_df.columns:
+            us_df["total_fee"] = pd.to_numeric(us_df["total_fee"], errors="coerce")
+
+        # 모든 숫자형 컬럼을 float64로 통일
+        for column in kr_df.columns:
+            if np.issubdtype(kr_df[column].dtype, np.number):
+                kr_df[column] = kr_df[column].astype(np.float64)
+        for column in us_df.columns:
+            if np.issubdtype(us_df[column].dtype, np.number):
+                us_df[column] = us_df[column].astype(np.float64)
+
+        df = pd.concat([kr_df, us_df])
+
+        df.to_parquet("parquet/global_etf_factors.parquet")
+
     def get_df_from_parquet(self, market_filter: MarketEnum) -> pd.DataFrame:
         df = None
         if market_filter:

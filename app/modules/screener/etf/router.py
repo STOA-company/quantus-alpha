@@ -13,6 +13,7 @@ from app.utils.oauth_utils import get_current_user
 from app.core.logging.config import get_logger
 from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN, ETF_MARKET_MAP
 from app.core.exception.base import CustomException
+from app.modules.screener.utils import screener_utils
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -343,8 +344,9 @@ def update_group_name(group_id: int, name: str, screener_etf_service: ScreenerET
 @router.get("/parquet/{ctry}")
 def update_parquet(ctry: Literal["KR", "US"], screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
     try:
-        result = screener_etf_service.update_parquet(ctry=ctry)
-        return result
+        screener_etf_service.update_parquet(ctry=ctry)
+        screener_utils.process_global_etf_factor_data()
+        return {"message": "Parquet updated successfully"}
     except Exception as e:
         logger.exception(e)
         raise e
