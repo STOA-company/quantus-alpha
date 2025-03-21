@@ -161,11 +161,11 @@ class InterestService:
             if number < 100000000:  # 1억 미만
                 return (number, "원")
             elif number < 1000000000000:  # 1조 미만
-                return (float(number / 100000000), "억원")
+                return (round(float(number / 100000000), 0), "억원")
             elif number < 10000000000000000:  # 1경 미만
-                return (float(number / 1000000000000), "조원")
+                return (round(float(number / 1000000000000), 2), "조원")
             else:
-                return (float(number / 10000000000000000), "경원")
+                return (round(float(number / 10000000000000000), 0), "경원")
         else:
             if number < 1000000:  # 1K 미만
                 return (number, "₩")
