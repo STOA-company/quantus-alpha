@@ -121,7 +121,7 @@ class InterestService:
 
     def delete_interest_group(self, group_id: int):
         try:
-            self.db._delete(table="interest_group", group_id=group_id)
+            self.db._delete(table="interest_group", id=group_id)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
         return True
