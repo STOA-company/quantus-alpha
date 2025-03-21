@@ -172,6 +172,10 @@ class InterestService:
         else:
             return (float(number / 1000000000000), "T$")
 
+    def get_interest_count(self, group_id: int):
+        count = self.db._select(table="user_stock_interest", group_id=group_id)
+        return len(count)
+
 
 def get_interest_service() -> InterestService:
     return InterestService()
