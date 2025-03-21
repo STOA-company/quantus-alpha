@@ -79,6 +79,16 @@ class NewsRenewalResponse(BaseModel):
     disclosure: list[DisclosureRenewalItem]
 
 
+class InterestNewsResponse(BaseModel):
+    news: list[NewsRenewalItem]
+    has_next: bool
+
+
+class InterestDisclosureResponse(BaseModel):
+    disclosure: list[DisclosureRenewalItem]
+    has_next: bool
+
+
 class LatestNewsResponse(BaseModel):
     date: datetime
     content: str

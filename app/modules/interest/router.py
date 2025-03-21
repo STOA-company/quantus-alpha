@@ -6,7 +6,7 @@ from app.modules.interest.service import InterestService, get_interest_service
 from app.modules.interest.response import InterestResponse, InterestTable
 from app.modules.interest.request import AddInterestRequest
 from app.modules.news.services import get_news_service, NewsService
-from app.modules.news.schemas import NewsRenewalResponse, TopStoriesResponse
+from app.modules.news.schemas import TopStoriesResponse, InterestNewsResponse, InterestDisclosureResponse
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.enum import TranslateCountry
 from app.cache.leaderboard import NewsLeaderboard
@@ -134,18 +134,42 @@ def update_group_name(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
-@router.get("/news/{group_id}", response_model=BaseResponse[NewsRenewalResponse])
+@router.get("/news/{group_id}", response_model=BaseResponse[InterestNewsResponse])
 def interest_news(
     group_id: int,
-    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
+    offset: Annotated[int, Query(description="페이지 번호, 기본값: 0")] = 0,
+    limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
 ):
     ticker_infos = service.get_interest_tickers(group_id)
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
-    news_data, disclosure_data = news_service.get_renewal_data(lang=lang, tickers=tickers)
+    total_news_data = news_service.get_news(lang=lang, tickers=tickers)
+    news_data = total_news_data[offset * limit : offset * limit + limit]
+    has_next = len(total_news_data) > offset * limit + limit
 
-    response_data = NewsRenewalResponse(news=news_data, disclosure=disclosure_data)
+    response_data = InterestNewsResponse(news=news_data, has_next=has_next)
+
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data)
+
+
+@router.get("/disclosure/{group_id}", response_model=BaseResponse[InterestDisclosureResponse])
+def interest_disclosure(
+    group_id: int,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
+    offset: Annotated[int, Query(description="페이지 번호, 기본값: 0")] = 0,
+    limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
+    news_service: NewsService = Depends(get_news_service),
+    service: InterestService = Depends(get_interest_service),
+):
+    ticker_infos = service.get_interest_tickers(group_id)
+    tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
+    total_disclosure_data = news_service.get_disclosure(lang=lang, tickers=tickers)
+    disclosure_data = total_disclosure_data[offset * limit : offset * limit + limit]
+    has_next = len(total_disclosure_data) > offset * limit + limit
+
+    response_data = InterestDisclosureResponse(disclosure=disclosure_data, has_next=has_next)
 
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data)
 
