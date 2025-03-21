@@ -38,20 +38,20 @@ class InterestService:
                     "price": {
                         "value": self.get_won_unit(row.current_price, lang)[0]
                         if row.ctry == "kr"
-                        else self.get_dollar_unit(row.current_price)[0],
+                        else round(self.get_dollar_unit(row.current_price)[0], 2),
                         "unit": self.get_won_unit(row.current_price, lang)[1]
                         if row.ctry == "kr"
                         else self.get_dollar_unit(row.current_price)[1],
                     },
                     "change": {
-                        "value": row.change_rt,
+                        "value": round(row.change_rt, 2),
                         "unit": "%",
                         "sign": "plus" if row.change_rt > 0 else "minus",
                     },
                     "amount": {
                         "value": self.get_won_unit(row.volume_change_rt, lang)[0]
                         if row.ctry == "kr"
-                        else self.get_dollar_unit(row.volume_change_rt)[0],
+                        else round(self.get_dollar_unit(row.volume_change_rt)[0], 2),
                         "unit": self.get_won_unit(row.volume_change_rt, lang)[1]
                         if row.ctry == "kr"
                         else self.get_dollar_unit(row.volume_change_rt)[1],
