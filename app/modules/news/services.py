@@ -119,6 +119,14 @@ class NewsService:
     def get_renewal_data(
         self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
     ) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
+        news_data = self.get_news(ctry=ctry, lang=lang, tickers=tickers)
+        disclosure_data = self.get_disclosure(ctry=ctry, lang=lang, tickers=tickers)
+
+        return news_data, disclosure_data
+
+    def get_news(
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
+    ) -> List[NewsRenewalItem]:
         if lang is None:
             lang = TranslateCountry.KO
 
@@ -129,21 +137,13 @@ class NewsService:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
 
         if lang == TranslateCountry.KO:
-            # 뉴스 데이터
             condition["lang"] = "ko-KR"
-
             news_name = "kr_name"
-            disclosure_name = "ko_name"
         else:
-            # 뉴스 데이터
             condition["lang"] = "en-US"
-
             news_name = "en_name"
-            disclosure_name = "en_name"
 
         news_condition = condition.copy()
-        disclosure_condition = condition.copy()
-
         news_condition["is_related"] = True
 
         change_rate_column = "change_rt"
@@ -157,26 +157,10 @@ class NewsService:
             is_outer=True,
         )
 
-        from concurrent.futures import ThreadPoolExecutor
-
-        def fetch_data(table, columns, condition):
-            return pd.DataFrame(
-                self.db._select(
-                    table=table,
-                    columns=columns,
-                    order="date",
-                    ascending=False,
-                    limit=100,
-                    join_info=join_info(table),
-                    **condition,
-                )
-            )
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            news_future = executor.submit(
-                fetch_data,
-                "news_analysis",
-                [
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_analysis",
+                columns=[
                     "id",
                     "ticker",
                     news_name,
@@ -192,13 +176,54 @@ class NewsService:
                     "is_related",
                     change_rate_column,
                 ],
-                news_condition,
+                order="date",
+                ascending=False,
+                limit=100,
+                join_info=join_info("news_analysis"),
+                **news_condition,
             )
+        )
 
-            disclosure_future = executor.submit(
-                fetch_data,
-                "disclosure_information",
-                [
+        news_data = [] if df_news.empty else self._process_price_data(df=self._process_dataframe_news(df_news), lang=lang)
+
+        return news_data
+
+    def get_disclosure(
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
+    ) -> List[DisclosureRenewalItem]:
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        condition = {"is_exist": True}
+        if tickers:
+            condition["ticker__in"] = tickers
+        if ctry:
+            condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+            disclosure_name = "ko_name"
+        else:
+            condition["lang"] = "en-US"
+            disclosure_name = "en_name"
+
+        disclosure_condition = condition.copy()
+
+        change_rate_column = "change_rt"
+
+        join_info = lambda table: JoinInfo(  # noqa: E731
+            primary_table=table,
+            secondary_table="stock_trend",
+            primary_column="ticker",
+            secondary_column="ticker",
+            columns=["current_price", change_rate_column],
+            is_outer=True,
+        )
+
+        df_disclosure = pd.DataFrame(
+            self.db._select(
+                table="disclosure_information",
+                columns=[
                     "id",
                     "ticker",
                     disclosure_name,
@@ -215,13 +240,13 @@ class NewsService:
                     "current_price",
                     change_rate_column,
                 ],
-                disclosure_condition,
+                order="date",
+                ascending=False,
+                limit=100,
+                join_info=join_info("disclosure_information"),
+                **disclosure_condition,
             )
-
-            df_news = news_future.result()
-            df_disclosure = disclosure_future.result()
-
-        news_data = [] if df_news.empty else self._process_price_data(df=self._process_dataframe_news(df_news), lang=lang)
+        )
 
         disclosure_data = (
             []
@@ -231,7 +256,7 @@ class NewsService:
             )
         )
 
-        return news_data, disclosure_data
+        return disclosure_data
 
     def _process_price_data(
         self, df: pd.DataFrame, lang: TranslateCountry, is_disclosure: bool = False
