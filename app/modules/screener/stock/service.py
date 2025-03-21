@@ -49,7 +49,7 @@ class ScreenerStockService(BaseScreenerService):
 
                 result.append(
                     {
-                        "factor": factor["factor"],
+                        "factor": FACTOR_MAP[factor["factor"]],
                         "description": factor["description"],
                         "unit": unit,
                         "category": factor["category"],
