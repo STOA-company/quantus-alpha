@@ -11,13 +11,9 @@ from app.modules.screener.etf.schemas import FilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
 from app.utils.oauth_utils import get_current_user
 from app.core.logging.config import get_logger
-from app.common.constants import (
-    FACTOR_KOREAN_TO_ENGLISH_MAP,
-    MARKET_KOREAN_TO_ENGLISH_MAP,
-    REVERSE_FACTOR_MAP,
-    REVERSE_FACTOR_MAP_EN,
-)
+from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN, ETF_MARKET_MAP
 from app.core.exception.base import CustomException
+from app.modules.screener.utils import screener_utils
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -31,6 +27,7 @@ def get_factors(market: ETFMarketEnum, screener_etf_service: ScreenerETFService 
     try:
         factors = screener_etf_service.get_factors(market)
         result = [FactorResponse(**factor) for factor in factors]
+        result = [factor_response for factor_response in result if factor_response.factor != "총 수수료"]
         return result
     except Exception as e:
         logger.error(f"Error getting factors: {e}")
@@ -79,9 +76,12 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
 
         has_next = filtered_etf.offset * filtered_etf.limit + filtered_etf.limit < total_count
 
-        if filtered_etf.lang == "en":
+        print("ETF", etfs_data[0].keys())
+        if filtered_etf.lang == "kr":
             for etf in etfs_data:
-                etf["Market"] = MARKET_KOREAN_TO_ENGLISH_MAP[etf["Market"]]
+                # 시장 키가 있는지 확인 후 처리
+                if "시장" in etf and etf["시장"] in ETF_MARKET_MAP:
+                    etf["시장"] = ETF_MARKET_MAP[etf["시장"]]
 
         result = {"data": etfs_data, "has_next": has_next}
         return result
@@ -187,6 +187,7 @@ async def create_or_update_group(
                 factor_filters=group_filter.factor_filters,
                 category=group_filter.category,
                 sort_info=group_filter.sort_info,
+                type=group_filter.type,
             )
             message = "Filter updated successfully"
         else:
@@ -345,8 +346,9 @@ def update_group_name(group_id: int, name: str, screener_etf_service: ScreenerET
 @router.get("/parquet/{ctry}")
 def update_parquet(ctry: Literal["KR", "US"], screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
     try:
-        result = screener_etf_service.update_parquet(ctry=ctry)
-        return result
+        screener_etf_service.update_parquet(ctry=ctry)
+        screener_utils.process_global_etf_factor_data()
+        return {"message": "Parquet updated successfully"}
     except Exception as e:
         logger.exception(e)
         raise e

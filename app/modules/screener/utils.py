@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
 from app.modules.screener.stock.schemas import MarketEnum
-from app.common.constants import NEED_TO_MULTIPLY_100, FACTOR_MAP, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
+from app.common.constants import NEED_TO_MULTIPLY_100, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
 import numpy as np
 from app.cache.factors import factors_cache
 from app.modules.screener.etf.enum import ETFMarketEnum
@@ -19,6 +19,7 @@ from app.modules.screener.etf.utils import ETFDataLoader
 from pandas.api.types import is_numeric_dtype
 from app.modules.screener.stock.schemas import StockType
 from app.utils.test_utils import time_it
+from app.kispy.manager import KISAPIManager
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class ScreenerUtils:
 
                 result.append(
                     {
-                        "factor": FACTOR_MAP[factor_name],
+                        "factor": factor_name,
                         "description": factor.description,
                         "unit": str(factor.unit).lower(),
                         "category": str(factor.category).lower(),
@@ -79,7 +80,7 @@ class ScreenerUtils:
 
                 result.append(
                     {
-                        "factor": FACTOR_MAP[factor_name],
+                        "factor": factor_name,
                         "description": factor.description,
                         "unit": str(factor.unit).lower(),
                         "category": str(factor.category).lower(),
@@ -116,8 +117,8 @@ class ScreenerUtils:
             CategoryEnum.FUNDAMENTAL: ["roe", "fscore", "deptRatio", "operating_income", "z_score"],
             CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"],
             CategoryEnum.DIVIDEND: [
+                "recent_dividend_yield",
                 "dividend_count",
-                "total_fee",
                 "last_dividend_per_share",
                 "dividend_growth_rate_5y",
                 "risk_rating",
@@ -270,10 +271,82 @@ class ScreenerUtils:
 
         df_result.to_parquet(output_file)
 
+    def process_global_factor_data(self):
+        big_price_columns = [
+            "gross_profit",
+            "gross_profit_ttm",
+            "marketCap",
+            "median_trade",
+            "operating_income",
+            "operating_income_ttm",
+            "rev",
+            "rev_ttm",
+        ]
+        small_price_columns = ["close"]
+
+        manager = KISAPIManager()
+        exchange_rate = manager.get_api().get_exchange_rates()
+        kr_df = self.get_df_from_parquet(MarketEnum.KR)
+        for column in big_price_columns:
+            kr_df[column] = self.convert_krw_billion_to_usd(kr_df[column], exchange_rate)
+        for column in small_price_columns:
+            kr_df[column] = kr_df[column] / exchange_rate
+
+        us_df = self.get_df_from_parquet(MarketEnum.US)
+
+        kr_df["country"] = "kr"
+        us_df["country"] = "us"
+
+        df = pd.concat([kr_df, us_df])
+
+        df.to_parquet("parquet/global_stock_factors.parquet")
+
+    def process_global_etf_factor_data(self):
+        big_price_columns = [
+            "marketCap",
+            "median_trade",
+        ]
+        small_price_columns = ["ba_absolute_spread", "ba_relative_spread", "close", "last_dividend_per_share"]
+
+        manager = KISAPIManager()
+        exchange_rate = manager.get_api().get_exchange_rates()
+
+        kr_df = self.etf_factor_loader.load_etf_factors(ETFMarketEnum.KR)
+        us_df = self.etf_factor_loader.load_etf_factors(ETFMarketEnum.US)
+
+        for column in big_price_columns:
+            kr_df[column] = self.convert_krw_billion_to_usd(kr_df[column], exchange_rate)
+        for column in small_price_columns:
+            kr_df[column] = kr_df[column] / exchange_rate
+
+        kr_df["country"] = "kr"
+        us_df["country"] = "us"
+
+        # 문자열 형태의 숫자를 실수형으로 변환
+        if "total_fee" in kr_df.columns:
+            kr_df["total_fee"] = pd.to_numeric(kr_df["total_fee"], errors="coerce")
+
+        if "total_fee" in us_df.columns:
+            us_df["total_fee"] = pd.to_numeric(us_df["total_fee"], errors="coerce")
+
+        # 모든 숫자형 컬럼을 float64로 통일
+        for column in kr_df.columns:
+            if np.issubdtype(kr_df[column].dtype, np.number):
+                kr_df[column] = kr_df[column].astype(np.float64)
+        for column in us_df.columns:
+            if np.issubdtype(us_df[column].dtype, np.number):
+                us_df[column] = us_df[column].astype(np.float64)
+
+        df = pd.concat([kr_df, us_df])
+
+        df.to_parquet("parquet/global_etf_factors.parquet")
+
     def get_df_from_parquet(self, market_filter: MarketEnum) -> pd.DataFrame:
         df = None
         if market_filter:
-            if market_filter in [MarketEnum.US, MarketEnum.NASDAQ, MarketEnum.SNP500]:
+            if market_filter == MarketEnum.ALL:
+                df = pd.read_parquet("parquet/global_stock_factors.parquet")
+            elif market_filter in [MarketEnum.US, MarketEnum.NASDAQ, MarketEnum.SNP500]:
                 df = pd.read_parquet("parquet/us_stock_factors.parquet")
             elif market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
                 df = pd.read_parquet("parquet/kr_stock_factors.parquet")
@@ -301,11 +374,7 @@ class ScreenerUtils:
 
         # 종목 필터링
         if market_filter:
-            if market_filter == MarketEnum.US:
-                df = df[df["country"] == "us"]
-            elif market_filter == MarketEnum.KR:
-                df = df[df["country"] == "kr"]
-            elif market_filter == MarketEnum.SNP500:
+            if market_filter == MarketEnum.SNP500:
                 df = df[df["is_snp_500"] == 1]
             elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSDAQ, MarketEnum.KOSPI]:
                 df = df[df["market"] == market_filter.value]
@@ -362,6 +431,11 @@ class ScreenerUtils:
         if columns is None:
             columns = []
         required_columns = columns.copy()
+        if "sector" in required_columns:
+            required_columns.append("sector_en")
+        if "Name" in required_columns:
+            required_columns.append("Name_en")
+
         if "score" in required_columns:
             required_columns.remove("score")
 
@@ -481,10 +555,20 @@ class ScreenerUtils:
 
         upload_file_to_bucket(file_path, "alpha-finder-factors", obj_path)
 
+    def convert_krw_billion_to_usd(self, value: float, exchange_rate: float = 1400) -> float:
+        if exchange_rate <= 0:
+            raise ValueError("환율은 0보다 커야 합니다.")
+
+        # 1억원 = 100,000,000원
+        krw_value = value * 100000000
+
+        # 원화 -> 달러 변환
+        usd_value = krw_value / exchange_rate
+
+        # 달러 -> 천달러 단위로 변환
+        usd_value_in_ten_million = usd_value / 1000
+
+        return usd_value_in_ten_million
+
 
 screener_utils = ScreenerUtils()
-
-
-if __name__ == "__main__":
-    df = screener_utils.get_df_from_parquet(MarketEnum.US)
-    print(df["market"].unique())

@@ -140,7 +140,10 @@ class BaseScreenerService(ABC):
         try:
             if group_id == -1:
                 default_columns = screener_utils.get_default_columns(category=category, type=type)
-                return [FACTOR_MAP[column] for column in default_columns]
+                result = [FACTOR_MAP[column] for column in default_columns]
+                if category == CategoryEnum.DIVIDEND:
+                    result.remove("총 수수료")
+                return result
 
             factor_filters = self.database._select(
                 table="screener_factor_filters", columns=["factor", "order"], group_id=group_id, category=category
@@ -532,13 +535,14 @@ class BaseScreenerService(ABC):
                     await self.reorder_factor_filters(group_id, category, factors)
 
             if sort_info:
-                for category, sort_info in sort_info.items():
+                for category, sort_data in sort_info.items():
+                    print(f"category: {category}, sort_data: {sort_data}")
                     self.database._update(
                         table="screener_sort_infos",
                         group_id=group_id,
                         category=category,
                         type=type,
-                        sets={"sort_by": REVERSE_FACTOR_MAP[sort_info.sort_by], "ascending": sort_info.ascending},
+                        sets={"sort_by": REVERSE_FACTOR_MAP[sort_data.sort_by], "ascending": sort_data.ascending},
                     )
 
             await asyncio.gather(*insert_tasks)

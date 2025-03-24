@@ -2,7 +2,7 @@ from datetime import datetime, time, timedelta
 import json
 import math
 import re
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Optional
 
 from fastapi import Request, Response
 import pytz
@@ -15,6 +15,7 @@ from app.modules.disclosure.mapping import (
     DOCUMENT_TYPE_MAPPING_EN,
     FORM_TYPE_MAPPING,
 )
+from app.cache.leaderboard import NewsLeaderboard, DisclosureLeaderboard
 
 import numpy as np
 import pandas as pd
@@ -116,31 +117,33 @@ class NewsService:
         return df
 
     def get_renewal_data(
-        self, ctry: str = None, lang: TranslateCountry | None = None
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
     ) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
+        news_data = self.get_news(ctry=ctry, lang=lang, tickers=tickers)
+        disclosure_data = self.get_disclosure(ctry=ctry, lang=lang, tickers=tickers)
+
+        return news_data, disclosure_data
+
+    def get_news(
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
+    ) -> List[NewsRenewalItem]:
         if lang is None:
             lang = TranslateCountry.KO
 
         condition = {"is_exist": True}
+        if tickers:
+            condition["ticker__in"] = tickers
         if ctry:
             condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
 
         if lang == TranslateCountry.KO:
-            # 뉴스 데이터
             condition["lang"] = "ko-KR"
-
             news_name = "kr_name"
-            disclosure_name = "ko_name"
         else:
-            # 뉴스 데이터
             condition["lang"] = "en-US"
-
             news_name = "en_name"
-            disclosure_name = "en_name"
 
         news_condition = condition.copy()
-        disclosure_condition = condition.copy()
-
         news_condition["is_related"] = True
 
         change_rate_column = "change_rt"
@@ -154,26 +157,10 @@ class NewsService:
             is_outer=True,
         )
 
-        from concurrent.futures import ThreadPoolExecutor
-
-        def fetch_data(table, columns, condition):
-            return pd.DataFrame(
-                self.db._select(
-                    table=table,
-                    columns=columns,
-                    order="date",
-                    ascending=False,
-                    limit=100,
-                    join_info=join_info(table),
-                    **condition,
-                )
-            )
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            news_future = executor.submit(
-                fetch_data,
-                "news_analysis",
-                [
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_analysis",
+                columns=[
                     "id",
                     "ticker",
                     news_name,
@@ -189,13 +176,54 @@ class NewsService:
                     "is_related",
                     change_rate_column,
                 ],
-                news_condition,
+                order="date",
+                ascending=False,
+                limit=100,
+                join_info=join_info("news_analysis"),
+                **news_condition,
             )
+        )
 
-            disclosure_future = executor.submit(
-                fetch_data,
-                "disclosure_information",
-                [
+        news_data = [] if df_news.empty else self._process_price_data(df=self._process_dataframe_news(df_news), lang=lang)
+
+        return news_data
+
+    def get_disclosure(
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
+    ) -> List[DisclosureRenewalItem]:
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        condition = {"is_exist": True}
+        if tickers:
+            condition["ticker__in"] = tickers
+        if ctry:
+            condition["ctry"] = "KR" if ctry == "kr" else "US" if ctry == "us" else None
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+            disclosure_name = "ko_name"
+        else:
+            condition["lang"] = "en-US"
+            disclosure_name = "en_name"
+
+        disclosure_condition = condition.copy()
+
+        change_rate_column = "change_rt"
+
+        join_info = lambda table: JoinInfo(  # noqa: E731
+            primary_table=table,
+            secondary_table="stock_trend",
+            primary_column="ticker",
+            secondary_column="ticker",
+            columns=["current_price", change_rate_column],
+            is_outer=True,
+        )
+
+        df_disclosure = pd.DataFrame(
+            self.db._select(
+                table="disclosure_information",
+                columns=[
                     "id",
                     "ticker",
                     disclosure_name,
@@ -212,13 +240,13 @@ class NewsService:
                     "current_price",
                     change_rate_column,
                 ],
-                disclosure_condition,
+                order="date",
+                ascending=False,
+                limit=100,
+                join_info=join_info("disclosure_information"),
+                **disclosure_condition,
             )
-
-            df_news = news_future.result()
-            df_disclosure = disclosure_future.result()
-
-        news_data = [] if df_news.empty else self._process_price_data(df=self._process_dataframe_news(df_news), lang=lang)
+        )
 
         disclosure_data = (
             []
@@ -228,7 +256,125 @@ class NewsService:
             )
         )
 
-        return news_data, disclosure_data
+        return disclosure_data
+
+    def get_news_by_id(self, news_id: int, lang: TranslateCountry | None = None) -> Optional[NewsRenewalItem]:
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        condition = {"is_exist": True}
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+            news_name = "kr_name"
+        else:
+            condition["lang"] = "en-US"
+            news_name = "en_name"
+
+        change_rate_column = "change_rt"
+
+        join_info = JoinInfo(  # noqa: E731
+            primary_table="news_analysis",
+            secondary_table="stock_trend",
+            primary_column="ticker",
+            secondary_column="ticker",
+            columns=["current_price", change_rate_column],
+            is_outer=True,
+        )
+
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_analysis",
+                columns=[
+                    "id",
+                    "ticker",
+                    news_name,
+                    "ctry",
+                    "date",
+                    "title",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "that_time_price",
+                    "current_price",
+                    "is_related",
+                    change_rate_column,
+                ],
+                join_info=join_info,
+                id=news_id,
+                **condition,
+            )
+        )
+
+        print("DF NEWS", df_news)
+
+        if df_news.empty:
+            return None
+
+        processed_df = self._process_dataframe_news(df_news)
+        news_items = self._process_price_data(df=processed_df, lang=lang)
+
+        return news_items[0] if news_items else None
+
+    def get_disclosure_by_id(
+        self, disclosure_id: int, lang: TranslateCountry | None = None
+    ) -> Optional[DisclosureRenewalItem]:
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        condition = {"is_exist": True, "id": disclosure_id}
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+            disclosure_name = "ko_name"
+        else:
+            condition["lang"] = "en-US"
+            disclosure_name = "en_name"
+
+        change_rate_column = "change_rt"
+
+        join_info = JoinInfo(  # noqa: E731
+            primary_table="disclosure_information",
+            secondary_table="stock_trend",
+            primary_column="ticker",
+            secondary_column="ticker",
+            columns=["current_price", change_rate_column],
+            is_outer=True,
+        )
+
+        df_disclosure = pd.DataFrame(
+            self.db._select(
+                table="disclosure_information",
+                columns=[
+                    "id",
+                    "ticker",
+                    disclosure_name,
+                    "ctry",
+                    "date",
+                    "url",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "form_type",
+                    "category_type",
+                    "that_time_price",
+                    "current_price",
+                    change_rate_column,
+                ],
+                join_info=join_info,
+                **condition,
+            )
+        )
+
+        if df_disclosure.empty:
+            return None
+
+        processed_df = self._process_dataframe_disclosure(df_disclosure)
+        disclosure_items = self._process_price_data(processed_df, lang=lang, is_disclosure=True)
+
+        return disclosure_items[0] if disclosure_items else None
 
     def _process_price_data(
         self, df: pd.DataFrame, lang: TranslateCountry, is_disclosure: bool = False
@@ -319,7 +465,7 @@ class NewsService:
             for _, row in df.iterrows()
         ]
 
-    def top_stories(self, request: Request, lang: TranslateCountry | None = None):
+    def top_stories(self, request: Request, tickers: Optional[List[str]] = None, lang: TranslateCountry | None = None):
         viewed_stories = set()
         if request.cookies.get("viewed_stories"):
             cookie_data = request.cookies.get("viewed_stories", "[]")
@@ -334,48 +480,61 @@ class NewsService:
         current_datetime = now_utc()
         before_24_hours = current_datetime - timedelta(hours=24)
 
-        query_us = f"""
-            SELECT st.ticker, st.volume_change_rt, st.current_price, st.change_rt
-            FROM stock_trend st
-            JOIN (
-                SELECT DISTINCT ticker
-                FROM news_analysis
-                WHERE date >= '{before_24_hours}'
-            ) na ON st.ticker = na.ticker
-            WHERE ctry = 'US'
-            ORDER BY st.volume_change_rt DESC
-            LIMIT 6
-        """
-        top_stories_data_us = self.db._execute(text(query_us))
-        query_kr = f"""
-            SELECT st.ticker, st.volume_change_rt, st.current_price, st.change_rt
-            FROM stock_trend st
-            JOIN (
-                SELECT DISTINCT ticker
-                FROM news_analysis
-                WHERE date >= '{before_24_hours}'
-            ) na ON st.ticker = na.ticker
-            WHERE ctry = 'KR'
-            ORDER BY st.volume_change_rt DESC
-            LIMIT 5
-        """
-        top_stories_data_kr = self.db._execute(text(query_kr))
+        if tickers:
+            top_stories_tickers = tickers
 
-        # 티커 및 관련 데이터 추출
-        top_stories_tickers = []
-        ticker_to_price_data = {}
+            # 해당 티커의 가격 데이터 조회
+            price_data = self.db._select(
+                table="stock_trend", columns=["ticker", "current_price", "change_rt", "ctry"], ticker__in=tickers
+            )
 
-        for row in top_stories_data_us:
-            ticker = row[0]
-            if ticker not in top_stories_tickers:
-                top_stories_tickers.append(ticker)
-                ticker_to_price_data[ticker] = {"current_price": row[2], "change_rt": row[3]}
+            ticker_to_price_data = {}
+            for row in price_data:
+                ticker = row[0]
+                ticker_to_price_data[ticker] = {"current_price": row[1], "change_rt": row[2]}
+        else:
+            query_us = f"""
+                SELECT st.ticker, st.volume_change_rt, st.current_price, st.change_rt
+                FROM stock_trend st
+                JOIN (
+                    SELECT DISTINCT ticker
+                    FROM news_analysis
+                    WHERE date >= '{before_24_hours}'
+                ) na ON st.ticker = na.ticker
+                WHERE ctry = 'US'
+                ORDER BY st.volume_change_rt DESC
+                LIMIT 6
+            """
+            top_stories_data_us = self.db._execute(text(query_us))
+            query_kr = f"""
+                SELECT st.ticker, st.volume_change_rt, st.current_price, st.change_rt
+                FROM stock_trend st
+                JOIN (
+                    SELECT DISTINCT ticker
+                    FROM news_analysis
+                    WHERE date >= '{before_24_hours}'
+                ) na ON st.ticker = na.ticker
+                WHERE ctry = 'KR'
+                ORDER BY st.volume_change_rt DESC
+                LIMIT 5
+            """
+            top_stories_data_kr = self.db._execute(text(query_kr))
 
-        for row in top_stories_data_kr:
-            ticker = row[0]
-            if ticker not in top_stories_tickers:
-                top_stories_tickers.append(ticker)
-                ticker_to_price_data[ticker] = {"current_price": row[2], "change_rt": row[3]}
+            # 티커 및 관련 데이터 추출
+            top_stories_tickers = []
+            ticker_to_price_data = {}
+
+            for row in top_stories_data_us:
+                ticker = row[0]
+                if ticker not in top_stories_tickers:
+                    top_stories_tickers.append(ticker)
+                    ticker_to_price_data[ticker] = {"current_price": row[2], "change_rt": row[3]}
+
+            for row in top_stories_data_kr:
+                ticker = row[0]
+                if ticker not in top_stories_tickers:
+                    top_stories_tickers.append(ticker)
+                    ticker_to_price_data[ticker] = {"current_price": row[2], "change_rt": row[3]}
 
         if not top_stories_tickers:
             return []  # 빠른 반환
@@ -479,8 +638,6 @@ class NewsService:
                         # 미국 공시, 영어: DOCUMENT_TYPE_MAPPING_EN 사용
                         return DOCUMENT_TYPE_MAPPING_EN.get(row["form_type"], row["form_type"])
 
-            print(f"df_disclosure: {df_disclosure}")
-
             # 각 행에 함수 적용하여 매핑된 form_type 생성
             df_disclosure["mapped_form_type"] = df_disclosure.apply(get_form_type_mapping, axis=1)
 
@@ -500,7 +657,8 @@ class NewsService:
         elif not df_disclosure.empty:
             total_df = df_disclosure
 
-        # 종목 현재가 정보 추가 (미리 가져온 데이터 사용)
+        if total_df.empty:
+            return []
         unique_tickers = total_df["ticker"].unique().tolist()
         total_df["price_impact"] = 0.0
 
@@ -716,8 +874,7 @@ class NewsService:
 
         ctry = check_ticker_country_len_2(ticker)
 
-        stock_info_columns = ["ticker", "en_name"]
-        stock_info_columns.append("is_kospi_200" if ctry == "kr" else "is_snp_500")
+        stock_info_columns = ["ticker", "en_name", "is_pub"]
         stock_info = self.db._select(
             table="stock_information",
             columns=stock_info_columns,
@@ -762,7 +919,7 @@ class NewsService:
             )
         )
         if df_news.empty:
-            if stock_info[0][-1]:
+            if stock_info[0].is_pub:
                 emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
                 return [], 0, 0, 0, emotion_count, ctry
             else:
@@ -886,6 +1043,14 @@ class NewsService:
             summary2_list.append(s2)
 
         return pd.Series(summary1_list, index=summaries.index), pd.Series(summary2_list, index=summaries.index)
+
+    def increase_news_search_count(self, news_id: int, ticker: str) -> None:
+        redis = NewsLeaderboard()
+        redis.increment_score(news_id, ticker)
+
+    def increase_disclosure_search_count(self, disclosure_id: int, ticker: str) -> None:
+        redis = DisclosureLeaderboard()
+        redis.increment_score(disclosure_id, ticker)
 
 
 def get_news_service() -> NewsService:

@@ -799,16 +799,20 @@ class FinancialService:
             logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
             raise DataNotFoundException(ticker=ticker, data_type="부채비율(4분기)")
 
-        # 벡터화된 계산
-        debt_ratios = [
-            float((self._to_decimal(q.total_dept) / self._to_decimal(q.total_asset)) * 100)
-            if self._to_decimal(q.total_asset) != 0
-            else 0.0
-            for q in quarters
-        ]
+        try:
+            # 벡터화된 계산
+            debt_ratios = [
+                float((self._to_decimal(q.total_dept) / self._to_decimal(q.total_asset)) * 100)
+                if self._to_decimal(q.total_asset) != 0
+                else 0.0
+                for q in quarters
+            ]
 
-        # 병렬 처리: 평균 계산과 산업 평균 조회를 동시에
-        average_debt_ratio = self._round_and_clean(sum(debt_ratios) / len(debt_ratios))
+            # 병렬 처리: 평균 계산과 산업 평균 조회를 동시에
+            average_debt_ratio = self._round_and_clean(sum(debt_ratios) / len(debt_ratios))
+        except TypeError:
+            average_debt_ratio = 0.0  # TODO:: FE에서 None 받을 수 있는지 확인 후 'None' 반환 필요
+
         industry_avg = self._round_and_clean(self.get_debt_ratio_industry_avg(country=country, ticker=ticker, db=db))
 
         debt_ratio_response = DebtRatioResponse(code=ticker, ratio=average_debt_ratio, industry_avg=industry_avg)
@@ -856,16 +860,20 @@ class FinancialService:
             logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
             raise DataNotFoundException(ticker=ticker, data_type="유동비율(4분기)")
 
-        # 벡터화된 계산
-        liquidity_ratios = [
-            float((self._to_decimal(q.current_asset) / self._to_decimal(q.current_dept)) * 100)
-            if self._to_decimal(q.current_dept) != 0
-            else 0.0
-            for q in quarters
-        ]
+        try:
+            # 벡터화된 계산
+            liquidity_ratios = [
+                float((self._to_decimal(q.current_asset) / self._to_decimal(q.current_dept)) * 100)
+                if self._to_decimal(q.current_dept) != 0
+                else 0.0
+                for q in quarters
+            ]
 
-        # 병렬 처리: 평균 계산과 산업 평균 조회를 동시에
-        average_liquidity_ratio = self._round_and_clean(sum(liquidity_ratios) / len(liquidity_ratios))
+            # 병렬 처리: 평균 계산과 산업 평균 조회를 동시에
+            average_liquidity_ratio = self._round_and_clean(sum(liquidity_ratios) / len(liquidity_ratios))
+        except TypeError:
+            average_liquidity_ratio = 0.0  # TODO:: FE에서 None 받을 수 있는지 확인 후 'None' 반환 필요
+
         industry_avg = self._round_and_clean(self.get_liquidity_industry_avg(country=country, ticker=ticker, db=db))
 
         return BaseResponse[LiquidityRatioResponse](
@@ -913,14 +921,18 @@ class FinancialService:
             logger.warning(f"4분기 데이터가 부족합니다: {ticker}")
             raise DataNotFoundException(ticker=ticker, data_type="이자보상배율(4분기)")
 
-        interest_coverage_ratios = [
-            float(self._to_decimal(q.operating_income) / self._to_decimal(q.fin_cost))
-            if self._to_decimal(q.fin_cost) != 0
-            else 0.0
-            for q in quarters
-        ]
+        try:
+            interest_coverage_ratios = [
+                float(self._to_decimal(q.operating_income) / self._to_decimal(q.fin_cost))
+                if self._to_decimal(q.fin_cost) != 0
+                else 0.0
+                for q in quarters
+            ]
 
-        average_ratio = self._round_and_clean(sum(interest_coverage_ratios) / len(interest_coverage_ratios))
+            average_ratio = self._round_and_clean(sum(interest_coverage_ratios) / len(interest_coverage_ratios))
+        except TypeError:
+            average_ratio = 0.0  # TODO:: FE에서 None 받을 수 있는지 확인 후 'None' 반환 필요
+
         industry_avg = self._round_and_clean(
             self.get_interest_coverage_industry_avg(country=country, ticker=ticker, db=db)
         )

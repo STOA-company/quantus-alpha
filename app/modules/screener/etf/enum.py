@@ -7,9 +7,3 @@ class ETFMarketEnum(str, Enum):
     NYSE = "nyse"
     NASDAQ = "nas"
     BATS = "bats"
-
-
-class ETFCategoryEnum(str, Enum):
-    TECHNICAL = "technical"
-    DIVIDEND = "dividend"
-    CUSTOM = "custom"

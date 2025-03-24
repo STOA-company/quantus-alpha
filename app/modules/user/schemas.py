@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 
 class UserInfoResponse(BaseModel):
@@ -8,6 +9,8 @@ class UserInfoResponse(BaseModel):
     nickname: Optional[str] = None
     profile_image: Optional[str] = None
     image_format: Optional[str] = None
+    is_subscribed: bool = False
+    subscription_end: Optional[datetime] = None
 
 
 class RefreshTokenResponse(BaseModel):

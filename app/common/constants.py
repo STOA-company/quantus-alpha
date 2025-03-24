@@ -57,6 +57,17 @@ MARKET_MAP_EN = {
     "AMS": "AMS",
 }
 
+
+ETF_MARKET_MAP = {"BATS": "바츠", "NYSE": "뉴욕 증권 거래소", "NAS": "나스닥", "KRX": "한국 거래소"}
+
+
+ETF_MARKET_MAP_EN = {
+    "BATS": "BATS",
+    "NYSE": "NYSE",
+    "NASDAQ": "NASDAQ",
+    "KRX": "KRX",
+}
+
 MARKET_KOREAN_TO_ENGLISH_MAP = {
     "코스피": "KOSPI",
     "코스닥": "KOSDAQ",
@@ -160,10 +171,10 @@ FACTOR_MAP = {
 
 FACTOR_MAP_EN = {
     "Code": "Ticker",
-    "Name_en": "Name",
+    "Name": "Name",
     "country": "Country",
     "market": "Market",
-    "sector_en": "Sector",
+    "sector": "Sector",
     "score": "Score",
     "abs_beta": "Absolute Beta (52-week)",
     "abs_beta_60": "Absolute Beta (60-day)",
@@ -223,6 +234,8 @@ FACTOR_MAP_EN = {
     ########################################################
     # ETF
     ########################################################
+    "manager": "Manager",
+    "risk_rating": "Risk Rating",
     "dividend_count": "5Y avg dividend frequency",
     "last_dividend_per_share": "Last dividend per share",
     "recent_dividend_yield": "Last annual dividend yield",
@@ -235,6 +248,13 @@ FACTOR_MAP_EN = {
     "ba_spread_20d_std": "20D std dev Bid-Ask spread",
     "ba_spread_1d_change": "1D change Bid-Ask spread",
     "ba_spread_20d_change": "20D change Bid-Ask spread",
+    "listing_date": "Listing date",
+    "base_index_name": "Base index",
+    "replication_method": "Replication method",
+    "base_asset_classification": "Base asset classification",
+    "tax_type": "Tax type",
+    "is_hedge": "Hedge",
+    "last_dividend_date": "Last dividend date",
 }
 
 FACTOR_KOREAN_TO_ENGLISH_MAP = {

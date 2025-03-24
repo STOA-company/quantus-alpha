@@ -418,7 +418,23 @@ class UserService:
         await screener_service.create_group(user_id=user_id, sector_filter=all_sectors)
         await screener_service.create_group(user_id=user_id, type=StockType.ETF)
 
+    def interest_init(self, user_id: int):
+        groups = self.db._select(table="interest_group", user_id=user_id)
+        if not groups:
+            self.db._insert(table="interest_group", sets={"user_id": user_id, "name": "기본"})
+
 
 def get_user_service() -> UserService:
     """UserService 의존성 주입을 위한 팩토리 함수"""
     return UserService()
+
+
+if __name__ == "__main__":
+    from app.utils.oauth_utils import create_jwt_token, create_refresh_token
+    from datetime import timedelta
+
+    service = UserService()
+    access_token = create_jwt_token(206, timedelta(minutes=1000000000))
+    refresh_token = create_refresh_token(206)
+    access_token_hash = service.store_token(access_token, refresh_token)
+    print(access_token_hash)
