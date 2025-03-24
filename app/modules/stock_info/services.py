@@ -21,7 +21,7 @@ class StockInfoService:
         self.file_path = "static"
         self.file_name = "stock_{}_info.csv"
 
-    async def get_stock_info(self, ctry: str, ticker: str) -> StockInfo:
+    async def get_stock_info(self, ctry: str, ticker: str, lang: TranslateCountry) -> StockInfo:
         """
         주식 정보 조회
         """
@@ -54,8 +54,19 @@ class StockInfoService:
                 if result.get("listing_date") and hasattr(result["listing_date"], "strftime"):
                     result["listing_date"] = result["listing_date"].strftime("%Y-%m-%d")
 
+            if lang == TranslateCountry.KO:
+                if ctry == "kr":
+                    introduction = intro_result.get("overview", "")
+                else:
+                    introduction = intro_result.get("translated_overview", "")
+            else:
+                if ctry == "kr":
+                    introduction = ""
+                else:
+                    introduction = intro_result.get("overview", "")
+
             return StockInfo(
-                introduction=intro_result.get("translated_overview" if ctry == "us" else "overview", ""),
+                introduction=introduction,
                 homepage_url=result.get("homepage_url", ""),
                 ceo_name=result.get("ceo", ""),
                 establishment_date=result.get("establishment_date", ""),
