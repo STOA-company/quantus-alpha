@@ -940,8 +940,8 @@ class ETFDataLoader:
         elif market_filter == ETFMarketEnum.KR:
             df = pd.read_parquet(os.path.join(self.parquet_dir, "kr_etf_factors.parquet"))
             df["country"] = "kr"
-        # elif market_filter == ETFMarketEnum.ALL:
-        #     df = pd.read_parquet(os.path.join(self.parquet_dir, "global_etf_factors.parquet"))
+        elif market_filter == ETFMarketEnum.ALL:
+            df = pd.read_parquet(os.path.join(self.parquet_dir, "global_etf_factors.parquet"))
         else:
             raise ValueError(f"Invalid market: {market_filter}")
 
