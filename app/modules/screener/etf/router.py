@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from app.batches.run_etf_screener import run_etf_screener_data
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
-from app.modules.screener.stock.schemas import FactorResponse, GroupFilter, GroupFilterResponse, GroupMetaData
+from app.modules.screener.stock.schemas import FactorResponse, GroupFilterResponse, GroupMetaData, ETFGroupFilter
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.etf.schemas import FilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
@@ -169,7 +169,7 @@ def get_groups(
 
 @router.post("/groups", response_model=Dict)
 async def create_or_update_group(
-    group_filter: GroupFilter,
+    group_filter: ETFGroupFilter,
     current_user: str = Depends(get_current_user),
     screener_etf_service: ScreenerETFService = Depends(ScreenerETFService),
 ):
