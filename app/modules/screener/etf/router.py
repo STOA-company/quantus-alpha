@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from app.batches.run_etf_screener import run_etf_screener_data
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
-from app.modules.screener.stock.schemas import FactorResponse, GroupFilterResponse, GroupMetaData, ETFGroupFilter
+from app.modules.screener.stock.schemas import FactorResponse, GroupMetaData, ETFGroupFilter, ETFGroupFilterResponse
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.etf.schemas import FilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
@@ -210,7 +210,7 @@ async def create_or_update_group(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/groups/{group_id}", response_model=GroupFilterResponse)
+@router.get("/groups/{group_id}", response_model=ETFGroupFilterResponse)
 def get_group_filters(
     group_id: int = -1,
     lang: str = "kr",
@@ -232,7 +232,7 @@ def get_group_filters(
         custom_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
 
         if group_id == -1:
-            return GroupFilterResponse(
+            return ETFGroupFilterResponse(
                 id=-1,
                 name="기본",
                 market_filter=ETFMarketEnum.US,
@@ -268,7 +268,7 @@ def get_group_filters(
         if lang == "en":
             custom_factor_filters = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in custom_factor_filters]
 
-        return GroupFilterResponse(
+        return ETFGroupFilterResponse(
             id=group_id,
             name=group_filters["name"],
             market_filter=market_filter if market_filter else ETFMarketEnum.US,

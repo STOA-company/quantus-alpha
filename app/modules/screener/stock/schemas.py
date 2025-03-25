@@ -68,6 +68,10 @@ class GroupFilterResponse(GroupFilter):
     has_custom: bool = False
 
 
+class ETFGroupFilterResponse(ETFGroupFilter):
+    has_custom: bool = False
+
+
 class FilteredStocks(BaseModel):
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
