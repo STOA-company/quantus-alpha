@@ -71,6 +71,7 @@ def process_dividend_data(ctry: str, type: str):
             .agg(
                 {
                     "per_share": "sum",
+                    "adj_factor": "first",  # adj_factor 컬럼 유지
                 }
             )
             .reset_index()
@@ -514,7 +515,6 @@ class StockDividendDataDownloader(ETFDataDownloader):
             LEFT OUTER JOIN LatestTicker T ON T.InfoCode = A.INFOCODE AND T.rn = 1
             WHERE A.EFFECTIVEDATE IS NOT NULL
             ORDER BY T.Ticker, A.EFFECTIVEDATE;
-
             """
         df = self._get_refinitiv_data(query)
 
@@ -533,7 +533,7 @@ class StockDividendDataDownloader(ETFDataDownloader):
 
 
 if __name__ == "__main__":
-    insert_dividend(ctry="US", type="etf")
+    update_dividend_records(ctry="KR", type="stock")
     # downloader = StockDividendDataDownloader()
     # downloader.download_stock_dividend(ctry="US", download=True)
     # downloader.download_stock_dividend(ctry="KR", download=True)
