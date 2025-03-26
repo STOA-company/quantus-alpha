@@ -29,8 +29,9 @@ class AlphafinderPrice(ServiceBase, BaseMixin):
     level: Mapped[int] = mapped_column(Integer, ForeignKey("alphafinder_level.level"), nullable=False)
     price: Mapped[Float] = mapped_column(Float, nullable=False)
     period_days: Mapped[int] = mapped_column(Integer, nullable=False)
-    event_price: Mapped[Float] = mapped_column(Float, nullable=False)
+    event_price: Mapped[Float] = mapped_column(Float, nullable=True)
     is_active: Mapped[Boolean] = mapped_column(Boolean, nullable=False, default=True)
+    price_type: Mapped[String] = mapped_column(String(length=100), nullable=False)
 
     # 관계
     level_info = relationship("AlphafinderLevel", back_populates="prices")
@@ -56,7 +57,6 @@ class AlphafinderPaymentHistory(ServiceBase, BaseMixin):
     paid_amount: Mapped[Float] = mapped_column(Float)
     payment_method: Mapped[String] = mapped_column(String(length=100))
     payment_company: Mapped[String] = mapped_column(String(length=100))
-    is_extended: Mapped[Boolean] = mapped_column(Boolean, default=False)
     refund_at: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
 
     # 관계
@@ -90,3 +90,47 @@ class TossReceipt(ServiceBase, BaseMixin):
 
     def __str__(self) -> str:
         return f"TossReceipt(id={self.id!r}, user_id={self.user_id!r}, payment_key={self.payment_key!r}, order_id={self.order_id!r})"
+
+
+class AlphafinderCouponBox(ServiceBase, BaseMixin):
+    __tablename__ = "alphafinder_coupon_box"
+    __table_args__ = {"extend_existing": True}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[BigInteger] = mapped_column(
+        BigInteger, ForeignKey("alphafinder_user.id", ondelete="SET NULL"), nullable=True
+    )
+    coupon_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("alphafinder_coupon.id", ondelete="SET NULL"), nullable=True
+    )
+    issued_at: Mapped[DateTime] = mapped_column(DateTime, nullable=False, comment="지급일")
+    expired_at: Mapped[DateTime] = mapped_column(DateTime, nullable=False, comment="만료일")
+
+    # 관계
+    user = relationship("AlphafinderUser")
+    coupon = relationship("AlphafinderCoupon")
+
+    def __repr__(self) -> str:
+        return f"AlphafinderCouponBox(id={self.id!r}, user_id={self.user_id!r}, coupon_id={self.coupon_id!r}, issued_at={self.issued_at!r}, expired_at={self.expired_at!r})"
+
+    def __str__(self) -> str:
+        return f"AlphafinderCouponBox(id={self.id!r}, user_id={self.user_id!r}, coupon_id={self.coupon_id!r}, issued_at={self.issued_at!r}, expired_at={self.expired_at!r})"
+
+
+class AlphafinderCoupon(ServiceBase, BaseMixin):
+    __tablename__ = "alphafinder_coupon"
+    __table_args__ = {"extend_existing": True}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    coupon_num: Mapped[String] = mapped_column(String(length=100), nullable=False, unique=True)
+    coupon_name: Mapped[String] = mapped_column(String(length=100), nullable=False)
+    coupon_period_days: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # 관계
+    coupon_box = relationship("AlphafinderCouponBox")
+
+    def __repr__(self) -> str:
+        return f"AlphafinderCoupon(id={self.id!r}, coupon_num={self.coupon_num!r}, coupon_name={self.coupon_name!r}, coupon_period_days={self.coupon_period_days!r})"
+
+    def __str__(self) -> str:
+        return f"AlphafinderCoupon(id={self.id!r}, coupon_num={self.coupon_num!r}, coupon_name={self.coupon_name!r}, coupon_period_days={self.coupon_period_days!r})"
