@@ -102,11 +102,15 @@ def user_delete(
 
 
 @router.get("/me", response_model=UserInfoResponse)
-def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
+def get_user_info(
+    current_user: AlphafinderUser = Depends(get_current_user), service: UserService = Depends(get_user_service)
+):
     """현재 인증된 사용자 정보 반환"""
     try:
         if not current_user:
             raise HTTPException(status_code=401, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
+        level = current_user.subscription_level
+        level_info = service.get_level_info(level)
         return UserInfoResponse(
             id=current_user.id,
             email=current_user.email,
@@ -115,6 +119,7 @@ def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
             image_format=current_user.image_format,
             is_subscribed=current_user.is_subscribed,
             subscription_end=current_user.subscription_end,
+            level=level_info.name,
         )
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
