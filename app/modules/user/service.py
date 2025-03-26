@@ -418,7 +418,7 @@ class UserService:
         await screener_service.create_group(user_id=user_id, sector_filter=all_sectors)
         await screener_service.create_group(user_id=user_id, type=StockType.ETF)
 
-    def interest_init(self, user_id: int):
+    async def interest_init(self, user_id: int):
         groups = self.db._select(table="interest_group", user_id=user_id)
         if not groups:
             self.db._insert(table="interest_group", sets={"user_id": user_id, "name": "기본"})
