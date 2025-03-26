@@ -667,6 +667,8 @@ class ScreenerUtils:
             required_columns.remove("score")
 
         df = self.etf_factor_loader.load_etf_factors(market_filter)
+        existing_columns = df.columns.tolist()
+        required_columns = [col for col in required_columns if col in existing_columns]
         filtered_df = df[df["Code"].isin(codes)][required_columns]
 
         return filtered_df
