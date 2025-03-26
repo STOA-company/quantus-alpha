@@ -246,15 +246,18 @@ def get_group_filters(
         technical_columns = screener_service.get_columns(group_id, CategoryEnum.TECHNICAL)
         fundamental_columns = screener_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL)
         valuation_columns = screener_service.get_columns(group_id, CategoryEnum.VALUATION)
+        dividend_columns = screener_service.get_columns(group_id, CategoryEnum.DIVIDEND)
 
         if lang == "en":
             technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
             fundamental_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in fundamental_columns]
             valuation_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in valuation_columns]
+            dividend_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in dividend_columns]
 
         technical_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
         fundamental_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.FUNDAMENTAL)
         valuation_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.VALUATION)
+        dividend_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.DIVIDEND)
         custom_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
 
         if group_id == -1:
@@ -270,12 +273,14 @@ def get_group_filters(
                     "technical": technical_columns,
                     "fundamental": fundamental_columns,
                     "valuation": valuation_columns,
+                    "dividend": dividend_columns,
                     "custom": [],
                 },
                 sort_info={
                     CategoryEnum.TECHNICAL: technical_sort_info,
                     CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
                     CategoryEnum.VALUATION: valuation_sort_info,
+                    CategoryEnum.DIVIDEND: dividend_sort_info,
                     CategoryEnum.CUSTOM: custom_sort_info,
                 },
             )
