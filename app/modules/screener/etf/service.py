@@ -127,7 +127,8 @@ class ScreenerETFService(BaseScreenerService):
             ordered_columns = ["Code", "Name", "manager", "score", "country"]
 
         selected_columns = ordered_columns.copy()
-
+        existing_columns = sorted_df.columns.tolist()
+        selected_columns = [col for col in selected_columns if col in existing_columns]
         sorted_df = sorted_df[selected_columns]
 
         for _, row in sorted_df.iterrows():

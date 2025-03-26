@@ -142,8 +142,8 @@ FACTOR_MAP = {
     "por_ttm": "POR (TTM)",
     "psr": "PSR",
     "psr_ttm": "PSR (TTM)",
-    "consecutive_dividend_growth_count": "연속 배당 성장 횟수",
     "ttm_dividend_yield": "직전 12개월 배당 수익률",
+    "consecutive_dividend_growth_count": "연속 배당 성장 횟수",
     ########################################################
     # ETF
     ########################################################
@@ -233,8 +233,8 @@ FACTOR_MAP_EN = {
     "por_ttm": "POR (TTM)",
     "psr": "PSR",
     "psr_ttm": "PSR (TTM)",
-    "consecutive_dividend_growth_count": "Consecutive Dividend Growth Count",
     "ttm_dividend_yield": "TTM Dividend Yield",
+    "consecutive_dividend_growth_count": "Consecutive Dividend Growth Count",
     ########################################################
     # ETF
     ########################################################

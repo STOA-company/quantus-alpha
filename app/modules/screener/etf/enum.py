@@ -7,3 +7,4 @@ class ETFMarketEnum(str, Enum):
     NYSE = "nyse"
     NASDAQ = "nas"
     BATS = "bats"
+    ALL = "all"

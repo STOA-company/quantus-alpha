@@ -52,7 +52,7 @@ async def get_combined(
     logger.info(f"Processing combined data for {ticker} ({ctry})")
 
     try:
-        stock_info = await stock_service.get_stock_info(ctry, ticker)
+        stock_info = await stock_service.get_stock_info(ctry, ticker, lang)
         logger.info("Successfully fetched stock_info")
     except Exception as e:
         logger.error(f"Error fetching stock_info: {e}")

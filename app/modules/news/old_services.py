@@ -263,6 +263,9 @@ class NewsService:
         # 3. 날짜 비교하여 최신 데이터 선택
         result = self._select_latest_data(disclosure_info, news_info)
 
+        if result is None:
+            raise DataNotFoundException(ticker=ticker, data_type="latest_news")
+
         date = result.get("date", "")
         date = date.replace(tzinfo=UTC).astimezone(KST).strftime("%Y-%m-%d %H:%M:%S")
         content = result.get("content", "")

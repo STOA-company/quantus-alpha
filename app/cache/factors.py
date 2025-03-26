@@ -50,13 +50,6 @@ class FactorsCache:
         self.clear_cache()
         self._update_configs()
 
-        results = {}
-        for asset_type in self.asset_type:
-            self.clear_cache()
-            results[f"{self.asset_type}"] = self._update_configs()
-
-        return results
-
     def clear_cache(self) -> None:
         self.redis.delete(self.factors_key)
 

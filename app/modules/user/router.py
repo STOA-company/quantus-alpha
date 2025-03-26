@@ -64,8 +64,8 @@ async def screener_init(user_id: int, service: UserService = Depends(get_user_se
 
 
 @router.post("/interest-init")
-def interest_init(user_id: int, service: UserService = Depends(get_user_service)):
-    service.interest_init(user_id=user_id)
+async def interest_init(user_id: int, service: UserService = Depends(get_user_service)):
+    await service.interest_init(user_id=user_id)
 
 
 @router.patch("/nickname")
