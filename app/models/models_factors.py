@@ -45,6 +45,7 @@ class Factors(Base):
     max_value = Column(Integer, nullable=True)
     is_stock = Column(Boolean, nullable=False, default=True)
     is_etf = Column(Boolean, nullable=False, default=False)
+    is_active = Column(Boolean, nullable=False, default=True)
 
     def __repr__(self):
         return f"<Factor {self.factor}>"

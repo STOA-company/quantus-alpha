@@ -33,18 +33,13 @@ class ScreenerUtils:
         self.etf_factor_loader = ETFDataLoader()
 
     def get_factors(self, market: MarketEnum) -> List[dict]:
-        factors = self.db._select(table="factors", is_stock=True)
+        factors = self.db._select(table="factors", is_stock=True, is_active=True)
         # 시장별 팩터 최소/최대값 계산
         market_data = self.get_df_from_parquet(market)
-
-        excluded_factors = ["ttm_dividend_yield", "consecutive_dividend_growth_count"]
 
         result = []
         for factor in factors:
             factor_name = factor.factor
-
-            if factor_name in excluded_factors:
-                continue
 
             if factor_name in market_data.columns:
                 min_value = market_data[factor_name].min()
