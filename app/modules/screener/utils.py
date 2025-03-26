@@ -166,7 +166,7 @@ class ScreenerUtils:
         dividend_data = self._get_dividend_data_for_tickers(unique_tickers)
 
         df["ttm_dividend_yield"] = np.nan
-        df["consecutive_dividend_growth"] = np.nan
+        df["consecutive_dividend_growth_count"] = np.nan
 
         matched_yield_count = 0
         matched_growth_count = 0
@@ -179,10 +179,10 @@ class ScreenerUtils:
                 matched_yield_count += 1
 
             if ticker in dividend_data["consecutive_growth"]:
-                df.at[index, "consecutive_dividend_growth"] = dividend_data["consecutive_growth"][ticker]
+                df.at[index, "consecutive_dividend_growth_count"] = dividend_data["consecutive_growth"][ticker]
                 matched_growth_count += 1
 
-        selected_columns = [
+        base_columns = [
             "Code",
             "market",
             "country",
@@ -192,13 +192,36 @@ class ScreenerUtils:
             "Name_en",
             "is_activate",
             "is_delisted",
-        ] + list(factors_mapping.keys())
+        ]
 
-        df_selected = df[selected_columns]
+        # 배당 관련 컬럼
+        dividend_columns = ["ttm_dividend_yield", "consecutive_dividend_growth_count"]
+
+        # 팩터 컬럼 (중복 제거)
+        factor_columns = [
+            col for col in factors_mapping.keys() if col not in base_columns and col not in dividend_columns
+        ]
+
+        # 모든 컬럼 합치기 (중복 없는 리스트)
+        all_columns = base_columns + dividend_columns + factor_columns
+
+        # 중복 체크 (디버깅용)
+        column_counts = {}
+        for col in all_columns:
+            column_counts[col] = column_counts.get(col, 0) + 1
+
+        duplicates = [col for col, count in column_counts.items() if count > 1]
+        if duplicates:
+            print(f"경고: 중복 컬럼 발견: {duplicates}")
+            # 중복 제거
+            all_columns = list(dict.fromkeys(all_columns))
+
+        # 데이터프레임 선택
+        df_selected = df[all_columns]
         df_result = df_selected[df_selected["market"].isin(["KOSPI", "KOSDAQ"])].copy()
 
         for column in df_result.columns:
-            if np.issubdtype(df_result[column].dtype, np.number):
+            if np.issubdtype(df_result[column].dtypes, np.number):
                 df_result[column] = df_result[column].replace([np.inf, -np.inf], np.nan)
 
         self.validate_integer_parts(df, df_result)
@@ -208,17 +231,16 @@ class ScreenerUtils:
         for column in NEED_TO_MULTIPLY_100:
             df_result[column] = df_result[column] * 100
 
-        # 모든 숫자 컬럼을 float64로 변환하기 전에 ttm_dividend_yield 열을 소수점 둘째자리로 반올림
         if "ttm_dividend_yield" in df_result.columns:
-            df_result["ttm_dividend_yield"] = df_result["ttm_dividend_yield"].apply(
-                lambda x: round(x, 2) if pd.notnull(x) else x
-            )
+            df_result["ttm_dividend_yield"] = df_result["ttm_dividend_yield"].round(2)
 
         for column in df_result.columns:
-            if np.issubdtype(df_result[column].dtype, np.number):
+            if np.issubdtype(df_result[column].dtypes, np.number):
                 df_result[column] = df_result[column].astype(np.float64)
 
-        df_result["consecutive_dividend_growth"] = df_result["consecutive_dividend_growth"].fillna(0).astype(np.int32)
+        df_result["consecutive_dividend_growth_count"] = (
+            df_result["consecutive_dividend_growth_count"].fillna(0).astype(np.int32)
+        )
 
         # 최종 저장 전 ttm_dividend_yield 확인
         if "ttm_dividend_yield" in df_result.columns:
@@ -281,7 +303,7 @@ class ScreenerUtils:
         dividend_data = self._get_dividend_data_for_tickers(unique_tickers)
 
         df["ttm_dividend_yield"] = np.nan
-        df["consecutive_dividend_growth"] = np.nan
+        df["consecutive_dividend_growth_count"] = np.nan
 
         matched_yield_count = 0
         matched_growth_count = 0
@@ -294,10 +316,10 @@ class ScreenerUtils:
                 matched_yield_count += 1
 
             if ticker in dividend_data["consecutive_growth"]:
-                df.at[index, "consecutive_dividend_growth"] = dividend_data["consecutive_growth"][ticker]
+                df.at[index, "consecutive_dividend_growth_count"] = dividend_data["consecutive_growth"][ticker]
                 matched_growth_count += 1
 
-        selected_columns = [
+        base_columns = [
             "Code",
             "market",
             "country",
@@ -305,16 +327,39 @@ class ScreenerUtils:
             "sector_en",
             "Name",
             "Name_en",
-            "is_snp_500",
             "is_activate",
             "is_delisted",
-        ] + list(factors_mapping.keys())
+            "is_snp_500",
+        ]
 
-        df_selected = df[selected_columns]
+        # 배당 관련 컬럼
+        dividend_columns = ["ttm_dividend_yield", "consecutive_dividend_growth_count"]
+
+        # 팩터 컬럼 (중복 제거)
+        factor_columns = [
+            col for col in factors_mapping.keys() if col not in base_columns and col not in dividend_columns
+        ]
+
+        # 모든 컬럼 합치기 (중복 없는 리스트)
+        all_columns = base_columns + dividend_columns + factor_columns
+
+        # 중복 체크 (디버깅용)
+        column_counts = {}
+        for col in all_columns:
+            column_counts[col] = column_counts.get(col, 0) + 1
+
+        duplicates = [col for col, count in column_counts.items() if count > 1]
+        if duplicates:
+            print(f"경고: 중복 컬럼 발견: {duplicates}")
+            # 중복 제거
+            all_columns = list(dict.fromkeys(all_columns))
+
+        # 데이터프레임 선택
+        df_selected = df[all_columns]
         df_result = df_selected[df_selected["market"].isin(["NAS", "NYS"])].copy()
 
         for column in df_result.columns:
-            if np.issubdtype(df_result[column].dtype, np.number):
+            if np.issubdtype(df_result[column].dtypes, np.number):
                 df_result[column] = df_result[column].replace([np.inf, -np.inf], np.nan)
 
         self.validate_integer_parts(df, df_result)
@@ -325,15 +370,15 @@ class ScreenerUtils:
             df_result[column] = df_result[column] * 100
 
         if "ttm_dividend_yield" in df_result.columns:
-            df_result["ttm_dividend_yield"] = df_result["ttm_dividend_yield"].apply(
-                lambda x: round(x, 2) if pd.notnull(x) else x
-            )
+            df_result["ttm_dividend_yield"] = df_result["ttm_dividend_yield"].round(2)
 
         for column in df_result.columns:
-            if np.issubdtype(df_result[column].dtype, np.number):
+            if np.issubdtype(df_result[column].dtypes, np.number):
                 df_result[column] = df_result[column].astype(np.float64)
 
-        df_result["consecutive_dividend_growth"] = df_result["consecutive_dividend_growth"].fillna(0).astype(np.int32)
+        df_result["consecutive_dividend_growth_count"] = (
+            df_result["consecutive_dividend_growth_count"].fillna(0).astype(np.int32)
+        )
 
         df_result.to_parquet(output_file)
 
@@ -489,19 +534,17 @@ class ScreenerUtils:
         kr_df["country"] = "kr"
         us_df["country"] = "us"
 
-        # 문자열 형태의 숫자를 실수형으로 변환
         if "total_fee" in kr_df.columns:
             kr_df["total_fee"] = pd.to_numeric(kr_df["total_fee"], errors="coerce")
 
         if "total_fee" in us_df.columns:
             us_df["total_fee"] = pd.to_numeric(us_df["total_fee"], errors="coerce")
 
-        # 모든 숫자형 컬럼을 float64로 통일
         for column in kr_df.columns:
-            if np.issubdtype(kr_df[column].dtype, np.number):
+            if np.issubdtype(kr_df[column].dtypes, np.number):
                 kr_df[column] = kr_df[column].astype(np.float64)
         for column in us_df.columns:
-            if np.issubdtype(us_df[column].dtype, np.number):
+            if np.issubdtype(us_df[column].dtypes, np.number):
                 us_df[column] = us_df[column].astype(np.float64)
 
         df = pd.concat([kr_df, us_df])
@@ -641,7 +684,7 @@ class ScreenerUtils:
         processed_df = processed_df[processed_df["Code"].isin(common_codes)]
 
         for col in processed_df.columns:
-            if np.issubdtype(processed_df[col].dtype, np.number):
+            if np.issubdtype(processed_df[col].dtypes, np.number):
                 if col in ["Code", "market", "sector", "Name", "country"]:
                     continue
 
@@ -739,311 +782,3 @@ class ScreenerUtils:
 
 
 screener_utils = ScreenerUtils()
-
-
-def test_dividend_calculation():
-    """배당 계산 기능을 테스트하는 함수"""
-    print("==== 배당 계산 테스트 시작 ====")
-
-    # 1. 테이블에 실제로 데이터가 있는지 확인
-    try:
-        count = database._count("dividend_information")
-        print(f"dividend_information 테이블 레코드 수: {count}")
-
-        if count == 0:
-            print("경고: dividend_information 테이블에 데이터가 없습니다.")
-            return
-    except Exception as e:
-        print(f"dividend_information 테이블 접근 오류: {e}")
-        return
-
-    # 2. 샘플 티커 목록 가져오기 (테스트 용)
-    try:
-        sample_tickers = database._select(table="stock_information", columns=["ticker"], limit=10)
-
-        tickers = [row[0] for row in sample_tickers]
-        print("테스트 티커 목록:", tickers)
-
-        # 3. 티커별 배당 정보 조회 테스트
-        print("\n-- 티커별 배당 정보 조회 테스트 --")
-        test_dividend_lookup(tickers)
-
-        # 4. 티커별 가격 정보 조회 테스트
-        print("\n-- 티커별 가격 정보 조회 테스트 --")
-        test_price_lookup(tickers)
-
-        # 5. 배당 수익률 계산 테스트
-        print("\n-- 배당 수익률 계산 테스트 --")
-        test_dividend_yield_calculation(tickers[0])
-
-        # 6. 연속 배당 성장 계산 테스트
-        print("\n-- 연속 배당 성장 계산 테스트 --")
-        test_consecutive_growth_calculation(tickers[0])
-
-    except Exception as e:
-        print(f"테스트 중 오류 발생: {e}")
-
-    print("==== 배당 계산 테스트 완료 ====")
-
-
-def test_dividend_lookup(tickers):
-    """티커별 배당 정보 조회 테스트"""
-    for ticker in tickers[:3]:  # 처음 3개 티커만 테스트
-        try:
-            # 최근 배당 정보 조회
-            recent_dividend = database._select(
-                table="dividend_information",
-                columns=["ex_date", "payment_date", "per_share"],
-                ticker=ticker,
-                order="ex_date",
-                ascending=False,
-                limit=3,
-            )
-
-            if recent_dividend:
-                print(f"\n{ticker} 최근 배당 정보:")
-                for i, record in enumerate(recent_dividend):
-                    print(f"  {i+1}. 배당락일: {record[0]}, 지급일: {record[1]}, 주당배당금: {record[2]}")
-            else:
-                print(f"  {ticker} 티커에 대한 배당 정보가 없습니다.")
-        except Exception as e:
-            print(f"  {ticker} 티커 배당 조회 중 오류: {e}")
-
-
-def test_price_lookup(tickers):
-    """티커별 가격 정보 조회 테스트"""
-    for ticker in tickers[:3]:  # 처음 3개 티커만 테스트
-        try:
-            # 가격 정보 조회
-            price_info = database._select(
-                table="stock_trend", columns=["prev_close", "updated_at"], ticker=ticker, limit=1
-            )
-
-            if price_info:
-                print(f"{ticker} 가격 정보: 전일종가={price_info[0][0]}, 업데이트={price_info[0][2]}")
-            else:
-                print(f"{ticker} 티커에 대한 가격 정보가 없습니다.")
-        except Exception as e:
-            print(f"{ticker} 티커 가격 조회 중 오류: {e}")
-
-
-def test_dividend_yield_calculation(ticker):
-    """배당 수익률 계산 테스트"""
-    try:
-        # 1년전 날짜 계산
-        from datetime import datetime, timedelta
-
-        one_year_ago = datetime.now() - timedelta(days=365)
-        one_year_ago_str = one_year_ago.strftime("%Y-%m-%d")
-
-        # 최근 12개월 배당 합계 조회
-        aggregates = {"total_dividend": ("per_share", "sum")}
-        ttm_dividend = database._select(
-            table="dividend_information",
-            columns=["ticker"],
-            aggregates=aggregates,
-            ticker=ticker,
-            ex_date__gte=one_year_ago_str,
-        )
-
-        if ttm_dividend and ttm_dividend[0][1] is not None:
-            total_dividend = ttm_dividend[0][1]
-            print(f"{ticker} 최근 12개월 배당 합계: {total_dividend}")
-
-            # 현재 가격 조회
-            price_info = database._select(table="stock_trend", columns=["prev_close"], ticker=ticker, limit=1)
-
-            if price_info:
-                current_price = price_info[0][0]
-                print(f"{ticker} 현재 가격: {current_price}")
-
-                # 배당 수익률 계산
-                if current_price > 0:
-                    yield_percentage = (total_dividend / current_price) * 100
-                    print(f"{ticker} 배당 수익률: {yield_percentage:.2f}%")
-                else:
-                    print(f"{ticker} 가격이 0 또는 음수입니다.")
-            else:
-                print(f"{ticker} 가격 정보가 없습니다.")
-        else:
-            print(f"{ticker} 최근 12개월 배당 정보가 없습니다.")
-
-    except Exception as e:
-        print(f"배당 수익률 계산 중 오류: {e}")
-
-
-def test_consecutive_growth_calculation(ticker):
-    """연속 배당 성장 계산 테스트"""
-    try:
-        # 모든 배당 데이터 조회
-        dividend_data = database._select(table="dividend_information", columns=["ex_date", "per_share"], ticker=ticker)
-
-        if not dividend_data:
-            print(f"{ticker} 배당 데이터가 없습니다.")
-            return
-
-        # 연도별 배당금 합계 계산
-        yearly_dividends = {}
-        for record in dividend_data:
-            ex_date = record[0]
-            amount = record[1]
-            year = ex_date.year
-
-            if year not in yearly_dividends:
-                yearly_dividends[year] = 0
-            yearly_dividends[year] += amount
-
-        # 결과 출력
-        print(f"{ticker} 연도별 배당금:")
-        for year, amount in sorted(yearly_dividends.items(), reverse=True):
-            print(f"  {year}: {amount}")
-
-        # 연속 성장 계산
-        sorted_years = sorted(yearly_dividends.keys(), reverse=True)
-        if len(sorted_years) < 2:
-            print(f"{ticker} 연속 배당 성장 계산을 위한 충분한 데이터가 없습니다.")
-            return
-
-        consecutive_count = 0
-        for i in range(len(sorted_years) - 1):
-            current_year = sorted_years[i]
-            prev_year = sorted_years[i + 1]
-
-            if yearly_dividends[current_year] > yearly_dividends[prev_year]:
-                consecutive_count += 1
-                print(
-                    f"  {current_year}년({yearly_dividends[current_year]}) > {prev_year}년({yearly_dividends[prev_year]})"
-                )
-            else:
-                print(
-                    f"  {current_year}년({yearly_dividends[current_year]}) <= {prev_year}년({yearly_dividends[prev_year]}) - 성장 중단"
-                )
-                break
-
-        print(f"{ticker} 연속 배당 성장 횟수: {consecutive_count}년")
-
-    except Exception as e:
-        print(f"연속 배당 성장 계산 중 오류: {e}")
-
-
-def test_factor_processing():
-    """factor 처리 전체 과정 테스트"""
-    print("\n==== Factor 처리 테스트 시작 ====")
-
-    try:
-        # 1. 한국 주식 처리
-        print("\n-- 한국 주식 처리 테스트 --")
-        screener_utils.process_kr_factor_data()
-
-        # 2. 결과 확인
-        kr_df = screener_utils.get_df_from_parquet(MarketEnum.KR)
-        print(f"한국 주식 데이터프레임 크기: {kr_df.shape}")
-        print("배당 수익률 통계:")
-        print(kr_df["ttm_dividend_yield"].describe())
-
-        # 배당 수익률이 있는 종목 확인
-        has_dividend = kr_df[kr_df["ttm_dividend_yield"].notna()]
-        print(f"배당 수익률이 있는 종목 수: {len(has_dividend)}")
-
-        if len(has_dividend) > 0:
-            print("\n배당 수익률 상위 5개 종목:")
-            top_dividend = has_dividend.sort_values("ttm_dividend_yield", ascending=False).head(5)
-            print(top_dividend[["Code", "Name", "ttm_dividend_yield", "consecutive_dividend_growth"]])
-
-        # 3. 미국 주식 처리는 선택적으로 진행
-        process_us = input("\n미국 주식도 처리하시겠습니까? (y/n): ").strip().lower() == "y"
-
-        if process_us:
-            print("\n-- 미국 주식 처리 테스트 --")
-            screener_utils.process_us_factor_data()
-
-            # 4. 결과 확인
-            us_df = screener_utils.get_df_from_parquet(MarketEnum.US)
-            print(f"미국 주식 데이터프레임 크기: {us_df.shape}")
-            print("배당 수익률 통계:")
-            print(us_df["ttm_dividend_yield"].describe())
-
-            # 배당 수익률이 있는 종목 확인
-            has_dividend = us_df[us_df["ttm_dividend_yield"].notna()]
-            print(f"배당 수익률이 있는 종목 수: {len(has_dividend)}")
-
-            if len(has_dividend) > 0:
-                print("\n배당 수익률 상위 5개 종목:")
-                top_dividend = has_dividend.sort_values("ttm_dividend_yield", ascending=False).head(5)
-                print(top_dividend[["Code", "Name", "ttm_dividend_yield", "consecutive_dividend_growth"]])
-
-        # 5. 글로벌 데이터 처리
-        process_global = input("\n글로벌 데이터도 처리하시겠습니까? (y/n): ").strip().lower() == "y"
-
-        if process_global:
-            print("\n-- 글로벌 데이터 처리 테스트 --")
-            screener_utils.process_global_factor_data()
-
-            # 결과 확인
-            global_df = pd.read_parquet("parquet/global_stock_factors.parquet")
-            print(f"글로벌 데이터프레임 크기: {global_df.shape}")
-            print("배당 수익률 통계:")
-            print(global_df["ttm_dividend_yield"].describe())
-
-    except Exception as e:
-        print(f"Factor 처리 테스트 중 오류 발생: {e}")
-
-
-def run_specific_tests():
-    """특정 테스트만 선택적으로 실행"""
-    print("실행할 테스트를 선택하세요:")
-    print("1. 배당 계산 테스트")
-    print("2. Factor 처리 테스트 (한국 주식)")
-    print("3. Factor 처리 테스트 (미국 주식)")
-    print("4. Factor 처리 테스트 (글로벌)")
-    print("5. 모든 테스트 실행")
-
-    choice = input("선택 (1-5): ").strip()
-
-    if choice == "1":
-        test_dividend_calculation()
-    elif choice == "2":
-        screener_utils.process_kr_factor_data()
-        kr_df = screener_utils.get_df_from_parquet(MarketEnum.KR)
-        print_dividend_stats(kr_df, "한국")
-    elif choice == "3":
-        screener_utils.process_us_factor_data()
-        us_df = screener_utils.get_df_from_parquet(MarketEnum.US)
-        print_dividend_stats(us_df, "미국")
-    elif choice == "4":
-        screener_utils.process_global_factor_data()
-        global_df = pd.read_parquet("parquet/global_stock_factors.parquet")
-        print_dividend_stats(global_df, "글로벌")
-    elif choice == "5":
-        test_dividend_calculation()
-        test_factor_processing()
-    else:
-        print("잘못된 선택입니다.")
-
-
-def print_dividend_stats(df, market_name):
-    """데이터프레임의 배당 통계 출력"""
-    print(f"\n{market_name} 주식 데이터프레임 크기: {df.shape}")
-
-    if "ttm_dividend_yield" in df.columns:
-        print("배당 수익률 통계:")
-        print(df["ttm_dividend_yield"].describe())
-
-        non_na_count = df["ttm_dividend_yield"].notna().sum()
-        print(f"배당 수익률이 있는 종목 수: {non_na_count}")
-
-        if non_na_count > 0:
-            print("\n배당 수익률 상위 5개 종목:")
-            top_dividend = df[df["ttm_dividend_yield"].notna()].sort_values("ttm_dividend_yield", ascending=False).head(5)
-            print(top_dividend[["Code", "Name", "ttm_dividend_yield", "consecutive_dividend_growth"]])
-    else:
-        print("배당 수익률 컬럼이 존재하지 않습니다.")
-
-
-# 메인 실행 부분
-if __name__ == "__main__":
-    try:
-        # 테스트 메뉴 실행
-        run_specific_tests()
-    except Exception as e:
-        print(f"테스트 실행 중 오류 발생: {e}")
