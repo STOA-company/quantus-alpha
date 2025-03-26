@@ -34,7 +34,7 @@ class ScreenerUtils:
         self.etf_factor_loader = ETFDataLoader()
 
     def get_factors(self, market: MarketEnum) -> List[dict]:
-        factors = self.db._select(table="factors", is_stock=True)
+        factors = self.db._select(table="factors", is_stock=True, is_active=True)
         # 시장별 팩터 최소/최대값 계산
         market_data = self.get_df_from_parquet(market)
 
@@ -57,7 +57,6 @@ class ScreenerUtils:
                         "max_value": ceil_to_integer(max_value),
                     }
                 )
-
             else:
                 raise ValueError(f"팩터 '{factor_name}'가 데이터에 존재하지 않습니다.")
 
