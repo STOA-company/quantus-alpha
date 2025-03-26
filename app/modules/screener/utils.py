@@ -110,20 +110,25 @@ class ScreenerUtils:
             return base_columns
 
         technical_columns = ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
+        dividend_columns = ["consecutive_dividend_growth_count", "ttm_dividend_yield"]
         if type == StockType.ETF:
             technical_columns = ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"]
+
+            dividend_columns = (
+                [
+                    "recent_dividend_yield",
+                    "dividend_count",
+                    "last_dividend_per_share",
+                    "dividend_growth_rate_5y",
+                    "risk_rating",
+                ],
+            )
 
         additional_columns = {
             CategoryEnum.TECHNICAL: technical_columns,
             CategoryEnum.FUNDAMENTAL: ["roe", "fscore", "deptRatio", "operating_income", "z_score"],
             CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"],
-            CategoryEnum.DIVIDEND: [
-                "recent_dividend_yield",
-                "dividend_count",
-                "last_dividend_per_share",
-                "dividend_growth_rate_5y",
-                "risk_rating",
-            ],
+            CategoryEnum.DIVIDEND: dividend_columns,
         }
 
         return [*base_columns, *additional_columns.get(category, [])]
