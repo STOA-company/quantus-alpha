@@ -132,7 +132,10 @@ class BaseScreenerService(ABC):
             raise e
 
     def get_columns(
-        self, group_id: int = -1, category: CategoryEnum = CategoryEnum.TECHNICAL, type: Optional[StockType] = None
+        self,
+        group_id: int = -1,
+        category: CategoryEnum = CategoryEnum.TECHNICAL,
+        type: Optional[StockType] = StockType.STOCK,
     ) -> List[str]:
         """
         컬럼 목록 조회

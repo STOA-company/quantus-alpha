@@ -487,7 +487,6 @@ class ETFDataDownloader:
                     SUM(D.DIVRATE) AS DSSUM
                 FROM DS2DIV D WITH (INDEX(DS2Div_1))
                 INNER JOIN DSINFO I ON D.INFOCODE = I.INFOCODE
-                WHERE D.EFFECTIVEDATE BETWEEN '2020-01-01' AND GETDATE()
                 GROUP BY D.INFOCODE, D.EFFECTIVEDATE, D.PayDate
             ),
             DSSUMADJ AS (
@@ -546,7 +545,6 @@ class ETFDataDownloader:
                     SUM(D.DIVRATE) AS DSSUM
                 FROM DS2DIV D WITH (INDEX(DS2Div_1))
                 INNER JOIN DSINFO I ON D.INFOCODE = I.INFOCODE
-                WHERE D.EFFECTIVEDATE BETWEEN '2020-01-01' AND GETDATE()
                 GROUP BY D.INFOCODE, D.EFFECTIVEDATE, D.PayDate
             ),
             DSSUMADJ AS (
@@ -940,8 +938,8 @@ class ETFDataLoader:
         elif market_filter == ETFMarketEnum.KR:
             df = pd.read_parquet(os.path.join(self.parquet_dir, "kr_etf_factors.parquet"))
             df["country"] = "kr"
-        # elif market_filter == ETFMarketEnum.ALL:
-        #     df = pd.read_parquet(os.path.join(self.parquet_dir, "global_etf_factors.parquet"))
+        elif market_filter == ETFMarketEnum.ALL:
+            df = pd.read_parquet(os.path.join(self.parquet_dir, "global_etf_factors.parquet"))
         else:
             raise ValueError(f"Invalid market: {market_filter}")
 
@@ -1053,10 +1051,12 @@ class ETFDividendFactorExtractor:
                     current_price = dividend_group.sort_values("payment_date", ascending=False).iloc[0]["price"]
 
                 # 배당 관련 팩터 계산
-                dividend_count = self._calculate_dividend_frequency(dividend_group)
+                dividend_count = self._calculate_dividend_count(dividend_group)
                 recent_dividend_yield = self._calculate_recent_dividend_yield(dividend_group, current_price)
+                ttm_dividend_yield = self._calculate_ttm_dividend_yield(dividend_group, current_price)
                 dividend_growth_rate_3y = self._calculate_dividend_growth_rate(dividend_group, 3)
                 dividend_growth_rate_5y = self._calculate_dividend_growth_rate(dividend_group, 5)
+                dividend_frequency = self._calculate_dividend_frequency(dividend_group)
 
                 # 최신 배당 정보
                 if len(dividend_group) > 0:
@@ -1066,9 +1066,11 @@ class ETFDividendFactorExtractor:
                         {
                             "ticker": ticker,
                             "dividend_count": dividend_count,
+                            "dividend_frequency": dividend_frequency,
                             "last_dividend_date": latest_dividend["payment_date"],
                             "last_dividend_per_share": latest_dividend["per_share"],
                             "recent_dividend_yield": recent_dividend_yield,
+                            "ttm_dividend_yield": ttm_dividend_yield,
                             "dividend_growth_rate_3y": dividend_growth_rate_3y,
                             "dividend_growth_rate_5y": dividend_growth_rate_5y,
                         }
@@ -1093,7 +1095,7 @@ class ETFDividendFactorExtractor:
 
         return result_df
 
-    def _calculate_dividend_frequency(self, ticker_dividends):
+    def _calculate_dividend_count(self, ticker_dividends):
         """
         배당 주기 계산 함수 - 5년 동안의 연평균 배당 지급 횟수 기준
 
@@ -1184,6 +1186,68 @@ class ETFDividendFactorExtractor:
 
         return dividend_yield
 
+    def _calculate_ttm_dividend_yield(self, ticker_dividends, current_price):
+        """
+        TTM(Trailing Twelve Months) 배당 수익률 계산 함수
+        최근 12개월간의 배당 데이터와 현재 가격을 사용하여 배당 수익률 계산
+
+        Args:
+            ticker_dividends (DataFrame): 특정 ETF의 배당 데이터
+            current_price (float): 현재 가격
+
+        Returns:
+            float: TTM 배당 수익률 (%)
+        """
+        # 필요한 데이터가 없거나 current_price가 0 또는 None인 경우
+        if ticker_dividends.empty or current_price is None or current_price <= 0:
+            return None
+
+        # payment_date가 datetime 타입인지 확인
+        if not pd.api.types.is_datetime64_any_dtype(ticker_dividends["payment_date"]):
+            return None
+
+        # 현재 날짜
+        current_date = datetime.datetime.now()
+
+        # 12개월 전 날짜 계산
+        one_year_ago = current_date - datetime.timedelta(days=365)
+
+        # 최근 12개월 배당 데이터 필터링
+        ttm_dividends = ticker_dividends[ticker_dividends["payment_date"] >= one_year_ago]
+
+        # 최근 12개월간 데이터가 없는 경우 최근 데이터 사용
+        if len(ttm_dividends) == 0:
+            # 모든 배당 날짜가 정렬된 리스트
+            sorted_dates = sorted(ticker_dividends["payment_date"].unique())
+
+            # 가장 최근 12개월에 해당하는 데이터가 없으면 가장 최근 12개월 기간의 데이터 사용
+            if len(sorted_dates) > 0:
+                latest_date = sorted_dates[-1]
+                oldest_date_within_year = latest_date - datetime.timedelta(days=365)
+                ttm_dividends = ticker_dividends[
+                    (ticker_dividends["payment_date"] <= latest_date)
+                    & (ticker_dividends["payment_date"] >= oldest_date_within_year)
+                ]
+
+                # 최소 1개 이상의 데이터가 있어야 함
+                if len(ttm_dividends) == 0:
+                    # 1년치 데이터가 없으면 가장 최근의 배당 데이터만 사용
+                    newest_dividends = ticker_dividends[ticker_dividends["payment_date"] == latest_date]
+                    if len(newest_dividends) > 0:
+                        ttm_dividends = newest_dividends
+                    else:
+                        return None
+            else:
+                return None
+
+        # 총 배당금 합계
+        total_dividend = ttm_dividends["per_share"].sum()
+
+        # 배당 수익률 계산 (%)
+        ttm_dividend_yield = (total_dividend / current_price) * 100
+
+        return ttm_dividend_yield
+
     def _calculate_dividend_growth_rate(self, ticker_dividends, period=5):
         """
         배당 성장률 계산 함수
@@ -1247,6 +1311,33 @@ class ETFDividendFactorExtractor:
         growth_rate = (np.power(end_dividend / start_dividend, 1 / years_diff) - 1) * 100
 
         return growth_rate
+
+    def _calculate_dividend_frequency(self, ticker_dividends):
+        """
+        배당 주기 계산 함수 - dividend_count 값을 기반으로 배당 주기 문자열 반환
+
+        Args:
+            ticker_dividends (DataFrame): 특정 ETF의 배당 데이터
+
+        Returns:
+            str: 배당 주기 문자열 (yearly, half, quarter, month, week 또는 unknown)
+        """
+        # dividend_count 계산
+        dividend_count = self._calculate_dividend_count(ticker_dividends)
+
+        # 배당 주기 결정
+        if dividend_count == 0:
+            return None  # 배당 데이터 없음
+        elif dividend_count <= 1.5:
+            return "yearly"  # 연 1회 배당 (연간)
+        elif dividend_count <= 2.5:
+            return "half"  # 연 2회 배당 (반기)
+        elif dividend_count <= 4.5:
+            return "quarter"  # 연 4회 배당 (분기)
+        elif dividend_count <= 13:
+            return "month"  # 연 12회 배당 (월간)
+        else:
+            return "week"  # 연 52회 배당 (주간)
 
 
 # 데이터 전처리
@@ -1485,9 +1576,11 @@ class ETFDataPreprocessor:
         all_columns = [
             "ticker",
             "dividend_count",
+            "dividend_frequency",
             "last_dividend_date",
             "last_dividend_per_share",
             "recent_dividend_yield",
+            "ttm_dividend_yield",
             "dividend_growth_rate_3y",
             "dividend_growth_rate_5y",
         ]
@@ -1503,6 +1596,7 @@ class ETFDataPreprocessor:
         numeric_columns = [
             "last_dividend_per_share",
             "recent_dividend_yield",
+            "ttm_dividend_yield",
             "dividend_growth_rate_3y",
             "dividend_growth_rate_5y",
         ]
@@ -2177,6 +2271,5 @@ class ETFDataMerger:
 
 # 사용 예시
 if __name__ == "__main__":
-    extractor = ETFFactorExtractor()
-    df = extractor.calculate_all_factors(ctry="KR")
-    df.to_parquet("test.parquet")
+    downloader = ETFDataDownloader()
+    downloader.download_etf_dividend(ctry="KR", download=True)

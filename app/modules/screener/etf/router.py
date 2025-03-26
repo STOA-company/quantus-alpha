@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from app.batches.run_etf_screener import run_etf_screener_data
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
-from app.modules.screener.stock.schemas import FactorResponse, GroupFilter, GroupFilterResponse, GroupMetaData
+from app.modules.screener.stock.schemas import FactorResponse, GroupMetaData, ETFGroupFilter, ETFGroupFilterResponse
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.etf.schemas import FilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
@@ -169,7 +169,7 @@ def get_groups(
 
 @router.post("/groups", response_model=Dict)
 async def create_or_update_group(
-    group_filter: GroupFilter,
+    group_filter: ETFGroupFilter,
     current_user: str = Depends(get_current_user),
     screener_etf_service: ScreenerETFService = Depends(ScreenerETFService),
 ):
@@ -210,7 +210,7 @@ async def create_or_update_group(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/groups/{group_id}", response_model=GroupFilterResponse)
+@router.get("/groups/{group_id}", response_model=ETFGroupFilterResponse)
 def get_group_filters(
     group_id: int = -1,
     lang: str = "kr",
@@ -219,77 +219,77 @@ def get_group_filters(
     """
     필터 목록 조회
     """
-    try:
-        technical_columns = screener_etf_service.get_columns(group_id, CategoryEnum.TECHNICAL, type=StockType.ETF)
-        dividend_columns = screener_etf_service.get_columns(group_id, CategoryEnum.DIVIDEND, type=StockType.ETF)
+    # try:
+    technical_columns = screener_etf_service.get_columns(group_id, CategoryEnum.TECHNICAL, type=StockType.ETF)
+    dividend_columns = screener_etf_service.get_columns(group_id, CategoryEnum.DIVIDEND, type=StockType.ETF)
 
-        if lang == "en":
-            technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
-            dividend_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in dividend_columns]
+    if lang == "en":
+        technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
+        dividend_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in dividend_columns]
 
-        technical_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
-        dividend_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.DIVIDEND)
-        custom_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
+    technical_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
+    dividend_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.DIVIDEND)
+    custom_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
 
-        if group_id == -1:
-            return GroupFilterResponse(
-                id=-1,
-                name="기본",
-                market_filter=ETFMarketEnum.US,
-                type=StockType.ETF,
-                has_custom=False,
-                sector_filter=[],
-                custom_filters=[],
-                factor_filters={"technical": technical_columns, "dividend": dividend_columns, "custom": []},
-                sort_info={
-                    CategoryEnum.TECHNICAL: technical_sort_info,
-                    CategoryEnum.DIVIDEND: dividend_sort_info,
-                    CategoryEnum.CUSTOM: custom_sort_info,
-                },
-            )
-
-        group_filters = screener_etf_service.get_group_filters(group_id)
-        stock_filters = group_filters["stock_filters"]
-
-        market_filter = None
-        sector_filter = []
-        custom_filters = []
-
-        for stock_filter in stock_filters:
-            if stock_filter["factor"] == "시장":
-                market_filter = stock_filter["value"]
-            elif stock_filter["factor"] == "산업":
-                continue
-            else:
-                custom_filters.append(stock_filter)
-
-        custom_factor_filters = group_filters["custom_factor_filters"]
-
-        if lang == "en":
-            custom_factor_filters = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in custom_factor_filters]
-
-        return GroupFilterResponse(
-            id=group_id,
-            name=group_filters["name"],
-            market_filter=market_filter if market_filter else ETFMarketEnum.US,
+    if group_id == -1:
+        return ETFGroupFilterResponse(
+            id=-1,
+            name="기본",
+            market_filter=ETFMarketEnum.US,
             type=StockType.ETF,
-            sector_filter=sector_filter,
-            custom_filters=custom_filters,
-            factor_filters={
-                "technical": technical_columns,
-                "dividend": dividend_columns,
-                "custom": custom_factor_filters,
-            },
+            has_custom=False,
+            sector_filter=[],
+            custom_filters=[],
+            factor_filters={"technical": technical_columns, "dividend": dividend_columns, "custom": []},
             sort_info={
                 CategoryEnum.TECHNICAL: technical_sort_info,
                 CategoryEnum.DIVIDEND: dividend_sort_info,
                 CategoryEnum.CUSTOM: custom_sort_info,
             },
-            has_custom=group_filters["has_custom"],
         )
-    except Exception as e:
-        logger.error(f"Error getting group filters: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+
+    group_filters = screener_etf_service.get_group_filters(group_id)
+    stock_filters = group_filters["stock_filters"]
+
+    market_filter = None
+    sector_filter = []
+    custom_filters = []
+
+    for stock_filter in stock_filters:
+        if stock_filter["factor"] == "시장":
+            market_filter = stock_filter["value"]
+        elif stock_filter["factor"] == "산업":
+            continue
+        else:
+            custom_filters.append(stock_filter)
+
+    custom_factor_filters = group_filters["custom_factor_filters"]
+
+    if lang == "en":
+        custom_factor_filters = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in custom_factor_filters]
+
+    return ETFGroupFilterResponse(
+        id=group_id,
+        name=group_filters["name"],
+        market_filter=market_filter if market_filter else ETFMarketEnum.US,
+        type=StockType.ETF,
+        sector_filter=sector_filter,
+        custom_filters=custom_filters,
+        factor_filters={
+            "technical": technical_columns,
+            "dividend": dividend_columns,
+            "custom": custom_factor_filters,
+        },
+        sort_info={
+            CategoryEnum.TECHNICAL: technical_sort_info,
+            CategoryEnum.DIVIDEND: dividend_sort_info,
+            CategoryEnum.CUSTOM: custom_sort_info,
+        },
+        has_custom=group_filters["has_custom"],
+    )
+    # except Exception as e:
+    #     logger.error(f"Error getting group filters: {e}")
+    #     raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/groups/{group_id}", response_model=Dict)
