@@ -3,9 +3,9 @@ import requests
 from app.core.config import settings
 from datetime import datetime, timedelta
 from app.database.crud import database_service
-from app.core.logging.config import get_logger
+from app.core.extra.LoggerBox import LoggerBox
 
-logger = get_logger(__name__)
+logger = LoggerBox().get_logger(__name__)
 
 
 class PaymentService:
@@ -18,20 +18,16 @@ class PaymentService:
         self,
         payment_key: str,
         order_id: str,
-        amount: int,
+        receipt: dict,
         user_id: int,
-        email: str,
     ):
-        # payment_method = get_payment_method(payment_key)
         self.db._insert(
             table="toss_payment_history",
             sets={
+                "user_id": user_id,
                 "payment_key": payment_key,
                 "order_id": order_id,
-                "amount": amount,
-                "user_id": user_id,
-                "email": email,
-                # "payment_method": payment_method,
+                "receipt": receipt,
             },
         )
 
@@ -44,7 +40,7 @@ class PaymentService:
         )
         return {"subscription_end": subscription_end}
 
-    def verify_toss_payment(self, payment_key: str, order_id: str, amount: int):
+    def verify_toss_payment(self, payment_key: str, order_id: str, receipt: dict):
         """Toss API를 통해 결제 정보를 가져옵니다."""
         # Basic 인증을 위한 헤더 (Secret Key와 빈 문자열을 Base64로 인코딩)
         import base64
@@ -67,8 +63,8 @@ class PaymentService:
             logger.error(f"주문번호 불일치: {payment_data.get('orderId')} != {order_id}")
             return False
 
-        if payment_data.get("totalAmount") != amount:
-            logger.error(f"금액 불일치: {payment_data.get('totalAmount')} != {amount}")
+        if payment_data.get("totalAmount") != receipt.get("amount"):
+            logger.error(f"금액 불일치: {payment_data.get('totalAmount')} != {receipt.get('amount')}")
             return False
 
         if payment_data.get("status") != "DONE":
