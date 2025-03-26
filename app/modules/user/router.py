@@ -50,7 +50,7 @@ async def signup(
     access_token_hash = service.store_token(access_token, refresh_token)
 
     await service.screener_init(user_id=user.id)
-    service.interest_init(user_id=user.id)
+    await service.interest_init(user_id=user.id)
 
     return {
         "message": "Signup successful",
@@ -64,8 +64,8 @@ async def screener_init(user_id: int, service: UserService = Depends(get_user_se
 
 
 @router.post("/interest-init")
-def interest_init(user_id: int, service: UserService = Depends(get_user_service)):
-    service.interest_init(user_id=user_id)
+async def interest_init(user_id: int, service: UserService = Depends(get_user_service)):
+    await service.interest_init(user_id=user_id)
 
 
 @router.patch("/nickname")
