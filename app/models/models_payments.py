@@ -75,9 +75,6 @@ class TossReceipt(ServiceBase, BaseMixin):
     __table_args__ = {"extend_existing": True}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[BigInteger] = mapped_column(
-        BigInteger, ForeignKey("alphafinder_user.id", ondelete="SET NULL"), nullable=True
-    )
     payment_key: Mapped[String] = mapped_column(String(length=100), nullable=False, unique=True)
     order_id: Mapped[String] = mapped_column(String(length=100), nullable=False)
     receipt: Mapped[JSON] = mapped_column(JSON)
@@ -105,6 +102,9 @@ class AlphafinderCouponBox(ServiceBase, BaseMixin):
     )
     issued_at: Mapped[DateTime] = mapped_column(DateTime, nullable=False, comment="지급일")
     expired_at: Mapped[DateTime] = mapped_column(DateTime, nullable=False, comment="만료일")
+    coupon_status: Mapped[String] = mapped_column(
+        String(length=10), nullable=False, default="inactive", comment="쿠폰 상태"
+    )
 
     # 관계
     user = relationship("AlphafinderUser")

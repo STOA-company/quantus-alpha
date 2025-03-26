@@ -20,6 +20,7 @@ class AlphafinderUser(BaseMixin, ServiceBase):
     subscription_level: Mapped[int] = mapped_column(
         Integer, ForeignKey("alphafinder_level.level", name="fk_user_subscription_level"), nullable=True
     )
+    subscription_name: Mapped[String] = mapped_column(String(length=100), nullable=True)
 
     groups = relationship("ScreenerGroup", back_populates="user", cascade="all, delete-orphan")
     toss_payment_history = relationship("TossPaymentHistory", back_populates="user")
