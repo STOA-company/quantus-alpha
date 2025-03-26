@@ -114,15 +114,13 @@ class ScreenerUtils:
         if type == StockType.ETF:
             technical_columns = ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"]
 
-            dividend_columns = (
-                [
-                    "recent_dividend_yield",
-                    "dividend_count",
-                    "last_dividend_per_share",
-                    "dividend_growth_rate_5y",
-                    "risk_rating",
-                ],
-            )
+            dividend_columns = [
+                "recent_dividend_yield",
+                "dividend_count",
+                "last_dividend_per_share",
+                "dividend_growth_rate_5y",
+                "risk_rating",
+            ]
 
         additional_columns = {
             CategoryEnum.TECHNICAL: technical_columns,
