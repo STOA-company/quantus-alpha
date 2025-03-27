@@ -17,7 +17,6 @@ logger = LoggerBox().get_logger(__name__)
 class PaymentService:
     def __init__(self):
         self.toss_secret_key = settings.TOSS_SECRET_KEY
-        self.toss_payment_key = settings.TOSS_PAYMENT_KEY
         self.toss_api_url = "https://api.tosspayments.com/v1"
         self.db = database_service
 
