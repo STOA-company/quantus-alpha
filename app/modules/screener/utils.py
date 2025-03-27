@@ -726,7 +726,6 @@ class ScreenerUtils:
 
         return usd_value_in_ten_million
 
-    # 앞서 만든 프리셋 분류 유틸리티 함수
     def classify_factors_preset(self, presets):
         """
         FactorsPreset 리스트를 받아서 각 항목의 값을 타입별로 분류하여 리턴하는 함수
@@ -738,7 +737,6 @@ class ScreenerUtils:
             list: 각 항목의 타입과 값을 포함하는 딕셔너리 리스트
                 또는 단일 객체가 입력된 경우 딕셔너리
         """
-        # 리스트인 경우 처리
         result = []
         for preset in presets:
             classified_preset = {
