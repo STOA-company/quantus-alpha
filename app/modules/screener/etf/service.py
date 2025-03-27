@@ -67,6 +67,7 @@ class ScreenerETFService(BaseScreenerService):
                         "min_value": factor["min_value"],
                         "max_value": factor["max_value"],
                         "type": type,
+                        "presets": factor["presets"],
                     }
                 )
 

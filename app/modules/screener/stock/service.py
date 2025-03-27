@@ -6,7 +6,14 @@ import pandas as pd
 import numpy as np
 from app.modules.screener.stock.schemas import MarketEnum
 from app.modules.screener.utils import screener_utils
-from app.common.constants import FACTOR_MAP, NON_NUMERIC_COLUMNS, FACTOR_MAP_EN, UNIT_MAP
+from app.common.constants import (
+    FACTOR_MAP,
+    NON_NUMERIC_COLUMNS,
+    FACTOR_MAP_EN,
+    UNIT_MAP,
+    DIVIDEND_FREQUENCY_RANGES,
+    DIVIDEND_FREQUENCY_RANGES_EN,
+)
 from app.core.exception.custom import CustomException
 from app.modules.screener.base import BaseScreenerService
 
@@ -57,6 +64,7 @@ class ScreenerStockService(BaseScreenerService):
                         "min_value": factor["min_value"],
                         "max_value": factor["max_value"],
                         "type": type,
+                        "presets": factor["presets"],
                     }
                 )
 
@@ -145,6 +153,23 @@ class ScreenerStockService(BaseScreenerService):
             factor_map = FACTOR_MAP
             if lang == "en":
                 factor_map = FACTOR_MAP_EN
+
+            if "dividend_frequency" in result[0].keys():
+                for stock in result:
+                    freq_value = stock["dividend_frequency"]
+                    # 딕셔너리인 경우 value 값을 사용
+                    if isinstance(freq_value, dict) and "value" in freq_value:
+                        freq_value = freq_value["value"]
+
+                    # NumPy 타입을 기본 float으로 변환
+                    freq_value = float(freq_value) if freq_value != "" else 0
+
+                    # 적절한 범위 찾기
+                    freq_ranges = DIVIDEND_FREQUENCY_RANGES_EN if lang == "en" else DIVIDEND_FREQUENCY_RANGES
+                    for (min_val, max_val), label in freq_ranges.items():
+                        if min_val <= freq_value <= max_val:
+                            stock["dividend_frequency"] = label
+                            break
 
             mapped_result = []
             for item in result:
