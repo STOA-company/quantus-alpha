@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends, Response
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict
-import io
+from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
+import time
 from app.modules.screener.stock.service import ScreenerStockService
 from app.modules.screener.stock.schemas import (
     FactorResponse,
@@ -142,37 +144,6 @@ def get_filtered_stocks_count(
     except Exception as e:
         logger.exception(f"Error getting filtered stocks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/stocks/download")
-def download_filtered_stocks(
-    filtered_stocks: FilteredStocks, screener_service: ScreenerStockService = Depends(ScreenerStockService)
-):
-    custom_filters = []
-    if filtered_stocks.custom_filters:
-        custom_filters = [
-            {
-                "factor": condition.factor,
-                "above": condition.above,
-                "below": condition.below,
-            }
-            for condition in filtered_stocks.custom_filters
-        ]
-    sorted_df = screener_service.get_filtered_data(
-        market_filter=filtered_stocks.market_filter,
-        sector_filter=filtered_stocks.sector_filter,
-        custom_filters=custom_filters,
-        columns=[REVERSE_FACTOR_MAP[column] for column in filtered_stocks.factor_filters],
-    )
-
-    stream = io.StringIO()
-    sorted_df.to_csv(stream, index=False, encoding="utf-8-sig")  # 한글 인코딩
-
-    return Response(
-        content=stream.getvalue(),
-        media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="filtered_stocks.csv"'},
-    )
 
 
 @router.get("/groups", response_model=List[GroupMetaData])
@@ -395,3 +366,52 @@ def update_parquet(country: str):
     except Exception as e:
         logger.exception(f"Error updating parquet: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/download")
+def download_filtered_stocks(
+    filtered_stocks: FilteredStocks, screener_service: ScreenerStockService = Depends(ScreenerStockService)
+):
+    custom_filters = []
+    if filtered_stocks.custom_filters:
+        custom_filters = [
+            {
+                "factor": REVERSE_FACTOR_MAP[condition.factor],
+                "above": condition.above,
+                "below": condition.below,
+            }
+            for condition in filtered_stocks.custom_filters
+        ]
+
+    request_columns = ["Code", "Name", "country"]
+    reverse_factor_map = REVERSE_FACTOR_MAP
+    if filtered_stocks.lang == "en":
+        reverse_factor_map = REVERSE_FACTOR_MAP_EN
+
+    for column in [reverse_factor_map[column] for column in filtered_stocks.factor_filters]:
+        if column not in request_columns:
+            request_columns.append(column)
+
+    sort_by = "score"
+    ascending = False
+    if filtered_stocks.sort_info:
+        sort_by = reverse_factor_map[filtered_stocks.sort_info.sort_by]
+        ascending = filtered_stocks.sort_info.ascending
+
+    df = screener_service.get_filtered_stocks_download(
+        market_filter=filtered_stocks.market_filter,
+        sector_filter=filtered_stocks.sector_filter,
+        custom_filters=custom_filters,
+        columns=request_columns,
+        sort_by=sort_by,
+        ascending=ascending,
+        lang=filtered_stocks.lang,
+    )
+
+    if df is None or df.empty:
+        return JSONResponse(content={"error": "No data found"}, status_code=404)
+
+    filename = f"temp_export_{int(time.time())}.csv"
+    df.to_csv(filename, index=False)
+
+    return FileResponse(path=filename, filename="stocks_export.csv", media_type="text/csv")
