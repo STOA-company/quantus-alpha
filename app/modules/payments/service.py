@@ -81,7 +81,8 @@ class PaymentService:
                         user_id=user_id,
                         coupon_name=product_name,
                         issued_at=now_kr().date(),
-                        expired_at=now_kr().date() + timedelta(days=period_days),
+                        expired_at=now_kr().date() + timedelta(days=365),
+                        coupon_status="inactive",
                     )
                 )
         except Exception as e:
@@ -269,14 +270,55 @@ class PaymentService:
             order="issued_at",
             ascending=False,
             user_id=user_id,
-            coupon_status__in=["inactive", "expired", "reserved"],
+            coupon_status__in=["inactive", "expired"],
         )
         return coupon_list
+
+    def check_coupon_used(self, coupon_number: str):
+        """
+        쿠폰 번호가 이미 사용되었는지 확인합니다.
+
+        Args:
+            coupon_number: 확인할 쿠폰 번호
+
+        Returns:
+            bool: 이미 사용된 쿠폰이면 True, 그렇지 않으면 False
+        """
+        from app.database.crud import JoinInfo
+
+        # alphafinder_coupon과 alphafinder_coupon_box 테이블을 조인하여 쿠폰 사용 여부 확인
+        join_info = JoinInfo(
+            primary_table="alphafinder_coupon",
+            secondary_table="alphafinder_coupon_box",
+            primary_column="id",
+            secondary_column="coupon_id",
+            columns=["coupon_status"],  # coupon_box 테이블의 컬럼
+            is_outer=False,  # INNER JOIN 사용
+        )
+
+        data = self.db._select(
+            table="alphafinder_coupon",
+            columns=["id", "coupon_num"],
+            join_info=join_info,
+            coupon_num=coupon_number,  # 쿠폰 번호로 필터링
+        )
+
+        # 데이터가 있으면(쿠폰이 이미 등록되어 있으면) True 반환
+        return len(data) > 0
 
     def check_coupon_number(
         self,
         coupon_number: str,
     ):
+        """
+        유효한 쿠폰 번호인지 확인합니다.
+
+        Args:
+            coupon_number: 확인할 쿠폰 번호
+
+        Returns:
+            Row | False: 유효한 쿠폰이면 쿠폰 정보가 담긴 Row 객체, 그렇지 않으면 False
+        """
         condition = {"coupon_num": coupon_number, "is_active": True}
         data = self.db._select(
             table="alphafinder_coupon",
@@ -286,3 +328,24 @@ class PaymentService:
         if not data:
             return False
         return data[0]
+
+    def use_coupon(self, user_id: int):
+        # 이미 사용중인 멤버십이 있는지 확인
+        data = self.get_membership(user_id)
+        if data[0].is_subscribed:
+            raise Exception("이미 사용중인 멤버십이 있습니다.")
+
+        # 쿠폰 사용
+        self.update_coupon_status(user_id)
+
+        self.db._update(
+            table="alphafinder_coupon_box",
+            sets={"coupon_status": "used"},
+        )
+
+    def update_coupon_status(self, user_id: int):
+        self.db._update(
+            table="alphafinder_coupon_box",
+            sets={"coupon_status": "used"},
+            user_id=user_id,
+        )

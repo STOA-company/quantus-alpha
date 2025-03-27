@@ -62,9 +62,14 @@ class StorePaymentsHistory(BaseModel):
 class StoreCoupon(BaseModel):
     user_id: int
     coupon_name: str
-    coupon_id: Optional[str] = None
+    coupon_id: Optional[int] = None
     issued_at: datetime
     expired_at: datetime
+    coupon_status: Optional[str] = None
+
+
+class CouponId(BaseModel):
+    coupon_id: int
 
 
 class UpdateUserSubscription(BaseModel):
