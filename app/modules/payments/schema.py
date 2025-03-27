@@ -13,7 +13,7 @@ class TradePayments(BaseModel):
     amount: int = Field(description="결제 금액", example=1000)
     order_id: str = Field(description="주문 번호", example="a4CWyWY5m89PNh7xJwhk1")
     payment_key: str = Field(description="결제 키", example="5EnNZRJGvaBX7zk2yd8ydw26XvwXkLrx9POLqKQjmAw4b0e1")
-    product_type: str = Field(description="쿠폰 or 멤버십", example="coupon")
+    product_id: int = Field(description="상품 아이디", example=1)
 
     class Config:
         schema_extra = {
@@ -22,7 +22,7 @@ class TradePayments(BaseModel):
                 "amount": 1000,
                 "order_id": "a4CWyWY5m89PNh7xJwhk1",
                 "payment_key": "5EnNZRJGvaBX7zk2yd8ydw26XvwXkLrx9POLqKQjmAw4b0e1",
-                "product_type": "coupon",
+                "product_id": 1,
             }
         }
 
@@ -33,7 +33,9 @@ class ResponseMembership(BaseModel):
     start_date: datetime
     end_date: datetime
     remaining_days: int
-    # used_days: int
+    used_days: int
+    product_type: str
+    is_extended: Optional[bool] = None
 
 
 class RequestCouponNumber(BaseModel):
@@ -72,6 +74,14 @@ class CouponId(BaseModel):
     coupon_id: int
 
 
+class PriceTemplate(BaseModel):
+    id: int
+    name: str
+    original_price: int
+    event_price: Optional[int] = None
+    period_days: int
+
+
 class UpdateUserSubscription(BaseModel):
     is_subscribed: Optional[bool] = None
     subscription_start: Optional[datetime] = None
@@ -79,6 +89,15 @@ class UpdateUserSubscription(BaseModel):
     recent_payment_date: datetime
     subscription_level: Optional[int] = None
     subscription_name: Optional[str] = None
+    using_history_id: Optional[int] = None
+
+
+class StoreUserUsingHistory(BaseModel):
+    user_id: int
+    start_date: datetime
+    end_date: datetime
+    product_name: str
+    product_type: str
 
 
 # Server is listening...
