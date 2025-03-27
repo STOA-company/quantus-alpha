@@ -3,7 +3,7 @@ import json
 import requests
 
 from app.core.config import settings
-from datetime import datetime, timedelta
+from datetime import timedelta
 from app.database.crud import database_service
 from app.core.extra.LoggerBox import LoggerBox
 from http.client import HTTPSConnection as https_conn
@@ -30,44 +30,64 @@ class PaymentService:
             logger.error(f"결제 승인 실패: {payment_key}, {order_id}, {amount}, 오류: {error_msg}")
             raise Exception(f"결제 승인 실패: {payment_key}, {order_id}, {amount}, 오류: {error_msg}")
 
-        ## 결제 영수증 저장
-        receipt_id = self.store_toss_receipt(payment_key, order_id, response)
+        try:
+            ## 결제 영수증 저장
+            receipt_id = self.store_toss_receipt(payment_key, order_id, response)
+        except Exception as e:
+            logger.error(f"결제 처리 중 오류 발생: {e}")
+            self.cancel_toss_payments(payment_key, "결제 영수증 처리 중 오류 발생")
+            raise e
 
-        ## 결제 정보 확인
-        payment_data = self.verify_toss_payment(payment_key, order_id, amount)
-        if not payment_data:
-            logger.error(f"결제 정보 확인 실패: payment_key={payment_key}, order_id={order_id}, amount={amount}")
-            raise Exception(f"결제 정보 확인 실패: payment_key={payment_key}, order_id={order_id}, amount={amount}")
+        # try:
+        #     ## 결제 정보 확인
+        #     payment_data = self.verify_toss_payment(payment_key, order_id, amount)
+        #     if not payment_data:
+        #         logger.error(f"결제 정보 확인 실패: payment_key={payment_key}, order_id={order_id}, amount={amount}")
+        #         raise Exception(f"결제 정보 확인 실패: payment_key={payment_key}, order_id={order_id}, amount={amount}")
+        # except Exception as e:
+        #     logger.error(f"결제 정보 확인 중 오류 발생: {e}")
+        #     self.cancel_toss_payments(payment_key, "결제 정보 확인 중 오류 발생")
+        #     raise e
 
-        product_name = payment_data.get("orderName")
-        product_price = payment_data.get("totalAmount")
+        try:
+            product_name = response.get("orderName")
+            product_price = response.get("totalAmount")
 
-        ## 결제 정보 저장
-        level, period_days = self.get_level_and_period_days(product_name, product_price, product_type)
-        store_payments_history = StorePaymentsHistory(
-            receipt_id=receipt_id,
-            user_id=user_id,
-            level=level,
-            period_days=period_days,
-            paid_amount=amount,
-            payment_method=response.get("paymentMethod"),
-            payment_company=payment_company,
-        )
-
-        self.store_payments_history(store_payments_history)
-
-        # 쿠폰 저장 또는 멤버십 시작
-        if product_type == "membership":
-            self.user_subscription_update(user_id, period_days, level, product_name)
-        elif product_type == "coupon":
-            self.store_coupon(
-                StoreCoupon(
-                    user_id=user_id,
-                    coupon_name=product_name,
-                    issued_at=now_kr().date(),
-                    expired_at=now_kr().date() + timedelta(days=period_days),
-                )
+            ## 결제 정보 저장
+            level, period_days = self.get_level_and_period_days(product_name, product_price, product_type)
+            store_payments_history = StorePaymentsHistory(
+                receipt_id=receipt_id,
+                user_id=user_id,
+                level=level,
+                period_days=period_days,
+                paid_amount=amount,
+                payment_method=response.get("method"),
+                payment_company=payment_company,
             )
+
+            self.store_payments_history(store_payments_history)
+        except Exception as e:
+            logger.error(f"결제 정보 저장 중 오류 발생: {e}")
+            self.cancel_toss_payments(payment_key, "결제 정보 저장 중 오류 발생")
+            raise e
+
+        try:
+            # 쿠폰 저장 또는 멤버십 시작
+            if product_type == "membership":
+                self.user_subscription_update(user_id, period_days, level, product_name)
+            elif product_type == "coupon":
+                self.store_coupon(
+                    StoreCoupon(
+                        user_id=user_id,
+                        coupon_name=product_name,
+                        issued_at=now_kr().date(),
+                        expired_at=now_kr().date() + timedelta(days=period_days),
+                    )
+                )
+        except Exception as e:
+            logger.error(f"결제 처리 중 오류 발생: {e}")
+            self.cancel_toss_payments(payment_key, "결제 처리 중 오류 발생")
+            raise e
 
         return True
 
@@ -222,6 +242,16 @@ class PaymentService:
         # 모든 검증 통과
         return payment_data
 
+    def cancel_toss_payments(self, payment_key: str, cancel_reason: str):
+        auth_string = base64.b64encode(f"{self.toss_secret_key}:".encode()).decode()
+        headers = {"Authorization": f"Basic {auth_string}", "Content-Type": "application/json"}
+        payload = json.dumps({"cancelReason": cancel_reason})
+        response = requests.post(f"{self.toss_api_url}/payments/{payment_key}/cancel", headers=headers, data=payload)
+        if response.status_code != 200:
+            logger.error(f"Toss API 요청 실패: {response.status_code}")
+            return False
+        return True
+
     def get_membership(self, user_id: int):
         data = self.db._select(
             table="alphafinder_user",
@@ -236,18 +266,22 @@ class PaymentService:
         coupon_list = self.db._select(
             table="alphafinder_coupon_box",
             columns=["id", "coupon_name", "issued_at", "expired_at", "coupon_status"],
+            order="issued_at",
+            ascending=False,
             user_id=user_id,
-            coupon_status__in=["inactive", "expired"],
-            expired_at__gte=datetime.now().date(),
+            coupon_status__in=["inactive", "expired", "reserved"],
         )
         return coupon_list
 
-    def check_coupon_number(self, coupon_number: str):
+    def check_coupon_number(
+        self,
+        coupon_number: str,
+    ):
+        condition = {"coupon_num": coupon_number, "is_active": True}
         data = self.db._select(
             table="alphafinder_coupon",
             columns=["id", "coupon_name", "coupon_period_days"],
-            coupon_num=coupon_number,
-            is_active=True,
+            **condition,
         )
         if not data:
             return False
