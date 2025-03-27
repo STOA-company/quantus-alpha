@@ -228,3 +228,82 @@ class ScreenerETFService(BaseScreenerService):
             except Exception:
                 continue
         return False
+
+    def get_filtered_etfs_download(
+        self,
+        market_filter: Optional[ETFMarketEnum] = None,
+        sector_filter: Optional[List[str]] = None,
+        custom_filters: Optional[List[Dict]] = None,
+        columns: Optional[List[str]] = None,
+        sort_by: Optional[str] = "score",
+        ascending: Optional[bool] = False,
+        lang: Optional[str] = "kr",
+    ) -> pd.DataFrame:
+        try:
+            valid_sort_cols = ["Code", "Name", "country", "market", "score"]
+            if columns is None:
+                columns = []
+            if sort_by not in columns and sort_by not in valid_sort_cols:
+                raise CustomException(status_code=400, message="sort_by must be in columns")
+
+            if sector_filter:
+                for sector in sector_filter:
+                    if sector not in self.get_available_sectors():
+                        raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
+
+            etfs = screener_utils.filter_etfs(market_filter, custom_filters)
+            filtered_df = screener_utils.get_filtered_etfs_df(market_filter, etfs, columns)
+            scored_df = etf_score_utils.calculate_factor_score(filtered_df)
+            if scored_df.empty:
+                print(f"scored_df is empty. filtered_df columns: {filtered_df.columns.tolist()}")
+
+                return pd.DataFrame()
+
+            merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
+            print(f"merged_df shape: {merged_df.shape}")
+            sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
+            print(f"sorted_df shape: {sorted_df.shape}")
+
+            if market_filter in [ETFMarketEnum.US, ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
+                sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
+
+            if columns:
+                ordered_columns = []
+                for col in columns:
+                    mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
+                    if mapped_col not in ordered_columns:
+                        ordered_columns.append(mapped_col)
+            else:
+                ordered_columns = ["Code", "Name", "score", "country"]
+
+            sorted_df = sorted_df[ordered_columns]
+
+            factors = etf_factors_cache.get_configs()
+            for col in ordered_columns:
+                if col in NON_NUMERIC_COLUMNS_ETF or col in ["Code", "Name"]:
+                    continue
+                elif col == "score":
+                    sorted_df[col] = sorted_df[col].astype(float)
+                elif col in sorted_df.columns:
+
+                    def convert_value(x):
+                        if pd.isna(x) or np.isinf(x):
+                            return ""
+                        value, _ = screener_utils.convert_unit_and_value(
+                            market_filter,
+                            float(x),
+                            factors[col].get("unit", "") if col in factors else "",
+                            lang,
+                        )
+                        return value
+
+                    sorted_df[col] = sorted_df[col].apply(convert_value)
+
+            factor_map = FACTOR_MAP_EN if lang == "en" else FACTOR_MAP
+            sorted_df.rename(columns=lambda x: factor_map.get(x, x), inplace=True)
+
+            return sorted_df
+
+        except Exception as e:
+            logger.error(f"Error in get_filtered_etfs_download: {e}")
+            raise e
