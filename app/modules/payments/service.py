@@ -82,6 +82,7 @@ class PaymentService:
                         coupon_name=product_name,
                         issued_at=now_kr().date(),
                         expired_at=now_kr().date() + timedelta(days=365),
+                        coupon_status="inactive",
                     )
                 )
         except Exception as e:
