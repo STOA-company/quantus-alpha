@@ -16,11 +16,12 @@ class AlphafinderUser(BaseMixin, ServiceBase):
     is_subscribed: Mapped[Boolean] = mapped_column(Boolean, nullable=False, default=False)
     subscription_end: Mapped[Date] = mapped_column(Date, nullable=True)
     subscription_start: Mapped[Date] = mapped_column(Date, nullable=True)
-    recent_payment_date: Mapped[Date] = mapped_column(Date, nullable=True)
+    recent_payment_date: Mapped[Date] = mapped_column(Date, nullable=True)  # TODO:: 삭제 예정
     subscription_level: Mapped[int] = mapped_column(
         Integer, ForeignKey("alphafinder_level.level", name="fk_user_subscription_level"), nullable=True, default=1
     )
-    subscription_name: Mapped[String] = mapped_column(String(length=100), nullable=True)
+    subscription_name: Mapped[String] = mapped_column(String(length=100), nullable=True)  # TODO:: 삭제 예정
+    using_history_id: Mapped[int] = mapped_column(Integer, nullable=True)
 
     groups = relationship("ScreenerGroup", back_populates="user", cascade="all, delete-orphan")
     toss_payment_history = relationship("TossPaymentHistory", back_populates="user")

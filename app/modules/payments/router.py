@@ -1,6 +1,7 @@
 from datetime import timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.payments.service import PaymentService
@@ -11,12 +12,22 @@ from app.modules.payments.schema import (
     StoreCoupon,
     TradePayments,
     CouponId,
+    PriceTemplate,
 )
 from app.models.models_users import AlphafinderUser
 from app.utils.date_utils import now_kr
 from app.utils.oauth_utils import get_current_user
 
 router = APIRouter()
+
+
+# 가격 정보
+@router.get("/price_template", response_model=BaseResponse[List[PriceTemplate]], summary="가격 정보 조회")
+def get_price_template(
+    payment_service: PaymentService = Depends(PaymentService),
+):
+    price_template = payment_service.get_price_template()
+    return BaseResponse(status_code=200, message="가격 정보 조회 성공", data=price_template)
 
 
 @router.post("/toss/confirm", response_model=BaseResponse[bool], summary="토스 결제 확인")
@@ -34,10 +45,10 @@ def confirm_toss_payments(
     order_id = trade_payments.order_id
     amount = trade_payments.amount
     payment_company = trade_payments.trade_company
-    product_type = trade_payments.product_type
+    product_id = trade_payments.product_id
 
     is_confirmed = payment_service.confirm_toss_payments(
-        payment_key, order_id, amount, user_id, payment_company, product_type
+        payment_key, order_id, amount, user_id, payment_company, product_id
     )
 
     return BaseResponse(status_code=200, message="결제 확인 성공", data=is_confirmed)
@@ -48,6 +59,7 @@ def confirm_toss_payments(
 def check_toss_membership(
     lang: Optional[TranslateCountry] = Query(TranslateCountry.KO, description="언어 설정 (ko/en)"),
     current_user: AlphafinderUser = Depends(get_current_user),
+    payment_service: PaymentService = Depends(PaymentService),
 ):
     if current_user is None:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
@@ -55,13 +67,24 @@ def check_toss_membership(
         data = None
     else:
         remaining_days = (current_user.subscription_end - now_kr().date()).days
+        user_using_history = payment_service.get_user_using_history_by_user_id(current_user.id)
+        used_days = payment_service.count_used_days(user_using_history)
+        current_using_history = payment_service.get_product_type_by_user_using_history(
+            user_using_history, current_user.using_history_id
+        )
+        if current_using_history and current_using_history.product_type == "membership":
+            is_extended = payment_service.check_is_extended(current_using_history.product_relation_id)
+        else:
+            is_extended = None
         data = ResponseMembership(
-            name=current_user.subscription_name,
+            name=current_using_history.product_name,
             status=current_user.is_subscribed,
             start_date=current_user.subscription_start,
             end_date=current_user.subscription_end,
             remaining_days=remaining_days,
-            # used_days=0,
+            used_days=used_days,
+            product_type=current_using_history.product_type,
+            is_extended=is_extended,
         )
     return BaseResponse(status_code=200, message="멤버십 정보 조회 성공", data=data)
 
@@ -91,10 +114,8 @@ def check_coupon(
 
     coupon_list = payment_service.get_coupon_list_by_user_id(current_user.id)
 
-    # 튜플 결과를 명시적으로 Coupon 모델에 맞게 변환
     result = []
     for coupon in coupon_list:
-        # coupon은 (id, coupon_name, issued_at, expired_at, coupon_status) 형태의 튜플
         result.append(
             Coupon(
                 id=coupon.id,
@@ -157,6 +178,7 @@ def use_coupon(
 ):
     if current_user is None:
         raise HTTPException(status_code=400, detail="로그인이 필요합니다.")
+
     coupon_id = coupon_id.coupon_id
     is_used = payment_service.use_coupon(current_user.id, coupon_id)
 
@@ -164,16 +186,16 @@ def use_coupon(
 
 
 # 쿠폰 사용 취소
-@router.patch("/coupon/cancel", summary="쿠폰 사용 취소 / 테스트용 / coupon_status inactive로 변경")
+@router.patch("/coupon/status", summary="쿠폰 사용 취소 / 테스트용 / coupon_status inactive로 변경")
 def cancel_coupon(
-    coupon_id: CouponId,
-    current_user: AlphafinderUser = Depends(get_current_user),
+    coupon_id: int = Query(..., description="쿠폰 ID"),
+    coupon_status: str = Query("inactive", description="쿠폰 상태 (active: 사용중, inactive: 미사용, expired: 만료)"),
     payment_service: PaymentService = Depends(PaymentService),
 ):
-    if current_user is None:
-        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    if coupon_status not in ["active", "inactive", "expired"]:
+        raise HTTPException(status_code=400, detail="coupon_status는 active 또는 inactive 또는 expired만 가능합니다.")
 
-    payment_service.update_coupon_status(coupon_id.coupon_id, "inactive")
+    payment_service.update_coupon_status(coupon_id, coupon_status)
     return BaseResponse(status_code=200, message="쿠폰 사용 취소 성공", data=True)
 
 

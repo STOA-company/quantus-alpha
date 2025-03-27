@@ -58,6 +58,7 @@ class AlphafinderPaymentHistory(ServiceBase, BaseMixin):
     payment_method: Mapped[String] = mapped_column(String(length=100))
     payment_company: Mapped[String] = mapped_column(String(length=100))
     refund_at: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    is_extended: Mapped[Boolean] = mapped_column(Boolean, nullable=False, default=False)
 
     # 관계
     user = relationship("AlphafinderUser", back_populates="payment_history")
@@ -78,9 +79,6 @@ class TossReceipt(ServiceBase, BaseMixin):
     payment_key: Mapped[String] = mapped_column(String(length=100), nullable=False, unique=True)
     order_id: Mapped[String] = mapped_column(String(length=100), nullable=False)
     receipt: Mapped[JSON] = mapped_column(JSON)
-
-    # 관계
-    user = relationship("AlphafinderUser")
 
     def __repr__(self) -> str:
         return f"TossReceipt(id={self.id!r}, user_id={self.user_id!r}, payment_key={self.payment_key!r}, order_id={self.order_id!r})"
@@ -137,3 +135,23 @@ class AlphafinderCoupon(ServiceBase, BaseMixin):
 
     def __str__(self) -> str:
         return f"AlphafinderCoupon(id={self.id!r}, coupon_num={self.coupon_num!r}, coupon_name={self.coupon_name!r}, coupon_period_days={self.coupon_period_days!r})"
+
+
+class UserUsingHistory(ServiceBase, BaseMixin):
+    __tablename__ = "user_using_history"
+    __table_args__ = {"extend_existing": True}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=True)
+    start_date: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
+    end_date: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
+    product_name: Mapped[String] = mapped_column(String(length=100), nullable=False)
+    product_type: Mapped[String] = mapped_column(String(length=100), nullable=False)
+    product_relation_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    refund_at: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"UserUsingHistory(id={self.id!r}, user_id={self.user_id!r}, start_date={self.start_date!r}, end_date={self.end_date!r}, product_name={self.product_name!r}, product_type={self.product_type!r}, product_relation_id={self.product_relation_id!r})"
+
+    def __str__(self) -> str:
+        return f"UserUsingHistory(id={self.id!r}, user_id={self.user_id!r}, start_date={self.start_date!r}, end_date={self.end_date!r}, product_name={self.product_name!r}, product_type={self.product_type!r}, product_relation_id={self.product_relation_id!r})"
