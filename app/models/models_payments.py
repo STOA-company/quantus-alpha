@@ -97,6 +97,7 @@ class AlphafinderCouponBox(ServiceBase, BaseMixin):
     user_id: Mapped[BigInteger] = mapped_column(
         BigInteger, ForeignKey("alphafinder_user.id", ondelete="SET NULL"), nullable=True
     )
+    coupon_name: Mapped[String] = mapped_column(String(length=100), nullable=True)
     coupon_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("alphafinder_coupon.id", ondelete="SET NULL"), nullable=True
     )
@@ -125,6 +126,7 @@ class AlphafinderCoupon(ServiceBase, BaseMixin):
     coupon_num: Mapped[String] = mapped_column(String(length=100), nullable=False, unique=True)
     coupon_name: Mapped[String] = mapped_column(String(length=100), nullable=False)
     coupon_period_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[Boolean] = mapped_column(Boolean, nullable=False, default=True)
 
     # 관계
     coupon_box = relationship("AlphafinderCouponBox")

@@ -18,7 +18,7 @@ class AlphafinderUser(BaseMixin, ServiceBase):
     subscription_start: Mapped[Date] = mapped_column(Date, nullable=True)
     recent_payment_date: Mapped[Date] = mapped_column(Date, nullable=True)
     subscription_level: Mapped[int] = mapped_column(
-        Integer, ForeignKey("alphafinder_level.level", name="fk_user_subscription_level"), nullable=True
+        Integer, ForeignKey("alphafinder_level.level", name="fk_user_subscription_level"), nullable=True, default=1
     )
     subscription_name: Mapped[String] = mapped_column(String(length=100), nullable=True)
 
