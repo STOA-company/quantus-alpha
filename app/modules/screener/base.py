@@ -228,10 +228,10 @@ class BaseScreenerService(ABC):
         기본 팩터 필터 생성
         """
         try:
-            technical = screener_utils.get_default_columns(category=CategoryEnum.TECHNICAL)
-            fundamental = screener_utils.get_default_columns(category=CategoryEnum.FUNDAMENTAL)
-            valuation = screener_utils.get_default_columns(category=CategoryEnum.VALUATION)
-            dividend = screener_utils.get_default_columns(category=CategoryEnum.DIVIDEND)
+            technical = screener_utils.get_default_columns(category=CategoryEnum.TECHNICAL, type=type)
+            fundamental = screener_utils.get_default_columns(category=CategoryEnum.FUNDAMENTAL, type=type)
+            valuation = screener_utils.get_default_columns(category=CategoryEnum.VALUATION, type=type)
+            dividend = screener_utils.get_default_columns(category=CategoryEnum.DIVIDEND, type=type)
 
             insert_tasks = []
 
