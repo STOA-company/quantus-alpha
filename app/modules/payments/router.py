@@ -1,6 +1,7 @@
 from datetime import timedelta
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.payments.service import PaymentService
 from app.modules.payments.schema import (
@@ -45,20 +46,37 @@ def confirm_toss_payments(
 # 멤버십 관리 페이지
 @router.get("/toss/membership", summary="멤버십 관리 화면 사용권 확인", response_model=BaseResponse[ResponseMembership])
 def check_toss_membership(
+    lang: Optional[TranslateCountry] = Query(TranslateCountry.KO, description="언어 설정 (ko/en)"),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
     if current_user is None:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
-    remaining_days = (current_user.subscription_end - now_kr().date()).days
-    data = ResponseMembership(
-        name=current_user.subscription_name,
-        status=current_user.is_subscribed,
-        start_date=current_user.subscription_start,
-        end_date=current_user.subscription_end,
-        remaining_days=remaining_days,
-        # used_days=0,
-    )
+    if current_user.subscription_name is None:
+        data = None
+    else:
+        remaining_days = (current_user.subscription_end - now_kr().date()).days
+        data = ResponseMembership(
+            name=current_user.subscription_name,
+            status=current_user.is_subscribed,
+            start_date=current_user.subscription_start,
+            end_date=current_user.subscription_end,
+            remaining_days=remaining_days,
+            # used_days=0,
+        )
     return BaseResponse(status_code=200, message="멤버십 정보 조회 성공", data=data)
+
+
+# 멤버십 구독 취소
+@router.patch("/membership/cancel", summary="멤버십 구독 취소 / test용 / subscription_status False로 변경")
+def cancel_toss_membership(
+    current_user: AlphafinderUser = Depends(get_current_user),
+    payment_service: PaymentService = Depends(PaymentService),
+):
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+    payment_service.cancel_membership(current_user.id)
+    return BaseResponse(status_code=200, message="멤버십 구독 취소 성공", data=True)
 
 
 # 쿠폰함 페이지
@@ -146,12 +164,17 @@ def use_coupon(
 
 
 # 쿠폰 사용 취소
-@router.patch("/coupon/cancel", response_model=BaseResponse[bool], summary="쿠폰 사용 취소")
+@router.patch("/coupon/cancel", summary="쿠폰 사용 취소 / 테스트용 / coupon_status inactive로 변경")
 def cancel_coupon(
+    coupon_id: CouponId,
     current_user: AlphafinderUser = Depends(get_current_user),
+    payment_service: PaymentService = Depends(PaymentService),
 ):
     if current_user is None:
-        raise HTTPException(status_code=400, detail="로그인이 필요합니다.")
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+    payment_service.update_coupon_status(coupon_id.coupon_id, "inactive")
+    return BaseResponse(status_code=200, message="쿠폰 사용 취소 성공", data=True)
 
 
 @router.post("/toss/refund", response_model=BaseResponse[bool], summary="토스 결제 환불")
