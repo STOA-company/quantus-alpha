@@ -362,11 +362,11 @@ class PaymentService:
 
         return True
 
-    def update_coupon_status(self, user_id: int, coupon_status: str):
+    def update_coupon_status(self, coupon_id: int, coupon_status: str):
         self.db._update(
             table="alphafinder_coupon_box",
             sets={"coupon_status": coupon_status},
-            user_id=user_id,
+            id=coupon_id,
         )
 
     def get_coupon_by_coupon_id(self, coupon_id: int):
@@ -385,3 +385,28 @@ class PaymentService:
             join_info=join_info,
         )
         return data[0]
+
+    #####################################
+    def cancel_membership(self, user_id: int):
+        self.db._update(
+            table="alphafinder_user",
+            sets={"is_subscribed": False},
+            id=user_id,
+        )
+
+    # def get_coupon_by_coupon_id(self, coupon_id: int):
+    #     join_info = JoinInfo(
+    #         primary_table="alphafinder_coupon_box",
+    #         secondary_table="alphafinder_price",
+    #         primary_column="coupon_name",
+    #         secondary_column="name",
+    #         columns=["period_days", "level"],
+    #     )
+
+    #     data = self.db._select(
+    #         table="alphafinder_coupon_box",
+    #         columns=["id", "coupon_name", "issued_at", "expired_at", "coupon_status", "period_days", "level"],
+    #         id=coupon_id,
+    #         join_info=join_info,
+    #     )
+    #     return data[0]
