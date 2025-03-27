@@ -191,7 +191,7 @@ class PaymentService:
                 subscription_end=now_kr().date() + timedelta(days=period),
                 recent_payment_date=now_kr().date(),
                 subscription_level=level,
-                product_name=product_name,
+                subscription_name=product_name,
             )
             self.update_subscription(user_id, update_user_subscription)
 
@@ -355,7 +355,7 @@ class PaymentService:
             raise HTTPException(status_code=410, detail="쿠폰의 유효기간이 지났습니다.")
 
         # 쿠폰 사용
-        self.update_coupon_status(user_id, "active")
+        self.update_coupon_status(coupon_id, "active")
 
         # 유저 정보 업데이트
         self.user_subscription_update(user_id, coupon_data.period_days, coupon_data.level, coupon_data.coupon_name)
