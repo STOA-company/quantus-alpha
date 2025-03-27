@@ -11,6 +11,7 @@ class UserInfoResponse(BaseModel):
     image_format: Optional[str] = None
     is_subscribed: bool = False
     subscription_end: Optional[datetime] = None
+    level: Optional[str] = None
 
 
 class RefreshTokenResponse(BaseModel):
