@@ -1,10 +1,11 @@
 import base64
 import json
+from fastapi import HTTPException
 import requests
 
 from app.core.config import settings
 from datetime import timedelta
-from app.database.crud import database_service
+from app.database.crud import JoinInfo, database_service
 from app.core.extra.LoggerBox import LoggerBox
 from http.client import HTTPSConnection as https_conn
 
@@ -190,7 +191,7 @@ class PaymentService:
                 subscription_end=now_kr().date() + timedelta(days=period),
                 recent_payment_date=now_kr().date(),
                 subscription_level=level,
-                product_name=product_name,
+                subscription_name=product_name,
             )
             self.update_subscription(user_id, update_user_subscription)
 
@@ -274,7 +275,18 @@ class PaymentService:
         )
         return coupon_list
 
-    def check_coupon_used(self, coupon_number: str):
+    # def get_coupon_by_coupon_id(self, coupon_id: int):
+    #     coupon_list = self.db._select(
+    #         table="alphafinder_coupon_box",
+    #         columns=["id", "coupon_name", "issued_at", "expired_at", "coupon_status"],
+    #         order="issued_at",
+    #         ascending=False,
+    #         user_id=user_id,
+    #         coupon_status__in=["inactive", "expired"],
+    #     )
+    #     return coupon_list
+
+    def check_coupon_used(self, coupon_number: str, user_id: int):
         """
         쿠폰 번호가 이미 사용되었는지 확인합니다.
 
@@ -284,7 +296,6 @@ class PaymentService:
         Returns:
             bool: 이미 사용된 쿠폰이면 True, 그렇지 않으면 False
         """
-        from app.database.crud import JoinInfo
 
         # alphafinder_coupon과 alphafinder_coupon_box 테이블을 조인하여 쿠폰 사용 여부 확인
         join_info = JoinInfo(
@@ -294,6 +305,7 @@ class PaymentService:
             secondary_column="coupon_id",
             columns=["coupon_status"],  # coupon_box 테이블의 컬럼
             is_outer=False,  # INNER JOIN 사용
+            secondary_condition={"user_id": user_id},
         )
 
         data = self.db._select(
@@ -322,30 +334,54 @@ class PaymentService:
         condition = {"coupon_num": coupon_number, "is_active": True}
         data = self.db._select(
             table="alphafinder_coupon",
-            columns=["id", "coupon_name", "coupon_period_days"],
+            columns=["id", "coupon_name", "coupon_period_days", "expired_at"],
             **condition,
         )
         if not data:
             return False
         return data[0]
 
-    def use_coupon(self, user_id: int):
+    def use_coupon(self, user_id: int, coupon_id: int) -> bool:
         # 이미 사용중인 멤버십이 있는지 확인
         data = self.get_membership(user_id)
         if data[0].is_subscribed:
-            raise Exception("이미 사용중인 멤버십이 있습니다.")
+            raise HTTPException(status_code=409, detail="이미 사용중인 멤버십이 있습니다.")
+
+        # 쿠폰이 사용한 상태인지 확인
+        coupon_data = self.get_coupon_by_coupon_id(coupon_id)
+        if coupon_data.coupon_status == "active":
+            raise HTTPException(status_code=409, detail="이미 사용중인 쿠폰입니다.")
+        elif coupon_data.coupon_status == "expired":
+            raise HTTPException(status_code=410, detail="쿠폰의 유효기간이 지났습니다.")
 
         # 쿠폰 사용
-        self.update_coupon_status(user_id)
+        self.update_coupon_status(coupon_id, "active")
 
+        # 유저 정보 업데이트
+        self.user_subscription_update(user_id, coupon_data.period_days, coupon_data.level, coupon_data.coupon_name)
+
+        return True
+
+    def update_coupon_status(self, user_id: int, coupon_status: str):
         self.db._update(
             table="alphafinder_coupon_box",
-            sets={"coupon_status": "used"},
-        )
-
-    def update_coupon_status(self, user_id: int):
-        self.db._update(
-            table="alphafinder_coupon_box",
-            sets={"coupon_status": "used"},
+            sets={"coupon_status": coupon_status},
             user_id=user_id,
         )
+
+    def get_coupon_by_coupon_id(self, coupon_id: int):
+        join_info = JoinInfo(
+            primary_table="alphafinder_coupon_box",
+            secondary_table="alphafinder_price",
+            primary_column="coupon_name",
+            secondary_column="name",
+            columns=["period_days", "level"],
+        )
+
+        data = self.db._select(
+            table="alphafinder_coupon_box",
+            columns=["id", "coupon_name", "issued_at", "expired_at", "coupon_status", "period_days", "level"],
+            id=coupon_id,
+            join_info=join_info,
+        )
+        return data[0]

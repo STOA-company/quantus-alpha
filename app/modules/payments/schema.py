@@ -29,9 +29,9 @@ class TradePayments(BaseModel):
 
 class ResponseMembership(BaseModel):
     name: str
-    status: str
-    start_date: str
-    end_date: str
+    status: bool
+    start_date: datetime
+    end_date: datetime
     remaining_days: int
     # used_days: int
 
@@ -78,7 +78,7 @@ class UpdateUserSubscription(BaseModel):
     subscription_end: datetime
     recent_payment_date: datetime
     subscription_level: Optional[int] = None
-    product_name: Optional[str] = None
+    subscription_name: Optional[str] = None
 
 
 # Server is listening...

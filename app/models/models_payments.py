@@ -127,6 +127,7 @@ class AlphafinderCoupon(ServiceBase, BaseMixin):
     coupon_name: Mapped[String] = mapped_column(String(length=100), nullable=False)
     coupon_period_days: Mapped[int] = mapped_column(Integer, nullable=False)
     is_active: Mapped[Boolean] = mapped_column(Boolean, nullable=False, default=True)
+    expired_at: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
 
     # 관계
     coupon_box = relationship("AlphafinderCouponBox")
