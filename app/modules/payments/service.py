@@ -393,3 +393,20 @@ class PaymentService:
             sets={"is_subscribed": False},
             id=user_id,
         )
+
+    # def get_coupon_by_coupon_id(self, coupon_id: int):
+    #     join_info = JoinInfo(
+    #         primary_table="alphafinder_coupon_box",
+    #         secondary_table="alphafinder_price",
+    #         primary_column="coupon_name",
+    #         secondary_column="name",
+    #         columns=["period_days", "level"],
+    #     )
+
+    #     data = self.db._select(
+    #         table="alphafinder_coupon_box",
+    #         columns=["id", "coupon_name", "issued_at", "expired_at", "coupon_status", "period_days", "level"],
+    #         id=coupon_id,
+    #         join_info=join_info,
+    #     )
+    #     return data[0]

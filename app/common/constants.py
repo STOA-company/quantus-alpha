@@ -144,6 +144,8 @@ FACTOR_MAP = {
     "psr_ttm": "PSR (TTM)",
     "ttm_dividend_yield": "직전 12개월 배당 수익률",
     "consecutive_dividend_growth_count": "연속 배당 성장 횟수",
+    "consecutive_dividend_count": "연속 배당 지급 횟수",
+    "dividend_frequency": "배당 주기",
     ########################################################
     # ETF
     ########################################################
@@ -235,6 +237,8 @@ FACTOR_MAP_EN = {
     "psr_ttm": "PSR (TTM)",
     "ttm_dividend_yield": "TTM Dividend Yield",
     "consecutive_dividend_growth_count": "Consecutive Dividend Growth Count",
+    "consecutive_dividend_count": "Consecutive Dividend Count",
+    "dividend_frequency": "Dividend Frequency",
     ########################################################
     # ETF
     ########################################################
@@ -260,6 +264,25 @@ FACTOR_MAP_EN = {
     "is_hedge": "Hedge",
     "last_dividend_date": "Last dividend date",
 }
+
+DIVIDEND_FREQUENCY_RANGES = {
+    (0, 0): "",  # 배당 없음
+    (0.01, 1.5): "연간",  # 연 1회 배당 (연간)
+    (1.5, 2.5): "반기",  # 연 2회 배당 (반기)
+    (2.5, 4.5): "분기",  # 연 4회 배당 (분기)
+    (4.5, 13): "월간",  # 연 12회 배당 (월간)
+    (13, float("inf")): "주간",  # 연 52회 배당 (주간)
+}
+
+DIVIDEND_FREQUENCY_RANGES_EN = {
+    (0, 0): "",  # 배당 없음
+    (0.01, 1.5): "Annual",  # 연 1회 배당 (연간)
+    (1.5, 2.5): "Semi-Annual",  # 연 2회 배당 (반기)
+    (2.5, 4.5): "Quarterly",  # 연 4회 배당 (분기)
+    (4.5, 13): "Monthly",  # 연 12회 배당 (월간)
+    (13, float("inf")): "Weekly",  # 연 52회 배당 (주간)
+}
+
 
 FACTOR_KOREAN_TO_ENGLISH_MAP = {
     "티커": "Ticker",

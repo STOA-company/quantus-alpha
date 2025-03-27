@@ -25,6 +25,7 @@ class FactorResponse(BaseModel):
     min_value: Optional[float] = None
     max_value: Optional[float] = None
     type: Optional[str] = None
+    presets: List[Dict] = []
 
     class Config:
         from_attributes = True

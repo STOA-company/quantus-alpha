@@ -328,7 +328,8 @@ def update_parquet(ctry: Literal["KR", "US"], screener_etf_service: ScreenerETFS
 @router.get("/old/parquet")
 def get_old_parquet(screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
     try:
-        run_etf_screener_data()
+        run_etf_screener_data("KR")
+        run_etf_screener_data("US")
         return True
     except Exception as e:
         logger.exception(e)
