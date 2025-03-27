@@ -37,10 +37,10 @@ echo "Changing to project directory..."
 cd ~/quantus-alpha || exit 1
 
 # Git 작업
-# echo "Fetching latest changes..."
-# git fetch origin || exit 1
-# git checkout $BRANCH || exit 1
-# git pull origin $BRANCH || exit 1
+echo "Fetching latest changes..."
+git fetch origin || exit 1
+git checkout $BRANCH || exit 1
+git pull origin $BRANCH || exit 1
 
 # Poetry install
 echo "Installing dependencies with Poetry..."
