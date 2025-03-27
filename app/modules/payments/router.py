@@ -97,25 +97,27 @@ def register_coupon(
     current_user: AlphafinderUser = Depends(get_current_user),
     payment_service: PaymentService = Depends(PaymentService),
 ):
-    # if current_user is None:
-    #     raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
-    user_id = 247
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
     coupon_number = coupon_number.coupon_number
-
+    user_id = current_user.id
     # 사용한 쿠폰인지 확인
-    is_used = payment_service.check_coupon_used(coupon_number)
+    is_used = payment_service.check_coupon_used(coupon_number, user_id)
     if is_used:
-        raise HTTPException(status_code=400, detail="이미 사용한 쿠폰입니다.")
+        raise HTTPException(status_code=409, detail="이미 사용한 쿠폰입니다.")
 
     # 유효한 쿠폰인지 확인
     coupon_data = payment_service.check_coupon_number(coupon_number)
     if not coupon_data:
-        raise HTTPException(status_code=400, detail="쿠폰 번호가 유효하지 않습니다.")
+        raise HTTPException(status_code=404, detail="쿠폰 번호가 유효하지 않습니다.")
+
+    # 쿠폰의 유효기간이 지났는지 확인
+    if coupon_data.expired_at.date() < now_kr().date():
+        raise HTTPException(status_code=410, detail="쿠폰의 유효기간이 지났습니다.")
 
     # 쿠폰 등록
     payment_service.store_coupon(
         StoreCoupon(
-            # user_id=current_user.id,
             user_id=user_id,
             coupon_name=coupon_data.coupon_name,
             coupon_id=coupon_data.id,
@@ -137,10 +139,10 @@ def use_coupon(
 ):
     if current_user is None:
         raise HTTPException(status_code=400, detail="로그인이 필요합니다.")
+    coupon_id = coupon_id.coupon_id
+    is_used = payment_service.use_coupon(current_user.id, coupon_id)
 
-    payment_service.use_coupon(current_user.id)
-
-    return BaseResponse(status_code=200, message="쿠폰 사용 성공", data=True)
+    return BaseResponse(status_code=200, message="쿠폰 사용 성공", data=is_used)
 
 
 # 쿠폰 사용 취소
