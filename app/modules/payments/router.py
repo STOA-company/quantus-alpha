@@ -81,8 +81,8 @@ def check_coupon(
             Coupon(
                 id=coupon.id,
                 coupon_name=coupon.coupon_name,
-                issued_at=coupon.issued_at.date(),  # datetime -> date 변환
-                expired_at=coupon.expired_at.date(),  # datetime -> date 변환
+                issued_at=coupon.issued_at.date(),
+                expired_at=coupon.expired_at.date(),
                 coupon_status=coupon.coupon_status,
             )
         )
