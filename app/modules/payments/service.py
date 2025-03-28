@@ -517,7 +517,7 @@ class PaymentService:
     def get_price_template_by_name(self, subscription_name: str):
         data = self.db._select(
             table="alphafinder_price",
-            columns=["period_days"],
+            columns=["id", "level", "period_days", "price", "event_price"],
             name=subscription_name,
         )
-        return data[0].period_days
+        return data[0]
