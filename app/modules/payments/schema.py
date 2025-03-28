@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -53,7 +53,7 @@ class Coupon(BaseModel):
 class StorePaymentsHistory(BaseModel):
     receipt_id: int
     user_id: int
-    level: str
+    level: int
     period_days: int
     paid_amount: int
     payment_method: str
@@ -82,6 +82,11 @@ class PriceTemplate(BaseModel):
     period_days: int
 
 
+class PriceTemplateInfo(BaseModel):
+    using_subscription_name: Optional[str] = None
+    price_template: List[PriceTemplate]
+
+
 class UpdateUserSubscription(BaseModel):
     is_subscribed: Optional[bool] = None
     subscription_start: Optional[datetime] = None
@@ -98,6 +103,15 @@ class StoreUserUsingHistory(BaseModel):
     end_date: datetime
     product_name: str
     product_type: str
+
+
+class ResponseUserUsingHistory(BaseModel):
+    history_id: int
+    start_date: datetime
+    end_date: datetime
+    product_name: str
+    product_type: str
+    is_refunded: bool
 
 
 # Server is listening...

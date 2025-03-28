@@ -1,6 +1,5 @@
 import base64
 import json
-from typing import List
 from fastapi import HTTPException
 import requests
 
@@ -10,8 +9,10 @@ from app.database.crud import JoinInfo, database_service
 from app.core.extra.LoggerBox import LoggerBox
 from http.client import HTTPSConnection as https_conn
 
+from app.models.models_users import AlphafinderUser
 from app.modules.payments.schema import (
     PriceTemplate,
+    PriceTemplateInfo,
     StoreCoupon,
     StorePaymentsHistory,
     StoreUserUsingHistory,
@@ -28,11 +29,11 @@ class PaymentService:
         self.toss_api_url = "https://api.tosspayments.com/v1"
         self.db = database_service
 
-    def get_price_template(self) -> List[PriceTemplate]:
+    def get_price_template(self, current_user: AlphafinderUser) -> PriceTemplateInfo:
         data = self.get_price()
-        result = []
+        price_template = []
         for price in data:
-            result.append(
+            price_template.append(
                 PriceTemplate(
                     id=price.id,
                     name=price.name,
@@ -41,6 +42,10 @@ class PaymentService:
                     period_days=price.period_days,
                 )
             )
+        result = PriceTemplateInfo(
+            using_subscription_name=current_user.subscription_name if current_user.is_subscribed else None,
+            price_template=price_template,
+        )
         return result
 
     def get_price(self):
@@ -459,7 +464,15 @@ class PaymentService:
     def cancel_membership(self, user_id: int):
         self.db._update(
             table="alphafinder_user",
-            sets={"subscription_name": None, "is_subscribed": False, "subscription_history_id": None},
+            sets={
+                "is_subscribed": False,
+                "subscription_end": None,
+                "subscription_start": None,
+                "recent_payment_date": None,
+                "subscription_level": 1,
+                "subscription_name": None,
+                "using_history_id": None,
+            },
             id=user_id,
         )
 
