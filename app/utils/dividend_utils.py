@@ -112,7 +112,7 @@ class DividendUtils:
 
         return payment_dict
 
-    def get_dividend_frequency(self, tickers: List[str]) -> Dict[str, int]:
+    def get_dividend_count(self, tickers: List[str]) -> Dict[str, int]:
         if not tickers:
             return {}
 
