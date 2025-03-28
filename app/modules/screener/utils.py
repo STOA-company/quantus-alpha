@@ -121,7 +121,7 @@ class ScreenerUtils:
 
             dividend_columns = [
                 "recent_dividend_yield",
-                "dividend_count",
+                "dividend_frequency",
                 "last_dividend_per_share",
                 "dividend_growth_rate_5y",
                 "risk_rating",

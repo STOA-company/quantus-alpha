@@ -149,7 +149,6 @@ FACTOR_MAP = {
     ########################################################
     # ETF
     ########################################################
-    "dividend_count": "5년 연평균 배당 횟수",
     "last_dividend_per_share": "최근 주당 배당금",
     "recent_dividend_yield": "직전 년도 배당 수익률",
     "dividend_growth_rate_3y": "배당 성장률 (3년)",
@@ -244,7 +243,6 @@ FACTOR_MAP_EN = {
     ########################################################
     "manager": "Manager",
     "risk_rating": "Risk Rating",
-    "dividend_count": "5Y avg dividend frequency",
     "last_dividend_per_share": "Last dividend per share",
     "recent_dividend_yield": "Last annual dividend yield",
     "dividend_growth_rate_3y": "Dividend growth (3Y)",
@@ -405,7 +403,6 @@ ETF_FACTOR_LIST = [
     "week_52_low",
     "drawdown_1y",
     "median_trade",
-    "dividend_count",
     "last_dividend_date",
     "last_dividend_per_share",
     "recent_dividend_yield",

@@ -1051,7 +1051,6 @@ class ETFDividendFactorExtractor:
                     current_price = dividend_group.sort_values("payment_date", ascending=False).iloc[0]["price"]
 
                 # 배당 관련 팩터 계산
-                dividend_count = self._calculate_dividend_count(dividend_group)
                 recent_dividend_yield = self._calculate_recent_dividend_yield(dividend_group, current_price)
                 ttm_dividend_yield = self._calculate_ttm_dividend_yield(dividend_group, current_price)
                 dividend_growth_rate_3y = self._calculate_dividend_growth_rate(dividend_group, 3)
@@ -1065,7 +1064,6 @@ class ETFDividendFactorExtractor:
                     results.append(
                         {
                             "ticker": ticker,
-                            "dividend_count": dividend_count,
                             "dividend_frequency": dividend_frequency,
                             "last_dividend_date": latest_dividend["payment_date"],
                             "last_dividend_per_share": latest_dividend["per_share"],
@@ -1575,7 +1573,6 @@ class ETFDataPreprocessor:
         """
         all_columns = [
             "ticker",
-            "dividend_count",
             "dividend_frequency",
             "last_dividend_date",
             "last_dividend_per_share",
