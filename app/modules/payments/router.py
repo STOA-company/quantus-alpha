@@ -76,9 +76,12 @@ def check_toss_membership(
         if current_using_history and current_using_history.product_type == "membership":
             is_extended = payment_service.check_is_extended(current_using_history.product_relation_id)
             price_template = payment_service.get_price_template_by_name(current_using_history.product_name)
+            product_id = price_template.id
+            product_amount = price_template.price
         else:
             is_extended = None
-            price_template = None
+            product_id = None
+            product_amount = None
         data = ResponseMembership(
             name=current_using_history.product_name,
             status=current_user.is_subscribed,
@@ -88,8 +91,8 @@ def check_toss_membership(
             used_days=used_days,
             product_type=current_using_history.product_type,
             is_extended=is_extended,
-            product_id=price_template.id,
-            product_amount=price_template,
+            product_id=product_id,
+            product_amount=product_amount,
         )
     return BaseResponse(status_code=200, message="멤버십 정보 조회 성공", data=data)
 
