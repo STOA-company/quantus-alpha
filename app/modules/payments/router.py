@@ -7,13 +7,13 @@ from app.modules.common.schemas import BaseResponse
 from app.modules.payments.service import PaymentService
 from app.modules.payments.schema import (
     Coupon,
+    PriceTemplate,
     RequestCouponNumber,
     ResponseMembership,
     ResponseUserUsingHistory,
     StoreCoupon,
     TradePayments,
     CouponId,
-    PriceTemplateInfo,
 )
 from app.models.models_users import AlphafinderUser
 from app.utils.date_utils import now_kr
@@ -23,12 +23,11 @@ router = APIRouter()
 
 
 # 가격 정보
-@router.get("/price_template", response_model=BaseResponse[PriceTemplateInfo], summary="가격 정보 조회")
+@router.get("/price_template", response_model=BaseResponse[List[PriceTemplate]], summary="가격 정보 조회")
 def get_price_template(
-    current_user: AlphafinderUser = Depends(get_current_user),
     payment_service: PaymentService = Depends(PaymentService),
 ):
-    price_template = payment_service.get_price_template(current_user)
+    price_template = payment_service.get_price_template()
     return BaseResponse(status_code=200, message="가격 정보 조회 성공", data=price_template)
 
 
@@ -76,8 +75,10 @@ def check_toss_membership(
         )
         if current_using_history and current_using_history.product_type == "membership":
             is_extended = payment_service.check_is_extended(current_using_history.product_relation_id)
+            product_amount = payment_service.get_product_amount(current_using_history.product_name)
         else:
             is_extended = None
+            product_amount = None
         data = ResponseMembership(
             name=current_using_history.product_name,
             status=current_user.is_subscribed,
@@ -87,6 +88,7 @@ def check_toss_membership(
             used_days=used_days,
             product_type=current_using_history.product_type,
             is_extended=is_extended,
+            product_amount=product_amount,
         )
     return BaseResponse(status_code=200, message="멤버십 정보 조회 성공", data=data)
 
@@ -231,9 +233,8 @@ def refund_toss_payments(
     current_user: AlphafinderUser = Depends(get_current_user),
     payment_service: PaymentService = Depends(PaymentService),
 ):
-    pass
-    # if current_user is None:
-    #     raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
-    # payment_service.refund_toss_payments(current_user.id)
-    # return BaseResponse(status_code=200, message="토스 결제 환불 성공", data=True)
+    payment_service.refund_toss_payments(current_user.id)
+    return BaseResponse(status_code=200, message="토스 결제 환불 성공", data=True)

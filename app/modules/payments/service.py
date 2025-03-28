@@ -1,5 +1,6 @@
 import base64
 import json
+from typing import List
 from fastapi import HTTPException
 import requests
 
@@ -9,10 +10,8 @@ from app.database.crud import JoinInfo, database_service
 from app.core.extra.LoggerBox import LoggerBox
 from http.client import HTTPSConnection as https_conn
 
-from app.models.models_users import AlphafinderUser
 from app.modules.payments.schema import (
     PriceTemplate,
-    PriceTemplateInfo,
     StoreCoupon,
     StorePaymentsHistory,
     StoreUserUsingHistory,
@@ -29,7 +28,7 @@ class PaymentService:
         self.toss_api_url = "https://api.tosspayments.com/v1"
         self.db = database_service
 
-    def get_price_template(self, current_user: AlphafinderUser) -> PriceTemplateInfo:
+    def get_price_template(self) -> List[PriceTemplate]:
         data = self.get_price()
         price_template = []
         for price in data:
@@ -42,11 +41,7 @@ class PaymentService:
                     period_days=price.period_days,
                 )
             )
-        result = PriceTemplateInfo(
-            using_subscription_name=current_user.subscription_name if current_user.is_subscribed else None,
-            price_template=price_template,
-        )
-        return result
+        return price_template
 
     def get_price(self):
         data = self.db._select(
@@ -510,3 +505,19 @@ class PaymentService:
             id=product_relation_id,
         )
         return data[0].is_extended
+
+    def get_product_amount(self, product_relation_id: int):
+        data = self.db._select(
+            table="alphafinder_price",
+            columns=["price"],
+            id=product_relation_id,
+        )
+        return data[0].price
+
+    def get_price_template_by_name(self, subscription_name: str):
+        data = self.db._select(
+            table="alphafinder_price",
+            columns=["period_days"],
+            name=subscription_name,
+        )
+        return data[0].period_days
