@@ -121,7 +121,7 @@ class ScreenerUtils:
 
             dividend_columns = [
                 "recent_dividend_yield",
-                "dividend_frequency",
+                "dividend_count",
                 "last_dividend_per_share",
                 "dividend_growth_rate_5y",
                 "risk_rating",
@@ -174,7 +174,7 @@ class ScreenerUtils:
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
         df["consecutive_dividend_count"] = np.nan
-        df["dividend_frequency"] = np.nan
+        df["dividend_count"] = np.nan
 
         for index, row in df.iterrows():
             ticker = row["Code"]
@@ -188,8 +188,8 @@ class ScreenerUtils:
             if ticker in dividend_data["consecutive_dividend_count"]:
                 df.at[index, "consecutive_dividend_count"] = dividend_data["consecutive_dividend_count"][ticker]
 
-            if ticker in dividend_data["dividend_frequency"]:
-                df.at[index, "dividend_frequency"] = dividend_data["dividend_frequency"][ticker]
+            if ticker in dividend_data["dividend_count"]:
+                df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
 
         base_columns = [
             "Code",
@@ -208,7 +208,7 @@ class ScreenerUtils:
             "ttm_dividend_yield",
             "consecutive_dividend_growth_count",
             "consecutive_dividend_count",
-            "dividend_frequency",
+            "dividend_count",
         ]
 
         # 팩터 컬럼 (중복 제거)
@@ -250,8 +250,8 @@ class ScreenerUtils:
         if "consecutive_dividend_count" in df_result.columns:
             df_result["consecutive_dividend_count"] = df_result["consecutive_dividend_count"].fillna(0).astype(np.int32)
 
-        if "dividend_frequency" in df_result.columns:
-            df_result["dividend_frequency"] = df_result["dividend_frequency"].fillna(0).astype(np.int32)
+        if "dividend_count" in df_result.columns:
+            df_result["dividend_count"] = df_result["dividend_count"].fillna(0).astype(np.int32)
 
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtypes, np.number):
@@ -317,7 +317,7 @@ class ScreenerUtils:
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
         df["consecutive_dividend_count"] = np.nan
-        df["dividend_frequency"] = np.nan
+        df["dividend_count"] = np.nan
 
         for index, row in df.iterrows():
             ticker = row["Code"]
@@ -331,8 +331,8 @@ class ScreenerUtils:
             if ticker in dividend_data["consecutive_dividend_count"]:
                 df.at[index, "consecutive_dividend_count"] = dividend_data["consecutive_dividend_count"][ticker]
 
-            if ticker in dividend_data["dividend_frequency"]:
-                df.at[index, "dividend_frequency"] = dividend_data["dividend_frequency"][ticker]
+            if ticker in dividend_data["dividend_count"]:
+                df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
 
         base_columns = [
             "Code",
@@ -352,7 +352,7 @@ class ScreenerUtils:
             "ttm_dividend_yield",
             "consecutive_dividend_growth_count",
             "consecutive_dividend_count",
-            "dividend_frequency",
+            "dividend_count",
         ]
 
         # 팩터 컬럼 (중복 제거)
@@ -395,8 +395,8 @@ class ScreenerUtils:
         if "consecutive_dividend_count" in df_result.columns:
             df_result["consecutive_dividend_count"] = df_result["consecutive_dividend_count"].fillna(0).astype(np.int32)
 
-        if "dividend_frequency" in df_result.columns:
-            df_result["dividend_frequency"] = df_result["dividend_frequency"].fillna(0).astype(np.int32)
+        if "dividend_count" in df_result.columns:
+            df_result["dividend_count"] = df_result["dividend_count"].fillna(0).astype(np.int32)
 
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtypes, np.number):
@@ -410,19 +410,19 @@ class ScreenerUtils:
 
     def _get_dividend_data_for_tickers(self, tickers):
         if not tickers:
-            return {"ttm_yield": {}, "consecutive_growth": {}, "consecutive_dividend_count": {}, "dividend_frequency": {}}
+            return {"ttm_yield": {}, "consecutive_growth": {}, "consecutive_dividend_count": {}, "dividend_count": {}}
 
         dividend_utils = DividendUtils()
         ttm_yield_dict = dividend_utils.get_ttm_dividend_yield(tickers)
         growth_dict = dividend_utils.get_consecutive_dividend_growth(tickers)
         consecutive_dividend_count_dict = dividend_utils.get_consecutive_dividend_payments(tickers)
-        dividend_frequency_dict = dividend_utils.get_dividend_frequency(tickers)
+        dividend_count_dict = dividend_utils.get_dividend_count(tickers)
 
         return {
             "ttm_yield": ttm_yield_dict,
             "consecutive_growth": growth_dict,
             "consecutive_dividend_count": consecutive_dividend_count_dict,
-            "dividend_frequency": dividend_frequency_dict,
+            "dividend_count": dividend_count_dict,
         }
 
     def process_global_factor_data(self):
