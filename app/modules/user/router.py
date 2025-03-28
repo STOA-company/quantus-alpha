@@ -114,7 +114,12 @@ def get_user_info(
             raise HTTPException(status_code=401, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
         level = current_user.subscription_level
         level_info = service.get_level_info(level)
-        subscription_period_days = payment_service.get_price_template_by_name(current_user.subscription_name).period_days
+        if current_user.subscription_name:
+            subscription_period_days = payment_service.get_price_template_by_name(
+                current_user.subscription_name
+            ).period_days
+        else:
+            subscription_period_days = None
         return UserInfoResponse(
             id=current_user.id,
             email=current_user.email,
