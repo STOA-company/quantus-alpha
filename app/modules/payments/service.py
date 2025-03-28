@@ -229,7 +229,7 @@ class PaymentService:
     ):
         data = self.db._select(
             table="alphafinder_user",
-            columns=["is_subscribed", "subscription_end", "subscription_start"],
+            columns=["is_subscribed", "subscription_end", "subscription_start", "using_history_id"],
             id=user_id,
         )
         if not data:
@@ -237,7 +237,7 @@ class PaymentService:
         is_subscribed = data[0].is_subscribed
         subscription_end = data[0].subscription_end
         subscription_start = data[0].subscription_start
-
+        using_history_id = data[0].using_history_id
         if is_subscribed:
             update_user_subscription = UpdateUserSubscription(
                 is_subscribed=True,
@@ -246,9 +246,9 @@ class PaymentService:
                 recent_payment_date=now_kr().date(),
                 subscription_level=level,
                 subscription_name=product_name,
-                using_history_id=user_using_history_id,
+                using_history_id=using_history_id,
             )
-            self.update_is_extended(user_using_history_id)
+            self.update_is_extended(using_history_id)
         else:
             update_user_subscription = UpdateUserSubscription(
                 is_subscribed=True,
