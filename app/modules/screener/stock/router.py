@@ -415,3 +415,9 @@ def download_filtered_stocks(
     df.to_csv(filename, index=False)
 
     return FileResponse(path=filename, filename="stocks_export.csv", media_type="text/csv")
+
+
+@router.post("/add-default-growth-factors")
+async def add_default_growth_factors(screener_service: ScreenerStockService = Depends(ScreenerStockService)):
+    await screener_service.add_default_growth_factors_if_missing()
+    return {"message": "Default growth factors added successfully"}
