@@ -11,11 +11,10 @@ from app.common.constants import (
     NON_NUMERIC_COLUMNS,
     FACTOR_MAP_EN,
     UNIT_MAP,
-    DIVIDEND_FREQUENCY_RANGES,
-    DIVIDEND_FREQUENCY_RANGES_EN,
 )
 from app.core.exception.custom import CustomException
 from app.modules.screener.base import BaseScreenerService
+from app.utils.test_utils import time_it
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +73,7 @@ class ScreenerStockService(BaseScreenerService):
             logger.exception(f"Error in get_factors: {e}")
             raise e
 
+    @time_it
     def get_filtered_stocks(
         self,
         market_filter: Optional[MarketEnum] = None,
@@ -93,9 +93,10 @@ class ScreenerStockService(BaseScreenerService):
             if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
 
+            available_sector_list = self.get_available_sectors()
             if sector_filter:
                 for sector in sector_filter:
-                    if sector not in self.get_available_sectors():
+                    if sector not in available_sector_list:
                         raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
 
             stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters)
@@ -154,23 +155,6 @@ class ScreenerStockService(BaseScreenerService):
             if lang == "en":
                 factor_map = FACTOR_MAP_EN
 
-            if "dividend_frequency" in result[0].keys():
-                for stock in result:
-                    freq_value = stock["dividend_frequency"]
-                    # 딕셔너리인 경우 value 값을 사용
-                    if isinstance(freq_value, dict) and "value" in freq_value:
-                        freq_value = freq_value["value"]
-
-                    # NumPy 타입을 기본 float으로 변환
-                    freq_value = float(freq_value) if freq_value != "" else 0
-
-                    # 적절한 범위 찾기
-                    freq_ranges = DIVIDEND_FREQUENCY_RANGES_EN if lang == "en" else DIVIDEND_FREQUENCY_RANGES
-                    for (min_val, max_val), label in freq_ranges.items():
-                        if min_val <= freq_value <= max_val:
-                            stock["dividend_frequency"] = label
-                            break
-
             mapped_result = []
             for item in result:
                 mapped_item = {}
@@ -192,6 +176,7 @@ class ScreenerStockService(BaseScreenerService):
         """
         return self.get_filtered_stocks(**kwargs)
 
+    @time_it
     def get_available_sectors(self, lang: str = "kr") -> List[str]:
         """
         사용 가능한 섹터 목록 조회

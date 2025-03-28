@@ -13,7 +13,7 @@ from app.modules.payments.schema import (
     StoreCoupon,
     TradePayments,
     CouponId,
-    PriceTemplate,
+    PriceTemplateInfo,
 )
 from app.models.models_users import AlphafinderUser
 from app.utils.date_utils import now_kr
@@ -23,11 +23,12 @@ router = APIRouter()
 
 
 # 가격 정보
-@router.get("/price_template", response_model=BaseResponse[List[PriceTemplate]], summary="가격 정보 조회")
+@router.get("/price_template", response_model=BaseResponse[PriceTemplateInfo], summary="가격 정보 조회")
 def get_price_template(
+    current_user: AlphafinderUser = Depends(get_current_user),
     payment_service: PaymentService = Depends(PaymentService),
 ):
-    price_template = payment_service.get_price_template()
+    price_template = payment_service.get_price_template(current_user)
     return BaseResponse(status_code=200, message="가격 정보 조회 성공", data=price_template)
 
 
