@@ -14,6 +14,7 @@ from app.common.constants import (
 )
 from app.core.exception.custom import CustomException
 from app.modules.screener.base import BaseScreenerService
+from app.utils.test_utils import time_it
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ class ScreenerStockService(BaseScreenerService):
             logger.exception(f"Error in get_factors: {e}")
             raise e
 
+    @time_it
     def get_filtered_stocks(
         self,
         market_filter: Optional[MarketEnum] = None,
@@ -91,9 +93,10 @@ class ScreenerStockService(BaseScreenerService):
             if sort_by not in columns and sort_by not in ["Code", "Name", "country", "market", "sector", "score"]:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
 
+            available_sector_list = self.get_available_sectors()
             if sector_filter:
                 for sector in sector_filter:
-                    if sector not in self.get_available_sectors():
+                    if sector not in available_sector_list:
                         raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
 
             stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters)
@@ -173,6 +176,7 @@ class ScreenerStockService(BaseScreenerService):
         """
         return self.get_filtered_stocks(**kwargs)
 
+    @time_it
     def get_available_sectors(self, lang: str = "kr") -> List[str]:
         """
         사용 가능한 섹터 목록 조회

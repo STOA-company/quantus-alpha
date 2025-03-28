@@ -442,6 +442,7 @@ class ScreenerUtils:
 
         return df
 
+    @time_it
     def filter_stocks(
         self,
         market_filter: Optional[MarketEnum] = None,
@@ -579,6 +580,7 @@ class ScreenerUtils:
 
         notifier.notify_info("팩터 정수 부분 불일치 검증 완료")
 
+    @time_it
     def convert_unit_and_value(
         self, market_filter: MarketEnum, value: float, unit: str, lang: str = "kr"
     ) -> tuple[float, str]:
