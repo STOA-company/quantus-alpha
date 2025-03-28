@@ -100,6 +100,7 @@ class StoreUserUsingHistory(BaseModel):
     end_date: datetime
     product_name: str
     product_type: str
+    product_relation_id: Optional[int] = None
 
 
 class ResponseUserUsingHistory(BaseModel):

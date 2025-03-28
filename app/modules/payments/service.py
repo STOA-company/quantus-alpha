@@ -10,6 +10,7 @@ from app.database.crud import JoinInfo, database_service
 from app.core.extra.LoggerBox import LoggerBox
 from http.client import HTTPSConnection as https_conn
 
+from app.models.models_users import AlphafinderUser
 from app.modules.payments.schema import (
     PriceTemplate,
     StoreCoupon,
@@ -51,7 +52,13 @@ class PaymentService:
         return data
 
     def confirm_toss_payments(
-        self, payment_key: str, order_id: str, amount: int, user_id: int, payment_company: str, product_id: int
+        self,
+        payment_key: str,
+        order_id: str,
+        amount: int,
+        current_user: AlphafinderUser,
+        payment_company: str,
+        product_id: int,
     ) -> bool:
         ## toss payments request
         response = self.request_confirm_toss_payments(payment_key, order_id, amount)
@@ -68,6 +75,7 @@ class PaymentService:
             self.cancel_toss_payments(payment_key, "결제 영수증 처리 중 오류 발생")
             raise e
 
+        user_id = current_user.id
         # try:
         #     ## 결제 정보 확인
         #     payment_data = self.verify_toss_payment(payment_key, order_id, amount)
@@ -92,7 +100,7 @@ class PaymentService:
                 payment_company=payment_company,
             )
 
-            self.store_payments_history(store_payments_history)
+            payment_history_id = self.store_payments_history(store_payments_history)
         except Exception as e:
             logger.error(f"결제 정보 저장 중 오류 발생: {e}")
             self.cancel_toss_payments(payment_key, "결제 정보 저장 중 오류 발생")
@@ -101,15 +109,28 @@ class PaymentService:
         try:
             # 쿠폰 저장 또는 멤버십 시작
             if product_type == "membership":
-                user_using_history_id = self.store_user_using_history(
-                    StoreUserUsingHistory(
-                        user_id=user_id,
-                        start_date=now_kr().date(),
-                        end_date=now_kr().date() + timedelta(days=period_days),
-                        product_name=product_name,
-                        product_type=product_type,
+                if current_user.is_subscribed:
+                    user_using_history_id = self.store_user_using_history(
+                        StoreUserUsingHistory(
+                            user_id=user_id,
+                            start_date=current_user.subscription_end + timedelta(days=1),
+                            end_date=current_user.subscription_end + timedelta(days=(period_days + 1)),
+                            product_name=product_name,
+                            product_type=product_type,
+                            product_relation_id=payment_history_id,
+                        )
                     )
-                )
+                else:
+                    user_using_history_id = self.store_user_using_history(
+                        StoreUserUsingHistory(
+                            user_id=user_id,
+                            start_date=now_kr().date(),
+                            end_date=now_kr().date() + timedelta(days=period_days),
+                            product_name=product_name,
+                            product_type=product_type,
+                            product_relation_id=payment_history_id,
+                        )
+                    )
                 self.user_subscription_update(user_id, period_days, level, product_name, user_using_history_id)
 
             elif product_type == "coupon":
@@ -189,7 +210,7 @@ class PaymentService:
         self,
         store_payments_history: StorePaymentsHistory,
     ):
-        self.db._insert(
+        data = self.db._insert(
             table="alphafinder_payment_history",
             sets={
                 "receipt_id": store_payments_history.receipt_id,
@@ -201,6 +222,7 @@ class PaymentService:
                 "payment_company": store_payments_history.payment_company,
             },
         )
+        return data.lastrowid
 
     def user_subscription_update(
         self, user_id: int, period: int, level: int, product_name: str, user_using_history_id: int
@@ -215,14 +237,12 @@ class PaymentService:
         is_subscribed = data[0].is_subscribed
         subscription_end = data[0].subscription_end
 
-        if is_subscribed and subscription_end <= now_kr().date():
+        if is_subscribed:
             update_user_subscription = UpdateUserSubscription(
-                subscription_end=subscription_end + timedelta(days=period),
+                subscription_end=subscription_end + timedelta(days=(period + 1)),
                 recent_payment_date=now_kr().date(),
-                subscription_level=level,
-                using_history_id=user_using_history_id,
             )
-            self.update_subscription(user_id, update_user_subscription)
+            self.update_is_extended(user_using_history_id)
         else:
             update_user_subscription = UpdateUserSubscription(
                 is_subscribed=True,
@@ -233,20 +253,26 @@ class PaymentService:
                 subscription_name=product_name,
                 using_history_id=user_using_history_id,
             )
-            self.update_subscription(user_id, update_user_subscription)
+        self.update_subscription(user_id, update_user_subscription)
 
         return {"subscription_end": subscription_end}
 
     def store_user_using_history(self, user_using_history: StoreUserUsingHistory):
+        sets = {
+            "user_id": user_using_history.user_id,
+            "start_date": user_using_history.start_date,
+            "end_date": user_using_history.end_date,
+            "product_name": user_using_history.product_name,
+            "product_type": user_using_history.product_type,
+        }
+
+        # Add product_relation_id if it's provided
+        if user_using_history.product_relation_id is not None:
+            sets["product_relation_id"] = user_using_history.product_relation_id
+
         data = self.db._insert(
             table="user_using_history",
-            sets={
-                "user_id": user_using_history.user_id,
-                "start_date": user_using_history.start_date,
-                "end_date": user_using_history.end_date,
-                "product_name": user_using_history.product_name,
-                "product_type": user_using_history.product_type,
-            },
+            sets=sets,
         )
         return data.lastrowid
 
@@ -414,15 +440,18 @@ class PaymentService:
         self.update_coupon_status(coupon_id, "active")
 
         # 유저 사용 이력 업데이트
-        user_using_history_id = self.store_user_using_history(
-            StoreUserUsingHistory(
-                user_id=user_id,
-                start_date=now_kr().date(),
-                end_date=now_kr().date() + timedelta(days=coupon_data.period_days),
-                product_name=coupon_data.coupon_name,
-                product_type="coupon",
+        if data[0].is_subscribed:
+            pass
+        else:
+            user_using_history_id = self.store_user_using_history(
+                StoreUserUsingHistory(
+                    user_id=user_id,
+                    start_date=now_kr().date(),
+                    end_date=now_kr().date() + timedelta(days=coupon_data.period_days),
+                    product_name=coupon_data.coupon_name,
+                    product_type="coupon",
+                )
             )
-        )
 
         # 유저 정보 업데이트
         self.user_subscription_update(
@@ -504,6 +533,9 @@ class PaymentService:
             columns=["is_extended"],
             id=product_relation_id,
         )
+        # Handle case when no data is found
+        if not data:
+            return False
         return data[0].is_extended
 
     def get_price_template_by_name(self, subscription_name: str):
@@ -513,3 +545,65 @@ class PaymentService:
             name=subscription_name,
         )
         return data[0]
+
+    def refund_payments(self, current_user: AlphafinderUser, using_history_id: int):
+        ####
+        # 사용 내역 확인하는 로직 추가하기
+        ###
+
+        #
+        payment_history = self.db._select(
+            table="alphafinder_payment_history",
+            columns=["receipt_id"],
+            id=using_history_id,
+        )
+        if payment_history[0].refund_at is not None:
+            raise HTTPException(status_code=409, detail="이미 환불된 결제입니다.")
+        elif payment_history is None:
+            raise HTTPException(status_code=404, detail="결제 내역이 없습니다.")
+
+        receipt_id = payment_history[0].receipt_id
+
+        if payment_history[0].payment_company == "toss":
+            # 토스 결제 환불
+            payment_key = self.db._select(
+                table="toss_receipt",
+                columns=["payment_key"],
+                id=receipt_id,
+            )
+            self.cancel_toss_payments(payment_key=payment_key[0].payment_key, cancel_reason="환불 요청")
+
+        elif payment_history[0].payment_company == "kakao":
+            # 카카오 결제 환불
+            pass
+
+        self.db._update(
+            table="user_using_history",
+            sets={"refund_at": now_kr()},
+            id=using_history_id,
+        )
+
+        if current_user.subscription_end > now_kr().date():
+            self.db._update(
+                table="alphafinder_user",
+                sets={
+                    "is_subscribed": False,
+                    "subscription_end": now_kr().date(),
+                    "subscription_level": 1,
+                },
+                id=current_user.id,
+            )
+
+        return True
+
+    def update_is_extended(self, user_using_history_id: int):
+        payment_history_id = self.db._select(
+            table="user_using_history",
+            columns=["product_relation_id"],
+            id=user_using_history_id,
+        )
+        self.db._update(
+            table="alphafinder_payment_history",
+            sets={"is_extended": True},
+            id=payment_history_id[0].product_relation_id,
+        )
