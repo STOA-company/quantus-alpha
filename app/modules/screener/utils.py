@@ -300,6 +300,7 @@ class ScreenerUtils:
         df["consecutive_dividend_growth_count"] = np.nan
         df["consecutive_dividend_count"] = np.nan
         df["dividend_count"] = np.nan
+        df["last_dividend_per_share"] = np.nan
 
         for index, row in df.iterrows():
             ticker = row["Code"]
@@ -315,6 +316,9 @@ class ScreenerUtils:
 
             if ticker in dividend_data["dividend_count"]:
                 df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
+
+            if ticker in dividend_data["dividend_per_share"]:
+                df.at[index, "last_dividend_per_share"] = dividend_data["dividend_per_share"][ticker]
 
         # 필터링된 데이터프레임 선택 (모든 컬럼 유지)
         df_result = df[df["market"].isin(["NAS", "NYS"])].copy()
@@ -339,6 +343,9 @@ class ScreenerUtils:
         if "dividend_count" in df_result.columns:
             df_result["dividend_count"] = df_result["dividend_count"].fillna(0).astype(np.int32)
 
+        if "last_dividend_per_share" in df_result.columns:
+            df_result["last_dividend_per_share"] = df_result["last_dividend_per_share"].fillna(0).astype(np.float64)
+
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtypes, np.number):
                 df_result[column] = df_result[column].astype(np.float64)
@@ -351,19 +358,27 @@ class ScreenerUtils:
 
     def _get_dividend_data_for_tickers(self, tickers):
         if not tickers:
-            return {"ttm_yield": {}, "consecutive_growth": {}, "consecutive_dividend_count": {}, "dividend_count": {}}
+            return {
+                "ttm_yield": {},
+                "consecutive_growth": {},
+                "consecutive_dividend_count": {},
+                "dividend_count": {},
+                "dividend_per_share": {},
+            }
 
         dividend_utils = DividendUtils()
         ttm_yield_dict = dividend_utils.get_ttm_dividend_yield(tickers)
         growth_dict = dividend_utils.get_consecutive_dividend_growth(tickers)
         consecutive_dividend_count_dict = dividend_utils.get_consecutive_dividend_payments(tickers)
         dividend_count_dict = dividend_utils.get_dividend_count(tickers)
+        dividend_per_share_dict = dividend_utils.get_dividend_per_share(tickers)
 
         return {
             "ttm_yield": ttm_yield_dict,
             "consecutive_growth": growth_dict,
             "consecutive_dividend_count": consecutive_dividend_count_dict,
             "dividend_count": dividend_count_dict,
+            "dividend_per_share": dividend_per_share_dict,
         }
 
     def process_global_factor_data(self):
