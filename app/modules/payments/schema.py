@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -36,6 +36,8 @@ class ResponseMembership(BaseModel):
     used_days: int
     product_type: str
     is_extended: Optional[bool] = None
+    product_id: Optional[int] = None
+    product_amount: Optional[int] = None
 
 
 class RequestCouponNumber(BaseModel):
@@ -80,11 +82,6 @@ class PriceTemplate(BaseModel):
     original_price: int
     event_price: Optional[int] = None
     period_days: int
-
-
-class PriceTemplateInfo(BaseModel):
-    using_subscription_name: Optional[str] = None
-    price_template: List[PriceTemplate]
 
 
 class UpdateUserSubscription(BaseModel):

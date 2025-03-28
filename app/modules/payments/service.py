@@ -506,14 +506,6 @@ class PaymentService:
         )
         return data[0].is_extended
 
-    def get_product_amount(self, product_relation_id: int):
-        data = self.db._select(
-            table="alphafinder_price",
-            columns=["price"],
-            id=product_relation_id,
-        )
-        return data[0].price
-
     def get_price_template_by_name(self, subscription_name: str):
         data = self.db._select(
             table="alphafinder_price",
