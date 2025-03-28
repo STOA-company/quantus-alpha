@@ -162,16 +162,40 @@ class DividendUtils:
 
         return frequency_dict
 
+    def get_latest_dividend_per_share(self, tickers: List[str]) -> Dict[str, float]:
+        if not tickers:
+            return {}
+
+        batch_size = 500
+        dividend_data_all = []
+
+        for i in range(0, len(tickers), batch_size):
+            batch_tickers = tickers[i : i + batch_size]
+
+            batch_dividend_data = self.db._select(
+                table="dividend_information",
+                columns=["ticker", "per_share", "ex_date"],
+                ticker__in=batch_tickers,
+                order="ex_date",
+                ascending=False,
+            )
+
+            dividend_data_all.extend(batch_dividend_data)
+
+        latest_dividend_per_share = {}
+        processed_tickers = set()
+
+        for record in dividend_data_all:
+            ticker = record[0]
+            amount = record[1]
+
+            if ticker not in processed_tickers and amount is not None:
+                latest_dividend_per_share[ticker] = amount
+                processed_tickers.add(ticker)
+
+        return latest_dividend_per_share
+
     def _get_yearly_dividends(self, tickers: List[str]) -> Dict[str, Dict[int, float]]:
-        """
-        Helper method to get yearly dividend totals for all tickers.
-
-        Args:
-            tickers: List of stock tickers
-
-        Returns:
-            Nested dictionary mapping tickers to years to total dividends
-        """
         batch_size = 500
         dividend_data_all = []
 

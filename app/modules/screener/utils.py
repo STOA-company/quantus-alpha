@@ -3,7 +3,7 @@ from app.database.crud import database
 from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
-from app.modules.screener.stock.schemas import MarketEnum
+from app.modules.screener.stock.schemas import MarketEnum, ExcludeEnum
 from app.common.constants import NEED_TO_MULTIPLY_100, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
 import numpy as np
 from app.modules.screener.etf.enum import ETFMarketEnum
@@ -114,7 +114,13 @@ class ScreenerUtils:
             return base_columns
 
         technical_columns = ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
-        dividend_columns = ["consecutive_dividend_growth_count", "ttm_dividend_yield"]
+        dividend_columns = [
+            "dividend_count",
+            "ttm_dividend_yield",
+            "consecutive_dividend_growth_count",
+            "div_yield_growth_qoq",
+            "div_yield_growth_yoy",
+        ]
         if type == StockType.ETF:
             technical_columns = ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"]
 
@@ -152,7 +158,17 @@ class ScreenerUtils:
 
         stock_information = self.db._select(
             "stock_information",
-            columns=["ticker", "kr_name", "en_name", "market", "sector_ko", "sector_2", "is_activate", "is_delisted"],
+            columns=[
+                "ticker",
+                "kr_name",
+                "en_name",
+                "market",
+                "sector_ko",
+                "sector_2",
+                "is_activate",
+                "is_delisted",
+                "is_warned",
+            ],
             ctry="kr",
         )
         stock_info_df = pd.DataFrame(stock_information)
@@ -169,6 +185,7 @@ class ScreenerUtils:
 
         df["is_activate"] = df["is_activate"].fillna(1).astype(int)
         df["is_delisted"] = df["is_delisted"].fillna(0).astype(int)
+        df["is_warned"] = df["is_warned"].fillna(0).astype(int)
 
         df = df[(df["is_activate"] == 1) & (df["is_delisted"] == 0)]
 
@@ -283,6 +300,7 @@ class ScreenerUtils:
         df["consecutive_dividend_growth_count"] = np.nan
         df["consecutive_dividend_count"] = np.nan
         df["dividend_count"] = np.nan
+        df["last_dividend_per_share"] = np.nan
 
         for index, row in df.iterrows():
             ticker = row["Code"]
@@ -298,6 +316,9 @@ class ScreenerUtils:
 
             if ticker in dividend_data["dividend_count"]:
                 df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
+
+            if ticker in dividend_data["dividend_per_share"]:
+                df.at[index, "last_dividend_per_share"] = dividend_data["dividend_per_share"][ticker]
 
         # 필터링된 데이터프레임 선택 (모든 컬럼 유지)
         df_result = df[df["market"].isin(["NAS", "NYS"])].copy()
@@ -322,6 +343,9 @@ class ScreenerUtils:
         if "dividend_count" in df_result.columns:
             df_result["dividend_count"] = df_result["dividend_count"].fillna(0).astype(np.int32)
 
+        if "last_dividend_per_share" in df_result.columns:
+            df_result["last_dividend_per_share"] = df_result["last_dividend_per_share"].fillna(0).astype(np.float64)
+
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtypes, np.number):
                 df_result[column] = df_result[column].astype(np.float64)
@@ -334,19 +358,27 @@ class ScreenerUtils:
 
     def _get_dividend_data_for_tickers(self, tickers):
         if not tickers:
-            return {"ttm_yield": {}, "consecutive_growth": {}, "consecutive_dividend_count": {}, "dividend_count": {}}
+            return {
+                "ttm_yield": {},
+                "consecutive_growth": {},
+                "consecutive_dividend_count": {},
+                "dividend_count": {},
+                "dividend_per_share": {},
+            }
 
         dividend_utils = DividendUtils()
         ttm_yield_dict = dividend_utils.get_ttm_dividend_yield(tickers)
         growth_dict = dividend_utils.get_consecutive_dividend_growth(tickers)
         consecutive_dividend_count_dict = dividend_utils.get_consecutive_dividend_payments(tickers)
         dividend_count_dict = dividend_utils.get_dividend_count(tickers)
+        dividend_per_share_dict = dividend_utils.get_dividend_per_share(tickers)
 
         return {
             "ttm_yield": ttm_yield_dict,
             "consecutive_growth": growth_dict,
             "consecutive_dividend_count": consecutive_dividend_count_dict,
             "dividend_count": dividend_count_dict,
+            "dividend_per_share": dividend_per_share_dict,
         }
 
     def process_global_factor_data(self):
@@ -448,9 +480,11 @@ class ScreenerUtils:
         market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
+        exclude_filters: Optional[List[ExcludeEnum]] = None,
     ) -> List[str]:
         df = self.get_df_from_parquet(market_filter)
-
+        if exclude_filters:
+            df = self.add_exclude_flags_to_dataframe(df, exclude_filters)
         # 종목 필터링
         if market_filter:
             if market_filter == MarketEnum.SNP500:
@@ -676,6 +710,49 @@ class ScreenerUtils:
             result.append(classified_preset)
 
         return result
+
+    def add_exclude_flags_to_dataframe(
+        self, df: pd.DataFrame, exclude_filters: Optional[List[ExcludeEnum]] = None
+    ) -> pd.DataFrame:
+        """
+        데이터프레임에 ExcludeEnum에 해당하는 제외 플래그 추가
+        """
+        if exclude_filters is None:
+            return df
+
+        if ExcludeEnum.FINANCIAL in exclude_filters:
+            # 금융주 여부 (sector 정보 기반)
+            financial_sectors = ["금융서비스", "보험", "은행", "부동산리츠"]
+            df["is_financial"] = df["sector"].isin(financial_sectors)
+
+        if ExcludeEnum.HOLDING in exclude_filters:
+            # 지주사 여부 (회사명 기반)
+            df["is_holding"] = df["Name"].str.contains("홀딩스|지주|Holdings", case=False, na=False)
+
+        if ExcludeEnum.WARNED in exclude_filters:
+            # 관리종목 여부
+            df["is_warned"] = df["is_warned"] == 1 if "is_warned" in df.columns else False
+
+        if ExcludeEnum.DEFICIT in exclude_filters:
+            # 적자기업 여부 (분기)
+            df["is_deficit"] = df["net_income_1q"] < 0 if "net_income_1q" in df.columns else False
+
+        if ExcludeEnum.ANNUAL_DEFICIT in exclude_filters:
+            # 적자기업 여부 (연간)
+            df["is_annual_deficit"] = df["net_income_ttm"] < 0 if "net_income_ttm" in df.columns else False
+
+        # if ExcludeEnum.CHINA in exclude_filters:
+        #     # 중국기업 여부
+        #     df['is_chinese'] = (df['country'] == 'china') | (df['상장된 시장의 국가'] == 'China') if '상장된 시장의 국가' in df.columns else False
+
+        # PTP 기업 여부 (Penny Stock, 보통 $5 미만 주식)
+        is_us_market = df["country"] == "us"
+        is_kr_market = df["country"] == "kr"
+
+        # 미국 주식은 $5 미만, 한국 주식은 1000원 미만을 PTP로 간주
+        df["is_ptp"] = (is_us_market & (df["close"] < 5)) | (is_kr_market & (df["close"] < 1000))
+
+        return df
 
 
 screener_utils = ScreenerUtils()
