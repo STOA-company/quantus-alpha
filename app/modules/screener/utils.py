@@ -587,19 +587,22 @@ class ScreenerUtils:
         nation = "kr" if market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ] else "us"
 
         if unit.lower() == "big_price":
+            print(f"value: {value}, unit: {unit}, lang: {lang}")
             if nation == "kr":
-                if value >= 10000:  # 1조원 이상
+                print("NATION: KR")
+                if value >= 10000 or value <= -10000:  # 1조원 이상
                     return round(value / 10000, 2), "조원"
                 return int(value), "억원"
             else:  # US
+                print("NATION: US")
                 # 1T = 1000B = 1000조원
-                if value >= 1000000000:  # 1000조원 이상
+                if value >= 1000000000 or value <= -1000000000:  # 1000조원 이상
                     return round(value / 1000000000, 2), "T$"
                 # 1B = 1조원
-                elif value >= 1000000:  # 1조원 이상
+                elif value >= 1000000 or value <= -1000000:  # 1조원 이상
                     return round(value / 1000000, 2), "B$"
                 # 1M = 10억원
-                elif value >= 1000:  # 10억원 이상
+                elif value >= 1000 or value <= -1000:  # 10억원 이상
                     return round(value / 1000, 2), "M$"
                 # 1K = 100만원
                 return round(value, 2), "K$"
