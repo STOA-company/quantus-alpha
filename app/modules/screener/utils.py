@@ -3,7 +3,7 @@ from app.database.crud import database
 from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
-from app.modules.screener.stock.schemas import MarketEnum
+from app.modules.screener.stock.schemas import MarketEnum, ExcludeEnum
 from app.common.constants import NEED_TO_MULTIPLY_100, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
 import numpy as np
 from app.modules.screener.etf.enum import ETFMarketEnum
@@ -152,7 +152,17 @@ class ScreenerUtils:
 
         stock_information = self.db._select(
             "stock_information",
-            columns=["ticker", "kr_name", "en_name", "market", "sector_ko", "sector_2", "is_activate", "is_delisted"],
+            columns=[
+                "ticker",
+                "kr_name",
+                "en_name",
+                "market",
+                "sector_ko",
+                "sector_2",
+                "is_activate",
+                "is_delisted",
+                "is_warned",
+            ],
             ctry="kr",
         )
         stock_info_df = pd.DataFrame(stock_information)
@@ -169,6 +179,7 @@ class ScreenerUtils:
 
         df["is_activate"] = df["is_activate"].fillna(1).astype(int)
         df["is_delisted"] = df["is_delisted"].fillna(0).astype(int)
+        df["is_warned"] = df["is_warned"].fillna(0).astype(int)
 
         df = df[(df["is_activate"] == 1) & (df["is_delisted"] == 0)]
 
@@ -448,9 +459,11 @@ class ScreenerUtils:
         market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
+        exclude_filters: Optional[List[ExcludeEnum]] = None,
     ) -> List[str]:
         df = self.get_df_from_parquet(market_filter)
-
+        if exclude_filters:
+            df = self.add_exclude_flags_to_dataframe(df, exclude_filters)
         # 종목 필터링
         if market_filter:
             if market_filter == MarketEnum.SNP500:
@@ -676,6 +689,49 @@ class ScreenerUtils:
             result.append(classified_preset)
 
         return result
+
+    def add_exclude_flags_to_dataframe(
+        self, df: pd.DataFrame, exclude_filters: Optional[List[ExcludeEnum]] = None
+    ) -> pd.DataFrame:
+        """
+        데이터프레임에 ExcludeEnum에 해당하는 제외 플래그 추가
+        """
+        if exclude_filters is None:
+            return df
+
+        if ExcludeEnum.FINANCIAL in exclude_filters:
+            # 금융주 여부 (sector 정보 기반)
+            financial_sectors = ["금융서비스", "보험", "은행", "부동산리츠"]
+            df["is_financial"] = df["sector"].isin(financial_sectors)
+
+        if ExcludeEnum.HOLDING in exclude_filters:
+            # 지주사 여부 (회사명 기반)
+            df["is_holding"] = df["Name"].str.contains("홀딩스|지주|Holdings", case=False, na=False)
+
+        if ExcludeEnum.WARNED in exclude_filters:
+            # 관리종목 여부
+            df["is_warned"] = df["is_warned"] == 1 if "is_warned" in df.columns else False
+
+        if ExcludeEnum.DEFICIT in exclude_filters:
+            # 적자기업 여부 (분기)
+            df["is_deficit"] = df["net_income_1q"] < 0 if "net_income_1q" in df.columns else False
+
+        if ExcludeEnum.ANNUAL_DEFICIT in exclude_filters:
+            # 적자기업 여부 (연간)
+            df["is_annual_deficit"] = df["net_income_ttm"] < 0 if "net_income_ttm" in df.columns else False
+
+        # if ExcludeEnum.CHINA in exclude_filters:
+        #     # 중국기업 여부
+        #     df['is_chinese'] = (df['country'] == 'china') | (df['상장된 시장의 국가'] == 'China') if '상장된 시장의 국가' in df.columns else False
+
+        # PTP 기업 여부 (Penny Stock, 보통 $5 미만 주식)
+        is_us_market = df["country"] == "us"
+        is_kr_market = df["country"] == "kr"
+
+        # 미국 주식은 $5 미만, 한국 주식은 1000원 미만을 PTP로 간주
+        df["is_ptp"] = (is_us_market & (df["close"] < 5)) | (is_kr_market & (df["close"] < 1000))
+
+        return df
 
 
 screener_utils = ScreenerUtils()

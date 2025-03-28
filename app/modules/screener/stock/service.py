@@ -4,7 +4,7 @@ from app.utils.score_utils import score_utils
 from app.cache.factors import factors_cache
 import pandas as pd
 import numpy as np
-from app.modules.screener.stock.schemas import MarketEnum
+from app.modules.screener.stock.schemas import MarketEnum, ExcludeEnum
 from app.modules.screener.utils import screener_utils
 from app.common.constants import (
     FACTOR_MAP,
@@ -78,6 +78,7 @@ class ScreenerStockService(BaseScreenerService):
         self,
         market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
+        exclude_filters: Optional[List[ExcludeEnum]] = None,
         custom_filters: Optional[List[Dict]] = None,
         columns: Optional[List[str]] = None,
         limit: Optional[int] = 50,
@@ -99,7 +100,7 @@ class ScreenerStockService(BaseScreenerService):
                     if sector not in available_sector_list:
                         raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
 
-            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters)
+            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters, exclude_filters)
             filtered_df = screener_utils.get_filtered_stocks_df(market_filter, stocks, columns)
             scored_df = score_utils.calculate_factor_score(filtered_df)
             if scored_df.empty:
