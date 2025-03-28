@@ -73,10 +73,21 @@ class ETFGroupFilterResponse(ETFGroupFilter):
     has_custom: bool = False
 
 
+class ExcludeEnum(str, Enum):
+    FINANCIAL = "financial"  # 금융주
+    HOLDING = "holding"  # 지주사
+    WARNED = "warned"  # 관리종목
+    DEFICIT = "deficit"  # 적자기업(분기)
+    ANNUAL_DEFICIT = "annual_deficit"  # 적자기업(연간)
+    CHINESE = "chinese"  # 중국기업
+    PTP = "ptp"  # PTP(Penny Stock) 기업
+
+
 class FilteredStocks(BaseModel):
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
+    exclude_filters: Optional[List[ExcludeEnum]] = None
     factor_filters: Optional[List[str]] = None
     limit: Optional[int] = 50
     offset: Optional[int] = 0

@@ -83,6 +83,7 @@ def get_filtered_stocks(
         stocks_data, total_count = screener_service.get_filtered_data(
             market_filter=filtered_stocks.market_filter,
             sector_filter=filtered_stocks.sector_filter,
+            exclude_filters=filtered_stocks.exclude_filters,
             custom_filters=custom_filters,
             columns=request_columns,
             limit=filtered_stocks.limit,
