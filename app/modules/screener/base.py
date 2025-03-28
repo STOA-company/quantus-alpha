@@ -274,6 +274,20 @@ class BaseScreenerService(ABC):
                             },
                         )
                     )
+
+                for idx, factor in enumerate(dividend):
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_factor_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": factor,
+                                "order": idx + 1,
+                                "category": CategoryEnum.DIVIDEND,
+                            },
+                        )
+                    )
+
                 for idx, factor in enumerate(growth):
                     insert_tasks.append(
                         self.database.insert_wrapper(
