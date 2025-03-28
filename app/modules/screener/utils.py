@@ -371,7 +371,7 @@ class ScreenerUtils:
         growth_dict = dividend_utils.get_consecutive_dividend_growth(tickers)
         consecutive_dividend_count_dict = dividend_utils.get_consecutive_dividend_payments(tickers)
         dividend_count_dict = dividend_utils.get_dividend_count(tickers)
-        dividend_per_share_dict = dividend_utils.get_dividend_per_share(tickers)
+        dividend_per_share_dict = dividend_utils.get_latest_dividend_per_share(tickers)
 
         return {
             "ttm_yield": ttm_yield_dict,
