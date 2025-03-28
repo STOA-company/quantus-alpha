@@ -162,6 +162,33 @@ class DividendUtils:
 
         return frequency_dict
 
+    def get_dividend_per_share(self, tickers: List[str]) -> Dict[str, float]:
+        if not tickers:
+            return {}
+
+        batch_size = 500
+        dividend_data_all = []
+
+        for i in range(0, len(tickers), batch_size):
+            batch_tickers = tickers[i : i + batch_size]
+
+            batch_dividend_data = self.db._select(
+                table="dividend_information", columns=["ticker", "per_share"], ticker__in=batch_tickers
+            )
+
+            dividend_data_all.extend(batch_dividend_data)
+
+        dividend_per_share_dict = {}
+
+        for record in dividend_data_all:
+            ticker = record[0]
+            amount = record[1]
+
+            if amount is not None:
+                dividend_per_share_dict[ticker] = amount
+
+        return dividend_per_share_dict
+
     def _get_yearly_dividends(self, tickers: List[str]) -> Dict[str, Dict[int, float]]:
         """
         Helper method to get yearly dividend totals for all tickers.
