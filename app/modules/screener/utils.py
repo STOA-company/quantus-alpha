@@ -114,7 +114,13 @@ class ScreenerUtils:
             return base_columns
 
         technical_columns = ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
-        dividend_columns = ["consecutive_dividend_growth_count", "ttm_dividend_yield"]
+        dividend_columns = [
+            "dividend_count",
+            "ttm_dividend_yield",
+            "consecutive_dividend_growth_count",
+            "div_yield_growth_qoq",
+            "div_yield_growth_yoy",
+        ]
         if type == StockType.ETF:
             technical_columns = ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"]
 

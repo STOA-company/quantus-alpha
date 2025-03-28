@@ -219,17 +219,20 @@ def get_group_filters(
         fundamental_columns = screener_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL)
         valuation_columns = screener_service.get_columns(group_id, CategoryEnum.VALUATION)
         dividend_columns = screener_service.get_columns(group_id, CategoryEnum.DIVIDEND)
+        growth_columns = screener_service.get_columns(group_id, CategoryEnum.GROWTH)
 
         if lang == "en":
             technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
             fundamental_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in fundamental_columns]
             valuation_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in valuation_columns]
             dividend_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in dividend_columns]
+            growth_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in growth_columns]
 
         technical_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
         fundamental_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.FUNDAMENTAL)
         valuation_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.VALUATION)
         dividend_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.DIVIDEND)
+        growth_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.GROWTH)
         custom_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
 
         if group_id == -1:
@@ -246,6 +249,7 @@ def get_group_filters(
                     "fundamental": fundamental_columns,
                     "valuation": valuation_columns,
                     "dividend": dividend_columns,
+                    "growth": growth_columns,
                     "custom": [],
                 },
                 sort_info={
@@ -253,6 +257,7 @@ def get_group_filters(
                     CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
                     CategoryEnum.VALUATION: valuation_sort_info,
                     CategoryEnum.DIVIDEND: dividend_sort_info,
+                    CategoryEnum.GROWTH: growth_sort_info,
                     CategoryEnum.CUSTOM: custom_sort_info,
                 },
             )
@@ -288,12 +293,16 @@ def get_group_filters(
                 "technical": technical_columns,
                 "fundamental": fundamental_columns,
                 "valuation": valuation_columns,
+                "dividend": dividend_columns,
+                "growth": growth_columns,
                 "custom": custom_factor_filters,
             },
             sort_info={
                 CategoryEnum.TECHNICAL: technical_sort_info,
                 CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
                 CategoryEnum.VALUATION: valuation_sort_info,
+                CategoryEnum.DIVIDEND: dividend_sort_info,
+                CategoryEnum.GROWTH: growth_sort_info,
                 CategoryEnum.CUSTOM: custom_sort_info,
             },
             has_custom=group_filters["has_custom"],
@@ -418,7 +427,7 @@ def download_filtered_stocks(
     return FileResponse(path=filename, filename="stocks_export.csv", media_type="text/csv")
 
 
-@router.post("/add-default-growth-factors")
-async def add_default_growth_factors(screener_service: ScreenerStockService = Depends(ScreenerStockService)):
-    await screener_service.add_default_growth_factors_if_missing()
-    return {"message": "Default growth factors added successfully"}
+@router.post("/init")
+async def init_screener(screener_service: ScreenerStockService = Depends(ScreenerStockService)):
+    await screener_service.initialize()
+    return {"message": "Screener initialized successfully"}

@@ -12,6 +12,7 @@ from app.common.constants import (
     FACTOR_MAP_EN,
     UNIT_MAP,
 )
+from app.modules.screener.stock.schemas import StockType
 from app.core.exception.custom import CustomException
 from app.modules.screener.base import BaseScreenerService
 from app.utils.test_utils import time_it
@@ -292,3 +293,12 @@ class ScreenerStockService(BaseScreenerService):
         except Exception as e:
             logger.error(f"Error in get_filtered_stocks_download: {e}")
             raise e
+
+    async def initialize(self):
+        users = self.database._select(table="alphafinder_user")
+        for user in users:
+            group = self.database._select(table="screener_groups", user_id=user.id)
+            if not group:
+                all_sectors = self.get_available_sectors()
+                await self.create_group(user_id=user.id, sector_filter=all_sectors)
+                await self.create_group(user_id=user.id, type=StockType.ETF)
