@@ -313,9 +313,6 @@ class BaseScreenerService(ABC):
                 )
 
             elif type == StockType.ETF:
-                technical.remove("sector")
-                technical.remove("beta")
-                dividend.remove("sector")
                 for idx, factor in enumerate(technical):
                     insert_tasks.append(
                         self.database.insert_wrapper(
