@@ -12,6 +12,7 @@ class UserInfoResponse(BaseModel):
     is_subscribed: bool = False
     subscription_end: Optional[datetime] = None
     level: Optional[str] = None
+    subscription_name: Optional[str] = None
 
 
 class RefreshTokenResponse(BaseModel):

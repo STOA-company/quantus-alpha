@@ -120,6 +120,7 @@ def get_user_info(
             is_subscribed=current_user.is_subscribed,
             subscription_end=current_user.subscription_end,
             level=level_info.name,
+            subscription_name=current_user.subscription_name,
         )
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
