@@ -39,8 +39,6 @@ def confirm_toss_payments(
 ):
     if current_user is None:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
-    else:
-        user_id = current_user.id
 
     payment_key = trade_payments.payment_key
     order_id = trade_payments.order_id
@@ -49,7 +47,7 @@ def confirm_toss_payments(
     product_id = trade_payments.product_id
 
     is_confirmed = payment_service.confirm_toss_payments(
-        payment_key, order_id, amount, user_id, payment_company, product_id
+        payment_key, order_id, amount, current_user, payment_company, product_id
     )
 
     return BaseResponse(status_code=200, message="결제 확인 성공", data=is_confirmed)
@@ -73,15 +71,26 @@ def check_toss_membership(
         current_using_history = payment_service.get_product_type_by_user_using_history(
             user_using_history, current_user.using_history_id
         )
+
         if current_using_history and current_using_history.product_type == "membership":
-            is_extended = payment_service.check_is_extended(current_using_history.product_relation_id)
-            price_template = payment_service.get_price_template_by_name(current_using_history.product_name)
-            product_id = price_template.id
-            product_amount = price_template.price
+            # Check if product_relation_id exists before calling check_is_extended
+            is_extended = False
+            if hasattr(current_using_history, "product_relation_id") and current_using_history.product_relation_id:
+                is_extended = payment_service.check_is_extended(current_using_history.product_relation_id)
+
+            # Get pricing info if available
+            try:
+                price_template = payment_service.get_price_template_by_name(current_using_history.product_name)
+                product_id = price_template.id if price_template else None
+                product_amount = price_template.price if price_template else None
+            except Exception:
+                product_id = None
+                product_amount = None
         else:
             is_extended = None
             product_id = None
             product_amount = None
+
         data = ResponseMembership(
             name=current_using_history.product_name,
             status=current_user.is_subscribed,
@@ -232,13 +241,14 @@ def get_usage_history(
     return BaseResponse(status_code=200, message="사용 내역 조회 성공", data=result)
 
 
-@router.post("/toss/refund", response_model=BaseResponse[bool], summary="토스 결제 환불")
+@router.post("/refund", response_model=BaseResponse[bool], summary="토스 결제 환불")
 def refund_toss_payments(
+    history_id: int = Query(..., description="사용 내역 ID"),
     current_user: AlphafinderUser = Depends(get_current_user),
     payment_service: PaymentService = Depends(PaymentService),
 ):
     if current_user is None:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
-    payment_service.refund_toss_payments(current_user.id)
-    return BaseResponse(status_code=200, message="토스 결제 환불 성공", data=True)
+    is_refunded = payment_service.refund_payments(current_user, using_history_id=history_id)
+    return BaseResponse(status_code=200, message="결제 환불 성공", data=is_refunded)
