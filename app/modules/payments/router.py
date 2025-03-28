@@ -9,10 +9,11 @@ from app.modules.payments.schema import (
     Coupon,
     RequestCouponNumber,
     ResponseMembership,
+    ResponseUserUsingHistory,
     StoreCoupon,
     TradePayments,
     CouponId,
-    PriceTemplate,
+    PriceTemplateInfo,
 )
 from app.models.models_users import AlphafinderUser
 from app.utils.date_utils import now_kr
@@ -22,11 +23,12 @@ router = APIRouter()
 
 
 # 가격 정보
-@router.get("/price_template", response_model=BaseResponse[List[PriceTemplate]], summary="가격 정보 조회")
+@router.get("/price_template", response_model=BaseResponse[PriceTemplateInfo], summary="가격 정보 조회")
 def get_price_template(
+    current_user: AlphafinderUser = Depends(get_current_user),
     payment_service: PaymentService = Depends(PaymentService),
 ):
-    price_template = payment_service.get_price_template()
+    price_template = payment_service.get_price_template(current_user)
     return BaseResponse(status_code=200, message="가격 정보 조회 성공", data=price_template)
 
 
@@ -199,9 +201,39 @@ def cancel_coupon(
     return BaseResponse(status_code=200, message="쿠폰 사용 취소 성공", data=True)
 
 
+# 사용 내역 조회
+@router.get("/usage_history", response_model=BaseResponse[List[ResponseUserUsingHistory]], summary="사용 내역 조회")
+def get_usage_history(
+    current_user: AlphafinderUser = Depends(get_current_user),
+    payment_service: PaymentService = Depends(PaymentService),
+):
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+    user_using_history = payment_service.get_user_using_history_by_user_id(current_user.id)
+    result = []
+    for history in user_using_history:
+        result.append(
+            ResponseUserUsingHistory(
+                history_id=history.id,
+                start_date=history.start_date,
+                end_date=history.end_date,
+                product_name=history.product_name,
+                product_type=history.product_type,
+                is_refunded=history.refund_at is not None,
+            )
+        )
+    return BaseResponse(status_code=200, message="사용 내역 조회 성공", data=result)
+
+
 @router.post("/toss/refund", response_model=BaseResponse[bool], summary="토스 결제 환불")
 def refund_toss_payments(
     current_user: AlphafinderUser = Depends(get_current_user),
     payment_service: PaymentService = Depends(PaymentService),
 ):
     pass
+    # if current_user is None:
+    #     raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+    # payment_service.refund_toss_payments(current_user.id)
+    # return BaseResponse(status_code=200, message="토스 결제 환불 성공", data=True)
