@@ -53,7 +53,7 @@ class Coupon(BaseModel):
 class StorePaymentsHistory(BaseModel):
     receipt_id: int
     user_id: int
-    level: str
+    level: int
     period_days: int
     paid_amount: int
     payment_method: str
