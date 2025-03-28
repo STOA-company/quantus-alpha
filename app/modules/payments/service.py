@@ -1,5 +1,6 @@
 import base64
 import json
+from typing import List
 from fastapi import HTTPException
 import requests
 
@@ -9,10 +10,8 @@ from app.database.crud import JoinInfo, database_service
 from app.core.extra.LoggerBox import LoggerBox
 from http.client import HTTPSConnection as https_conn
 
-from app.models.models_users import AlphafinderUser
 from app.modules.payments.schema import (
     PriceTemplate,
-    PriceTemplateInfo,
     StoreCoupon,
     StorePaymentsHistory,
     StoreUserUsingHistory,
@@ -29,7 +28,7 @@ class PaymentService:
         self.toss_api_url = "https://api.tosspayments.com/v1"
         self.db = database_service
 
-    def get_price_template(self, current_user: AlphafinderUser) -> PriceTemplateInfo:
+    def get_price_template(self) -> List[PriceTemplate]:
         data = self.get_price()
         price_template = []
         for price in data:
