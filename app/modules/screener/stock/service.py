@@ -17,8 +17,7 @@ from app.modules.screener.stock.schemas import StockType
 from app.core.exception.custom import CustomException
 from app.modules.screener.base import BaseScreenerService
 from app.utils.test_utils import time_it
-from app.core.config import settings
-from redis import Redis
+from app.core.redis import redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +27,7 @@ class ScreenerStockService(BaseScreenerService):
 
     def __init__(self):
         super().__init__()
-        self.redis_client = Redis(
-            host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True
-        )
+        self.redis_client = redis_client
         self.cache_ttl = 72000
 
     def _is_stock(self) -> bool:
