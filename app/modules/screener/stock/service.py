@@ -27,7 +27,7 @@ class ScreenerStockService(BaseScreenerService):
 
     def __init__(self):
         super().__init__()
-        self.redis_client = redis_client
+        self.redis_client = redis_client()
         self.cache_ttl = 72000
 
     def _is_stock(self) -> bool:
