@@ -1,13 +1,10 @@
-#!/bin/bash
 set -e
 
-# BuildKit 활성화
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 
 ENVIRONMENT=${1:-dev}
-FORCE_REBUILD=${2:-false}
-CLEAN_CACHE=${3:-false}
+CLEAN_CACHE=${2:-false}
 
 case $ENVIRONMENT in
     prod|production)
@@ -41,24 +38,20 @@ fi
 echo "Changing to project directory..."
 cd ~/quantus-alpha || exit 1
 
-# # Git 업데이트 수행 (force 여부 관계없이 항상 최신 상태 유지)
-# echo "Fetching latest changes..."
-# git fetch origin || exit 1
-# git checkout $BRANCH || exit 1
-# git pull origin $BRANCH || exit 1
+echo "Fetching latest changes..."
+git fetch origin || exit 1
+git checkout $BRANCH || exit 1
+git pull origin $BRANCH || exit 1
 
-# 서브모듈도 자동으로 업데이트
 echo "Updating git submodules..."
 git submodule update --init --recursive || exit 1
 
-# 디스크 공간 확인
 disk_usage=$(df -h | grep "/$" | awk '{print $5}' | sed 's/%//')
 if [ -n "$disk_usage" ] && [ "$disk_usage" -gt 85 ]; then
     echo "High disk usage detected: ${disk_usage}%. Performing cleanup..."
     docker container prune -f
     docker image prune -f
 
-    # 85% 이상인 경우에만 더 적극적인 정리 수행
     if [ "$disk_usage" -gt 90 ]; then
         echo "Critical disk usage! Performing aggressive cleanup..."
         docker image prune -a -f
@@ -70,7 +63,6 @@ if [ -n "$disk_usage" ] && [ "$disk_usage" -gt 85 ]; then
     df -h | grep "/$"
 fi
 
-# 캐시 클리닝 옵션이 활성화된 경우에만 캐시 초기화
 if [ "$CLEAN_CACHE" = "true" ]; then
     echo "Cleaning pip and poetry caches..."
     docker volume rm -f pip-cache poetry-cache 2>/dev/null || true
@@ -79,7 +71,6 @@ if [ "$CLEAN_CACHE" = "true" ]; then
     docker volume create poetry-cache
 fi
 
-# 현재 활성 서비스 확인
 current_service=$(docker-compose -f docker-compose.yml ps | grep -E 'web-(blue|green)' | grep "Up" | awk '{print $1}' | head -n1)
 
 if [ -z "$current_service" ]; then
@@ -136,13 +127,11 @@ EOF
 
 echo "Preparing deployment for $target_service..."
 
-# 컨테이너가 존재하는 경우에만 제거
 if docker-compose ps $target_service | grep -q $target_service; then
     echo "Removing existing container for $target_service..."
     docker-compose rm -f $target_service
 fi
 
-# --no-cache 옵션 사용하지 않음 (항상 캐시 활용)
 echo "Building $target_service container..."
 docker-compose -f docker-compose.yml build $target_service
 
