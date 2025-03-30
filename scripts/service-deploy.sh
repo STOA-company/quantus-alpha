@@ -1,20 +1,27 @@
+#!/bin/bash
 set -e
 
+# BuildKit 활성화
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
 ENVIRONMENT=${1:-dev}
+FORCE_REBUILD=${2:-false}
+CLEAN_CACHE=${3:-false}
 
 case $ENVIRONMENT in
     prod|production)
-        ENV_FILE=.env.prod
+        ENV_FILE=.env
         ENV=prod
         BRANCH=main
         ;;
     stage|staging)
-        ENV_FILE=.env.stage
+        ENV_FILE=.env
         ENV=stage
         BRANCH=staging
         ;;
     dev|development)
-        ENV_FILE=.env.dev
+        ENV_FILE=.env
         ENV=dev
         BRANCH=dev
         ;;
@@ -26,61 +33,61 @@ esac
 
 echo "Deploying for environment: $ENV using $ENV_FILE (Branch: $BRANCH)"
 
-# 환경변수 파일 확인
 if [ ! -f "$ENV_FILE" ]; then
     echo "Error: $ENV_FILE not found!"
     exit 1
 fi
 
-# 프로젝트 디렉토리로 이동
 echo "Changing to project directory..."
 cd ~/quantus-alpha || exit 1
 
-# Git 작업
-echo "Fetching latest changes..."
-git fetch origin || exit 1
-git checkout $BRANCH || exit 1
-git pull origin $BRANCH || exit 1
+# # Git 업데이트 수행 (force 여부 관계없이 항상 최신 상태 유지)
+# echo "Fetching latest changes..."
+# git fetch origin || exit 1
+# git checkout $BRANCH || exit 1
+# git pull origin $BRANCH || exit 1
 
-# Poetry install
-echo "Installing dependencies with Poetry..."
-poetry install || { echo "Poetry installation failed!"; exit 1; }
+# 서브모듈도 자동으로 업데이트
+echo "Updating git submodules..."
+git submodule update --init --recursive || exit 1
 
-# Git 작업 직후, 배포 전 Docker 시스템 정리
-echo "Cleaning up Docker system..."
-# 중지된 컨테이너 정리
-docker container prune -f
-# 사용하지 않는 이미지 정리
-docker image prune -f
-# 사용하지 않는 빌드 캐시 정리
-docker builder prune -f
-# 현재 디스크 사용량 표시
-echo "Current disk usage:"
-df -h | grep "/$"
-
-# 만약 디스크 사용률이 85% 이상이면 더 적극적인 정리 수행
+# 디스크 공간 확인
 disk_usage=$(df -h | grep "/$" | awk '{print $5}' | sed 's/%//')
 if [ -n "$disk_usage" ] && [ "$disk_usage" -gt 85 ]; then
-    echo "High disk usage detected: ${disk_usage}%. Performing aggressive cleanup..."
-    # 더 적극적인 이미지 정리 (사용중이지 않은 모든 이미지)
-    docker image prune -a -f
-    # 사용하지 않는 볼륨 정리
-    docker volume prune -f
-    # Docker 시스템 전체 정리
-    docker system prune -f
-    echo "After aggressive cleanup:"
+    echo "High disk usage detected: ${disk_usage}%. Performing cleanup..."
+    docker container prune -f
+    docker image prune -f
+
+    # 85% 이상인 경우에만 더 적극적인 정리 수행
+    if [ "$disk_usage" -gt 90 ]; then
+        echo "Critical disk usage! Performing aggressive cleanup..."
+        docker image prune -a -f
+        docker volume prune -f
+        docker system prune -f
+    fi
+
+    echo "After cleanup:"
     df -h | grep "/$"
 fi
 
+# 캐시 클리닝 옵션이 활성화된 경우에만 캐시 초기화
+if [ "$CLEAN_CACHE" = "true" ]; then
+    echo "Cleaning pip and poetry caches..."
+    docker volume rm -f pip-cache poetry-cache 2>/dev/null || true
+    echo "Creating new cache volumes..."
+    docker volume create pip-cache
+    docker volume create poetry-cache
+fi
+
+# 현재 활성 서비스 확인
 current_service=$(docker-compose -f docker-compose.yml ps | grep -E 'web-(blue|green)' | grep "Up" | awk '{print $1}' | head -n1)
 
 if [ -z "$current_service" ]; then
-    if grep -q "web-blue" /etc/nginx/conf.d/default.conf; then
+    if grep -q "web-blue" /etc/nginx/conf.d/default.conf 2>/dev/null; then
         current_service="web-blue"
-    elif grep -q "web-green" /etc/nginx/conf.d/default.conf; then
+    elif grep -q "web-green" /etc/nginx/conf.d/default.conf 2>/dev/null; then
         current_service="web-green"
     else
-        # 기본값
         current_service="web-blue"
     fi
 fi
@@ -129,12 +136,18 @@ EOF
 
 echo "Preparing deployment for $target_service..."
 
-echo "Removing existing container for $target_service if it exists..."
-docker-compose rm -f $target_service
+# 컨테이너가 존재하는 경우에만 제거
+if docker-compose ps $target_service | grep -q $target_service; then
+    echo "Removing existing container for $target_service..."
+    docker-compose rm -f $target_service
+fi
 
-echo "Building and starting new $target_service container..."
-docker-compose -f docker-compose.yml build --no-cache $target_service
-ENV=$ENV docker-compose -f docker-compose.yml --env-file $ENV_FILE up -d --no-deps $target_service
+# --no-cache 옵션 사용하지 않음 (항상 캐시 활용)
+echo "Building $target_service container..."
+docker-compose -f docker-compose.yml build $target_service
+
+echo "Starting $target_service container..."
+docker-compose -f docker-compose.yml up -d --no-deps $target_service
 
 echo "Waiting for container to initialize..."
 sleep 10
@@ -146,7 +159,6 @@ attempt=1
 while [ $attempt -le $max_attempts ]; do
     echo "Health check attempt $attempt of $max_attempts..."
 
-    # 컨테이너 내부에서 직접 헬스 체크
     health_status=$(docker-compose exec -T $target_service curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/health-check" 2>/dev/null || echo "000")
 
     if [ "$health_status" = "200" ]; then
@@ -161,6 +173,7 @@ done
 
 if [ $attempt -gt $max_attempts ]; then
     echo "Health check failed after $max_attempts attempts. Reverting to previous setup."
+    echo "Check logs with: docker-compose logs $target_service"
     exit 1
 fi
 
