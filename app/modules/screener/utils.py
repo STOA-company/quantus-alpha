@@ -195,7 +195,7 @@ class ScreenerUtils:
 
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
-        df["consecutive_dividend_count"] = np.nan
+        df["consecutive_dividend_payment_count"] = np.nan
         df["dividend_count"] = np.nan
 
         for index, row in df.iterrows():
@@ -204,11 +204,15 @@ class ScreenerUtils:
             if ticker in dividend_data["ttm_yield"]:
                 df.at[index, "ttm_dividend_yield"] = round(dividend_data["ttm_yield"][ticker], 2)
 
-            if ticker in dividend_data["consecutive_growth"]:
-                df.at[index, "consecutive_dividend_growth_count"] = dividend_data["consecutive_growth"][ticker]
+            if ticker in dividend_data["consecutive_dividend_growth_count"]:
+                df.at[index, "consecutive_dividend_growth_count"] = dividend_data["consecutive_dividend_growth_count"][
+                    ticker
+                ]
 
-            if ticker in dividend_data["consecutive_dividend_count"]:
-                df.at[index, "consecutive_dividend_count"] = dividend_data["consecutive_dividend_count"][ticker]
+            if ticker in dividend_data["consecutive_dividend_payment_count"]:
+                df.at[index, "consecutive_dividend_payment_count"] = dividend_data["consecutive_dividend_payment_count"][
+                    ticker
+                ]
 
             if ticker in dividend_data["dividend_count"]:
                 df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
@@ -230,8 +234,10 @@ class ScreenerUtils:
         if "ttm_dividend_yield" in df_result.columns:
             df_result["ttm_dividend_yield"] = df_result["ttm_dividend_yield"].round(2)
 
-        if "consecutive_dividend_count" in df_result.columns:
-            df_result["consecutive_dividend_count"] = df_result["consecutive_dividend_count"].fillna(0).astype(np.int32)
+        if "consecutive_dividend_payment_count" in df_result.columns:
+            df_result["consecutive_dividend_payment_count"] = (
+                df_result["consecutive_dividend_payment_count"].fillna(0).astype(np.int32)
+            )
 
         if "dividend_count" in df_result.columns:
             df_result["dividend_count"] = df_result["dividend_count"].fillna(0).astype(np.int32)
@@ -298,7 +304,7 @@ class ScreenerUtils:
 
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
-        df["consecutive_dividend_count"] = np.nan
+        df["consecutive_dividend_payment_count"] = np.nan
         df["dividend_count"] = np.nan
         df["last_dividend_per_share"] = np.nan
 
@@ -308,11 +314,15 @@ class ScreenerUtils:
             if ticker in dividend_data["ttm_yield"]:
                 df.at[index, "ttm_dividend_yield"] = round(dividend_data["ttm_yield"][ticker], 2)
 
-            if ticker in dividend_data["consecutive_growth"]:
-                df.at[index, "consecutive_dividend_growth_count"] = dividend_data["consecutive_growth"][ticker]
+            if ticker in dividend_data["consecutive_dividend_growth_count"]:
+                df.at[index, "consecutive_dividend_growth_count"] = dividend_data["consecutive_dividend_growth_count"][
+                    ticker
+                ]
 
-            if ticker in dividend_data["consecutive_dividend_count"]:
-                df.at[index, "consecutive_dividend_count"] = dividend_data["consecutive_dividend_count"][ticker]
+            if ticker in dividend_data["consecutive_dividend_payment_count"]:
+                df.at[index, "consecutive_dividend_payment_count"] = dividend_data["consecutive_dividend_payment_count"][
+                    ticker
+                ]
 
             if ticker in dividend_data["dividend_count"]:
                 df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
@@ -337,8 +347,10 @@ class ScreenerUtils:
         if "ttm_dividend_yield" in df_result.columns:
             df_result["ttm_dividend_yield"] = df_result["ttm_dividend_yield"].round(2)
 
-        if "consecutive_dividend_count" in df_result.columns:
-            df_result["consecutive_dividend_count"] = df_result["consecutive_dividend_count"].fillna(0).astype(np.int32)
+        if "consecutive_dividend_payment_count" in df_result.columns:
+            df_result["consecutive_dividend_payment_count"] = (
+                df_result["consecutive_dividend_payment_count"].fillna(0).astype(np.int32)
+            )
 
         if "dividend_count" in df_result.columns:
             df_result["dividend_count"] = df_result["dividend_count"].fillna(0).astype(np.int32)
@@ -360,23 +372,23 @@ class ScreenerUtils:
         if not tickers:
             return {
                 "ttm_yield": {},
-                "consecutive_growth": {},
-                "consecutive_dividend_count": {},
+                "consecutive_dividend_growth_count": {},
+                "consecutive_dividend_payment_count": {},
                 "dividend_count": {},
                 "dividend_per_share": {},
             }
 
         dividend_utils = DividendUtils()
         ttm_yield_dict = dividend_utils.get_ttm_dividend_yield(tickers)
-        growth_dict = dividend_utils.get_consecutive_dividend_growth(tickers)
-        consecutive_dividend_count_dict = dividend_utils.get_consecutive_dividend_payments(tickers)
+        consecutive_dividend_growth_count_dict = dividend_utils.get_consecutive_dividend_growth_count(tickers)
+        consecutive_dividend_payment_count_dict = dividend_utils.get_consecutive_dividend_payment_count(tickers)
         dividend_count_dict = dividend_utils.get_dividend_count(tickers)
         dividend_per_share_dict = dividend_utils.get_latest_dividend_per_share(tickers)
 
         return {
             "ttm_yield": ttm_yield_dict,
-            "consecutive_growth": growth_dict,
-            "consecutive_dividend_count": consecutive_dividend_count_dict,
+            "consecutive_dividend_growth_count": consecutive_dividend_growth_count_dict,
+            "consecutive_dividend_payment_count": consecutive_dividend_payment_count_dict,
             "dividend_count": dividend_count_dict,
             "dividend_per_share": dividend_per_share_dict,
         }
