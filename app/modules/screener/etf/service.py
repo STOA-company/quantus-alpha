@@ -247,11 +247,6 @@ class ScreenerETFService(BaseScreenerService):
             if sort_by not in columns and sort_by not in valid_sort_cols:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
 
-            if sector_filter:
-                for sector in sector_filter:
-                    if sector not in self.get_available_sectors():
-                        raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
-
             etfs = screener_utils.filter_etfs(market_filter, custom_filters)
             filtered_df = screener_utils.get_filtered_etfs_df(market_filter, etfs, columns)
             scored_df = etf_score_utils.calculate_factor_score(filtered_df)

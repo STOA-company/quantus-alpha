@@ -4,7 +4,7 @@ set -e
 echo "Starting Redis and required services..."
 docker-compose -f docker-compose.local.yml up -d
 
-ENV_FILE=.env.dev
+ENV_FILE=.env
 if [ -f "$ENV_FILE" ]; then
     export $(grep -v '^#' $ENV_FILE | xargs)
 else
@@ -16,7 +16,7 @@ poetry run uvicorn app.main:app --reload --reload-dir=app/ --host 0.0.0.0 --port
 
 function cleanup {
     echo "Shutting down development environment..."
-    docker-compose -f docker-compose.dev.yml down
+    docker-compose -f docker-compose.local.yml down
     echo "Done!"
 }
 

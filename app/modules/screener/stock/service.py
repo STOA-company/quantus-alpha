@@ -4,6 +4,7 @@ from app.utils.score_utils import score_utils
 from app.cache.factors import factors_cache
 import pandas as pd
 import numpy as np
+import json
 from app.modules.screener.stock.schemas import MarketEnum, ExcludeEnum
 from app.modules.screener.utils import screener_utils
 from app.common.constants import (
@@ -16,6 +17,8 @@ from app.modules.screener.stock.schemas import StockType
 from app.core.exception.custom import CustomException
 from app.modules.screener.base import BaseScreenerService
 from app.utils.test_utils import time_it
+from app.core.config import settings
+from redis import Redis
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,10 @@ class ScreenerStockService(BaseScreenerService):
 
     def __init__(self):
         super().__init__()
+        self.redis_client = Redis(
+            host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True
+        )
+        self.cache_ttl = 72000
 
     def _is_stock(self) -> bool:
         """주식 관련 서비스임을 표시"""
@@ -180,16 +187,25 @@ class ScreenerStockService(BaseScreenerService):
 
     @time_it
     def get_available_sectors(self, lang: str = "kr") -> List[str]:
-        """
-        사용 가능한 섹터 목록 조회
-        """
+        cache_key = f"available_sectors:{lang}"
+
+        cached_data = self.redis_client.get(cache_key)
+        if cached_data:
+            print("Redis 캐시 사용")
+            return json.loads(cached_data)
+
+        print("Redis 캐시 없음, 데이터 로드 중...")
+
         kr_df = pd.read_parquet("parquet/kr_stock_factors.parquet")
         us_df = pd.read_parquet("parquet/us_stock_factors.parquet")
+
         sector_lang = "sector" if lang == "kr" else "sector_en"
         kr_sectors = kr_df[sector_lang].unique().tolist()
         us_sectors = us_df[sector_lang].unique().tolist()
 
         sectors = list(set(kr_sectors + us_sectors))
+
+        self.redis_client.setex(cache_key, self.cache_ttl, json.dumps(sectors))
 
         return sectors
 
