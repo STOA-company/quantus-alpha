@@ -80,6 +80,7 @@ MARKET_KOREAN_TO_ENGLISH_MAP = {
 FACTOR_MAP = {
     "Code": "티커",
     "ticker": "티 커",  # 띄어쓰기 제거시 에러 발생함
+    "exclude": "제외",
     "Name": "종목명",
     "kr_name": "종목명(한)",
     "en_name": "종목명(영)",
@@ -223,6 +224,7 @@ FACTOR_MAP = {
 
 FACTOR_MAP_EN = {
     "Code": "Ticker",
+    "exclude": "Exclude",
     "Name": "Name",
     "country": "Country",
     "market": "Market",

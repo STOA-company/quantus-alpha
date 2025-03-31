@@ -180,6 +180,7 @@ async def create_or_update_group(
                 group_id=group_filter.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
+                exclude_filters=group_filter.exclude_filters,
                 sector_filter=group_filter.sector_filter,
                 custom_filters=group_filter.custom_filters,
                 factor_filters=group_filter.factor_filters,
@@ -192,6 +193,7 @@ async def create_or_update_group(
                 user_id=current_user.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
+                exclude_filters=group_filter.exclude_filters,
                 sector_filter=group_filter.sector_filter,
                 custom_filters=group_filter.custom_filters,
                 type=group_filter.type,
@@ -242,6 +244,7 @@ def get_group_filters(
                 name="기본",
                 market_filter=MarketEnum.US,
                 has_custom=False,
+                exclude_filters=[],
                 sector_filter=all_sectors,
                 custom_filters=[],
                 factor_filters={
@@ -267,6 +270,7 @@ def get_group_filters(
 
         market_filter = None
         sector_filter = []
+        exclude_filters = []
         custom_filters = []
 
         for stock_filter in stock_filters:
@@ -274,6 +278,8 @@ def get_group_filters(
                 market_filter = stock_filter["value"]
             elif stock_filter["factor"] == "산업":
                 sector_filter.append(stock_filter["value"])
+            elif stock_filter["factor"] == "제외":
+                exclude_filters.append(stock_filter["value"])
             else:
                 custom_filters.append(stock_filter)
 
@@ -289,6 +295,7 @@ def get_group_filters(
             market_filter=market_filter,
             sector_filter=sector_filter,
             custom_filters=custom_filters,
+            exclude_filters=exclude_filters,
             factor_filters={
                 "technical": technical_columns,
                 "fundamental": fundamental_columns,
