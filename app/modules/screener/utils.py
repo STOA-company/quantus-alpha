@@ -47,6 +47,10 @@ class ScreenerUtils:
                 min_value = market_data[factor_name].min()
                 max_value = market_data[factor_name].max()
 
+                if factor_name == "dividend_count":
+                    min_value = 0
+                    max_value = 52
+
                 result.append(
                     {
                         "factor": factor_name,
