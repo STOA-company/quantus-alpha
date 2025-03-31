@@ -80,6 +80,7 @@ MARKET_KOREAN_TO_ENGLISH_MAP = {
 FACTOR_MAP = {
     "Code": "티커",
     "ticker": "티 커",  # 띄어쓰기 제거시 에러 발생함
+    "exclude": "제외",
     "Name": "종목명",
     "kr_name": "종목명(한)",
     "en_name": "종목명(영)",
@@ -172,7 +173,7 @@ FACTOR_MAP = {
     "div_yield_growth_yoy": "배당수익률 성장 (YoY)",
     "ttm_dividend_yield": "직전 12개월 배당 수익률",
     "consecutive_dividend_growth_count": "연속 배당 성장 횟수",
-    "consecutive_dividend_count": "연속 배당 지급 횟수",
+    "consecutive_dividend_payment_count": "연속 배당 지급 횟수",
     "dividend_count": "5년 연평균 배당 횟수",
     # 가치
     "pbr": "PBR",
@@ -223,6 +224,7 @@ FACTOR_MAP = {
 
 FACTOR_MAP_EN = {
     "Code": "Ticker",
+    "exclude": "Exclude",
     "Name": "Name",
     "country": "Country",
     "market": "Market",
@@ -285,7 +287,7 @@ FACTOR_MAP_EN = {
     "psr_ttm": "PSR (TTM)",
     "ttm_dividend_yield": "TTM Dividend Yield",
     "consecutive_dividend_growth_count": "Consecutive Dividend Growth Count",
-    "consecutive_dividend_count": "Consecutive Dividend Count",
+    "consecutive_dividend_payment_count": "Consecutive Dividend Payment Count",
     "dividend_count": "5-Year Average Dividend Frequency",
     ########################################################
     # ETF

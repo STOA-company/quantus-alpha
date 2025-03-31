@@ -60,7 +60,7 @@ class DividendUtils:
 
         return ttm_yield_dict
 
-    def get_consecutive_dividend_growth(self, tickers: List[str]) -> Dict[str, int]:
+    def get_consecutive_dividend_growth_count(self, tickers: List[str]) -> Dict[str, int]:
         if not tickers:
             return {}
 
@@ -89,12 +89,12 @@ class DividendUtils:
 
         return growth_dict
 
-    def get_consecutive_dividend_payments(self, tickers: List[str]) -> Dict[str, int]:
+    def get_consecutive_dividend_payment_count(self, tickers: List[str]) -> Dict[str, int]:
         if not tickers:
             return {}
 
         yearly_dividends = self._get_yearly_dividends(tickers)
-        payment_dict = {}
+        consecutive_dividend_payment_dict = {}
 
         current_year = datetime.now().year
 
@@ -108,9 +108,9 @@ class DividendUtils:
                 else:
                     break
 
-            payment_dict[ticker] = consecutive_count
+            consecutive_dividend_payment_dict[ticker] = consecutive_count
 
-        return payment_dict
+        return consecutive_dividend_payment_dict
 
     def get_dividend_count(self, tickers: List[str]) -> Dict[str, int]:
         if not tickers:
