@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -18,6 +18,7 @@ from app.modules.payments.schema import (
 from app.models.models_users import AlphafinderUser
 from app.utils.date_utils import now_kr
 from app.utils.oauth_utils import get_current_user
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -197,6 +198,11 @@ def use_coupon(
         raise HTTPException(status_code=400, detail="로그인이 필요합니다.")
 
     coupon_id = coupon_id.coupon_id
+    if settings.ENV == "stage":
+        today = now_kr().date()
+        if today < datetime(2025, 4, 15).date():
+            raise HTTPException(status_code=403, detail="쿠폰 사용 기간이 아직 안 됐습니다.")
+
     is_used = payment_service.use_coupon(current_user.id, coupon_id)
 
     return BaseResponse(status_code=200, message="쿠폰 사용 성공", data=is_used)
