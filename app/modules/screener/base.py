@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Union
 
 from app.database.crud import database_service
-from app.modules.screener.stock.schemas import MarketEnum, SortInfo
+from app.modules.screener.stock.schemas import MarketEnum, SortInfo, ExcludeEnum
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
@@ -421,6 +421,7 @@ class BaseScreenerService(ABC):
         type: Optional[StockType] = StockType.STOCK,
         market_filter: Optional[Union[MarketEnum, ETFMarketEnum]] = None,
         sector_filter: Optional[List[str]] = [],
+        exclude_filters: Optional[List[ExcludeEnum]] = [],
         custom_filters: Optional[List[Dict]] = [],
     ) -> bool:
         """
@@ -468,6 +469,19 @@ class BaseScreenerService(ABC):
                         )
                     )
 
+            if exclude_filters:
+                for exclude_filter in exclude_filters:
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_stock_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": "exclude",
+                                "value": exclude_filter,
+                            },
+                        )
+                    )
+
             if custom_filters:
                 for condition in custom_filters:
                     insert_tasks.append(
@@ -501,6 +515,7 @@ class BaseScreenerService(ABC):
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
         factor_filters: Optional[Dict[str, List[str]]] = None,
+        exclude_filters: Optional[List[ExcludeEnum]] = None,
         category: Optional[CategoryEnum] = CategoryEnum.CUSTOM,
         sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None,
         type: Optional[StockType] = StockType.STOCK,
@@ -527,7 +542,7 @@ class BaseScreenerService(ABC):
                 self.database._update(table="screener_groups", id=group_id, sets={"name": name})
 
             # 종목 필터
-            if custom_filters or market_filter or sector_filter:
+            if custom_filters or market_filter or sector_filter or exclude_filters:
                 self.database._delete(table="screener_stock_filters", group_id=group_id)
 
             if market_filter:
@@ -551,6 +566,19 @@ class BaseScreenerService(ABC):
                                 "group_id": group_id,
                                 "factor": "sector",
                                 "value": sector,
+                            },
+                        )
+                    )
+
+            if exclude_filters:
+                for exclude_filter in exclude_filters:
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_stock_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": "exclude",
+                                "value": exclude_filter,
                             },
                         )
                     )

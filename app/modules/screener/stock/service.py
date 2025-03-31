@@ -43,8 +43,10 @@ class ScreenerStockService(BaseScreenerService):
 
             if market in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 nation = "us"
-            else:
+            elif market in [MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
                 nation = "kr"
+            elif market == MarketEnum.ALL:
+                nation = "global"
 
             result = []
             for factor in factors:
