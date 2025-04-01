@@ -80,6 +80,7 @@ MARKET_KOREAN_TO_ENGLISH_MAP = {
 FACTOR_MAP = {
     "Code": "티커",
     "ticker": "티 커",  # 띄어쓰기 제거시 에러 발생함
+    "exclude": "제외",
     "Name": "종목명",
     "kr_name": "종목명(한)",
     "en_name": "종목명(영)",
@@ -131,6 +132,50 @@ FACTOR_MAP = {
     "roe": "ROE",
     "roe_ttm": "ROE (TTM)",
     "z_score": "Altman Z-score",
+    # 성장
+    "rv_growth_qoq": "매출액성장률 (QoQ)",
+    "rv_growth_yoy": "매출액성장률 (YoY)",
+    "gp_growth_qoq": "매출총이익성장률 (QoQ)",
+    "gp_growth_yoy": "매출총이익성장률 (YoY)",
+    "op_growth_qoq": "영업이익성장률 (QoQ)",
+    "op_growth_yoy": "영업이익성장률 (YoY)",
+    "net_profit_growth_qoq": "순이익성장률 (QoQ)",
+    "net_profit_growth_yoy": "순이익성장률 (YoY)",
+    "asset_growth_qoq": "자산성장률 (QoQ)",
+    "asset_growth_yoy": "자산성장률 (YoY)",
+    "equity_growth_qoq": "자본성장률 (QoQ)",
+    "equity_growth_yoy": "자본성장률 (YoY)",
+    "gpa_growth_qoq": "GP/A성장률 (QoQ)",
+    "gpa_growth_yoy": "GP/A성장률 (YoY)",
+    "op_borrowing_qoq": "영업이익 / 차입금 성장 (QoQ)",
+    "op_borrowing_yoy": "영업이익 / 차입금 성장 (YoY)",
+    "operating_cashflow_growth_qoq": "현금흐름 성장 (QoQ)",
+    "operating_cashflow_growth_yoy": "현금흐름 성장 (YoY)",
+    "rnd_expense_growth_qoq": "연구개발비 지출 성장 (QoQ)",
+    "rnd_expense_growth_yoy": "연구개발비 지출 성장 (YoY)",
+    "cash_asset_growth_qoq": "보유 현금성자산 성장 (QoQ)",
+    "cash_asset_growth_yoy": "보유 현금성자산 성장 (YoY)",
+    "borrowing_growth_qoq": "차입금 성장 (QoQ)",
+    "borrowing_growth_yoy": "차입금 성장 (YoY)",
+    # 가속
+    "earning_acceleration_yoy": "순이익성장 가속 (YoY)",
+    "earning_acceleration_qoq": "순이익성장 가속 (QoQ)",
+    "rev_acceleration_yoy": "매출액성장 가속 (YoY)",
+    "rev_acceleration_qoq": "매출액성장 가속 (QoQ)",
+    "gp_acceleration_yoy": "매출총이익 성장 가속 (YoY)",
+    "gp_acceleration_qoq": "매출총이익 성장 가속 (QoQ)",
+    "op_acceleration_yoy": "영업이익 성장 가속 (YoY)",
+    "op_acceleration_qoq": "영업이익 성장 가속 (QoQ)",
+    "operating_cashflow_acceleration_yoy": "영업활동현금흐름 성장 가속 (YoY)",
+    "operating_cashflow_acceleration_qoq": "영업활동현금흐름 성장 가속 (QoQ)",
+    # 배당
+    "div_yield_growth_qoq": "배당수익률 성장 (QoQ)",
+    "div_yield_growth_yoy": "배당수익률 성장 (YoY)",
+    "ttm_dividend_yield": "직전 12개월 배당 수익률",
+    "consecutive_dividend_growth_count": "연속 배당 성장 횟수",
+    "consecutive_dividend_payment_count": "연속 배당 지급 횟수",
+    "dividend_count": "5년 연평균 배당 횟수",
+    # 가치
     "pbr": "PBR",
     "pcr": "PCR",
     "pcr_ttm": "PCR (TTM)",
@@ -142,12 +187,18 @@ FACTOR_MAP = {
     "por_ttm": "POR (TTM)",
     "psr": "PSR",
     "psr_ttm": "PSR (TTM)",
-    "ttm_dividend_yield": "직전 12개월 배당 수익률",
-    "consecutive_dividend_growth_count": "연속 배당 성장 횟수",
+    "ev": "EV",
+    "evnet": "EV/Net",
+    "evsales": "EV/Sales",
+    "evebitda": "EV/EBITDA",
+    "evebit": "EV/EBIT",
+    "evgp": "EV/GP",
+    "evrnd": "EV/R&D",
+    "evcf": "EV/CF",
+    "evac": "EV/AC",
     ########################################################
     # ETF
     ########################################################
-    "dividend_count": "5년 연평균 배당 횟수",
     "last_dividend_per_share": "최근 주당 배당금",
     "recent_dividend_yield": "직전 년도 배당 수익률",
     "dividend_growth_rate_3y": "배당 성장률 (3년)",
@@ -173,6 +224,7 @@ FACTOR_MAP = {
 
 FACTOR_MAP_EN = {
     "Code": "Ticker",
+    "exclude": "Exclude",
     "Name": "Name",
     "country": "Country",
     "market": "Market",
@@ -235,12 +287,13 @@ FACTOR_MAP_EN = {
     "psr_ttm": "PSR (TTM)",
     "ttm_dividend_yield": "TTM Dividend Yield",
     "consecutive_dividend_growth_count": "Consecutive Dividend Growth Count",
+    "consecutive_dividend_payment_count": "Consecutive Dividend Payment Count",
+    "dividend_count": "5-Year Average Dividend Frequency",
     ########################################################
     # ETF
     ########################################################
     "manager": "Manager",
     "risk_rating": "Risk Rating",
-    "dividend_count": "5Y avg dividend frequency",
     "last_dividend_per_share": "Last dividend per share",
     "recent_dividend_yield": "Last annual dividend yield",
     "dividend_growth_rate_3y": "Dividend growth (3Y)",
@@ -260,6 +313,25 @@ FACTOR_MAP_EN = {
     "is_hedge": "Hedge",
     "last_dividend_date": "Last dividend date",
 }
+
+DIVIDEND_COUNT_RANGES = {
+    (0, 0): "",  # 배당 없음
+    (0.01, 1.5): "연간",  # 연 1회 배당 (연간)
+    (1.5, 2.5): "반기",  # 연 2회 배당 (반기)
+    (2.5, 4.5): "분기",  # 연 4회 배당 (분기)
+    (4.5, 13): "월간",  # 연 12회 배당 (월간)
+    (13, float("inf")): "주간",  # 연 52회 배당 (주간)
+}
+
+DIVIDEND_COUNT_RANGES_EN = {
+    (0, 0): "",  # 배당 없음
+    (0.01, 1.5): "Annual",  # 연 1회 배당 (연간)
+    (1.5, 2.5): "Semi-Annual",  # 연 2회 배당 (반기)
+    (2.5, 4.5): "Quarterly",  # 연 4회 배당 (분기)
+    (4.5, 13): "Monthly",  # 연 12회 배당 (월간)
+    (13, float("inf")): "Weekly",  # 연 52회 배당 (주간)
+}
+
 
 FACTOR_KOREAN_TO_ENGLISH_MAP = {
     "티커": "Ticker",
@@ -382,7 +454,6 @@ ETF_FACTOR_LIST = [
     "week_52_low",
     "drawdown_1y",
     "median_trade",
-    "dividend_count",
     "last_dividend_date",
     "last_dividend_per_share",
     "recent_dividend_yield",

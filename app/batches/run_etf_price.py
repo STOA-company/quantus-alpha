@@ -1,4 +1,6 @@
+import os
 import time
+from app.common.constants import ETF_DATA_DIR
 from app.database.crud import database
 
 import numpy as np
@@ -11,10 +13,10 @@ slack_noti = SlackNotifier()
 def run_etf_price(ctry: str):
     try:
         if ctry == "US":
-            df = pd.read_csv("/Users/kyungmin/git_repo/alpha-finder/check_data/etf/us_etf_price1.csv")
+            df = pd.read_parquet(os.path.join(ETF_DATA_DIR, "us_etf_price.parquet"))
             country = "us"
         elif ctry == "KR":
-            df = pd.read_csv("/Users/kyungmin/git_repo/alpha-finder/check_data/etf/kr_etf_price1.csv")
+            df = pd.read_parquet(os.path.join(ETF_DATA_DIR, "kr_etf_price.parquet"))
             country = "kr"
         else:
             raise ValueError("ctry must be US or KR")

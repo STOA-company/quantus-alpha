@@ -1,7 +1,8 @@
 from app.models.models_base import Base
 from sqlalchemy.schema import Index
 from enum import Enum
-from sqlalchemy import Column, String, Text, Integer, Enum as SQLAlchemyEnum, Boolean
+from sqlalchemy import Column, String, Text, Integer, Enum as SQLAlchemyEnum, Boolean, ForeignKey
+from sqlalchemy.orm import relationship
 
 
 class CategoryEnum(str, Enum):
@@ -9,6 +10,7 @@ class CategoryEnum(str, Enum):
     FUNDAMENTAL = "fundamental"
     VALUATION = "valuation"
     DIVIDEND = "dividend"
+    GROWTH = "growth"
     CUSTOM = "custom"
 
 
@@ -47,5 +49,23 @@ class Factors(Base):
     is_etf = Column(Boolean, nullable=False, default=False)
     is_active = Column(Boolean, nullable=False, default=True)
 
+    presets = relationship("FactorsPreset", back_populates="factors")
+
     def __repr__(self):
         return f"<Factor {self.factor}>"
+
+
+class FactorsPreset(Base):
+    __tablename__ = "factors_preset"
+
+    id = Column(Integer, primary_key=True)
+    factor = Column(String(50), ForeignKey("factors.factor", ondelete="CASCADE"), nullable=False)
+    above = Column(Integer, nullable=True)
+    below = Column(Integer, nullable=True)
+    display = Column(String(50), nullable=True)
+    order = Column(Integer, nullable=False)
+
+    factors = relationship("Factors", back_populates="presets")
+
+    def __repr__(self):
+        return f"<FactorPreset {self.factor}>"

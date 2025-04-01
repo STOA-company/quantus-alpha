@@ -4,6 +4,12 @@ import pandas as pd
 from app.common.constants import ETF_DATA_DIR
 from app.database.crud import database
 from app.modules.screener.etf.utils import ETFDataDownloader
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 
 def process_dividend_data(ctry: str, type: str):
@@ -80,82 +86,81 @@ def process_dividend_data(ctry: str, type: str):
     return df_dividend, contry
 
 
-def insert_dividend_records(ctry: str, type: str):
+def get_all_price_data(df_dividend, contry, type):
     """
-    배당금 데이터 중 DB에 없는 데이터를 삽입합니다.
-    (유니크 값: ticker, ex_date, payment_date)
+    모든 필요한 가격 데이터를 한 번에 가져오는 함수
 
     Args:
-        ctry (str): 국가코드 (US, KR)
-        type (str): 자산 타입 (stock, etf)
+        df_dividend (DataFrame): 배당금 데이터프레임
+        contry (str): 국가 코드
+        type (str): 자산 유형
+
+    Returns:
+        DataFrame: 티커와 날짜에 대한 가격 데이터
     """
-    # 데이터 준비
-    df_dividend, contry = process_dividend_data(ctry, type)
+    # 필요한 모든 티커와 날짜 조합 수집
+    all_tickers = df_dividend["ticker"].unique().tolist()
+    all_dates = df_dividend["ex_date"].dt.strftime("%Y-%m-%d").unique().tolist()
 
-    # 티커별 처리
-    processed_count = 0
-    total_tickers = len(df_dividend["ticker"].unique())
+    # 필요한 모든 가격 데이터를 한 번에 가져옴
+    all_price_data = database._select(
+        table=f"{type}_{contry}_1d", columns=["Ticker", "Date", "Close"], Ticker__in=all_tickers, Date__in=all_dates
+    )
 
-    # 배치 사이즈 설정
-    MAX_BATCH_SIZE = 1000
+    # 데이터프레임 변환 및 정리
+    df_prices = pd.DataFrame(all_price_data, columns=["ticker", "ex_date", "price"])
 
-    # 각 티커마다 개별적으로 처리
-    for ticker in df_dividend["ticker"].unique():
-        insert_data = []  # 새로 삽입할 데이터
+    return df_prices
 
-        processed_count += 1
-        print(f"Processing ticker {ticker} ({processed_count}/{total_tickers})")
 
-        df_dividend_ticker = df_dividend[df_dividend["ticker"] == ticker]
-        df_dividend_ticker = df_dividend_ticker.sort_values(by="ex_date", ascending=True)
+def process_ticker_batch(
+    ticker_batch, df_dividend, df_prices, existing_records_dict, table, action="insert", max_batch_size=1000
+):
+    """
+    티커 배치를 처리하는 함수 (삽입 또는 업데이트)
 
-        # 현재 ticker의 데이터에 대해서만 DB 조회
-        existing_records = database._select(
-            table="dividend_information",
-            columns=["ticker", "ex_date", "payment_date"],
-            ticker=ticker,
-            ex_date__in=df_dividend_ticker["ex_date"].dt.strftime("%Y-%m-%d").tolist(),
-        )
+    Args:
+        ticker_batch (list): 처리할 티커 목록
+        df_dividend (DataFrame): 배당금 데이터
+        df_prices (DataFrame): 가격 데이터
+        existing_records_dict (dict): 기존 레코드 정보
+        table (str): 데이터베이스 테이블
+        action (str): "insert" 또는 "update"
+        max_batch_size (int): 최대 배치 크기
 
-        # 중복 체크를 위한 set 생성 (ticker, ex_date, payment_date를 키로 사용)
-        existing_keys = set()
-        for record in existing_records:
-            ticker, ex_date, payment_date = record
-            key = (ticker, ex_date.strftime("%Y-%m-%d"), payment_date.strftime("%Y-%m-%d") if payment_date else None)
-            existing_keys.add(key)
+    Returns:
+        int: 처리된 레코드 수
+    """
+    records_processed = 0
+    batch_data = []
 
-        # ex_date 리스트 생성
-        list_ex_date = df_dividend_ticker["ex_date"].dt.strftime("%Y-%m-%d").tolist()
+    for ticker in ticker_batch:
+        # 해당 티커의 배당 데이터 필터링
+        df_ticker = df_dividend[df_dividend["ticker"] == ticker]
 
-        # 가격 데이터 조회 및 수익률 계산
-        df_data_price = pd.DataFrame(
-            database._select(
-                table=f"{type}_{contry}_1d",
-                columns=["Date", "Close"],
-                Ticker=ticker,
-                Date__in=list_ex_date,
-            )
-        )
-        if df_data_price.empty:
-            continue
+        # 업데이트인 경우 adj_factor가 1이 아닌 레코드만 필터링
+        if action == "update":
+            df_ticker = df_ticker[abs(df_ticker["adj_factor"] - 1.0) > 0.00001]
+            if df_ticker.empty:
+                continue
 
-        df_data_price = df_data_price.rename(
-            columns={
-                "Date": "ex_date",
-                "Close": "price",
-            }
-        )
-        ticker_data = pd.merge(df_dividend_ticker, df_data_price, on="ex_date", how="left")
+        # 해당 티커의 가격 데이터 가져오기
+        df_ticker_prices = df_prices[df_prices["ticker"] == ticker]
+
+        # 배당금 데이터와 가격 데이터 병합
+        ticker_data = pd.merge(df_ticker, df_ticker_prices, on=["ticker", "ex_date"], how="left")
+
+        # 수익률 계산
         ticker_data["yield_rate"] = round((ticker_data["per_share"] / ticker_data["price"]) * 100, 2)
 
-        # 각 행에 대해 중복 확인 후 삽입 데이터 준비
+        # 각 행 처리
         for _, row in ticker_data.iterrows():
             payment_date_str = row["payment_date"].strftime("%Y-%m-%d") if pd.notna(row["payment_date"]) else None
             ex_date_str = row["ex_date"].strftime("%Y-%m-%d")
 
             key = (row["ticker"], ex_date_str, payment_date_str)
 
-            # per_share와 yield_rate 값 준비
+            # 값 준비
             per_share_val = float(row["per_share"]) if pd.notna(row["per_share"]) else None
             yield_rate_val = float(row["yield_rate"]) if pd.notna(row["yield_rate"]) else None
 
@@ -168,206 +173,354 @@ def insert_dividend_records(ctry: str, type: str):
                 "yield_rate": yield_rate_val,
             }
 
-            # DB에 없는 데이터만 삽입
-            if key not in existing_keys:
-                insert_data.append(record)
+            # 삽입 또는 업데이트 로직
+            if action == "insert":
+                # DB에 없는 데이터만 삽입
+                if key not in existing_records_dict:
+                    batch_data.append(record)
+                    records_processed += 1
+            else:  # update
+                # 기존 DB에 데이터가 있는 경우 값 비교
+                if key in existing_records_dict:
+                    old_values = existing_records_dict[key]
+                    old_per_share = old_values.get("per_share")
+                    new_per_share = per_share_val
 
-            # 더 작은 배치 사이즈로 처리
-            if len(insert_data) >= MAX_BATCH_SIZE:
-                print(f"  Inserting {len(insert_data)} records for {ticker}")
-                try:
-                    # 작은 배치로 나누어 삽입
-                    for i in range(0, len(insert_data), 500):
-                        batch = insert_data[i : i + 500]
-                        database._insert(table="dividend_information", sets=batch)
-                        time.sleep(0.1)  # 짧은 대기 시간
-                except Exception as e:
-                    print(f"  Error inserting data: {e}")
-                insert_data = []
+                    old_yield_rate = old_values.get("yield_rate")
+                    new_yield_rate = yield_rate_val
 
-        # 남은 데이터 처리
-        if insert_data:
-            print(f"  Final inserting {len(insert_data)} records for {ticker}")
-            try:
-                # 작은 배치로 나누어 삽입
-                for i in range(0, len(insert_data), 500):
-                    batch = insert_data[i : i + 500]
-                    database._insert(table="dividend_information", sets=batch)
-                    time.sleep(0.1)  # 짧은 대기 시간
-            except Exception as e:
-                print(f"  Error inserting remaining data: {e}")
-
-        # 티커 단위 처리 완료 후 짧은 대기
-        time.sleep(0.5)
-
-
-def update_dividend_records(ctry: str, type: str):
-    """
-    배당금 데이터 중 adj_factor가 1이 아닌 데이터에 대해 값을 업데이트합니다.
-    값이 같으면 넘어가고 다르면 업데이트합니다.
-
-    Args:
-        ctry (str): 국가코드 (US, KR)
-        type (str): 자산 타입 (stock, etf)
-    """
-    # 데이터 준비
-    df_dividend, contry = process_dividend_data(ctry, type)
-
-    # 티커별 처리
-    processed_count = 0
-    total_tickers = len(df_dividend["ticker"].unique())
-
-    # 배치 사이즈 설정
-    MAX_BATCH_SIZE = 500
-
-    # 각 티커마다 개별적으로 처리
-    for ticker in df_dividend["ticker"].unique():
-        update_data = []  # 업데이트할 데이터
-
-        processed_count += 1
-        print(f"Processing ticker {ticker} for updates ({processed_count}/{total_tickers})")
-
-        df_dividend_ticker = df_dividend[df_dividend["ticker"] == ticker]
-        df_dividend_ticker = df_dividend_ticker.sort_values(by="ex_date", ascending=True)
-
-        # adj_factor가 1이 아닌 레코드 필터링
-        df_dividend_ticker = df_dividend_ticker[abs(df_dividend_ticker["adj_factor"] - 1.0) > 0.00001]
-
-        if df_dividend_ticker.empty:
-            continue
-
-        # 현재 ticker의 데이터에 대해서만 DB 조회
-        existing_records = database._select(
-            table="dividend_information",
-            columns=["ticker", "ex_date", "payment_date", "per_share", "yield_rate"],
-            ticker=ticker,
-            ex_date__in=df_dividend_ticker["ex_date"].dt.strftime("%Y-%m-%d").tolist(),
-        )
-
-        # 중복 체크를 위한 dictionary 생성 (ticker, ex_date, payment_date를 키로 사용)
-        existing_dict = {}
-        for record in existing_records:
-            ticker, ex_date, payment_date, per_share, yield_rate = record
-            key = (ticker, ex_date.strftime("%Y-%m-%d"), payment_date.strftime("%Y-%m-%d") if payment_date else None)
-            existing_dict[key] = {
-                "per_share": float(per_share) if per_share is not None else None,
-                "yield_rate": float(yield_rate) if yield_rate is not None else None,
-            }
-
-        # ex_date 리스트 생성
-        list_ex_date = df_dividend_ticker["ex_date"].dt.strftime("%Y-%m-%d").tolist()
-
-        # 가격 데이터 조회 및 수익률 계산
-        df_data_price = pd.DataFrame(
-            database._select(
-                table=f"{type}_{contry}_1d",
-                columns=["Date", "Close"],
-                Ticker=ticker,
-                Date__in=list_ex_date,
-            )
-        )
-        if df_data_price.empty:
-            continue
-
-        df_data_price = df_data_price.rename(
-            columns={
-                "Date": "ex_date",
-                "Close": "price",
-            }
-        )
-        ticker_data = pd.merge(df_dividend_ticker, df_data_price, on="ex_date", how="left")
-        ticker_data["yield_rate"] = round((ticker_data["per_share"] / ticker_data["price"]) * 100, 2)
-
-        # 각 행에 대해 값 비교 후 업데이트 데이터 준비
-        for _, row in ticker_data.iterrows():
-            payment_date_str = row["payment_date"].strftime("%Y-%m-%d") if pd.notna(row["payment_date"]) else None
-            ex_date_str = row["ex_date"].strftime("%Y-%m-%d")
-
-            key = (row["ticker"], ex_date_str, payment_date_str)
-
-            # per_share와 yield_rate 값 준비
-            per_share_val = float(row["per_share"]) if pd.notna(row["per_share"]) else None
-            yield_rate_val = float(row["yield_rate"]) if pd.notna(row["yield_rate"]) else None
-
-            # 기존 DB에 데이터가 있는 경우에만 처리
-            if key in existing_dict:
-                # 값이 다른지 비교 (per_share 또는 yield_rate)
-                old_per_share = existing_dict[key]["per_share"]
-                new_per_share = per_share_val
-
-                old_yield_rate = existing_dict[key]["yield_rate"]
-                new_yield_rate = yield_rate_val
-
-                # 값이 다르면 업데이트 (None 값 비교 고려)
-                per_share_changed = (
-                    (old_per_share is None and new_per_share is not None)
-                    or (old_per_share is not None and new_per_share is None)
-                    or (
-                        old_per_share is not None
-                        and new_per_share is not None
-                        and abs(old_per_share - new_per_share) > 0.00001
-                    )
-                )
-
-                yield_rate_changed = (
-                    (old_yield_rate is None and new_yield_rate is not None)
-                    or (old_yield_rate is not None and new_yield_rate is None)
-                    or (
-                        old_yield_rate is not None
-                        and new_yield_rate is not None
-                        and abs(old_yield_rate - new_yield_rate) > 0.00001
-                    )
-                )
-
-                if per_share_changed or yield_rate_changed:
-                    # 업데이트를 위한 복합키 데이터 생성
-                    update_record = {
-                        "ticker": row["ticker"],
-                        "payment_date": payment_date_str,
-                        "ex_date": ex_date_str,
-                        "per_share": per_share_val,
-                        "yield_rate": yield_rate_val,
-                    }
-                    update_data.append(update_record)
-
-            # 배치 단위로 업데이트 처리
-            if len(update_data) >= MAX_BATCH_SIZE:
-                print(f"  Updating {len(update_data)} records for {ticker}")
-                try:
-                    # 복합 키로 인해 개별적으로 업데이트
-                    for record in update_data:
-                        database._update(
-                            table="dividend_information",
-                            sets={"per_share": record["per_share"], "yield_rate": record["yield_rate"]},
-                            ticker=record["ticker"],
-                            ex_date=record["ex_date"],
-                            payment_date=record["payment_date"],
+                    # 값이 다른지 비교
+                    per_share_changed = (
+                        (old_per_share is None and new_per_share is not None)
+                        or (old_per_share is not None and new_per_share is None)
+                        or (
+                            old_per_share is not None
+                            and new_per_share is not None
+                            and abs(old_per_share - new_per_share) > 0.00001
                         )
-                except Exception as e:
-                    print(f"  Error updating data: {e}")
-                update_data = []
+                    )
 
-        # 남은 업데이트 데이터 처리
-        if update_data:
-            print(f"  Final updating {len(update_data)} records for {ticker}")
-            try:
-                # 복합 키로 인해 개별적으로 업데이트
-                for record in update_data:
+                    yield_rate_changed = (
+                        (old_yield_rate is None and new_yield_rate is not None)
+                        or (old_yield_rate is not None and new_yield_rate is None)
+                        or (
+                            old_yield_rate is not None
+                            and new_yield_rate is not None
+                            and abs(old_yield_rate - new_yield_rate) > 0.00001
+                        )
+                    )
+
+                    if per_share_changed or yield_rate_changed:
+                        batch_data.append(record)
+                        records_processed += 1
+
+            # 배치 처리
+            if len(batch_data) >= max_batch_size:
+                try:
+                    if action == "insert":
+                        database._insert(table=table, sets=batch_data)
+                    else:  # update
+                        for record in batch_data:
+                            database._update(
+                                table=table,
+                                sets={"per_share": record["per_share"], "yield_rate": record["yield_rate"]},
+                                ticker=record["ticker"],
+                                ex_date=record["ex_date"],
+                                payment_date=record["payment_date"],
+                            )
+                except Exception as e:
+                    logger.error(f"Error processing batch: {e}")
+                batch_data = []
+
+    # 남은 데이터 처리
+    if batch_data:
+        try:
+            if action == "insert":
+                database._insert(table=table, sets=batch_data)
+            else:  # update
+                for record in batch_data:
                     database._update(
-                        table="dividend_information",
+                        table=table,
                         sets={"per_share": record["per_share"], "yield_rate": record["yield_rate"]},
                         ticker=record["ticker"],
                         ex_date=record["ex_date"],
                         payment_date=record["payment_date"],
                     )
+        except Exception as e:
+            logger.error(f"Error processing final batch: {e}")
+
+    return records_processed
+
+
+def insert_dividend_records(ctry: str, type: str, max_workers=4):
+    """
+    배당금 데이터 중 DB에 없는 데이터를 삽입합니다. (병렬 처리 최적화 버전)
+
+    Args:
+        ctry (str): 국가코드 (US, KR)
+        type (str): 자산 타입 (stock, etf)
+        max_workers (int): 동시 작업자 수
+    """
+    logger.info(f"Starting insert_dividend_records for {ctry} {type}")
+    start_time = time.time()
+
+    # 데이터 준비
+    df_dividend, contry = process_dividend_data(ctry, type)
+    tickers = df_dividend["ticker"].unique().tolist()
+    total_tickers = len(tickers)
+
+    logger.info(f"Processing {total_tickers} tickers for insertion")
+
+    # 필요한 ex_date 목록 생성
+    all_ex_dates = df_dividend["ex_date"].dt.strftime("%Y-%m-%d").tolist()
+
+    # 기존 레코드 한 번에 조회
+    logger.info("Fetching existing records...")
+    existing_records = database._select(
+        table="dividend_information",
+        columns=["ticker", "ex_date", "payment_date"],
+        ticker__in=tickers,
+        ex_date__in=all_ex_dates,
+    )
+
+    # 중복 체크를 위한 dictionary 생성
+    existing_records_dict = {}
+    for record in existing_records:
+        ticker, ex_date, payment_date = record
+        key = (ticker, ex_date.strftime("%Y-%m-%d"), payment_date.strftime("%Y-%m-%d") if payment_date else None)
+        existing_records_dict[key] = {}
+
+    logger.info(f"Found {len(existing_records_dict)} existing records")
+
+    # 모든 필요한 가격 데이터 한 번에 가져오기
+    logger.info("Fetching all price data...")
+    df_prices = get_all_price_data(df_dividend, contry, type)
+
+    # 티커를 작업자 수에 맞게 배치로 나누기
+    batch_size = max(1, len(tickers) // max_workers)
+    ticker_batches = [tickers[i : i + batch_size] for i in range(0, len(tickers), batch_size)]
+
+    # 병렬 처리
+    total_inserted = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+        for batch in ticker_batches:
+            future = executor.submit(
+                process_ticker_batch,
+                batch,
+                df_dividend,
+                df_prices,
+                existing_records_dict,
+                "dividend_information",
+                "insert",
+            )
+            futures.append(future)
+
+        for future in as_completed(futures):
+            try:
+                total_inserted += future.result()
             except Exception as e:
-                print(f"  Error updating remaining data: {e}")
+                logger.error(f"Error in worker thread: {e}")
 
-        # 티커 단위 처리 완료 후 짧은 대기
-        time.sleep(0.5)
+    elapsed_time = time.time() - start_time
+    logger.info(f"Inserted {total_inserted} records in {elapsed_time:.2f} seconds")
 
 
-def insert_dividend(ctry: str, type: str):
+def update_dividend_records(ctry: str, type: str, max_workers=4):
+    """
+    배당금 데이터 중 adj_factor가 1이 아닌 데이터에 대해 값을 업데이트합니다. (병렬 처리 최적화 버전)
+
+    Args:
+        ctry (str): 국가코드 (US, KR)
+        type (str): 자산 타입 (stock, etf)
+        max_workers (int): 동시 작업자 수
+    """
+    logger.info(f"Starting update_dividend_records for {ctry} {type}")
+    start_time = time.time()
+
+    # 데이터 준비
+    df_dividend, contry = process_dividend_data(ctry, type)
+
+    # adj_factor가 1이 아닌 레코드만 필터링
+    df_dividend_filtered = df_dividend[abs(df_dividend["adj_factor"] - 1.0) > 0.00001]
+    tickers = df_dividend_filtered["ticker"].unique().tolist()
+    total_tickers = len(tickers)
+    total_records = len(df_dividend_filtered)
+
+    if not tickers:
+        logger.info("No records to update")
+        return
+
+    logger.info(f"Processing {total_tickers} tickers with {total_records} potential records for updates")
+
+    # 필요한 ex_date 목록 생성
+    all_ex_dates = df_dividend_filtered["ex_date"].dt.strftime("%Y-%m-%d").tolist()
+
+    # 기존 레코드 한 번에 조회
+    logger.info("Fetching existing records...")
+    existing_records = database._select(
+        table="dividend_information",
+        columns=["ticker", "ex_date", "payment_date", "per_share", "yield_rate"],
+        ticker__in=tickers,
+        ex_date__in=all_ex_dates,
+    )
+
+    # 중복 체크를 위한 dictionary 생성
+    existing_records_dict = {}
+    for record in existing_records:
+        ticker, ex_date, payment_date, per_share, yield_rate = record
+        key = (ticker, ex_date.strftime("%Y-%m-%d"), payment_date.strftime("%Y-%m-%d") if payment_date else None)
+        existing_records_dict[key] = {
+            "per_share": float(per_share) if per_share is not None else None,
+            "yield_rate": float(yield_rate) if yield_rate is not None else None,
+        }
+
+    logger.info(f"Found {len(existing_records_dict)} existing records to check for updates")
+
+    # 모든 필요한 가격 데이터 한 번에 가져오기
+    logger.info("Fetching all price data...")
+    df_prices = get_all_price_data(df_dividend_filtered, contry, type)
+
+    # 데이터 처리를 위한 함수 정의
+    def calculate_values(df_dividend, df_prices):
+        """
+        배당금 및 수익률 값을 계산하여 반환하는 함수
+        정확한 문자열 형식의 값으로 반환하여 정밀도 문제를 해결
+        """
+        # 데이터프레임 병합 및 계산
+        merged_data = []
+
+        # 티커 별로 처리
+        for ticker in df_dividend["ticker"].unique():
+            df_ticker = df_dividend[df_dividend["ticker"] == ticker]
+            df_ticker_prices = df_prices[df_prices["ticker"] == ticker]
+
+            # 배당금 데이터와 가격 데이터 병합
+            ticker_data = pd.merge(df_ticker, df_ticker_prices, on=["ticker", "ex_date"], how="left")
+
+            # 수익률 계산
+            for _, row in ticker_data.iterrows():
+                payment_date_str = row["payment_date"].strftime("%Y-%m-%d") if pd.notna(row["payment_date"]) else None
+                ex_date_str = row["ex_date"].strftime("%Y-%m-%d")
+
+                # per_share 및 yield_rate 계산
+                per_share = float(row["per_share"]) if pd.notna(row["per_share"]) else None
+
+                # 수익률 계산 (정밀한 계산을 위해 문자열로 변환 전 계산)
+                if pd.notna(row["per_share"]) and pd.notna(row["price"]) and row["price"] > 0:
+                    yield_rate = round((row["per_share"] / row["price"]) * 100, 2)
+                else:
+                    yield_rate = None
+
+                # 키 및 레코드 데이터
+                key = (row["ticker"], ex_date_str, payment_date_str)
+
+                # 계산된 값을 문자열로 정확히 표현 (정밀도 문제 해결)
+                per_share_str = f"{per_share:.8f}" if per_share is not None else None
+                yield_rate_str = f"{yield_rate:.8f}" if yield_rate is not None else None
+
+                merged_data.append(
+                    {
+                        "key": key,
+                        "per_share": per_share,
+                        "yield_rate": yield_rate,
+                        "per_share_str": per_share_str,
+                        "yield_rate_str": yield_rate_str,
+                    }
+                )
+
+        return merged_data
+
+    # 계산된 최신 값 얻기
+    calculated_data = calculate_values(df_dividend_filtered, df_prices)
+
+    # 해시 기반 업데이트 접근방식
+    # 각 레코드를 해시로 변환하여 변경 사항이 실제로 있는지 비교
+    def get_exact_hash(per_share, yield_rate):
+        """
+        부동소수점 값을 정확히 비교하기 위한 해시 생성 함수
+        """
+        per_share_str = f"{per_share:.8f}" if per_share is not None else "NULL"
+        yield_rate_str = f"{yield_rate:.8f}" if yield_rate is not None else "NULL"
+        return f"{per_share_str}_{yield_rate_str}"
+
+    # 업데이트가 필요한 레코드만 필터링
+    records_to_update = []
+    records_checked = 0
+
+    for item in calculated_data:
+        key = item["key"]
+        records_checked += 1
+
+        if key in existing_records_dict:
+            old_values = existing_records_dict[key]
+            old_per_share = old_values.get("per_share")
+            old_yield_rate = old_values.get("yield_rate")
+
+            new_per_share = item["per_share"]
+            new_yield_rate = item["yield_rate"]
+
+            # 해시 기반 비교 - 더 정확한 비교
+            old_hash = get_exact_hash(old_per_share, old_yield_rate)
+            new_hash = get_exact_hash(new_per_share, new_yield_rate)
+
+            if old_hash != new_hash:
+                # 업데이트 필요
+                record = {
+                    "ticker": key[0],
+                    "ex_date": key[1],
+                    "payment_date": key[2],
+                    "per_share": new_per_share,
+                    "yield_rate": new_yield_rate,
+                }
+                records_to_update.append(record)
+
+    logger.info(f"Found {len(records_to_update)} records requiring updates out of {records_checked} checked")
+
+    # 병렬 처리 함수
+    def update_records_batch(batch):
+        """배치 단위로 레코드 업데이트"""
+        updated = 0
+        try:
+            for record in batch:
+                database._update(
+                    table="dividend_information",
+                    sets={"per_share": record["per_share"], "yield_rate": record["yield_rate"]},
+                    ticker=record["ticker"],
+                    ex_date=record["ex_date"],
+                    payment_date=record["payment_date"],
+                )
+                updated += 1
+        except Exception as e:
+            logger.error(f"Error updating batch: {e}")
+        return updated
+
+    # 배치 업데이트
+    max_batch_size = 500
+    batches = [records_to_update[i : i + max_batch_size] for i in range(0, len(records_to_update), max_batch_size)]
+
+    total_updated = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+        for batch in batches:
+            future = executor.submit(update_records_batch, batch)
+            futures.append(future)
+
+        for future in as_completed(futures):
+            try:
+                total_updated += future.result()
+            except Exception as e:
+                logger.error(f"Error in worker thread: {e}")
+
+    elapsed_time = time.time() - start_time
+    logger.info(f"Checked {records_checked} records, Updated {total_updated} records in {elapsed_time:.2f} seconds")
+
+    # 업데이트가 없는 경우에 대한 로그
+    if total_updated == 0:
+        logger.info("No records needed updates. All values were already up-to-date.")
+
+
+def insert_dividend(ctry: str, type: str, max_workers=4):
     """
     배당금 데이터를 삽입하고 업데이트합니다.
     (기존 함수와의 호환성을 위해 유지)
@@ -375,9 +528,16 @@ def insert_dividend(ctry: str, type: str):
     Args:
         ctry (str): 국가코드 (US, KR)
         type (str): 자산 타입 (stock, etf)
+        max_workers (int): 병렬 처리를 위한 최대 작업자 수
     """
-    insert_dividend_records(ctry, type)
-    update_dividend_records(ctry, type)
+    logger.info(f"Starting dividend data processing for {ctry} {type}")
+    total_start_time = time.time()
+
+    insert_dividend_records(ctry, type, max_workers)
+    update_dividend_records(ctry, type, max_workers)
+
+    total_elapsed_time = time.time() - total_start_time
+    logger.info(f"Completed all dividend processing in {total_elapsed_time:.2f} seconds")
 
 
 class StockDividendDataDownloader(ETFDataDownloader):
@@ -533,7 +693,7 @@ class StockDividendDataDownloader(ETFDataDownloader):
 
 
 if __name__ == "__main__":
-    update_dividend_records(ctry="KR", type="stock")
+    insert_dividend(ctry="KR", type="stock")
     # downloader = StockDividendDataDownloader()
     # downloader.download_stock_dividend(ctry="US", download=True)
     # downloader.download_stock_dividend(ctry="KR", download=True)

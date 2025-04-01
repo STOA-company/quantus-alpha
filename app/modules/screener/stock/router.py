@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends, Response
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict
-import io
+from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
+import time
 from app.modules.screener.stock.service import ScreenerStockService
 from app.modules.screener.stock.schemas import (
     FactorResponse,
@@ -81,6 +83,7 @@ def get_filtered_stocks(
         stocks_data, total_count = screener_service.get_filtered_data(
             market_filter=filtered_stocks.market_filter,
             sector_filter=filtered_stocks.sector_filter,
+            exclude_filters=filtered_stocks.exclude_filters,
             custom_filters=custom_filters,
             columns=request_columns,
             limit=filtered_stocks.limit,
@@ -144,37 +147,6 @@ def get_filtered_stocks_count(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/stocks/download")
-def download_filtered_stocks(
-    filtered_stocks: FilteredStocks, screener_service: ScreenerStockService = Depends(ScreenerStockService)
-):
-    custom_filters = []
-    if filtered_stocks.custom_filters:
-        custom_filters = [
-            {
-                "factor": condition.factor,
-                "above": condition.above,
-                "below": condition.below,
-            }
-            for condition in filtered_stocks.custom_filters
-        ]
-    sorted_df = screener_service.get_filtered_data(
-        market_filter=filtered_stocks.market_filter,
-        sector_filter=filtered_stocks.sector_filter,
-        custom_filters=custom_filters,
-        columns=[REVERSE_FACTOR_MAP[column] for column in filtered_stocks.factor_filters],
-    )
-
-    stream = io.StringIO()
-    sorted_df.to_csv(stream, index=False, encoding="utf-8-sig")  # 한글 인코딩
-
-    return Response(
-        content=stream.getvalue(),
-        media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="filtered_stocks.csv"'},
-    )
-
-
 @router.get("/groups", response_model=List[GroupMetaData])
 def get_groups(
     current_user: str = Depends(get_current_user),
@@ -208,6 +180,7 @@ async def create_or_update_group(
                 group_id=group_filter.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
+                exclude_filters=group_filter.exclude_filters,
                 sector_filter=group_filter.sector_filter,
                 custom_filters=group_filter.custom_filters,
                 factor_filters=group_filter.factor_filters,
@@ -220,6 +193,7 @@ async def create_or_update_group(
                 user_id=current_user.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
+                exclude_filters=group_filter.exclude_filters,
                 sector_filter=group_filter.sector_filter,
                 custom_filters=group_filter.custom_filters,
                 type=group_filter.type,
@@ -247,17 +221,20 @@ def get_group_filters(
         fundamental_columns = screener_service.get_columns(group_id, CategoryEnum.FUNDAMENTAL)
         valuation_columns = screener_service.get_columns(group_id, CategoryEnum.VALUATION)
         dividend_columns = screener_service.get_columns(group_id, CategoryEnum.DIVIDEND)
+        growth_columns = screener_service.get_columns(group_id, CategoryEnum.GROWTH)
 
         if lang == "en":
             technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
             fundamental_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in fundamental_columns]
             valuation_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in valuation_columns]
             dividend_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in dividend_columns]
+            growth_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in growth_columns]
 
         technical_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
         fundamental_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.FUNDAMENTAL)
         valuation_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.VALUATION)
         dividend_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.DIVIDEND)
+        growth_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.GROWTH)
         custom_sort_info = screener_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
 
         if group_id == -1:
@@ -267,6 +244,7 @@ def get_group_filters(
                 name="기본",
                 market_filter=MarketEnum.US,
                 has_custom=False,
+                exclude_filters=[],
                 sector_filter=all_sectors,
                 custom_filters=[],
                 factor_filters={
@@ -274,6 +252,7 @@ def get_group_filters(
                     "fundamental": fundamental_columns,
                     "valuation": valuation_columns,
                     "dividend": dividend_columns,
+                    "growth": growth_columns,
                     "custom": [],
                 },
                 sort_info={
@@ -281,6 +260,7 @@ def get_group_filters(
                     CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
                     CategoryEnum.VALUATION: valuation_sort_info,
                     CategoryEnum.DIVIDEND: dividend_sort_info,
+                    CategoryEnum.GROWTH: growth_sort_info,
                     CategoryEnum.CUSTOM: custom_sort_info,
                 },
             )
@@ -290,6 +270,7 @@ def get_group_filters(
 
         market_filter = None
         sector_filter = []
+        exclude_filters = []
         custom_filters = []
 
         for stock_filter in stock_filters:
@@ -297,6 +278,8 @@ def get_group_filters(
                 market_filter = stock_filter["value"]
             elif stock_filter["factor"] == "산업":
                 sector_filter.append(stock_filter["value"])
+            elif stock_filter["factor"] == "제외":
+                exclude_filters.append(stock_filter["value"])
             else:
                 custom_filters.append(stock_filter)
 
@@ -312,16 +295,21 @@ def get_group_filters(
             market_filter=market_filter,
             sector_filter=sector_filter,
             custom_filters=custom_filters,
+            exclude_filters=exclude_filters,
             factor_filters={
                 "technical": technical_columns,
                 "fundamental": fundamental_columns,
                 "valuation": valuation_columns,
+                "dividend": dividend_columns,
+                "growth": growth_columns,
                 "custom": custom_factor_filters,
             },
             sort_info={
                 CategoryEnum.TECHNICAL: technical_sort_info,
                 CategoryEnum.FUNDAMENTAL: fundamental_sort_info,
                 CategoryEnum.VALUATION: valuation_sort_info,
+                CategoryEnum.DIVIDEND: dividend_sort_info,
+                CategoryEnum.GROWTH: growth_sort_info,
                 CategoryEnum.CUSTOM: custom_sort_info,
             },
             has_custom=group_filters["has_custom"],
@@ -395,3 +383,58 @@ def update_parquet(country: str):
     except Exception as e:
         logger.exception(f"Error updating parquet: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/download")
+def download_filtered_stocks(
+    filtered_stocks: FilteredStocks, screener_service: ScreenerStockService = Depends(ScreenerStockService)
+):
+    custom_filters = []
+    if filtered_stocks.custom_filters:
+        custom_filters = [
+            {
+                "factor": REVERSE_FACTOR_MAP[condition.factor],
+                "above": condition.above,
+                "below": condition.below,
+            }
+            for condition in filtered_stocks.custom_filters
+        ]
+
+    request_columns = ["Code", "Name", "country"]
+    reverse_factor_map = REVERSE_FACTOR_MAP
+    if filtered_stocks.lang == "en":
+        reverse_factor_map = REVERSE_FACTOR_MAP_EN
+
+    for column in [reverse_factor_map[column] for column in filtered_stocks.factor_filters]:
+        if column not in request_columns:
+            request_columns.append(column)
+
+    sort_by = "score"
+    ascending = False
+    if filtered_stocks.sort_info:
+        sort_by = reverse_factor_map[filtered_stocks.sort_info.sort_by]
+        ascending = filtered_stocks.sort_info.ascending
+
+    df = screener_service.get_filtered_stocks_download(
+        market_filter=filtered_stocks.market_filter,
+        sector_filter=filtered_stocks.sector_filter,
+        custom_filters=custom_filters,
+        columns=request_columns,
+        sort_by=sort_by,
+        ascending=ascending,
+        lang=filtered_stocks.lang,
+    )
+
+    if df is None or df.empty:
+        return JSONResponse(content={"error": "No data found"}, status_code=404)
+
+    filename = f"temp_export_{int(time.time())}.csv"
+    df.to_csv(filename, index=False)
+
+    return FileResponse(path=filename, filename="stocks_export.csv", media_type="text/csv")
+
+
+@router.post("/init")
+async def init_screener(screener_service: ScreenerStockService = Depends(ScreenerStockService)):
+    await screener_service.initialize()
+    return {"message": "Screener initialized successfully"}

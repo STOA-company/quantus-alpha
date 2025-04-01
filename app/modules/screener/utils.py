@@ -3,11 +3,9 @@ from app.database.crud import database
 from typing import Dict, List, Optional
 from Aws.logic.s3 import get_data_from_bucket
 import io
-from app.modules.screener.stock.schemas import MarketEnum
+from app.modules.screener.stock.schemas import MarketEnum, ExcludeEnum
 from app.common.constants import NEED_TO_MULTIPLY_100, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
 import numpy as np
-from collections import defaultdict
-from app.cache.factors import factors_cache
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.models.models_factors import CategoryEnum
@@ -21,6 +19,7 @@ from pandas.api.types import is_numeric_dtype
 from app.modules.screener.stock.schemas import StockType
 from app.utils.test_utils import time_it
 from app.kispy.manager import KISAPIManager
+from app.utils.dividend_utils import DividendUtils
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +40,16 @@ class ScreenerUtils:
         result = []
         for factor in factors:
             factor_name = factor.factor
+            factor_presets = self.db._select(table="factors_preset", factor=factor_name, order="order", ascending=True)
+            classified_presets = self.classify_factors_preset(factor_presets)
 
             if factor_name in market_data.columns:
                 min_value = market_data[factor_name].min()
                 max_value = market_data[factor_name].max()
+
+                if factor_name == "dividend_count":
+                    min_value = 0
+                    max_value = 52
 
                 result.append(
                     {
@@ -55,9 +60,9 @@ class ScreenerUtils:
                         "direction": factor.sort_direction,
                         "min_value": floor_to_integer(min_value),
                         "max_value": ceil_to_integer(max_value),
+                        "presets": classified_presets,
                     }
                 )
-
             else:
                 raise ValueError(f"팩터 '{factor_name}'가 데이터에 존재하지 않습니다.")
 
@@ -71,6 +76,8 @@ class ScreenerUtils:
         result = []
         for factor in factors:
             factor_name = factor.factor
+            factor_presets = self.db._select(table="factors_preset", factor=factor_name, order="order", ascending=True)
+            classified_presets = self.classify_factors_preset(factor_presets)
 
             if factor_name in market_data.columns:
                 min_value = None
@@ -88,6 +95,7 @@ class ScreenerUtils:
                         "direction": factor.sort_direction,
                         "min_value": min_value,
                         "max_value": max_value,
+                        "presets": classified_presets,
                     }
                 )
 
@@ -111,7 +119,13 @@ class ScreenerUtils:
 
         # technical_columns = ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
         technical_columns = ["close", "marketCap", "median_trade", "abs_beta", "sharpe"]
-        dividend_columns = ["consecutive_dividend_growth_count", "ttm_dividend_yield"]
+        dividend_columns = [
+            "dividend_count",
+            "ttm_dividend_yield",
+            "consecutive_dividend_growth_count",
+            "div_yield_growth_qoq",
+            "div_yield_growth_yoy",
+        ]
         if type == StockType.ETF:
             # technical_columns = ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"]
             technical_columns = ["close", "marketCap", "median_trade", "momentum_6", "sharpe", "sortino"]
@@ -129,24 +143,38 @@ class ScreenerUtils:
             CategoryEnum.FUNDAMENTAL: ["roe", "fscore", "deptRatio", "operating_income", "z_score"],
             CategoryEnum.VALUATION: ["pbr", "pcr", "per", "por", "psr"],
             CategoryEnum.DIVIDEND: dividend_columns,
+            CategoryEnum.GROWTH: [
+                "rv_growth_yoy",
+                "op_growth_yoy",
+                "net_profit_growth_yoy",
+                "operating_cashflow_growth_yoy",
+                "rev_acceleration_yoy",
+            ],
         }
 
         return [*base_columns, *additional_columns.get(category, [])]
 
     def process_kr_factor_data(self):
         output_file = "parquet/kr_stock_factors.parquet"
-        factors_mapping = factors_cache.get_configs()
 
         result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_ko_active.parquet", dir="port/")
         df = pd.read_parquet(io.BytesIO(result))
-
-        print(f"한국 factor 데이터 로드 - 행: {df.shape[0]}, 열: {df.shape[1]}")
 
         df["merge_code"] = df["Code"]
 
         stock_information = self.db._select(
             "stock_information",
-            columns=["ticker", "kr_name", "en_name", "market", "sector_ko", "sector_2", "is_activate", "is_delisted"],
+            columns=[
+                "ticker",
+                "kr_name",
+                "en_name",
+                "market",
+                "sector_ko",
+                "sector_2",
+                "is_activate",
+                "is_delisted",
+                "is_warned",
+            ],
             ctry="kr",
         )
         stock_info_df = pd.DataFrame(stock_information)
@@ -163,6 +191,7 @@ class ScreenerUtils:
 
         df["is_activate"] = df["is_activate"].fillna(1).astype(int)
         df["is_delisted"] = df["is_delisted"].fillna(0).astype(int)
+        df["is_warned"] = df["is_warned"].fillna(0).astype(int)
 
         df = df[(df["is_activate"] == 1) & (df["is_delisted"] == 0)]
 
@@ -172,58 +201,30 @@ class ScreenerUtils:
 
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
-
-        matched_yield_count = 0
-        matched_growth_count = 0
+        df["consecutive_dividend_payment_count"] = np.nan
+        df["dividend_count"] = np.nan
 
         for index, row in df.iterrows():
             ticker = row["Code"]
 
             if ticker in dividend_data["ttm_yield"]:
                 df.at[index, "ttm_dividend_yield"] = round(dividend_data["ttm_yield"][ticker], 2)
-                matched_yield_count += 1
 
-            if ticker in dividend_data["consecutive_growth"]:
-                df.at[index, "consecutive_dividend_growth_count"] = dividend_data["consecutive_growth"][ticker]
-                matched_growth_count += 1
+            if ticker in dividend_data["consecutive_dividend_growth_count"]:
+                df.at[index, "consecutive_dividend_growth_count"] = dividend_data["consecutive_dividend_growth_count"][
+                    ticker
+                ]
 
-        base_columns = [
-            "Code",
-            "market",
-            "country",
-            "sector",
-            "sector_en",
-            "Name",
-            "Name_en",
-            "is_activate",
-            "is_delisted",
-        ]
+            if ticker in dividend_data["consecutive_dividend_payment_count"]:
+                df.at[index, "consecutive_dividend_payment_count"] = dividend_data["consecutive_dividend_payment_count"][
+                    ticker
+                ]
 
-        # 배당 관련 컬럼
-        dividend_columns = ["ttm_dividend_yield", "consecutive_dividend_growth_count"]
+            if ticker in dividend_data["dividend_count"]:
+                df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
 
-        # 팩터 컬럼 (중복 제거)
-        factor_columns = [
-            col for col in factors_mapping.keys() if col not in base_columns and col not in dividend_columns
-        ]
-
-        # 모든 컬럼 합치기 (중복 없는 리스트)
-        all_columns = base_columns + dividend_columns + factor_columns
-
-        # 중복 체크 (디버깅용)
-        column_counts = {}
-        for col in all_columns:
-            column_counts[col] = column_counts.get(col, 0) + 1
-
-        duplicates = [col for col, count in column_counts.items() if count > 1]
-        if duplicates:
-            print(f"경고: 중복 컬럼 발견: {duplicates}")
-            # 중복 제거
-            all_columns = list(dict.fromkeys(all_columns))
-
-        # 데이터프레임 선택
-        df_selected = df[all_columns]
-        df_result = df_selected[df_selected["market"].isin(["KOSPI", "KOSDAQ"])].copy()
+        # 필터링된 데이터프레임 선택 (모든 컬럼 유지)
+        df_result = df[df["market"].isin(["KOSPI", "KOSDAQ"])].copy()
 
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtypes, np.number):
@@ -239,6 +240,14 @@ class ScreenerUtils:
         if "ttm_dividend_yield" in df_result.columns:
             df_result["ttm_dividend_yield"] = df_result["ttm_dividend_yield"].round(2)
 
+        if "consecutive_dividend_payment_count" in df_result.columns:
+            df_result["consecutive_dividend_payment_count"] = (
+                df_result["consecutive_dividend_payment_count"].fillna(0).astype(np.int32)
+            )
+
+        if "dividend_count" in df_result.columns:
+            df_result["dividend_count"] = df_result["dividend_count"].fillna(0).astype(np.int32)
+
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtypes, np.number):
                 df_result[column] = df_result[column].astype(np.float64)
@@ -247,18 +256,10 @@ class ScreenerUtils:
             df_result["consecutive_dividend_growth_count"].fillna(0).astype(np.int32)
         )
 
-        # 최종 저장 전 ttm_dividend_yield 확인
-        if "ttm_dividend_yield" in df_result.columns:
-            print("\nttm_dividend_yield 소수점 확인:")
-            non_null_yields = df_result["ttm_dividend_yield"].dropna().head(10)
-            print(non_null_yields)
-
         df_result.to_parquet(output_file)
-        print(f"배당 정보가 포함된 한국 주식 factor 데이터가 {output_file}에 저장되었습니다.")
 
     def process_us_factor_data(self):
         output_file = "parquet/us_stock_factors.parquet"
-        factors_mapping = factors_cache.get_configs()
 
         result = get_data_from_bucket(bucket="quantus-ticker-prices", key="factor_us_active.parquet", dir="port/")
         df = pd.read_parquet(io.BytesIO(result))
@@ -309,59 +310,34 @@ class ScreenerUtils:
 
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
-
-        matched_yield_count = 0
-        matched_growth_count = 0
+        df["consecutive_dividend_payment_count"] = np.nan
+        df["dividend_count"] = np.nan
+        df["last_dividend_per_share"] = np.nan
 
         for index, row in df.iterrows():
             ticker = row["Code"]
 
             if ticker in dividend_data["ttm_yield"]:
                 df.at[index, "ttm_dividend_yield"] = round(dividend_data["ttm_yield"][ticker], 2)
-                matched_yield_count += 1
 
-            if ticker in dividend_data["consecutive_growth"]:
-                df.at[index, "consecutive_dividend_growth_count"] = dividend_data["consecutive_growth"][ticker]
-                matched_growth_count += 1
+            if ticker in dividend_data["consecutive_dividend_growth_count"]:
+                df.at[index, "consecutive_dividend_growth_count"] = dividend_data["consecutive_dividend_growth_count"][
+                    ticker
+                ]
 
-        base_columns = [
-            "Code",
-            "market",
-            "country",
-            "sector",
-            "sector_en",
-            "Name",
-            "Name_en",
-            "is_activate",
-            "is_delisted",
-            "is_snp_500",
-        ]
+            if ticker in dividend_data["consecutive_dividend_payment_count"]:
+                df.at[index, "consecutive_dividend_payment_count"] = dividend_data["consecutive_dividend_payment_count"][
+                    ticker
+                ]
 
-        # 배당 관련 컬럼
-        dividend_columns = ["ttm_dividend_yield", "consecutive_dividend_growth_count"]
+            if ticker in dividend_data["dividend_count"]:
+                df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
 
-        # 팩터 컬럼 (중복 제거)
-        factor_columns = [
-            col for col in factors_mapping.keys() if col not in base_columns and col not in dividend_columns
-        ]
+            if ticker in dividend_data["dividend_per_share"]:
+                df.at[index, "last_dividend_per_share"] = dividend_data["dividend_per_share"][ticker]
 
-        # 모든 컬럼 합치기 (중복 없는 리스트)
-        all_columns = base_columns + dividend_columns + factor_columns
-
-        # 중복 체크 (디버깅용)
-        column_counts = {}
-        for col in all_columns:
-            column_counts[col] = column_counts.get(col, 0) + 1
-
-        duplicates = [col for col, count in column_counts.items() if count > 1]
-        if duplicates:
-            print(f"경고: 중복 컬럼 발견: {duplicates}")
-            # 중복 제거
-            all_columns = list(dict.fromkeys(all_columns))
-
-        # 데이터프레임 선택
-        df_selected = df[all_columns]
-        df_result = df_selected[df_selected["market"].isin(["NAS", "NYS"])].copy()
+        # 필터링된 데이터프레임 선택 (모든 컬럼 유지)
+        df_result = df[df["market"].isin(["NAS", "NYS"])].copy()
 
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtypes, np.number):
@@ -377,6 +353,17 @@ class ScreenerUtils:
         if "ttm_dividend_yield" in df_result.columns:
             df_result["ttm_dividend_yield"] = df_result["ttm_dividend_yield"].round(2)
 
+        if "consecutive_dividend_payment_count" in df_result.columns:
+            df_result["consecutive_dividend_payment_count"] = (
+                df_result["consecutive_dividend_payment_count"].fillna(0).astype(np.int32)
+            )
+
+        if "dividend_count" in df_result.columns:
+            df_result["dividend_count"] = df_result["dividend_count"].fillna(0).astype(np.int32)
+
+        if "last_dividend_per_share" in df_result.columns:
+            df_result["last_dividend_per_share"] = df_result["last_dividend_per_share"].fillna(0).astype(np.float64)
+
         for column in df_result.columns:
             if np.issubdtype(df_result[column].dtypes, np.number):
                 df_result[column] = df_result[column].astype(np.float64)
@@ -389,97 +376,28 @@ class ScreenerUtils:
 
     def _get_dividend_data_for_tickers(self, tickers):
         if not tickers:
-            return {"ttm_yield": {}, "consecutive_growth": {}}
+            return {
+                "ttm_yield": {},
+                "consecutive_dividend_growth_count": {},
+                "consecutive_dividend_payment_count": {},
+                "dividend_count": {},
+                "dividend_per_share": {},
+            }
 
-        one_year_ago = datetime.now() - timedelta(days=365)
+        dividend_utils = DividendUtils()
+        ttm_yield_dict = dividend_utils.get_ttm_dividend_yield(tickers)
+        consecutive_dividend_growth_count_dict = dividend_utils.get_consecutive_dividend_growth_count(tickers)
+        consecutive_dividend_payment_count_dict = dividend_utils.get_consecutive_dividend_payment_count(tickers)
+        dividend_count_dict = dividend_utils.get_dividend_count(tickers)
+        dividend_per_share_dict = dividend_utils.get_latest_dividend_per_share(tickers)
 
-        batch_size = 500
-        ttm_dividends_all = []
-
-        for i in range(0, len(tickers), batch_size):
-            batch_tickers = tickers[i : i + batch_size]
-
-            aggregates = {"total_dividend": ("per_share", "sum")}
-
-            batch_ttm_dividends = self.db._select(
-                table="dividend_information",
-                columns=["ticker"],
-                aggregates=aggregates,
-                group_by=["ticker"],
-                ex_date__gte=one_year_ago.strftime("%Y-%m-%d"),
-                ticker__in=batch_tickers,
-            )
-
-            ttm_dividends_all.extend(batch_ttm_dividends)
-
-        price_data_all = []
-
-        for i in range(0, len(tickers), batch_size):
-            batch_tickers = tickers[i : i + batch_size]
-
-            batch_price_data = self.db._select(
-                table="stock_trend", columns=["ticker", "prev_close"], ticker__in=batch_tickers
-            )
-
-            price_data_all.extend(batch_price_data)
-
-        price_dict = {row[0]: row[1] for row in price_data_all}
-
-        ttm_yield_dict = {}
-
-        for dividend_row in ttm_dividends_all:
-            ticker = dividend_row[0]
-            ttm_dividend = dividend_row[1]
-
-            if ticker in price_dict and price_dict[ticker] > 0:
-                yield_percentage = (ttm_dividend / price_dict[ticker]) * 100
-                ttm_yield_dict[ticker] = round(yield_percentage, 2)
-
-        dividend_data_all = []
-
-        for i in range(0, len(tickers), batch_size):
-            batch_tickers = tickers[i : i + batch_size]
-
-            batch_dividend_data = self.db._select(
-                table="dividend_information", columns=["ticker", "ex_date", "per_share"], ticker__in=batch_tickers
-            )
-
-            dividend_data_all.extend(batch_dividend_data)
-
-        yearly_dividends = defaultdict(lambda: defaultdict(float))
-
-        for record in dividend_data_all:
-            ticker = record[0]
-            ex_date = record[1]
-            amount = record[2]
-
-            if amount is not None:
-                year = ex_date.year
-                yearly_dividends[ticker][year] += amount
-
-        growth_dict = {}
-
-        for ticker, yearly_data in yearly_dividends.items():
-            sorted_years = sorted(yearly_data.keys(), reverse=True)
-
-            if len(sorted_years) < 2:
-                growth_dict[ticker] = 0
-                continue
-
-            consecutive_count = 0
-
-            for i in range(len(sorted_years) - 1):
-                current_year = sorted_years[i]
-                prev_year = sorted_years[i + 1]
-
-                if yearly_data[current_year] > yearly_data[prev_year]:
-                    consecutive_count += 1
-                else:
-                    break
-
-            growth_dict[ticker] = consecutive_count
-
-        return {"ttm_yield": ttm_yield_dict, "consecutive_growth": growth_dict}
+        return {
+            "ttm_yield": ttm_yield_dict,
+            "consecutive_dividend_growth_count": consecutive_dividend_growth_count_dict,
+            "consecutive_dividend_payment_count": consecutive_dividend_payment_count_dict,
+            "dividend_count": dividend_count_dict,
+            "dividend_per_share": dividend_per_share_dict,
+        }
 
     def process_global_factor_data(self):
         big_price_columns = [
@@ -511,12 +429,7 @@ class ScreenerUtils:
 
         df = pd.concat([kr_df, us_df])
 
-        if "ttm_dividend_yield" in df.columns:
-            non_na_yield = df["ttm_dividend_yield"].notna().sum()
-            print(f"글로벌 데이터에서 배당 수익률이 있는 종목 수: {non_na_yield}")
-
         df.to_parquet("parquet/global_stock_factors.parquet")
-        print("글로벌 factor 데이터가 업데이트되었습니다.")
 
     def process_global_etf_factor_data(self):
         big_price_columns = [
@@ -579,14 +492,17 @@ class ScreenerUtils:
 
         return df
 
+    @time_it
     def filter_stocks(
         self,
         market_filter: Optional[MarketEnum] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
+        exclude_filters: Optional[List[ExcludeEnum]] = None,
     ) -> List[str]:
         df = self.get_df_from_parquet(market_filter)
-
+        if exclude_filters:
+            df = self.add_exclude_flags_to_dataframe(df, exclude_filters)
         # 종목 필터링
         if market_filter:
             if market_filter == MarketEnum.SNP500:
@@ -716,25 +632,29 @@ class ScreenerUtils:
 
         notifier.notify_info("팩터 정수 부분 불일치 검증 완료")
 
+    @time_it
     def convert_unit_and_value(
         self, market_filter: MarketEnum, value: float, unit: str, lang: str = "kr"
     ) -> tuple[float, str]:
         nation = "kr" if market_filter in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ] else "us"
 
         if unit.lower() == "big_price":
+            print(f"value: {value}, unit: {unit}, lang: {lang}")
             if nation == "kr":
-                if value >= 10000:  # 1조원 이상
+                print("NATION: KR")
+                if value >= 10000 or value <= -10000:  # 1조원 이상
                     return round(value / 10000, 2), "조원"
                 return int(value), "억원"
             else:  # US
+                print("NATION: US")
                 # 1T = 1000B = 1000조원
-                if value >= 1000000000:  # 1000조원 이상
+                if value >= 1000000000 or value <= -1000000000:  # 1000조원 이상
                     return round(value / 1000000000, 2), "T$"
                 # 1B = 1조원
-                elif value >= 1000000:  # 1조원 이상
+                elif value >= 1000000 or value <= -1000000:  # 1조원 이상
                     return round(value / 1000000, 2), "B$"
                 # 1M = 10억원
-                elif value >= 1000:  # 10억원 이상
+                elif value >= 1000 or value <= -1000:  # 10억원 이상
                     return round(value / 1000, 2), "M$"
                 # 1K = 100만원
                 return round(value, 2), "K$"
@@ -786,6 +706,71 @@ class ScreenerUtils:
         usd_value_in_ten_million = usd_value / 1000
 
         return usd_value_in_ten_million
+
+    def classify_factors_preset(self, presets):
+        """
+        FactorsPreset 리스트를 받아서 각 항목의 값을 타입별로 분류하여 리턴하는 함수
+
+        Args:
+            presets: FactorsPreset 객체 리스트 또는 단일 객체
+
+        Returns:
+            list: 각 항목의 타입과 값을 포함하는 딕셔너리 리스트
+                또는 단일 객체가 입력된 경우 딕셔너리
+        """
+        result = []
+        for preset in presets:
+            classified_preset = {
+                "display": preset.display,
+                "above": preset.above,
+                "below": preset.below,
+            }
+            result.append(classified_preset)
+
+        return result
+
+    def add_exclude_flags_to_dataframe(
+        self, df: pd.DataFrame, exclude_filters: Optional[List[ExcludeEnum]] = None
+    ) -> pd.DataFrame:
+        """
+        데이터프레임에 ExcludeEnum에 해당하는 제외 플래그 추가
+        """
+        if exclude_filters is None:
+            return df
+
+        if ExcludeEnum.FINANCIAL in exclude_filters:
+            # 금융주 여부 (sector 정보 기반)
+            financial_sectors = ["금융서비스", "보험", "은행", "부동산리츠"]
+            df["is_financial"] = df["sector"].isin(financial_sectors)
+
+        if ExcludeEnum.HOLDING in exclude_filters:
+            # 지주사 여부 (회사명 기반)
+            df["is_holding"] = df["Name"].str.contains("홀딩스|지주|Holdings", case=False, na=False)
+
+        if ExcludeEnum.WARNED in exclude_filters:
+            # 관리종목 여부
+            df["is_warned"] = df["is_warned"] == 1 if "is_warned" in df.columns else False
+
+        if ExcludeEnum.DEFICIT in exclude_filters:
+            # 적자기업 여부 (분기)
+            df["is_deficit"] = df["net_income_1q"] < 0 if "net_income_1q" in df.columns else False
+
+        if ExcludeEnum.ANNUAL_DEFICIT in exclude_filters:
+            # 적자기업 여부 (연간)
+            df["is_annual_deficit"] = df["net_income_ttm"] < 0 if "net_income_ttm" in df.columns else False
+
+        # if ExcludeEnum.CHINA in exclude_filters:
+        #     # 중국기업 여부
+        #     df['is_chinese'] = (df['country'] == 'china') | (df['상장된 시장의 국가'] == 'China') if '상장된 시장의 국가' in df.columns else False
+
+        # PTP 기업 여부 (Penny Stock, 보통 $5 미만 주식)
+        is_us_market = df["country"] == "us"
+        is_kr_market = df["country"] == "kr"
+
+        # 미국 주식은 $5 미만, 한국 주식은 1000원 미만을 PTP로 간주
+        df["is_ptp"] = (is_us_market & (df["close"] < 5)) | (is_kr_market & (df["close"] < 1000))
+
+        return df
 
 
 screener_utils = ScreenerUtils()

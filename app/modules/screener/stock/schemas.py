@@ -16,6 +16,16 @@ class MarketEnum(str, Enum):
     ALL = "all"
 
 
+class ExcludeEnum(str, Enum):
+    FINANCIAL = "financial"  # 금융주
+    HOLDING = "holding"  # 지주사
+    WARNED = "warned"  # 관리종목
+    DEFICIT = "deficit"  # 적자기업(분기)
+    ANNUAL_DEFICIT = "annual_deficit"  # 적자기업(연간)
+    CHINESE = "chinese"  # 중국기업
+    PTP = "ptp"  # PTP(Penny Stock) 기업
+
+
 class FactorResponse(BaseModel):
     factor: str
     description: str
@@ -25,6 +35,7 @@ class FactorResponse(BaseModel):
     min_value: Optional[float] = None
     max_value: Optional[float] = None
     type: Optional[str] = None
+    presets: List[Dict] = []
 
     class Config:
         from_attributes = True
@@ -53,6 +64,7 @@ class GroupFilter(BaseModel):
     type: Optional[StockType] = StockType.STOCK
     market_filter: Optional[MarketEnum] = MarketEnum.ALL
     sector_filter: Optional[List[str]] = None
+    exclude_filters: Optional[List[ExcludeEnum]] = None
     category: Optional[CategoryEnum] = None
     custom_filters: Optional[List[FilterCondition]] = None
     factor_filters: Optional[Dict[str, List[str]]] = None
@@ -76,6 +88,7 @@ class FilteredStocks(BaseModel):
     market_filter: Optional[MarketEnum] = MarketEnum.US
     sector_filter: Optional[List[str]] = None
     custom_filters: Optional[List[FilterCondition]] = None
+    exclude_filters: Optional[List[ExcludeEnum]] = None
     factor_filters: Optional[List[str]] = None
     limit: Optional[int] = 50
     offset: Optional[int] = 0

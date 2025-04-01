@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile, Form
 from app.models.models_users import AlphafinderUser
 from app.modules.common.schemas import BaseResponse, InfiniteScrollResponse
 from app.modules.community.schemas import CommentItemWithPostInfo, ResponsePost
+from app.modules.payments.service import PaymentService
 from app.utils.oauth_utils import get_current_user
 from app.modules.user.service import get_user_service, UserService
 from app.modules.user.schemas import UserInfoResponse, UserProfileResponse
@@ -102,11 +103,23 @@ def user_delete(
 
 
 @router.get("/me", response_model=UserInfoResponse)
-def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
+def get_user_info(
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: UserService = Depends(get_user_service),
+    payment_service: PaymentService = Depends(PaymentService),
+):
     """현재 인증된 사용자 정보 반환"""
     try:
         if not current_user:
             raise HTTPException(status_code=401, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
+        level = current_user.subscription_level
+        level_info = service.get_level_info(level)
+        if current_user.subscription_name:
+            subscription_period_days = payment_service.get_price_template_by_name(
+                current_user.subscription_name
+            ).period_days
+        else:
+            subscription_period_days = None
         return UserInfoResponse(
             id=current_user.id,
             email=current_user.email,
@@ -115,6 +128,8 @@ def get_user_info(current_user: AlphafinderUser = Depends(get_current_user)):
             image_format=current_user.image_format,
             is_subscribed=current_user.is_subscribed,
             subscription_end=current_user.subscription_end,
+            level=level_info.name,
+            period_days=subscription_period_days if current_user.is_subscribed else None,
         )
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
