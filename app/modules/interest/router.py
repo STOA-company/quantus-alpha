@@ -4,7 +4,7 @@ from app.utils.oauth_utils import get_current_user
 from app.models.models_users import AlphafinderUser
 from app.modules.interest.service import InterestService, get_interest_service
 from app.modules.interest.response import InterestResponse, InterestTable
-from app.modules.interest.request import AddInterestRequest, DeleteInterestRequest
+from app.modules.interest.request import AddInterestRequest, DeleteInterestRequest, UpdateInterestRequest
 from app.modules.news.services import get_news_service, NewsService
 from app.modules.news.schemas import TopStoriesResponse, InterestNewsResponse, InterestDisclosureResponse
 from app.modules.common.schemas import BaseResponse
@@ -81,6 +81,18 @@ def delete_interest(
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+
+@router.post("/update")
+def update_interest(
+    request: UpdateInterestRequest,
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: InterestService = Depends(get_interest_service),
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    service.update_interest(current_user.id, request.group_ids, request.ticker)
+    return {"message": f"종목 : {request.ticker}, 그룹 : {', '.join(map(str, request.group_ids))} 수정되었습니다."}
 
 
 @router.get("/columns")
@@ -250,3 +262,14 @@ def get_interest(
     interests = service.get_interest(group_id, lang, offset, limit)
     data = [InterestTable.from_dict(interest) for interest in interests["data"]]
     return InterestResponse(has_next=interests["has_next"], data=data)
+
+
+@router.get("/info/{ticker}")
+def get_interest_info(
+    ticker: str,
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: InterestService = Depends(get_interest_service),
+):
+    if not current_user:
+        return {"is_interested": False, "group_ids": []}
+    return service.get_interest_info(current_user.id, ticker)
