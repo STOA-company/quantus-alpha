@@ -271,5 +271,5 @@ def get_interest_info(
     service: InterestService = Depends(get_interest_service),
 ):
     if not current_user:
-        return {"is_interested": False, "group_ids": []}
+        return {"is_interested": False, "groups": []}
     return service.get_interest_info(current_user.id, ticker)

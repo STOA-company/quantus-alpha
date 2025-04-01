@@ -259,17 +259,18 @@ class InterestService:
         return disclosure_items
 
     def get_interest_info(self, user_id: int, ticker: str):
-        groups = self.db._select(table="interest_group", user_id=user_id)
-        if not groups:
-            return {"is_interested": False, "group_ids": []}
+        queries = self.db._select(table="interest_group", user_id=user_id)
+        if not queries:
+            return {"is_interested": False, "groups": []}
 
-        group_ids = []
-        for group in groups:
-            interest = self.db._select(table="user_stock_interest", group_id=group.id, ticker=ticker)
+        groups = []
+        for query in queries:
+            interest = self.db._select(table="user_stock_interest", group_id=query.id, ticker=ticker)
             if interest:
-                group_ids.append(group.id)
+                group_info = {"id": query.id, "name": query.name}
+                groups.append(group_info)
 
-        return {"is_interested": len(group_ids) > 0, "group_ids": group_ids}
+        return {"is_interested": len(groups) > 0, "groups": groups}
 
 
 def get_interest_service() -> InterestService:
