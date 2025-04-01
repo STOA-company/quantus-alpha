@@ -111,9 +111,6 @@ class InterestService:
         groups = self.db._select(table="interest_group", user_id=user_id)
         if not groups:
             raise HTTPException(status_code=404, detail="관심 그룹이 존재하지 않습니다.")
-        stocks = self.db._select(table="user_stock_interest", ticker=ticker, group_id__in=group_ids)
-        if not stocks:
-            raise HTTPException(status_code=404, detail="관심 종목에 추가되지 않은 종목입니다.")
 
         self.db._delete(table="user_stock_interest", ticker=ticker, group_id__not_in=group_ids)
         for group_id in group_ids:
@@ -263,15 +260,22 @@ class InterestService:
         if not query:
             return {"is_interested": False, "groups": []}
 
-        total_groups = [{"id": group.id, "name": group.name} for group in query]
+        total_groups = [
+            {
+                "id": group.id,
+                "name": group.name,
+                "included": True
+                if self.db._select(table="user_stock_interest", group_id=group.id, ticker=ticker)
+                else False,
+            }
+            for group in query
+        ]
 
-        groups = []
         for group in total_groups:
-            interest = self.db._select(table="user_stock_interest", group_id=group["id"], ticker=ticker)
-            if interest:
-                groups.append(group)
+            if group["included"] is True:
+                return {"included": True, "groups": total_groups}
 
-        return {"is_interested": len(groups) > 0, "groups": total_groups}
+        return {"is_interested": False, "groups": total_groups}
 
 
 def get_interest_service() -> InterestService:
