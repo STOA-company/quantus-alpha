@@ -107,6 +107,23 @@ class InterestService:
 
         return True
 
+    def update_interest(self, user_id: int, group_ids: List[int], ticker: str):
+        groups = self.db._select(table="interest_group", user_id=user_id)
+        if not groups:
+            raise HTTPException(status_code=404, detail="관심 그룹이 존재하지 않습니다.")
+        stocks = self.db._select(table="user_stock_interest", ticker=ticker, group_id__in=group_ids)
+        if not stocks:
+            raise HTTPException(status_code=404, detail="관심 종목에 추가되지 않은 종목입니다.")
+
+        self.db._delete(table="user_stock_interest", ticker=ticker, group_id__not_in=group_ids)
+        for group_id in group_ids:
+            group = self.db._select(table="interest_group", id=group_id, user_id=user_id)
+            if not group:
+                raise HTTPException(status_code=404, detail=f"그룹 {group_id}이 존재하지 않습니다.")
+            self.db._insert(table="user_stock_interest", sets={"group_id": group_id, "ticker": ticker})
+
+        return True
+
     def get_interest_group(self, user_id: int):
         groups = self.db._select(table="interest_group", user_id=user_id, order="created_at", ascending=True)
         if not groups:
@@ -240,6 +257,19 @@ class InterestService:
                     disclosure_items.append(disclosure_item)
 
         return disclosure_items
+
+    def get_interest_info(self, user_id: int, ticker: str):
+        groups = self.db._select(table="interest_group", user_id=user_id)
+        if not groups:
+            return {"is_interested": False, "group_ids": []}
+
+        group_ids = []
+        for group in groups:
+            interest = self.db._select(table="user_stock_interest", group_id=group.id, ticker=ticker)
+            if interest:
+                group_ids.append(group.id)
+
+        return {"is_interested": len(group_ids) > 0, "group_ids": group_ids}
 
 
 def get_interest_service() -> InterestService:
