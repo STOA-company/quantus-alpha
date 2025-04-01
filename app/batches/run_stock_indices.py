@@ -321,6 +321,17 @@ def get_domestic_index_data(ticker: str):
         # 15:30 데이터 업데이트
         last_time = datetime.datetime.strptime(today + "1530", "%Y%m%d%H%M")
         last_time = KST.localize(last_time).astimezone(UTC)
+        insert_data = {
+            "ticker": ticker,
+            "date": last_time,
+            "open": 0,
+            "high": 0,
+            "low": 0,
+            "close": float(df_last_data["bstp_nmix_prpr"].iloc[0]),
+            "volume": float(df_last_data["cntg_vol"].iloc[0]),
+            "change": float(df_last_data["bstp_nmix_prdy_vrss"].iloc[0]),
+            "change_rate": float(df_last_data["bstp_nmix_prdy_ctrt"].iloc[0]),
+        }
         update_data = {
             "close": float(df_last_data["bstp_nmix_prpr"].iloc[0]),
             "change": float(df_last_data["bstp_nmix_prdy_vrss"].iloc[0]),
@@ -328,10 +339,16 @@ def get_domestic_index_data(ticker: str):
         }
 
         try:
-            database._update(table="stock_indices_1m", sets=update_data, ticker=ticker, date=last_time)
-            return 0
-            logging.info(f"Updated last record for {ticker} at {last_time}")
+            try:
+                print(f"insert_data: {insert_data}")
+                database._insert(table="stock_indices_1m", sets=insert_data)
+            except Exception:
+                print(f"update_data: {update_data}")
+                database._update(table="stock_indices_1m", sets=update_data, ticker=ticker, date=last_time)
+                return 0
+                logging.info(f"Updated last record for {ticker} at {last_time}")
         except Exception as e:
+            print(f"Failed to update last record: {str(e)}")
             logging.error(f"Failed to update last record: {str(e)}")
             raise
 
@@ -527,9 +544,11 @@ def get_yf_index_data(ticker_symbol: str, yf_symbol: str):
 
 
 if __name__ == "__main__":
-    get_yf_index_data("NASDAQ", "^IXIC")
-# logging.info("Starting US market batch job from command line")
-# kr_run_stock_indices_batch()
+    # get_yf_index_data("NASDAQ", "^IXIC")
+    # logging.info("Starting US market batch job from command line")
+    # kr_run_stock_indices_batch()
 
-# get_stock_indices_data("NASDAQ")
-# get_stock_indices_data("SP500")
+    # get_stock_indices_data("NASDAQ")
+    # get_stock_indices_data("SP500")
+    get_stock_indices_data("KOSPI")
+    # get_stock_indices_data("KOSDAQ")
