@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 
+from app.batches.run_expiration import coupon_expiration, subscription_expiration
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.payments.service import PaymentService
@@ -258,3 +259,20 @@ def refund_toss_payments(
 
     is_refunded = payment_service.refund_payments(current_user, using_history_id=history_id)
     return BaseResponse(status_code=200, message="결제 환불 성공", data=is_refunded)
+
+
+###############################
+@router.get("/subscription/expiration", summary="구독 만료 처리")
+def run_subscription_expiration(x_api_key: str = Header(None)):
+    if x_api_key != "GoNVDA2xToTheMoon!":
+        raise HTTPException(status_code=403, detail="Unauthorized access")
+    subscription_expiration()
+    return BaseResponse(status_code=200, message="success", data=True)
+
+
+@router.get("/coupon/expiration", summary="쿠폰 만료 처리")
+def run_coupon_expiration(x_api_key: str = Header(None)):
+    if x_api_key != "GoNVDA2xToTheMoon!":
+        raise HTTPException(status_code=403, detail="Unauthorized access")
+    coupon_expiration()
+    return BaseResponse(status_code=200, message="success", data=True)
