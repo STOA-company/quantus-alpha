@@ -273,7 +273,7 @@ class InterestService:
 
         for group in total_groups:
             if group["included"] is True:
-                return {"included": True, "groups": total_groups}
+                return {"is_interested": True, "groups": total_groups}
 
         return {"is_interested": False, "groups": total_groups}
 
