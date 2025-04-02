@@ -207,58 +207,85 @@ class KISAPI(BaseAPI):
             print(f"Error fetching status for overseas stock {ticker}: {str(e)}")
             return {"ticker": ticker, "error": str(e), "is_trading_stopped": False, "is_delisted": False}
 
-    def get_domestic_index_minute(self, period: str, market: str):
-        try:
-            endpoint = "/uapi/domestic-stock/v1/quotations/inquire-index-timeprice"
-            url = f"{self.base_url}{endpoint}"
+    def get_domestic_index_minute(self, period: str, market: str, retry_count: int = 3):
+        """
+        국내 지수 분봉 데이터 조회
 
-            headers = {
-                "content-type": "application/json; charset=utf-8",
-                "authorization": f"Bearer {self.access_token}",
-                "appkey": self.app_key,
-                "appsecret": self.app_secret,
-                "tr_id": "FHPUP02110200",
-                "custtype": "P",
-            }
+        Args:
+            period (str): 조회 기간 (예: "1m", "5m", "1h")
+            market (str): 시장 코드 (KOSPI, KOSDAQ)
+            retry_count (int): 재시도 횟수, 기본값 3
 
-            if period[-1] == "s":
-                time_period = int(period[:-1])
-            elif period[-1] == "m":
-                time_period = int(period[:-1]) * 60
-            elif period[-1] == "h":
-                time_period = int(period[:-1]) * 60 * 60
-            else:
-                raise ValueError(f"지원하지 않는 period: {period}")
+        Returns:
+            dict: 지수 분봉 데이터
+        """
+        endpoint = "/uapi/domestic-stock/v1/quotations/inquire-index-timeprice"
+        url = f"{self.base_url}{endpoint}"
 
-            params = {
-                "fid_input_hour_1": str(time_period),
-                "fid_input_iscd": self.INDEX_MARKET_CODES[market],
-                "fid_cond_mrkt_div_code": "U",
-            }
+        if period[-1] == "s":
+            time_period = int(period[:-1])
+        elif period[-1] == "m":
+            time_period = int(period[:-1]) * 60
+        elif period[-1] == "h":
+            time_period = int(period[:-1]) * 60 * 60
+        else:
+            raise ValueError(f"지원하지 않는 period: {period}")
 
-            response = requests.get(url, headers=headers, params=params)
+        params = {
+            "fid_input_hour_1": str(time_period),
+            "fid_input_iscd": self.INDEX_MARKET_CODES[market],
+            "fid_cond_mrkt_div_code": "U",
+        }
 
-            if response.status_code != 200:
-                raise Exception(f"API request failed with status {response.status_code}")
+        for attempt in range(retry_count):
+            try:
+                headers = {
+                    "content-type": "application/json; charset=utf-8",
+                    "authorization": f"Bearer {self.access_token}",
+                    "appkey": self.app_key,
+                    "appsecret": self.app_secret,
+                    "tr_id": "FHPUP02110200",
+                    "custtype": "P",
+                }
 
-            data = response.json()
+                response = requests.get(url, headers=headers, params=params)
+                response.raise_for_status()  # HTTP 에러 체크
 
-            if data["rt_cd"] != "0":  # API 에러 체크
-                raise Exception(f"API error: {data['msg1']}")
+                data = response.json()
 
-            return data["output"]
+                if data.get("rt_cd") == "0":  # 성공 응답
+                    return data["output"]
 
-        except Exception as e:
-            print(f"Error fetching stock index for {market}: {str(e)}")
-            return {"error": str(e)}
+                elif data.get("msg_cd") == "EGW00121":  # 토큰 만료
+                    logger.warning("Token expired, refreshing token...")
+                    self.access_token = self._get_access_token()
+                    continue
 
-    def get_global_index_minute(self, index_code: str, include_history: bool = True) -> dict:
+                elif data.get("msg_cd") == "EGW00201":  # rate limit
+                    wait_time = 1 * (attempt + 1)
+                    logger.warning(f"Rate limit hit, waiting {wait_time} seconds before retry")
+                    time.sleep(wait_time)
+                    continue
+
+                else:
+                    logger.error(f"API Error: {data.get('msg1')}")
+
+            except Exception as e:
+                logger.error(f"Error fetching index data for {market}: {str(e)}")
+                if attempt < retry_count - 1:
+                    time.sleep(1)
+
+        logger.error(f"Failed to get index minute data after {retry_count} attempts for market {market}")
+        return {"error": f"Failed to get data after {retry_count} retry attempts"}
+
+    def get_global_index_minute(self, index_code: str, include_history: bool = True, retry_count: int = 3) -> dict:
         """
         해외 지수 분봉 데이터 조회
 
         Args:
             index_code (str): 지수 코드 (SPX: S&P500, COMP: 나스닥)
             include_history (bool): 과거 데이터 포함 여부
+            retry_count (int): 재시도 횟수, 기본값 3
 
         Returns:
             dict: {
@@ -266,40 +293,58 @@ class KISAPI(BaseAPI):
                 'minute_data': 분봉 데이터 DataFrame
             }
         """
-        try:
-            url = f"{self.base_url}/uapi/overseas-price/v1/quotations/inquire-time-indexchartprice"
+        url = f"{self.base_url}/uapi/overseas-price/v1/quotations/inquire-time-indexchartprice"
 
-            headers = {
-                "content-type": "application/json; charset=utf-8",
-                "authorization": f"Bearer {self.access_token}",
-                "appkey": self.app_key,
-                "appsecret": self.app_secret,
-                "tr_id": "FHKST03030200",
-                "custtype": "P",
-            }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "N",  # 해외지수
+            "FID_INPUT_ISCD": self.INDEX_MARKET_CODES[index_code],
+            "FID_HOUR_CLS_CODE": "0",  # 정규장
+            "FID_PW_DATA_INCU_YN": "Y" if include_history else "N",
+        }
 
-            params = {
-                "FID_COND_MRKT_DIV_CODE": "N",  # 해외지수
-                "FID_INPUT_ISCD": self.INDEX_MARKET_CODES[index_code],
-                "FID_HOUR_CLS_CODE": "0",  # 정규장
-                "FID_PW_DATA_INCU_YN": "Y" if include_history else "N",
-            }
+        for attempt in range(retry_count):
+            try:
+                headers = {
+                    "content-type": "application/json; charset=utf-8",
+                    "authorization": f"Bearer {self.access_token}",
+                    "appkey": self.app_key,
+                    "appsecret": self.app_secret,
+                    "tr_id": "FHKST03030200",
+                    "custtype": "P",
+                }
 
-            response = requests.get(url, headers=headers, params=params)
+                response = requests.get(url, headers=headers, params=params)
+                response.raise_for_status()  # HTTP 에러 체크
 
-            if response.status_code != 200:
-                raise Exception(f"API request failed with status {response.status_code}")
+                data = response.json()
 
-            data = response.json()
+                if data.get("rt_cd") == "0":  # 성공 응답
+                    if not data or "output1" not in data:
+                        raise Exception(f"Failed to fetch data for {index_code}")
+                    return data
 
-            if not data or "output1" not in data:
-                raise Exception(f"Failed to fetch data for {index_code}")
+                elif data.get("msg_cd") == "EGW00121":  # 토큰 만료
+                    logger.warning("Token expired, refreshing token...")
+                    self.access_token = self._get_access_token()
+                    continue
 
-            return data
+                elif data.get("msg_cd") == "EGW00201":  # rate limit
+                    wait_time = 1 * (attempt + 1)
+                    logger.warning(f"Rate limit hit, waiting {wait_time} seconds before retry")
+                    time.sleep(wait_time)
+                    continue
 
-        except Exception as e:
-            logger.error(f"Error fetching global index data for {index_code}: {str(e)}")
-            raise
+                else:
+                    logger.error(f"API Error: {data.get('msg1')}")
+
+            except Exception as e:
+                logger.error(f"Error fetching global index data for {index_code}: {str(e)}")
+                if attempt < retry_count - 1:
+                    logger.warning(f"Retrying ({attempt+1}/{retry_count})...")
+                    time.sleep(1)
+
+        logger.error(f"Failed to get global index data after {retry_count} attempts for index {index_code}")
+        return {"error": f"Failed to get data after {retry_count} retry attempts"}
 
     def get_domestic_index_1d(self, index_code: str, date: str, include_history: bool = True) -> dict:
         """
