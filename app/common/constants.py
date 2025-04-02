@@ -171,7 +171,7 @@ FACTOR_MAP = {
     # 배당
     "div_yield_growth_qoq": "배당수익률 성장 (QoQ)",
     "div_yield_growth_yoy": "배당수익률 성장 (YoY)",
-    "ttm_dividend_yield": "직전 12개월 배당 수익률",
+    "ttm_dividend_yield": "배당 수익률 (TTM)",
     "consecutive_dividend_growth_count": "연속 배당 성장 횟수",
     "consecutive_dividend_payment_count": "연속 배당 지급 횟수",
     "dividend_count": "배당 주기",
