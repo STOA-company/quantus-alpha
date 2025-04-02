@@ -60,17 +60,30 @@ class BaseScreenerService(ABC):
             custom_factor_filters = sorted(custom_factor_filters, key=lambda x: x.order)
             has_custom = len(custom_factor_filters) > 0
 
-            return {
-                "name": group[0].name,
-                "stock_filters": [
-                    {
-                        "factor": FACTOR_MAP[stock_filter.factor],
-                        "value": stock_filter.value if stock_filter.value else None,
+            # 같은 factor를 가진 필터들을 그룹화
+            grouped_filters = {}
+            for stock_filter in stock_filters:
+                factor = FACTOR_MAP[stock_filter.factor]
+                if factor not in grouped_filters:
+                    grouped_filters[factor] = {
+                        "factor": factor,
+                        "values": [],
                         "above": stock_filter.above if stock_filter.above else None,
                         "below": stock_filter.below if stock_filter.below else None,
                     }
-                    for stock_filter in stock_filters
-                ],
+                if stock_filter.value:
+                    grouped_filters[factor]["values"].append(stock_filter.value)
+
+            # 그룹화된 필터들을 리스트로 변환
+            stock_filters_list = []
+            for filter_data in grouped_filters.values():
+                if not filter_data["values"]:  # values가 비어있으면 null로 설정
+                    filter_data["values"] = None
+                stock_filters_list.append(filter_data)
+
+            return {
+                "name": group[0].name,
+                "stock_filters": stock_filters_list,
                 "custom_factor_filters": [FACTOR_MAP[factor_filter.factor] for factor_filter in custom_factor_filters],
                 "has_custom": has_custom,
             }
