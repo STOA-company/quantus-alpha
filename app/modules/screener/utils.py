@@ -131,7 +131,7 @@ class ScreenerUtils:
             technical_columns = ["close", "marketCap", "median_trade", "momentum_6", "sharpe", "sortino"]
 
             dividend_columns = [
-                "recent_dividend_yield",
+                "ttm_dividend_yield",
                 "dividend_count",
                 "last_dividend_per_share",
                 "dividend_growth_rate_5y",
