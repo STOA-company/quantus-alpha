@@ -120,6 +120,10 @@ def get_user_info(
             ).period_days
         else:
             subscription_period_days = None
+        if current_user.using_history_id:
+            product_type = payment_service.get_product_type_by_user_using_history_id(current_user.using_history_id)
+        else:
+            product_type = None
         return UserInfoResponse(
             id=current_user.id,
             email=current_user.email,
@@ -130,6 +134,7 @@ def get_user_info(
             subscription_end=current_user.subscription_end,
             level=level_info.name,
             period_days=subscription_period_days if current_user.is_subscribed else None,
+            product_type=product_type if current_user.is_subscribed else None,
         )
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
