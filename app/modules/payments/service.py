@@ -594,7 +594,7 @@ class PaymentService:
             id=using_history_id,
         )
         if payment_history[0].refund_at is not None:
-            raise HTTPException(status_code=409, detail="이미 환불된 결제입니다.")
+            raise HTTPException(status_code=422, detail="이미 환불된 결제입니다.")
         elif payment_history is None:
             raise HTTPException(status_code=404, detail="결제 내역이 없습니다.")
 
