@@ -207,6 +207,7 @@ class ScreenerStockService(BaseScreenerService):
     def get_filtered_data_count(
         self,
         market_filter: Optional[MarketEnum] = None,
+        exclude_filters: Optional[List[ExcludeEnum]] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
         columns: Optional[List[str]] = None,
@@ -215,7 +216,7 @@ class ScreenerStockService(BaseScreenerService):
         필터링된 주식 개수 조회
         """
         try:
-            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters)
+            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters, exclude_filters)
             filtered_df = screener_utils.get_filtered_stocks_df(market_filter, stocks, columns)
 
             return len(filtered_df)

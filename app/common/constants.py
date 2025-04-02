@@ -10,32 +10,27 @@ USE = pytz.timezone("America/New_York")
 
 NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6", "momentum_12", "current_ratio"]
 
-NON_NUMERIC_COLUMNS = ["Code", "Name", "market", "sector", "country", "score", "Name_en", "sector_en"]
+NON_NUMERIC_COLUMNS = [
+    "Code",
+    "Name",
+    "Name_en",
+    "market",
+    "sector",
+    "sector_en",
+    "country",
+    "dividend_frequency",
+]
 
 NON_NUMERIC_COLUMNS_ETF = [
     "Code",
-    "country",
-    "score",
-    "ticker",
-    "ctry",
-    "kr_name",
-    "en_name",
     "Name",
+    "Name_en",
     "market",
-    "listing_date",
-    "base_index_name",
-    "replication_method",
-    "base_asset_classification",
-    "manager",
-    "tax_type",
-    "is_hedge",
-    "last_dividend_date",
-    "manager",
-    "tax_type",
-    "is_hedge",
+    "sector",
+    "sector_en",
+    "country",
+    "dividend_frequency",
 ]
-
-ETF_DEFAULT_SCREENER_COLUMNS = ["ticker", "market", "kr_name", "en_name"]
 
 UNIT_MAP = {"percentage": "%", "times": "회", "score": "점", "multiple": "배", "ratio": ""}
 UNIT_MAP_EN = {"percentage": "%", "times": "", "score": "", "multiple": "", "ratio": ""}

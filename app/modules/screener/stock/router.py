@@ -61,6 +61,7 @@ def get_filtered_stocks(
                     "factor": REVERSE_FACTOR_MAP[condition.factor],
                     "above": condition.above,
                     "below": condition.below,
+                    "values": condition.values,
                 }
                 for condition in filtered_stocks.custom_filters
             ]
@@ -128,6 +129,7 @@ def get_filtered_stocks_count(
                     "factor": REVERSE_FACTOR_MAP[condition.factor],
                     "above": condition.above,
                     "below": condition.below,
+                    "values": condition.values,
                 }
                 for condition in filtered_stocks.custom_filters
             ]
@@ -135,6 +137,7 @@ def get_filtered_stocks_count(
         total_count = screener_service.get_filtered_data_count(
             market_filter=filtered_stocks.market_filter,
             sector_filter=filtered_stocks.sector_filter,
+            exclude_filters=filtered_stocks.exclude_filters,
             custom_filters=custom_filters,
             columns=[REVERSE_FACTOR_MAP[column] for column in filtered_stocks.factor_filters],
         )

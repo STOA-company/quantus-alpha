@@ -195,11 +195,14 @@ class ScreenerUtils:
         unique_tickers = df["Code"].unique().tolist()
 
         dividend_data = self._get_dividend_data_for_tickers(unique_tickers)
+        dividend_utils = DividendUtils()
+        dividend_frequencies = dividend_utils.get_dividend_frequency(unique_tickers)
 
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
         df["consecutive_dividend_payment_count"] = np.nan
         df["dividend_count"] = np.nan
+        df["dividend_frequency"] = ""
 
         for index, row in df.iterrows():
             ticker = row["Code"]
@@ -219,6 +222,9 @@ class ScreenerUtils:
 
             if ticker in dividend_data["dividend_count"]:
                 df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
+
+            if ticker in dividend_frequencies:
+                df.at[index, "dividend_frequency"] = dividend_frequencies[ticker]
 
         # 필터링된 데이터프레임 선택 (모든 컬럼 유지)
         df_result = df[df["market"].isin(["KOSPI", "KOSDAQ"])].copy()
@@ -304,11 +310,14 @@ class ScreenerUtils:
         unique_tickers = df["Code"].unique().tolist()
 
         dividend_data = self._get_dividend_data_for_tickers(unique_tickers)
+        dividend_utils = DividendUtils()
+        dividend_frequencies = dividend_utils.get_dividend_frequency(unique_tickers)
 
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
         df["consecutive_dividend_payment_count"] = np.nan
         df["dividend_count"] = np.nan
+        df["dividend_frequency"] = ""
         df["last_dividend_per_share"] = np.nan
 
         for index, row in df.iterrows():
@@ -332,6 +341,9 @@ class ScreenerUtils:
 
             if ticker in dividend_data["dividend_per_share"]:
                 df.at[index, "last_dividend_per_share"] = dividend_data["dividend_per_share"][ticker]
+
+            if ticker in dividend_frequencies:
+                df.at[index, "dividend_frequency"] = dividend_frequencies[ticker]
 
         # 필터링된 데이터프레임 선택 (모든 컬럼 유지)
         df_result = df[df["market"].isin(["NAS", "NYS"])].copy()
@@ -519,6 +531,12 @@ class ScreenerUtils:
                     df = df[df[factor] >= filter["above"]]
                 if filter["below"] is not None:
                     df = df[df[factor] <= filter["below"]]
+                if filter["values"] is not None:
+                    # OR
+                    value_conditions = pd.Series(False, index=df.index)
+                    for value in filter["values"]:
+                        value_conditions = value_conditions | (df[factor] == value)
+                    df = df[value_conditions]
 
         stock_codes = df["Code"].tolist()
         return stock_codes
