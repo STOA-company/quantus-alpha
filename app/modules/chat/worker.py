@@ -33,7 +33,7 @@ def save_task_to_store(task_id: str, task_data: Dict):
     redis_client.set(f"task:{task_id}", json.dumps(task_data))
 
 
-@celery_app.task(name="app.chat.worker.process_chat")
+@celery_app.task(name="app.modules.chat.worker.process_chat")
 def process_chat(message: str) -> Dict[str, Any]:
     task_id = process_chat.request.id
 
