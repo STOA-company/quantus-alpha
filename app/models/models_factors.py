@@ -29,6 +29,12 @@ class UnitEnum(str, Enum):
     MULTIPLE = "multiple"  # 배
 
 
+class FactorTypeEnum(str, Enum):
+    SLIDER = "slider"
+    MULTI = "multi"
+    SINGLE = "single"
+
+
 class Factors(Base):
     __tablename__ = "factors"
 
@@ -43,6 +49,7 @@ class Factors(Base):
     unit = Column(SQLAlchemyEnum(UnitEnum), nullable=False)
     sort_direction = Column(SQLAlchemyEnum(SortDirectionEnum), nullable=False)
     category = Column(SQLAlchemyEnum(CategoryEnum), nullable=False)
+    type = Column(SQLAlchemyEnum(FactorTypeEnum), nullable=False, default=FactorTypeEnum.SLIDER)
     min_value = Column(Integer, nullable=True)
     max_value = Column(Integer, nullable=True)
     is_stock = Column(Boolean, nullable=False, default=True)
@@ -60,6 +67,7 @@ class FactorsPreset(Base):
 
     id = Column(Integer, primary_key=True)
     factor = Column(String(50), ForeignKey("factors.factor", ondelete="CASCADE"), nullable=False)
+    value = Column(String(50), nullable=True)
     above = Column(Integer, nullable=True)
     below = Column(Integer, nullable=True)
     display = Column(String(50), nullable=True)

@@ -174,7 +174,8 @@ FACTOR_MAP = {
     "ttm_dividend_yield": "배당 수익률 (TTM)",
     "consecutive_dividend_growth_count": "연속 배당 성장 횟수",
     "consecutive_dividend_payment_count": "연속 배당 지급 횟수",
-    "dividend_count": "배당 주기",
+    "dividend_count": "연평균 배당 횟수",
+    "dividend_frequency": "배당 주기",
     # 가치
     "pbr": "PBR",
     "pcr": "PCR",
@@ -288,7 +289,8 @@ FACTOR_MAP_EN = {
     "ttm_dividend_yield": "TTM Dividend Yield",
     "consecutive_dividend_growth_count": "Consecutive Dividend Growth Count",
     "consecutive_dividend_payment_count": "Consecutive Dividend Payment Count",
-    "dividend_count": "Dividend Frequency",
+    "dividend_count": "Dividend Count",
+    "dividend_frequency": "Dividend Frequency",
     ########################################################
     # ETF
     ########################################################
