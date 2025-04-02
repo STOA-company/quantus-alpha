@@ -484,17 +484,33 @@ class BaseScreenerService(ABC):
 
             if custom_filters:
                 for condition in custom_filters:
-                    insert_tasks.append(
-                        self.database.insert_wrapper(
-                            table="screener_stock_filters",
-                            sets={
-                                "group_id": group_id,
-                                "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                "above": condition.above,
-                                "below": condition.below,
-                            },
+                    if condition.values:
+                        for value in condition.values:
+                            insert_tasks.append(
+                                self.database.insert_wrapper(
+                                    table="screener_stock_filters",
+                                    sets={
+                                        "group_id": group_id,
+                                        "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                        "above": condition.above,
+                                        "below": condition.below,
+                                        "value": value,
+                                    },
+                                )
+                            )
+                    else:
+                        insert_tasks.append(
+                            self.database.insert_wrapper(
+                                table="screener_stock_filters",
+                                sets={
+                                    "group_id": group_id,
+                                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                    "above": condition.above,
+                                    "below": condition.below,
+                                    "value": None,
+                                },
+                            )
                         )
-                    )
 
             await asyncio.gather(*insert_tasks)
 
@@ -585,17 +601,33 @@ class BaseScreenerService(ABC):
 
             if custom_filters:
                 for condition in custom_filters:
-                    insert_tasks.append(
-                        self.database.insert_wrapper(
-                            table="screener_stock_filters",
-                            sets={
-                                "group_id": group_id,
-                                "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                "above": condition.above,
-                                "below": condition.below,
-                            },
+                    if condition.values:
+                        for value in condition.values:
+                            insert_tasks.append(
+                                self.database.insert_wrapper(
+                                    table="screener_stock_filters",
+                                    sets={
+                                        "group_id": group_id,
+                                        "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                        "above": condition.above,
+                                        "below": condition.below,
+                                        "value": value,
+                                    },
+                                )
+                            )
+                    else:
+                        insert_tasks.append(
+                            self.database.insert_wrapper(
+                                table="screener_stock_filters",
+                                sets={
+                                    "group_id": group_id,
+                                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                    "above": condition.above,
+                                    "below": condition.below,
+                                    "value": None,
+                                },
+                            )
                         )
-                    )
 
             # 팩터 필터
             if factor_filters:
