@@ -564,15 +564,10 @@ class ScreenerUtils:
                 factor = filter["factor"]
                 if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
-                if "value" in filter:
-                    # value 기반 필터링
-                    df = df[df[factor] == filter["value"]]
-                else:
-                    # range 기반 필터링
-                    if "above" in filter and filter["above"] is not None:
-                        df = df[df[factor] >= filter["above"]]
-                    if "below" in filter and filter["below"] is not None:
-                        df = df[df[factor] <= filter["below"]]
+                if filter["above"] is not None:
+                    df = df[df[factor] >= filter["above"]]
+                if filter["below"] is not None:
+                    df = df[df[factor] <= filter["below"]]
 
         stock_codes = df["Code"].tolist()
         return stock_codes
@@ -821,39 +816,6 @@ class ScreenerUtils:
 
         # 미국 주식은 $5 미만, 한국 주식은 1000원 미만을 PTP로 간주
         df["is_ptp"] = (is_us_market & (df["close"] < 5)) | (is_kr_market & (df["close"] < 1000))
-
-        return df
-
-    def filter_market(self, df: pd.DataFrame, market_filter: MarketEnum) -> pd.DataFrame:
-        """시장 필터링"""
-        if market_filter == MarketEnum.SNP500:
-            df = df[df["is_snp_500"] == 1]
-        elif market_filter in [MarketEnum.NASDAQ, MarketEnum.KOSDAQ, MarketEnum.KOSPI]:
-            df = df[df["market"] == market_filter.value]
-        return df
-
-    def filter_sector(self, df: pd.DataFrame, sector_filter: List[str]) -> pd.DataFrame:
-        """섹터 필터링"""
-        df = df[df["sector"].isin(sector_filter)]
-        return df
-
-    def filter_exclude(self, df: pd.DataFrame, exclude_filters: List[ExcludeEnum]) -> pd.DataFrame:
-        """제외 필터링"""
-        df = self.add_exclude_flags_to_dataframe(df, exclude_filters)
-
-        # 각 제외 조건에 대해 필터링
-        if ExcludeEnum.FINANCIAL in exclude_filters:
-            df = df[~df["is_financial"]]
-        if ExcludeEnum.HOLDING in exclude_filters:
-            df = df[~df["is_holding"]]
-        if ExcludeEnum.WARNED in exclude_filters:
-            df = df[~df["is_warned"]]
-        if ExcludeEnum.DEFICIT in exclude_filters:
-            df = df[~df["is_deficit"]]
-        if ExcludeEnum.ANNUAL_DEFICIT in exclude_filters:
-            df = df[~df["is_annual_deficit"]]
-        if ExcludeEnum.PTP in exclude_filters:
-            df = df[~df["is_ptp"]]
 
         return df
 
