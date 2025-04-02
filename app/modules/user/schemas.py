@@ -13,6 +13,7 @@ class UserInfoResponse(BaseModel):
     subscription_end: Optional[datetime] = None
     level: Optional[str] = None
     period_days: Optional[int] = None
+    product_type: Optional[str] = None
 
 
 class RefreshTokenResponse(BaseModel):
