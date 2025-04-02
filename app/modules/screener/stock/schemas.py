@@ -53,7 +53,7 @@ class FilterCondition(BaseModel):
     value: Optional[str] = None
     above: Optional[float] = None
     below: Optional[float] = None
-    values: Optional[List[FilterValue]] = None
+    values: Optional[List[str]] = None
 
 
 class GroupMetaData(BaseModel):
