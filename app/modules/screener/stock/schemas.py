@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from app.models.models_factors import CategoryEnum
+from app.models.models_factors import CategoryEnum, FactorTypeEnum
 from app.models.models_screener import StockType
 from app.modules.screener.etf.enum import ETFMarketEnum
 from typing import Optional, List, Dict
@@ -26,6 +26,12 @@ class ExcludeEnum(str, Enum):
     PTP = "ptp"  # PTP(Penny Stock) 기업
 
 
+class FilterValue(BaseModel):
+    value: Optional[str] = None
+    above: Optional[float] = None
+    below: Optional[float] = None
+
+
 class FactorResponse(BaseModel):
     factor: str
     description: str
@@ -43,8 +49,11 @@ class FactorResponse(BaseModel):
 
 class FilterCondition(BaseModel):
     factor: str
+    type: Optional[FactorTypeEnum] = None
+    value: Optional[str] = None
     above: Optional[float] = None
     below: Optional[float] = None
+    values: Optional[List[FilterValue]] = None
 
 
 class GroupMetaData(BaseModel):
@@ -54,21 +63,43 @@ class GroupMetaData(BaseModel):
 
 
 class SortInfo(BaseModel):
-    sort_by: Optional[str] = None
-    ascending: Optional[bool] = None
+    sort_by: str
+    ascending: bool = False
+
+
+class StockFilter(BaseModel):
+    factor: str
+    type: Optional[FactorTypeEnum] = None
+    value: Optional[str] = None
+    above: Optional[float] = None
+    below: Optional[float] = None
+    values: Optional[List[FilterValue]] = None
 
 
 class GroupFilter(BaseModel):
     id: Optional[int] = None
-    name: Optional[str] = None
-    type: Optional[StockType] = StockType.STOCK
-    market_filter: Optional[MarketEnum] = MarketEnum.ALL
+    name: str
+    market_filter: Optional[MarketEnum] = None
     sector_filter: Optional[List[str]] = None
     exclude_filters: Optional[List[ExcludeEnum]] = None
     category: Optional[CategoryEnum] = None
     custom_filters: Optional[List[FilterCondition]] = None
     factor_filters: Optional[Dict[str, List[str]]] = None
     sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None
+    type: Optional[StockType] = StockType.STOCK
+
+
+class GroupFilterResponse(BaseModel):
+    id: int
+    name: str
+    market_filter: Optional[str] = None
+    sector_filter: List[str] = []
+    exclude_filters: List[str] = []
+    custom_filters: List[StockFilter] = []
+    factor_filters: Dict[str, List[str]] = {}
+    sort_info: Dict[CategoryEnum, SortInfo] = {}
+    has_custom: bool = False
+    type: Optional[StockType] = StockType.STOCK
 
 
 class ETFGroupFilter(GroupFilter):
@@ -76,24 +107,20 @@ class ETFGroupFilter(GroupFilter):
     type: Optional[StockType] = StockType.ETF
 
 
-class GroupFilterResponse(GroupFilter):
-    has_custom: bool = False
-
-
 class ETFGroupFilterResponse(ETFGroupFilter):
     has_custom: bool = False
 
 
 class FilteredStocks(BaseModel):
-    market_filter: Optional[MarketEnum] = MarketEnum.US
+    market_filter: Optional[MarketEnum] = None
     sector_filter: Optional[List[str]] = None
-    custom_filters: Optional[List[FilterCondition]] = None
     exclude_filters: Optional[List[ExcludeEnum]] = None
-    factor_filters: Optional[List[str]] = None
-    limit: Optional[int] = 50
-    offset: Optional[int] = 0
+    custom_filters: Optional[List[FilterCondition]] = None
+    factor_filters: List[str] = []
     sort_info: Optional[SortInfo] = None
-    lang: Optional[str] = "kr"
+    limit: int = 20
+    offset: int = 0
+    lang: str = "kr"
 
 
 class ColumnSet(BaseModel):
