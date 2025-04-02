@@ -38,21 +38,49 @@ def process_chat(message: str) -> Dict[str, Any]:
     task_id = process_chat.request.id
 
     try:
-        response_text = "LLM API 연동이 아직 구현되지 않았습니다."
+        initial_state = {
+            "task_id": task_id,
+            "status": "PROCESSING",
+            "request": message,
+            "response": "",
+            "chunks_received": 0,
+            "timestamp": time.time(),
+        }
+        save_task_to_store(task_id, initial_state)
 
-        # 응답 데이터 구성
-        response_data = {
+        chunks = [
+            "안녕하세요! ",
+            f"'{message}'에 대한 답변을 생성중입니다. ",
+            "현재는 테스트 단계로, ",
+            "청크 단위로 응답이 생성되는 것을 시뮬레이션 하고 있습니다. ",
+            "이런 방식으로 긴 응답도 점진적으로 확인할 수 있습니다.",
+        ]
+
+        for i, chunk in enumerate(chunks):
+            current_state = json.loads(redis_client.get(f"task:{task_id}"))
+
+            current_state["response"] += chunk
+            current_state["chunks_received"] = i + 1
+            current_state["timestamp"] = time.time()
+
+            save_task_to_store(task_id, current_state)
+
+            time.sleep(1)
+
+        # 완료 상태 저장
+        final_state = {
             "task_id": task_id,
             "status": "SUCCESS",
             "request": message,
-            "response": response_text,
+            "response": current_state["response"],
+            "chunks_received": current_state["chunks_received"],
             "timestamp": time.time(),
         }
+        save_task_to_store(task_id, final_state)
 
-        save_task_to_store(task_id, response_data)
+        return final_state
 
-        return response_data
     except Exception as e:
-        error_data = {"task_id": task_id, "status": "ERROR", "error": str(e), "timestamp": time.time()}
-        save_task_to_store(task_id, error_data)
-        return error_data
+        error_state = {"task_id": task_id, "status": "ERROR", "error": str(e), "timestamp": time.time()}
+        save_task_to_store(task_id, error_state)
+        return error_state
