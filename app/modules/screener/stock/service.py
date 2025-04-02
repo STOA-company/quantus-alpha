@@ -52,10 +52,13 @@ class ScreenerStockService(BaseScreenerService):
             for factor in factors:
                 if factor["unit"] == "small_price":
                     unit = "원" if nation == "kr" else "$"
+                    type = "input"
                 elif factor["unit"] == "big_price":
                     unit = "억원" if nation == "kr" else "K$"
+                    type = "input"
                 else:
                     unit = UNIT_MAP[factor["unit"]]
+                    type = "slider"
 
                 result.append(
                     {
@@ -64,9 +67,9 @@ class ScreenerStockService(BaseScreenerService):
                         "unit": unit,
                         "category": factor["category"],
                         "direction": factor["direction"],
-                        "min_value": factor["min_value"] if factor["min_value"] is not None else None,
-                        "max_value": factor["max_value"] if factor["max_value"] is not None else None,
-                        "type": factor["type"],
+                        "min_value": factor["min_value"],
+                        "max_value": factor["max_value"],
+                        "type": type,
                         "presets": factor["presets"],
                     }
                 )
