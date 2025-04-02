@@ -67,13 +67,14 @@ def get_filtered_stocks(
                             }
                         )
                 else:
+                    # min_value, max_value가 있는 경우 above, below로 처리
                     filter_data = {
                         "factor": REVERSE_FACTOR_MAP[condition.factor],
                     }
-                    if hasattr(condition, "above") and condition.above is not None:
-                        filter_data["above"] = condition.above
-                    if hasattr(condition, "below") and condition.below is not None:
-                        filter_data["below"] = condition.below
+                    if hasattr(condition, "min_value") and condition.min_value is not None:
+                        filter_data["above"] = condition.min_value
+                    if hasattr(condition, "max_value") and condition.max_value is not None:
+                        filter_data["below"] = condition.max_value
                     if hasattr(condition, "value") and condition.value is not None:
                         filter_data["value"] = condition.value
                     custom_filters.append(filter_data)
@@ -110,8 +111,7 @@ def get_filtered_stocks(
 
         if filtered_stocks.lang == "en":
             for stock in stocks_data:
-                if "Market" in stock:
-                    stock["Market"] = MARKET_KOREAN_TO_ENGLISH_MAP[stock["Market"]]
+                stock["Market"] = MARKET_KOREAN_TO_ENGLISH_MAP[stock["Market"]]
 
         result = {"data": stocks_data, "has_next": has_next}
         return result
@@ -137,27 +137,14 @@ def get_filtered_stocks_count(
     try:
         custom_filters = []
         if filtered_stocks.custom_filters:
-            for condition in filtered_stocks.custom_filters:
-                if hasattr(condition, "values") and condition.values:
-                    # values 배열이 있는 경우 각 value를 개별 필터로 추가
-                    for value in condition.values:
-                        custom_filters.append(
-                            {
-                                "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                "value": value,
-                            }
-                        )
-                else:
-                    filter_data = {
-                        "factor": REVERSE_FACTOR_MAP[condition.factor],
-                    }
-                    if hasattr(condition, "above") and condition.above is not None:
-                        filter_data["above"] = condition.above
-                    if hasattr(condition, "below") and condition.below is not None:
-                        filter_data["below"] = condition.below
-                    if hasattr(condition, "value") and condition.value is not None:
-                        filter_data["value"] = condition.value
-                    custom_filters.append(filter_data)
+            custom_filters = [
+                {
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "above": condition.above,
+                    "below": condition.below,
+                }
+                for condition in filtered_stocks.custom_filters
+            ]
 
         total_count = screener_service.get_filtered_data_count(
             market_filter=filtered_stocks.market_filter,
