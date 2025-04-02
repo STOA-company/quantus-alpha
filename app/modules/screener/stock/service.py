@@ -40,7 +40,7 @@ class ScreenerStockService(BaseScreenerService):
         """
         try:
             factors = screener_utils.get_factors(market)
-
+            nation = "global"
             if market in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 nation = "us"
             elif market in [MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
