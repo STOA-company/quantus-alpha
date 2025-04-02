@@ -40,10 +40,9 @@ class ScreenerStockService(BaseScreenerService):
         """
         try:
             factors = screener_utils.get_factors(market)
-            nation = "global"
             if market in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 nation = "us"
-            elif market in [MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
+            elif market in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
                 nation = "kr"
             elif market == MarketEnum.ALL:
                 nation = "global"
@@ -52,13 +51,10 @@ class ScreenerStockService(BaseScreenerService):
             for factor in factors:
                 if factor["unit"] == "small_price":
                     unit = "원" if nation == "kr" else "$"
-                    type = "input"
                 elif factor["unit"] == "big_price":
                     unit = "억원" if nation == "kr" else "K$"
-                    type = "input"
                 else:
                     unit = UNIT_MAP[factor["unit"]]
-                    type = "slider"
 
                 result.append(
                     {
@@ -69,7 +65,7 @@ class ScreenerStockService(BaseScreenerService):
                         "direction": factor["direction"],
                         "min_value": factor["min_value"],
                         "max_value": factor["max_value"],
-                        "type": type,
+                        "type": factor["type"],
                         "presets": factor["presets"],
                     }
                 )
