@@ -6,7 +6,7 @@ from app.database.crud import database_service
 from app.modules.screener.stock.schemas import MarketEnum, SortInfo, ExcludeEnum
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.enum.type import StockType
-from app.models.models_factors import CategoryEnum, FactorTypeEnum
+from app.models.models_factors import CategoryEnum
 from app.modules.screener.utils import screener_utils
 from app.common.constants import (
     FACTOR_MAP,
@@ -47,98 +47,33 @@ class BaseScreenerService(ABC):
             logger.error(f"Error in get_groups: {e}")
             raise e
 
-    def get_group_filters(self, group_id: int = None, user_id: int = None) -> List[Dict]:
+    def get_group_filters(self, group_id: int) -> Dict:
         """
         그룹 필터 조회
         """
         try:
-            if group_id is not None:
-                group = self.database._select(table="screener_groups", id=group_id)
-                if not group:
-                    return []
-                groups = [group[0]]
-            else:
-                groups = self.database._select(table="screener_groups", user_id=user_id)
-                if not groups:
-                    return []
+            group = self.database._select(table="screener_groups", id=group_id)
+            stock_filters = self.database._select(table="screener_stock_filters", group_id=group_id)
+            custom_factor_filters = self.database._select(
+                table="screener_factor_filters", group_id=group_id, category=CategoryEnum.CUSTOM
+            )
+            custom_factor_filters = sorted(custom_factor_filters, key=lambda x: x.order)
+            has_custom = len(custom_factor_filters) > 0
 
-            response = []
-            for group in groups:
-                stock_filters = self.database._select(table="screener_stock_filters", group_id=group.id)
-                custom_factor_filters = self.database._select(
-                    table="screener_factor_filters", group_id=group.id, category=CategoryEnum.CUSTOM
-                )
-                custom_factor_filters = sorted(custom_factor_filters, key=lambda x: x.order)
-
-                custom_filters = []
-                market_filter = None
-                sector_filter = []
-                exclude_filters = []
-
-                for stock_filter in stock_filters:
-                    if stock_filter.factor == "market":
-                        market_filter = stock_filter.value
-                    elif stock_filter.factor == "sector":
-                        sector_filter.append(stock_filter.value)
-                    elif stock_filter.factor == "exclude":
-                        exclude_filters.append(stock_filter.value)
-                    else:
-                        factor = screener_utils.get_factor_by_name(stock_filter.factor)
-                        if not factor:
-                            continue
-
-                        if factor.type == FactorTypeEnum.SLIDER:
-                            custom_filters.append(
-                                {
-                                    "factor": FACTOR_MAP[stock_filter.factor],
-                                    "type": factor.type,
-                                    "above": stock_filter.above,
-                                    "below": stock_filter.below,
-                                }
-                            )
-                        elif factor.type == FactorTypeEnum.SINGLE:
-                            custom_filters.append(
-                                {
-                                    "factor": FACTOR_MAP[stock_filter.factor],
-                                    "type": factor.type,
-                                    "value": stock_filter.value,
-                                }
-                            )
-                        elif factor.type == FactorTypeEnum.MULTI:
-                            values = []
-                            for value in stock_filter.values:
-                                values.append(
-                                    {
-                                        "value": value.value,
-                                        "above": value.above,
-                                        "below": value.below,
-                                    }
-                                )
-                            custom_filters.append(
-                                {
-                                    "factor": FACTOR_MAP[stock_filter.factor],
-                                    "type": factor.type,
-                                    "values": values,
-                                }
-                            )
-
-                response.append(
+            return {
+                "name": group[0].name,
+                "stock_filters": [
                     {
-                        "id": group.id,
-                        "name": group.name,
-                        "market_filter": market_filter,
-                        "sector_filter": sector_filter,
-                        "exclude_filters": exclude_filters,
-                        "custom_filters": custom_filters,
-                        "factor_filters": {},
-                        "sort_info": {},
-                        "has_custom": bool(custom_filters),
-                        "type": group.type,
+                        "factor": FACTOR_MAP[stock_filter.factor],
+                        "value": stock_filter.value if stock_filter.value else None,
+                        "above": stock_filter.above if stock_filter.above else None,
+                        "below": stock_filter.below if stock_filter.below else None,
                     }
-                )
-
-            return response
-
+                    for stock_filter in stock_filters
+                ],
+                "custom_factor_filters": [FACTOR_MAP[factor_filter.factor] for factor_filter in custom_factor_filters],
+                "has_custom": has_custom,
+            }
         except Exception as e:
             logger.error(f"Error in get_group_filters: {e}")
             raise e

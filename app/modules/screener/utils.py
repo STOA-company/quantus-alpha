@@ -8,7 +8,7 @@ from app.common.constants import NEED_TO_MULTIPLY_100, MARKET_MAP, UNIT_MAP, UNI
 import numpy as np
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.core.extra.SlackNotifier import SlackNotifier
-from app.models.models_factors import CategoryEnum, FactorTypeEnum
+from app.models.models_factors import CategoryEnum
 import logging
 from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.date_utils import is_holiday
@@ -44,44 +44,29 @@ class ScreenerUtils:
             classified_presets = self.classify_factors_preset(factor_presets)
 
             if factor_name in market_data.columns:
-                factor_data = {
-                    "factor": factor_name,
-                    "type": factor.type,
-                    "description": factor.description,
-                    "unit": str(factor.unit).lower(),
-                    "category": str(factor.category).lower(),
-                    "direction": factor.sort_direction,
-                    "presets": classified_presets,
-                }
+                min_value = market_data[factor_name].min()
+                max_value = market_data[factor_name].max()
 
-                # SLIDER 타입일 때만 min/max 값 계산
-                if factor.type == FactorTypeEnum.SLIDER:
-                    min_value = market_data[factor_name].min()
-                    max_value = market_data[factor_name].max()
-                    factor_data["min_value"] = floor_to_integer(min_value)
-                    factor_data["max_value"] = ceil_to_integer(max_value)
-                else:
-                    factor_data["min_value"] = None
-                    factor_data["max_value"] = None
+                if factor_name == "dividend_count":
+                    min_value = 0
+                    max_value = 52
 
-                result.append(factor_data)
+                result.append(
+                    {
+                        "factor": factor_name,
+                        "description": factor.description,
+                        "unit": str(factor.unit).lower(),
+                        "category": str(factor.category).lower(),
+                        "direction": factor.sort_direction,
+                        "min_value": floor_to_integer(min_value),
+                        "max_value": ceil_to_integer(max_value),
+                        "presets": classified_presets,
+                    }
+                )
             else:
                 raise ValueError(f"팩터 '{factor_name}'가 데이터에 존재하지 않습니다.")
 
         return result
-
-    def get_factor_by_name(self, factor_name: str):
-        """
-        팩터 이름으로 팩터 정보 조회
-        """
-        try:
-            factor = self.db._select(table="factors", factor=factor_name)
-            if not factor:
-                return None
-            return factor[0]
-        except Exception as e:
-            logger.error(f"Error in get_factor_by_name: {e}")
-            raise e
 
     def get_etf_factors(self, market: ETFMarketEnum) -> List[dict]:
         factors = self.db._select(table="factors", is_etf=True)
@@ -136,7 +121,6 @@ class ScreenerUtils:
         technical_columns = ["close", "marketCap", "median_trade", "abs_beta", "sharpe"]
         dividend_columns = [
             "dividend_count",
-            "dividend_frequency",
             "ttm_dividend_yield",
             "consecutive_dividend_growth_count",
             "div_yield_growth_qoq",
@@ -149,7 +133,6 @@ class ScreenerUtils:
             dividend_columns = [
                 "ttm_dividend_yield",
                 "dividend_count",
-                "dividend_frequency",
                 "last_dividend_per_share",
                 "dividend_growth_rate_5y",
                 "risk_rating",
@@ -170,29 +153,6 @@ class ScreenerUtils:
         }
 
         return [*base_columns, *additional_columns.get(category, [])]
-
-    def _calculate_dividend_frequency(self, dividend_count: float) -> str:
-        """
-        배당 주기 계산 함수 - dividend_count 값을 기반으로 배당 주기 문자열 반환
-
-        Args:
-            dividend_count (float): 연간 배당 횟수
-
-        Returns:
-            str: 배당 주기 문자열 (yearly, half, quarter, month, week 또는 None)
-        """
-        if dividend_count == 0:
-            return None  # 배당 데이터 없음
-        elif dividend_count <= 1.5:
-            return "yearly"  # 연 1회 배당 (연간)
-        elif dividend_count <= 2.5:
-            return "half"  # 연 2회 배당 (반기)
-        elif dividend_count <= 4.5:
-            return "quarter"  # 연 4회 배당 (분기)
-        elif dividend_count <= 13:
-            return "month"  # 연 12회 배당 (월간)
-        else:
-            return "week"  # 연 52회 배당 (주간)
 
     def process_kr_factor_data(self):
         output_file = "parquet/kr_stock_factors.parquet"
@@ -243,7 +203,6 @@ class ScreenerUtils:
         df["consecutive_dividend_growth_count"] = np.nan
         df["consecutive_dividend_payment_count"] = np.nan
         df["dividend_count"] = np.nan
-        df["dividend_frequency"] = None
 
         for index, row in df.iterrows():
             ticker = row["Code"]
@@ -262,9 +221,7 @@ class ScreenerUtils:
                 ]
 
             if ticker in dividend_data["dividend_count"]:
-                dividend_count = dividend_data["dividend_count"][ticker]
-                df.at[index, "dividend_count"] = dividend_count
-                df.at[index, "dividend_frequency"] = self._calculate_dividend_frequency(dividend_count)
+                df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
 
         # 필터링된 데이터프레임 선택 (모든 컬럼 유지)
         df_result = df[df["market"].isin(["KOSPI", "KOSDAQ"])].copy()
@@ -356,7 +313,6 @@ class ScreenerUtils:
         df["consecutive_dividend_payment_count"] = np.nan
         df["dividend_count"] = np.nan
         df["last_dividend_per_share"] = np.nan
-        df["dividend_frequency"] = None
 
         for index, row in df.iterrows():
             ticker = row["Code"]
@@ -375,9 +331,7 @@ class ScreenerUtils:
                 ]
 
             if ticker in dividend_data["dividend_count"]:
-                dividend_count = dividend_data["dividend_count"][ticker]
-                df.at[index, "dividend_count"] = dividend_count
-                df.at[index, "dividend_frequency"] = self._calculate_dividend_frequency(dividend_count)
+                df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
 
             if ticker in dividend_data["dividend_per_share"]:
                 df.at[index, "last_dividend_per_share"] = dividend_data["dividend_per_share"][ticker]
@@ -768,7 +722,6 @@ class ScreenerUtils:
         for preset in presets:
             classified_preset = {
                 "display": preset.display,
-                "value": preset.value,
                 "above": preset.above,
                 "below": preset.below,
             }

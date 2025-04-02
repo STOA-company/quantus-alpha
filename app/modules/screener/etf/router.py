@@ -13,7 +13,7 @@ from app.modules.screener.etf.schemas import FilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
 from app.utils.oauth_utils import get_current_user
 from app.core.logging.config import get_logger
-from app.common.constants import REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN, ETF_MARKET_MAP, FACTOR_KOREAN_TO_ENGLISH_MAP
+from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN, ETF_MARKET_MAP
 from app.core.exception.base import CustomException
 from app.modules.screener.utils import screener_utils
 
@@ -41,28 +41,14 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
     try:
         custom_filters = []
         if filtered_etf.custom_filters:
-            for condition in filtered_etf.custom_filters:
-                if hasattr(condition, "values") and condition.values:
-                    # values 배열이 있는 경우 각 value를 개별 필터로 추가
-                    for value in condition.values:
-                        custom_filters.append(
-                            {
-                                "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                "value": value,
-                            }
-                        )
-                else:
-                    # min_value, max_value가 있는 경우 above, below로 처리
-                    filter_data = {
-                        "factor": REVERSE_FACTOR_MAP[condition.factor],
-                    }
-                    if hasattr(condition, "min_value") and condition.min_value is not None:
-                        filter_data["above"] = condition.min_value
-                    if hasattr(condition, "max_value") and condition.max_value is not None:
-                        filter_data["below"] = condition.max_value
-                    if hasattr(condition, "value") and condition.value is not None:
-                        filter_data["value"] = condition.value
-                    custom_filters.append(filter_data)
+            custom_filters = [
+                {
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "above": condition.above,
+                    "below": condition.below,
+                }
+                for condition in filtered_etf.custom_filters
+            ]
 
         request_columns = ["Code", "Name", "manager", "country"]
         reverse_factor_map = REVERSE_FACTOR_MAP
@@ -204,63 +190,77 @@ def get_group_filters(
     """
     필터 목록 조회
     """
-    try:
-        technical_columns = screener_etf_service.get_columns(group_id, CategoryEnum.TECHNICAL, type=StockType.ETF)
-        dividend_columns = screener_etf_service.get_columns(group_id, CategoryEnum.DIVIDEND, type=StockType.ETF)
+    # try:
+    technical_columns = screener_etf_service.get_columns(group_id, CategoryEnum.TECHNICAL, type=StockType.ETF)
+    dividend_columns = screener_etf_service.get_columns(group_id, CategoryEnum.DIVIDEND, type=StockType.ETF)
 
-        if lang == "en":
-            technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
-            dividend_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in dividend_columns]
+    if lang == "en":
+        technical_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in technical_columns]
+        dividend_columns = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in dividend_columns]
 
-        technical_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
-        dividend_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.DIVIDEND)
-        custom_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
+    technical_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.TECHNICAL)
+    dividend_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.DIVIDEND)
+    custom_sort_info = screener_etf_service.get_sort_info(group_id, CategoryEnum.CUSTOM)
 
-        if group_id == -1:
-            return ETFGroupFilterResponse(
-                id=-1,
-                name="기본",
-                market_filter=ETFMarketEnum.US,
-                type=StockType.ETF,
-                has_custom=False,
-                sector_filter=[],
-                custom_filters=[],
-                factor_filters={"technical": technical_columns, "dividend": dividend_columns, "custom": []},
-                sort_info={
-                    CategoryEnum.TECHNICAL: technical_sort_info,
-                    CategoryEnum.DIVIDEND: dividend_sort_info,
-                    CategoryEnum.CUSTOM: custom_sort_info,
-                },
-            )
-
-        group_filters = screener_etf_service.get_group_filters(group_id)
-        if not group_filters:
-            raise HTTPException(status_code=404, detail="Group not found")
-
-        group_filter = group_filters[0]  # 단일 그룹 조회이므로 첫 번째 항목만 사용
-
+    if group_id == -1:
         return ETFGroupFilterResponse(
-            id=group_id,
-            name=group_filter["name"],
-            market_filter=group_filter["market_filter"],
+            id=-1,
+            name="기본",
+            market_filter=ETFMarketEnum.US,
             type=StockType.ETF,
-            sector_filter=group_filter["sector_filter"],
-            custom_filters=group_filter["custom_filters"],
-            factor_filters={
-                "technical": technical_columns,
-                "dividend": dividend_columns,
-                "custom": [],
-            },
+            has_custom=False,
+            sector_filter=[],
+            custom_filters=[],
+            factor_filters={"technical": technical_columns, "dividend": dividend_columns, "custom": []},
             sort_info={
                 CategoryEnum.TECHNICAL: technical_sort_info,
                 CategoryEnum.DIVIDEND: dividend_sort_info,
                 CategoryEnum.CUSTOM: custom_sort_info,
             },
-            has_custom=group_filter["has_custom"],
         )
-    except Exception as e:
-        logger.exception(f"Error getting group filters: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+
+    group_filters = screener_etf_service.get_group_filters(group_id)
+    stock_filters = group_filters["stock_filters"]
+
+    market_filter = None
+    sector_filter = []
+    custom_filters = []
+
+    for stock_filter in stock_filters:
+        if stock_filter["factor"] == "시장":
+            market_filter = stock_filter["value"]
+        elif stock_filter["factor"] == "산업":
+            continue
+        else:
+            custom_filters.append(stock_filter)
+
+    custom_factor_filters = group_filters["custom_factor_filters"]
+
+    if lang == "en":
+        custom_factor_filters = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in custom_factor_filters]
+
+    return ETFGroupFilterResponse(
+        id=group_id,
+        name=group_filters["name"],
+        market_filter=market_filter if market_filter else ETFMarketEnum.US,
+        type=StockType.ETF,
+        sector_filter=sector_filter,
+        custom_filters=custom_filters,
+        factor_filters={
+            "technical": technical_columns,
+            "dividend": dividend_columns,
+            "custom": custom_factor_filters,
+        },
+        sort_info={
+            CategoryEnum.TECHNICAL: technical_sort_info,
+            CategoryEnum.DIVIDEND: dividend_sort_info,
+            CategoryEnum.CUSTOM: custom_sort_info,
+        },
+        has_custom=group_filters["has_custom"],
+    )
+    # except Exception as e:
+    #     logger.error(f"Error getting group filters: {e}")
+    #     raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/groups/{group_id}", response_model=Dict)

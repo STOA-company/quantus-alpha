@@ -56,28 +56,14 @@ def get_filtered_stocks(
     try:
         custom_filters = []
         if filtered_stocks.custom_filters:
-            for condition in filtered_stocks.custom_filters:
-                if hasattr(condition, "values") and condition.values:
-                    # values 배열이 있는 경우 각 value를 개별 필터로 추가
-                    for value in condition.values:
-                        custom_filters.append(
-                            {
-                                "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                "value": value,
-                            }
-                        )
-                else:
-                    # min_value, max_value가 있는 경우 above, below로 처리
-                    filter_data = {
-                        "factor": REVERSE_FACTOR_MAP[condition.factor],
-                    }
-                    if hasattr(condition, "min_value") and condition.min_value is not None:
-                        filter_data["above"] = condition.min_value
-                    if hasattr(condition, "max_value") and condition.max_value is not None:
-                        filter_data["below"] = condition.max_value
-                    if hasattr(condition, "value") and condition.value is not None:
-                        filter_data["value"] = condition.value
-                    custom_filters.append(filter_data)
+            custom_filters = [
+                {
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "above": condition.above,
+                    "below": condition.below,
+                }
+                for condition in filtered_stocks.custom_filters
+            ]
 
         request_columns = ["Code", "Name", "country"]
         reverse_factor_map = REVERSE_FACTOR_MAP
@@ -225,9 +211,7 @@ async def create_or_update_group(
 
 @router.get("/groups/{group_id}", response_model=GroupFilterResponse)
 def get_group_filters(
-    group_id: int = -1,
-    lang: str = "kr",
-    screener_service: ScreenerStockService = Depends(ScreenerStockService),
+    group_id: int = -1, lang: str = "kr", screener_service: ScreenerStockService = Depends(ScreenerStockService)
 ):
     """
     필터 목록 조회
@@ -282,25 +266,43 @@ def get_group_filters(
             )
 
         group_filters = screener_service.get_group_filters(group_id)
-        if not group_filters:
-            raise HTTPException(status_code=404, detail="Group not found")
+        stock_filters = group_filters["stock_filters"]
 
-        group_filter = group_filters[0]  # 단일 그룹 조회이므로 첫 번째 항목만 사용
+        market_filter = None
+        sector_filter = []
+        exclude_filters = []
+        custom_filters = []
+
+        for stock_filter in stock_filters:
+            if stock_filter["factor"] == "시장":
+                market_filter = stock_filter["value"]
+            elif stock_filter["factor"] == "산업":
+                sector_filter.append(stock_filter["value"])
+            elif stock_filter["factor"] == "제외":
+                exclude_filters.append(stock_filter["value"])
+            else:
+                custom_filters.append(stock_filter)
+
+        custom_factor_filters = group_filters["custom_factor_filters"]
+
+        if lang == "en":
+            # sector_filter = [MARKET_KOREAN_TO_ENGLISH_MAP[sector] for sector in sector_filter]
+            custom_factor_filters = [FACTOR_KOREAN_TO_ENGLISH_MAP[factor] for factor in custom_factor_filters]
 
         return GroupFilterResponse(
             id=group_id,
-            name=group_filter["name"],
-            market_filter=group_filter["market_filter"],
-            sector_filter=group_filter["sector_filter"],
-            exclude_filters=group_filter["exclude_filters"],
-            custom_filters=group_filter["custom_filters"],
+            name=group_filters["name"],
+            market_filter=market_filter,
+            sector_filter=sector_filter,
+            custom_filters=custom_filters,
+            exclude_filters=exclude_filters,
             factor_filters={
                 "technical": technical_columns,
                 "fundamental": fundamental_columns,
                 "valuation": valuation_columns,
                 "dividend": dividend_columns,
                 "growth": growth_columns,
-                "custom": [],
+                "custom": custom_factor_filters,
             },
             sort_info={
                 CategoryEnum.TECHNICAL: technical_sort_info,
@@ -310,7 +312,7 @@ def get_group_filters(
                 CategoryEnum.GROWTH: growth_sort_info,
                 CategoryEnum.CUSTOM: custom_sort_info,
             },
-            has_custom=group_filter["has_custom"],
+            has_custom=group_filters["has_custom"],
         )
     except Exception as e:
         logger.exception(f"Error getting group filters: {e}")
