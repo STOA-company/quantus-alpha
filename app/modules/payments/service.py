@@ -515,15 +515,37 @@ class PaymentService:
         return data
 
     def count_used_days(self, user_using_history):
-        used_days = 1
+        """
+        사용자의 서비스 사용 일수를 계산합니다.
+
+        Args:
+            user_using_history: 사용자의 서비스 사용 이력 목록
+
+        Returns:
+            int: 총 사용 일수
+        """
+        used_days = 0
         for history in user_using_history:
+            # 시작일
+            start_date = history.start_date.date()
+
+            # 종료일 계산 (환불된 경우와 아닌 경우 구분)
             if history.refund_at is None:
+                # 환불되지 않은 경우
+                # 구독 종료일이 현재보다 미래라면 현재까지만 계산
                 if history.end_date.date() > now_kr().date():
-                    used_days += (now_kr().date() - history.start_date.date()).days
+                    end_date = now_kr().date()
                 else:
-                    used_days += (history.end_date.date() - history.start_date.date()).days
+                    end_date = history.end_date.date()
             else:
-                used_days += (history.refund_at.date() - history.start_date.date()).days
+                # 환불된 경우 환불 날짜까지만 계산
+                end_date = history.refund_at.date()
+
+            # 사용 일수 계산 (종료일 포함하여 계산하므로 +1)
+            days = (end_date - start_date).days + 1
+
+            # 음수가 나오지 않도록 보정
+            used_days += max(0, days)
 
         return used_days
 
@@ -572,7 +594,7 @@ class PaymentService:
             id=using_history_id,
         )
         if payment_history[0].refund_at is not None:
-            raise HTTPException(status_code=422, detail="이미 환불된 결제입니다.")
+            raise HTTPException(status_code=409, detail="이미 환불된 결제입니다.")
         elif payment_history is None:
             raise HTTPException(status_code=404, detail="결제 내역이 없습니다.")
 
