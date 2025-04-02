@@ -435,7 +435,7 @@ class PaymentService:
         # 쿠폰이 사용한 상태인지 확인
         coupon_data = self.get_coupon_by_coupon_id(coupon_id)
         if coupon_data.coupon_status == "active":
-            raise HTTPException(status_code=409, detail="이미 사용중인 쿠폰입니다.")
+            raise HTTPException(status_code=422, detail="이미 사용중인 쿠폰입니다.")
         elif coupon_data.coupon_status == "expired":
             raise HTTPException(status_code=410, detail="쿠폰의 유효기간이 지났습니다.")
 
@@ -533,6 +533,14 @@ class PaymentService:
                 return history
         return None
 
+    def get_product_type_by_user_using_history_id(self, user_using_history_id: int):
+        data = self.db._select(
+            table="user_using_history",
+            columns=["product_type"],
+            id=user_using_history_id,
+        )
+        return data[0].product_type
+
     def check_is_extended(self, product_relation_id: int):
         data = self.db._select(
             table="alphafinder_payment_history",
@@ -564,7 +572,7 @@ class PaymentService:
             id=using_history_id,
         )
         if payment_history[0].refund_at is not None:
-            raise HTTPException(status_code=409, detail="이미 환불된 결제입니다.")
+            raise HTTPException(status_code=422, detail="이미 환불된 결제입니다.")
         elif payment_history is None:
             raise HTTPException(status_code=404, detail="결제 내역이 없습니다.")
 

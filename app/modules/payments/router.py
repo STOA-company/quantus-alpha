@@ -202,7 +202,7 @@ def use_coupon(
     if settings.ENV == "stage":
         today = now_kr().date()
         if today < datetime(2025, 4, 15).date():
-            raise HTTPException(status_code=403, detail="쿠폰 사용 기간이 아직 안 됐습니다.")
+            raise HTTPException(status_code=425, detail="쿠폰 사용 기간이 아직 안 됐습니다.")
 
     is_used = payment_service.use_coupon(current_user.id, coupon_id)
 
