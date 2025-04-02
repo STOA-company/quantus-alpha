@@ -10,32 +10,27 @@ USE = pytz.timezone("America/New_York")
 
 NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6", "momentum_12", "current_ratio"]
 
-NON_NUMERIC_COLUMNS = ["Code", "Name", "market", "sector", "country", "score", "Name_en", "sector_en"]
+NON_NUMERIC_COLUMNS = [
+    "Code",
+    "Name",
+    "Name_en",
+    "market",
+    "sector",
+    "sector_en",
+    "country",
+    "dividend_frequency",
+]
 
 NON_NUMERIC_COLUMNS_ETF = [
     "Code",
-    "country",
-    "score",
-    "ticker",
-    "ctry",
-    "kr_name",
-    "en_name",
     "Name",
+    "Name_en",
     "market",
-    "listing_date",
-    "base_index_name",
-    "replication_method",
-    "base_asset_classification",
-    "manager",
-    "tax_type",
-    "is_hedge",
-    "last_dividend_date",
-    "manager",
-    "tax_type",
-    "is_hedge",
+    "sector",
+    "sector_en",
+    "country",
+    "dividend_frequency",
 ]
-
-ETF_DEFAULT_SCREENER_COLUMNS = ["ticker", "market", "kr_name", "en_name"]
 
 UNIT_MAP = {"percentage": "%", "times": "회", "score": "점", "multiple": "배", "ratio": ""}
 UNIT_MAP_EN = {"percentage": "%", "times": "", "score": "", "multiple": "", "ratio": ""}
@@ -174,7 +169,8 @@ FACTOR_MAP = {
     "ttm_dividend_yield": "배당 수익률 (TTM)",
     "consecutive_dividend_growth_count": "연속 배당 성장 횟수",
     "consecutive_dividend_payment_count": "연속 배당 지급 횟수",
-    "dividend_count": "배당 주기",
+    "dividend_count": "연평균 배당 횟수",
+    "dividend_frequency": "배당 주기",
     # 가치
     "pbr": "PBR",
     "pcr": "PCR",
@@ -288,7 +284,8 @@ FACTOR_MAP_EN = {
     "ttm_dividend_yield": "TTM Dividend Yield",
     "consecutive_dividend_growth_count": "Consecutive Dividend Growth Count",
     "consecutive_dividend_payment_count": "Consecutive Dividend Payment Count",
-    "dividend_count": "Dividend Frequency",
+    "dividend_count": "Dividend Count",
+    "dividend_frequency": "Dividend Frequency",
     ########################################################
     # ETF
     ########################################################

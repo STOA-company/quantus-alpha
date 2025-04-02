@@ -8,7 +8,7 @@ from app.common.constants import NEED_TO_MULTIPLY_100, MARKET_MAP, UNIT_MAP, UNI
 import numpy as np
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.core.extra.SlackNotifier import SlackNotifier
-from app.models.models_factors import CategoryEnum
+from app.models.models_factors import CategoryEnum, FactorTypeEnum
 import logging
 from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.date_utils import is_holiday
@@ -42,29 +42,26 @@ class ScreenerUtils:
             factor_name = factor.factor
             factor_presets = self.db._select(table="factors_preset", factor=factor_name, order="order", ascending=True)
             classified_presets = self.classify_factors_preset(factor_presets)
-
-            if factor_name in market_data.columns:
+            factor_type = factor.type.lower()
+            min_value = None
+            max_value = None
+            if factor_type == FactorTypeEnum.SLIDER.value:
                 min_value = market_data[factor_name].min()
                 max_value = market_data[factor_name].max()
 
-                if factor_name == "dividend_count":
-                    min_value = 0
-                    max_value = 52
-
-                result.append(
-                    {
-                        "factor": factor_name,
-                        "description": factor.description,
-                        "unit": str(factor.unit).lower(),
-                        "category": str(factor.category).lower(),
-                        "direction": factor.sort_direction,
-                        "min_value": floor_to_integer(min_value),
-                        "max_value": ceil_to_integer(max_value),
-                        "presets": classified_presets,
-                    }
-                )
-            else:
-                raise ValueError(f"팩터 '{factor_name}'가 데이터에 존재하지 않습니다.")
+            result.append(
+                {
+                    "factor": factor_name,
+                    "description": factor.description,
+                    "unit": str(factor.unit).lower(),
+                    "category": str(factor.category).lower(),
+                    "direction": factor.sort_direction,
+                    "min_value": floor_to_integer(min_value),
+                    "max_value": ceil_to_integer(max_value),
+                    "presets": classified_presets,
+                    "type": factor_type,
+                }
+            )
 
         return result
 
@@ -198,11 +195,14 @@ class ScreenerUtils:
         unique_tickers = df["Code"].unique().tolist()
 
         dividend_data = self._get_dividend_data_for_tickers(unique_tickers)
+        dividend_utils = DividendUtils()
+        dividend_frequencies = dividend_utils.get_dividend_frequency(unique_tickers)
 
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
         df["consecutive_dividend_payment_count"] = np.nan
         df["dividend_count"] = np.nan
+        df["dividend_frequency"] = ""
 
         for index, row in df.iterrows():
             ticker = row["Code"]
@@ -222,6 +222,9 @@ class ScreenerUtils:
 
             if ticker in dividend_data["dividend_count"]:
                 df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
+
+            if ticker in dividend_frequencies:
+                df.at[index, "dividend_frequency"] = dividend_frequencies[ticker]
 
         # 필터링된 데이터프레임 선택 (모든 컬럼 유지)
         df_result = df[df["market"].isin(["KOSPI", "KOSDAQ"])].copy()
@@ -307,11 +310,14 @@ class ScreenerUtils:
         unique_tickers = df["Code"].unique().tolist()
 
         dividend_data = self._get_dividend_data_for_tickers(unique_tickers)
+        dividend_utils = DividendUtils()
+        dividend_frequencies = dividend_utils.get_dividend_frequency(unique_tickers)
 
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
         df["consecutive_dividend_payment_count"] = np.nan
         df["dividend_count"] = np.nan
+        df["dividend_frequency"] = ""
         df["last_dividend_per_share"] = np.nan
 
         for index, row in df.iterrows():
@@ -335,6 +341,9 @@ class ScreenerUtils:
 
             if ticker in dividend_data["dividend_per_share"]:
                 df.at[index, "last_dividend_per_share"] = dividend_data["dividend_per_share"][ticker]
+
+            if ticker in dividend_frequencies:
+                df.at[index, "dividend_frequency"] = dividend_frequencies[ticker]
 
         # 필터링된 데이터프레임 선택 (모든 컬럼 유지)
         df_result = df[df["market"].isin(["NAS", "NYS"])].copy()
@@ -522,6 +531,12 @@ class ScreenerUtils:
                     df = df[df[factor] >= filter["above"]]
                 if filter["below"] is not None:
                     df = df[df[factor] <= filter["below"]]
+                if filter["values"] is not None:
+                    # OR
+                    value_conditions = pd.Series(False, index=df.index)
+                    for value in filter["values"]:
+                        value_conditions = value_conditions | (df[factor] == value)
+                    df = df[value_conditions]
 
         stock_codes = df["Code"].tolist()
         return stock_codes
@@ -722,6 +737,7 @@ class ScreenerUtils:
         for preset in presets:
             classified_preset = {
                 "display": preset.display,
+                "value": preset.value,
                 "above": preset.above,
                 "below": preset.below,
             }

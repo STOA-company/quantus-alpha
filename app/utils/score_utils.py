@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from app.cache.factors import factors_cache, etf_factors_cache
 from app.utils.test_utils import time_it
-from app.common.constants import NON_NUMERIC_COLUMNS, NON_NUMERIC_COLUMNS_ETF
 
 
 class ScoreUtils:
@@ -18,10 +17,8 @@ class ScoreUtils:
         df_copy = df.copy()
         columns = df_copy.columns.tolist()
 
-        non_numeric_columns = NON_NUMERIC_COLUMNS_ETF if self.asset_type == "etf" else NON_NUMERIC_COLUMNS
-
-        # 비수치 컬럼 사전 필터링
-        numeric_columns = [col for col in columns if col not in non_numeric_columns]
+        # 데이터 타입을 직접 확인하여 숫자형 컬럼 식별
+        numeric_columns = [col for col in columns if pd.api.types.is_numeric_dtype(df_copy[col])]
 
         # NaN -> 중앙값
         for col in numeric_columns:

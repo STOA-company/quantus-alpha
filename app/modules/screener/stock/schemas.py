@@ -43,6 +43,7 @@ class FactorResponse(BaseModel):
 
 class FilterCondition(BaseModel):
     factor: str
+    values: Optional[List[str]] = None
     above: Optional[float] = None
     below: Optional[float] = None
 

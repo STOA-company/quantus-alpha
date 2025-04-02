@@ -40,10 +40,9 @@ class ScreenerStockService(BaseScreenerService):
         """
         try:
             factors = screener_utils.get_factors(market)
-            nation = "global"
             if market in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 nation = "us"
-            elif market in [MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
+            elif market in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
                 nation = "kr"
             elif market == MarketEnum.ALL:
                 nation = "global"
@@ -52,13 +51,10 @@ class ScreenerStockService(BaseScreenerService):
             for factor in factors:
                 if factor["unit"] == "small_price":
                     unit = "원" if nation == "kr" else "$"
-                    type = "input"
                 elif factor["unit"] == "big_price":
                     unit = "억원" if nation == "kr" else "K$"
-                    type = "input"
                 else:
                     unit = UNIT_MAP[factor["unit"]]
-                    type = "slider"
 
                 result.append(
                     {
@@ -69,7 +65,7 @@ class ScreenerStockService(BaseScreenerService):
                         "direction": factor["direction"],
                         "min_value": factor["min_value"],
                         "max_value": factor["max_value"],
-                        "type": type,
+                        "type": factor["type"],
                         "presets": factor["presets"],
                     }
                 )
@@ -211,6 +207,7 @@ class ScreenerStockService(BaseScreenerService):
     def get_filtered_data_count(
         self,
         market_filter: Optional[MarketEnum] = None,
+        exclude_filters: Optional[List[ExcludeEnum]] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
         columns: Optional[List[str]] = None,
@@ -219,7 +216,7 @@ class ScreenerStockService(BaseScreenerService):
         필터링된 주식 개수 조회
         """
         try:
-            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters)
+            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters, exclude_filters)
             filtered_df = screener_utils.get_filtered_stocks_df(market_filter, stocks, columns)
 
             return len(filtered_df)
