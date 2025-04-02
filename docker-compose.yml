@@ -84,7 +84,7 @@ services:
             context: .
             dockerfile: Dockerfile
         container_name: chat_worker
-        command: poetry run celery -A app.modules.chat.worker.celery_app worker --loglevel=info -Q chat_queue
+        command: poetry run celery -A app.modules.chat.worker worker --loglevel=info -Q chat_queue
         environment:
             ENV: ${ENV:-dev}
             REDIS_HOST: redis
