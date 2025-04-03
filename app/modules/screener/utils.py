@@ -535,11 +535,12 @@ class ScreenerUtils:
                 if filter["below"] is not None:
                     df = df[df[factor] <= filter["below"]]
                 if filter["values"] is not None:
-                    # OR
-                    value_conditions = pd.Series(False, index=df.index)
-                    for value in filter["values"]:
-                        value_conditions = value_conditions | (df[factor] == value)
-                    df = df[value_conditions]
+                    if len(filter["values"]) > 0:
+                        # OR
+                        value_conditions = pd.Series(False, index=df.index)
+                        for value in filter["values"]:
+                            value_conditions = value_conditions | (df[factor] == value)
+                        df = df[value_conditions]
 
         stock_codes = df["Code"].tolist()
         return stock_codes

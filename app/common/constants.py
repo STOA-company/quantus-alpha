@@ -480,7 +480,7 @@ UNKNOWN_USER_EN = "(Unknown User)"
 SELECT_MAP = {
     "dividend_frequency": [
         {"value": "annual", "display": "연간"},
-        {"value": "semi_annual", "display": "반기"},
+        {"value": "semi-annual", "display": "반기"},
         {"value": "quarter", "display": "분기"},
         {"value": "month", "display": "월간"},
         {"value": "week", "display": "주간"},
