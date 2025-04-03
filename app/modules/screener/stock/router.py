@@ -179,7 +179,7 @@ async def create_or_update_group(
     """
     try:
         if group_filter.id:
-            is_success = await screener_service.update_group(
+            group_filters = await screener_service.update_group(
                 group_id=group_filter.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
@@ -190,9 +190,9 @@ async def create_or_update_group(
                 category=group_filter.category,
                 sort_info=group_filter.sort_info,
             )
-            message = "Filter updated successfully"
+            return group_filters
         else:
-            is_success = await screener_service.create_group(
+            group_filters = await screener_service.create_group(
                 user_id=current_user.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
@@ -201,9 +201,7 @@ async def create_or_update_group(
                 custom_filters=group_filter.custom_filters,
                 type=group_filter.type,
             )
-            message = "Group created successfully"
-        if is_success:
-            return {"message": message}
+            return group_filters
     except CustomException as e:
         logger.exception(f"Error creating group: {e}")
         raise HTTPException(status_code=e.status_code, detail=e.message)
