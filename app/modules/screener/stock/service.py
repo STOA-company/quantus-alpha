@@ -12,6 +12,7 @@ from app.common.constants import (
     NON_NUMERIC_COLUMNS,
     FACTOR_MAP_EN,
     UNIT_MAP,
+    SELECT_MAP,
 )
 from app.modules.screener.stock.schemas import StockType
 from app.core.exception.custom import CustomException
@@ -138,7 +139,19 @@ class ScreenerStockService(BaseScreenerService):
                 for col in selected_columns:
                     if col in NON_NUMERIC_COLUMNS:
                         if col in row:
-                            stock_data[col] = row[col]
+                            raw_value = row[col]
+                            if col in SELECT_MAP:
+                                value_info = next(
+                                    (
+                                        {"value": item["value"], "display": item["display"]}
+                                        for item in SELECT_MAP[col]
+                                        if item["value"] == raw_value
+                                    ),
+                                    {"value": raw_value, "display": raw_value},
+                                )
+                                stock_data[col] = value_info
+                            else:
+                                stock_data[col] = raw_value
                     elif col == "score":
                         stock_data[col] = {"value": float(row[col]), "unit": ""}
                     elif col in row:
