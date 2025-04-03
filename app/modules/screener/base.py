@@ -533,7 +533,7 @@ class BaseScreenerService(ABC):
             await asyncio.gather(*insert_tasks)
 
             # get_group_filters와 동일한 형식으로 반환
-            return self.get_group_filters(group_id)
+            return group_id
 
         except Exception as e:
             if hasattr(e, "orig") and "1062" in str(getattr(e, "orig", "")):
@@ -670,7 +670,7 @@ class BaseScreenerService(ABC):
             await asyncio.gather(*insert_tasks)
 
             # get_group_filters와 동일한 형식으로 반환
-            return self.get_group_filters(group_id)
+            return group_id
 
         except Exception as e:
             if hasattr(e, "orig") and "1062" in str(getattr(e, "orig", "")):
