@@ -27,6 +27,8 @@ class FactorsCache:
         elif self.asset_type == "etf":
             condition["is_etf"] = True
 
+        condition["is_active"] = True
+
         factors = database._select(
             "factors",
             columns=["factor", "description", "unit", "category", "sort_direction", "min_value", "max_value"],
