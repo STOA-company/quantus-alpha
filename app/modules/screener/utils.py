@@ -79,8 +79,11 @@ class ScreenerUtils:
                 min_value = None
                 max_value = None
                 if factor_type == FactorTypeEnum.SLIDER.value:
-                    min_value = market_data[factor_name].min()
-                    max_value = market_data[factor_name].max()
+                    market_data[factor_name] = pd.to_numeric(market_data[factor_name], errors="coerce")
+                    valid_data = market_data[factor_name].dropna()
+                    if not valid_data.empty:
+                        min_value = valid_data.min()
+                        max_value = valid_data.max()
 
                 result.append(
                     {
