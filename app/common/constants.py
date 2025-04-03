@@ -190,6 +190,12 @@ FACTOR_MAP = {
     "evrnd": "EV/R&D",
     "evcf": "EV/CF",
     "evac": "EV/AC",
+    # RS
+    "Log_RS_5": "RS (5일)",
+    "Log_RS_20": "RS (20일)",
+    "Log_RS_50": "RS (50일)",
+    "Log_RS_100": "RS (100일)",
+    "Log_RS_200": "RS (200일)",
     ########################################################
     # ETF
     ########################################################
@@ -284,6 +290,12 @@ FACTOR_MAP_EN = {
     "consecutive_dividend_payment_count": "Consecutive Dividend Payment Count",
     "dividend_count": "Dividend Count",
     "dividend_frequency": "Dividend Frequency",
+    # RS
+    "Log_RS_5": "RS (5-day)",
+    "Log_RS_20": "RS (20-day)",
+    "Log_RS_50": "RS (50-day)",
+    "Log_RS_100": "RS (100-day)",
+    "Log_RS_200": "RS (200-day)",
     ########################################################
     # ETF
     ########################################################
@@ -390,6 +402,12 @@ FACTOR_KOREAN_TO_ENGLISH_MAP = {
     "POR (TTM)": "POR (TTM)",
     "PSR": "PSR",
     "PSR (TTM)": "PSR (TTM)",
+    # RS
+    "RS (5일)": "RS (5-day)",
+    "RS (20일)": "RS (20-day)",
+    "RS (50일)": "RS (50-day)",
+    "RS (100일)": "RS (100-day)",
+    "RS (200일)": "RS (200-day)",
 }
 
 REVERSE_FACTOR_MAP = {v: k for k, v in FACTOR_MAP.items()}
