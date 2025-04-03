@@ -326,9 +326,10 @@ class ScreenerStockService(BaseScreenerService):
                 await self.create_group(user_id=user.id, type=StockType.ETF)
 
     def get_multi_select_factors(self):
-        """멀티 셀렉트 팩터 정보를 FACTOR_MAP으로 매핑하여 반환"""
         mapped_select_map = {}
         for key, value in SELECT_MAP.items():
             mapped_key = FACTOR_MAP.get(key, key)
-            mapped_select_map[mapped_key] = value
+            filtered_values = [item for item in value if item["value"] not in ["no_dividend", "insufficient_data"]]
+            if filtered_values:
+                mapped_select_map[mapped_key] = filtered_values
         return mapped_select_map
