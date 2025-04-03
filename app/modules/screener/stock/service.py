@@ -9,9 +9,10 @@ from app.modules.screener.stock.schemas import MarketEnum, ExcludeEnum
 from app.modules.screener.utils import screener_utils
 from app.common.constants import (
     FACTOR_MAP,
-    NON_NUMERIC_COLUMNS,
+    BASE_COLUMNS,
     FACTOR_MAP_EN,
     UNIT_MAP,
+    SELECT_MAP,
 )
 from app.modules.screener.stock.schemas import StockType
 from app.core.exception.custom import CustomException
@@ -40,10 +41,9 @@ class ScreenerStockService(BaseScreenerService):
         """
         try:
             factors = screener_utils.get_factors(market)
-            nation = "global"
             if market in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 nation = "us"
-            elif market in [MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
+            elif market in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
                 nation = "kr"
             elif market == MarketEnum.ALL:
                 nation = "global"
@@ -52,13 +52,10 @@ class ScreenerStockService(BaseScreenerService):
             for factor in factors:
                 if factor["unit"] == "small_price":
                     unit = "원" if nation == "kr" else "$"
-                    type = "input"
                 elif factor["unit"] == "big_price":
                     unit = "억원" if nation == "kr" else "K$"
-                    type = "input"
                 else:
                     unit = UNIT_MAP[factor["unit"]]
-                    type = "slider"
 
                 result.append(
                     {
@@ -69,7 +66,7 @@ class ScreenerStockService(BaseScreenerService):
                         "direction": factor["direction"],
                         "min_value": factor["min_value"],
                         "max_value": factor["max_value"],
-                        "type": type,
+                        "type": factor["type"],
                         "presets": factor["presets"],
                     }
                 )
@@ -140,9 +137,18 @@ class ScreenerStockService(BaseScreenerService):
                 stock_data = {}
 
                 for col in selected_columns:
-                    if col in NON_NUMERIC_COLUMNS:
-                        if col in row:
-                            stock_data[col] = row[col]
+                    if col in BASE_COLUMNS:
+                        stock_data[col] = row[col]
+                    elif col in SELECT_MAP:
+                        value_info = next(
+                            (
+                                {"value": item["value"], "display": item["display"]}
+                                for item in SELECT_MAP[col]
+                                if item["value"] == row[col]
+                            ),
+                            {"value": row[col], "display": row[col]},
+                        )
+                        stock_data[col] = value_info
                     elif col == "score":
                         stock_data[col] = {"value": float(row[col]), "unit": ""}
                     elif col in row:
@@ -211,6 +217,7 @@ class ScreenerStockService(BaseScreenerService):
     def get_filtered_data_count(
         self,
         market_filter: Optional[MarketEnum] = None,
+        exclude_filters: Optional[List[ExcludeEnum]] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
         columns: Optional[List[str]] = None,
@@ -219,7 +226,7 @@ class ScreenerStockService(BaseScreenerService):
         필터링된 주식 개수 조회
         """
         try:
-            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters)
+            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters, exclude_filters)
             filtered_df = screener_utils.get_filtered_stocks_df(market_filter, stocks, columns)
 
             return len(filtered_df)
@@ -281,7 +288,7 @@ class ScreenerStockService(BaseScreenerService):
 
             factors = factors_cache.get_configs()
             for col in ordered_columns:
-                if col in NON_NUMERIC_COLUMNS or col in ["Code", "Name"]:
+                if col in BASE_COLUMNS or col in ["Code", "Name"]:
                     continue
                 elif col == "score":
                     sorted_df[col] = sorted_df[col].astype(float)
@@ -317,3 +324,12 @@ class ScreenerStockService(BaseScreenerService):
                 all_sectors = self.get_available_sectors()
                 await self.create_group(user_id=user.id, sector_filter=all_sectors)
                 await self.create_group(user_id=user.id, type=StockType.ETF)
+
+    def get_multi_select_factors(self):
+        mapped_select_map = {}
+        for key, value in SELECT_MAP.items():
+            mapped_key = FACTOR_MAP.get(key, key)
+            filtered_values = [item for item in value if item["value"] not in ["no_dividend", "insufficient_data"]]
+            if filtered_values:
+                mapped_select_map[mapped_key] = filtered_values
+        return mapped_select_map

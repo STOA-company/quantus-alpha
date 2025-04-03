@@ -8,7 +8,8 @@ from Aws.logic.s3 import get_data_from_bucket
 from app.common.constants import (
     FACTOR_MAP,
     FACTOR_MAP_EN,
-    NON_NUMERIC_COLUMNS_ETF,
+    BASE_COLUMNS_ETF,
+    SELECT_MAP,
     PARQUET_DIR,
     UNIT_MAP,
 )
@@ -42,6 +43,8 @@ class ScreenerETFService(BaseScreenerService):
 
             if market in [ETFMarketEnum.US, ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
                 nation = "us"
+            elif market == ETFMarketEnum.ALL:
+                nation = "global"
             else:
                 nation = "kr"
 
@@ -49,13 +52,10 @@ class ScreenerETFService(BaseScreenerService):
             for factor in factors:
                 if factor["unit"] == "small_price":
                     unit = "원" if nation == "kr" else "$"
-                    type = "input"
                 elif factor["unit"] == "big_price":
                     unit = "억원" if nation == "kr" else "K$"
-                    type = "input"
                 else:
                     unit = UNIT_MAP[factor["unit"]]
-                    type = "slider"
 
                 result.append(
                     {
@@ -66,7 +66,7 @@ class ScreenerETFService(BaseScreenerService):
                         "direction": factor["direction"],
                         "min_value": factor["min_value"],
                         "max_value": factor["max_value"],
-                        "type": type,
+                        "type": factor["type"],
                         "presets": factor["presets"],
                     }
                 )
@@ -94,9 +94,7 @@ class ScreenerETFService(BaseScreenerService):
         if columns is None:
             columns = []
 
-        non_numeric_columns = [col for col in NON_NUMERIC_COLUMNS_ETF]
-
-        if sort_by not in columns and sort_by not in non_numeric_columns:
+        if sort_by not in columns and sort_by not in BASE_COLUMNS_ETF:
             raise CustomException(status_code=400, message="sort_by must be in columns")
 
         etfs = screener_utils.filter_etfs(market_filter, custom_filters)
@@ -138,9 +136,18 @@ class ScreenerETFService(BaseScreenerService):
 
             # 숫자형 데이터 처리
             for col in sorted_df.columns:
-                if col in NON_NUMERIC_COLUMNS_ETF:
-                    if col in row:
-                        etf_data[col] = row[col]
+                if col in BASE_COLUMNS_ETF:
+                    etf_data[col] = row[col]
+                elif col in SELECT_MAP:
+                    value_info = next(
+                        (
+                            {"value": item["value"], "display": item["display"]}
+                            for item in SELECT_MAP[col]
+                            if item["value"] == row[col]
+                        ),
+                        {"value": row[col], "display": row[col]},
+                    )
+                    etf_data[col] = value_info
                 elif col == "score":
                     etf_data[col] = float(row[col])
                 elif col in row:
@@ -276,7 +283,7 @@ class ScreenerETFService(BaseScreenerService):
 
             factors = etf_factors_cache.get_configs()
             for col in ordered_columns:
-                if col in NON_NUMERIC_COLUMNS_ETF or col in ["Code", "Name"]:
+                if col in BASE_COLUMNS_ETF or col in ["Code", "Name"]:
                     continue
                 elif col == "score":
                     sorted_df[col] = sorted_df[col].astype(float)

@@ -10,32 +10,25 @@ USE = pytz.timezone("America/New_York")
 
 NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6", "momentum_12", "current_ratio"]
 
-NON_NUMERIC_COLUMNS = ["Code", "Name", "market", "sector", "country", "score", "Name_en", "sector_en"]
-
-NON_NUMERIC_COLUMNS_ETF = [
+BASE_COLUMNS = [
     "Code",
-    "country",
-    "score",
-    "ticker",
-    "ctry",
-    "kr_name",
-    "en_name",
     "Name",
+    "Name_en",
     "market",
-    "listing_date",
-    "base_index_name",
-    "replication_method",
-    "base_asset_classification",
-    "manager",
-    "tax_type",
-    "is_hedge",
-    "last_dividend_date",
-    "manager",
-    "tax_type",
-    "is_hedge",
+    "sector",
+    "sector_en",
+    "country",
 ]
 
-ETF_DEFAULT_SCREENER_COLUMNS = ["ticker", "market", "kr_name", "en_name"]
+BASE_COLUMNS_ETF = [
+    "Code",
+    "Name",
+    "Name_en",
+    "market",
+    "sector",
+    "sector_en",
+    "country",
+]
 
 UNIT_MAP = {"percentage": "%", "times": "회", "score": "점", "multiple": "배", "ratio": ""}
 UNIT_MAP_EN = {"percentage": "%", "times": "", "score": "", "multiple": "", "ratio": ""}
@@ -174,7 +167,8 @@ FACTOR_MAP = {
     "ttm_dividend_yield": "배당 수익률 (TTM)",
     "consecutive_dividend_growth_count": "연속 배당 성장 횟수",
     "consecutive_dividend_payment_count": "연속 배당 지급 횟수",
-    "dividend_count": "배당 주기",
+    "dividend_count": "연평균 배당 횟수",
+    "dividend_frequency": "배당 주기",
     # 가치
     "pbr": "PBR",
     "pcr": "PCR",
@@ -196,6 +190,12 @@ FACTOR_MAP = {
     "evrnd": "EV/R&D",
     "evcf": "EV/CF",
     "evac": "EV/AC",
+    # RS
+    "Log_RS_5": "RS (5일)",
+    "Log_RS_20": "RS (20일)",
+    "Log_RS_50": "RS (50일)",
+    "Log_RS_100": "RS (100일)",
+    "Log_RS_200": "RS (200일)",
     ########################################################
     # ETF
     ########################################################
@@ -288,7 +288,14 @@ FACTOR_MAP_EN = {
     "ttm_dividend_yield": "TTM Dividend Yield",
     "consecutive_dividend_growth_count": "Consecutive Dividend Growth Count",
     "consecutive_dividend_payment_count": "Consecutive Dividend Payment Count",
-    "dividend_count": "Dividend Frequency",
+    "dividend_count": "Dividend Count",
+    "dividend_frequency": "Dividend Frequency",
+    # RS
+    "Log_RS_5": "RS (5-day)",
+    "Log_RS_20": "RS (20-day)",
+    "Log_RS_50": "RS (50-day)",
+    "Log_RS_100": "RS (100-day)",
+    "Log_RS_200": "RS (200-day)",
     ########################################################
     # ETF
     ########################################################
@@ -395,6 +402,12 @@ FACTOR_KOREAN_TO_ENGLISH_MAP = {
     "POR (TTM)": "POR (TTM)",
     "PSR": "PSR",
     "PSR (TTM)": "PSR (TTM)",
+    # RS
+    "RS (5일)": "RS (5-day)",
+    "RS (20일)": "RS (20-day)",
+    "RS (50일)": "RS (50-day)",
+    "RS (100일)": "RS (100-day)",
+    "RS (200일)": "RS (200-day)",
 }
 
 REVERSE_FACTOR_MAP = {v: k for k, v in FACTOR_MAP.items()}
@@ -481,3 +494,15 @@ FACTOR_MAP_ETF = {v: k for k, v in FACTOR_MAP.items() if k in ETF_FACTOR_LIST}
 
 UNKNOWN_USER_KO = "(알 수 없는 유저)"
 UNKNOWN_USER_EN = "(Unknown User)"
+
+SELECT_MAP = {
+    "dividend_frequency": [
+        {"value": "annual", "display": "연간"},
+        {"value": "semi-annual", "display": "반기"},
+        {"value": "quarter", "display": "분기"},
+        {"value": "month", "display": "월간"},
+        {"value": "week", "display": "주간"},
+        {"value": "no_dividend", "display": None},
+        {"value": "insufficient_data", "display": None},
+    ],
+}

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from app.models.models_factors import CategoryEnum
+from app.models.models_factors import CategoryEnum, FactorTypeEnum
 from app.models.models_screener import StockType
 from app.modules.screener.etf.enum import ETFMarketEnum
 from typing import Optional, List, Dict
@@ -43,6 +43,8 @@ class FactorResponse(BaseModel):
 
 class FilterCondition(BaseModel):
     factor: str
+    type: Optional[FactorTypeEnum] = FactorTypeEnum.SLIDER
+    values: Optional[List[str]] = None
     above: Optional[float] = None
     below: Optional[float] = None
 

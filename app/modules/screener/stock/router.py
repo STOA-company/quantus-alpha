@@ -61,6 +61,7 @@ def get_filtered_stocks(
                     "factor": REVERSE_FACTOR_MAP[condition.factor],
                     "above": condition.above,
                     "below": condition.below,
+                    "values": condition.values,
                 }
                 for condition in filtered_stocks.custom_filters
             ]
@@ -128,6 +129,7 @@ def get_filtered_stocks_count(
                     "factor": REVERSE_FACTOR_MAP[condition.factor],
                     "above": condition.above,
                     "below": condition.below,
+                    "values": condition.values,
                 }
                 for condition in filtered_stocks.custom_filters
             ]
@@ -135,6 +137,7 @@ def get_filtered_stocks_count(
         total_count = screener_service.get_filtered_data_count(
             market_filter=filtered_stocks.market_filter,
             sector_filter=filtered_stocks.sector_filter,
+            exclude_filters=filtered_stocks.exclude_filters,
             custom_filters=custom_filters,
             columns=[REVERSE_FACTOR_MAP[column] for column in filtered_stocks.factor_filters],
         )
@@ -275,11 +278,11 @@ def get_group_filters(
 
         for stock_filter in stock_filters:
             if stock_filter["factor"] == "시장":
-                market_filter = stock_filter["value"]
+                market_filter = stock_filter["values"][0]
             elif stock_filter["factor"] == "산업":
-                sector_filter.append(stock_filter["value"])
+                sector_filter.extend(stock_filter["values"])
             elif stock_filter["factor"] == "제외":
-                exclude_filters.append(stock_filter["value"])
+                exclude_filters.extend(stock_filter["values"])
             else:
                 custom_filters.append(stock_filter)
 
@@ -438,3 +441,8 @@ def download_filtered_stocks(
 async def init_screener(screener_service: ScreenerStockService = Depends(ScreenerStockService)):
     await screener_service.initialize()
     return {"message": "Screener initialized successfully"}
+
+
+@router.get("/multi")
+def get_multi_select_factors(screener_service: ScreenerStockService = Depends(ScreenerStockService)):
+    return screener_service.get_multi_select_factors()

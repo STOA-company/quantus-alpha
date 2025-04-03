@@ -3,7 +3,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, En
 from sqlalchemy.schema import Index
 from sqlalchemy.orm import relationship
 from app.enum.type import StockType
-from app.models.models_factors import CategoryEnum
+from app.models.models_factors import CategoryEnum, FactorTypeEnum
 
 
 class ScreenerGroup(ServiceBase, BaseMixin):
@@ -33,6 +33,7 @@ class ScreenerStockFilter(ServiceBase, BaseMixin):
     id = Column(Integer, primary_key=True, index=True)
     group_id = Column(Integer, ForeignKey("screener_groups.id", ondelete="CASCADE"), nullable=False)
     factor = Column(String(50), nullable=False)
+    type = Column(Enum(FactorTypeEnum), nullable=False, default=FactorTypeEnum.SLIDER)
     above = Column(Integer, nullable=True)
     below = Column(Integer, nullable=True)
     value = Column(String(50), nullable=True)

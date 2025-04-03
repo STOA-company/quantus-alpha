@@ -1055,6 +1055,7 @@ class ETFDividendFactorExtractor:
                 ttm_dividend_yield = self._calculate_ttm_dividend_yield(dividend_group, current_price)
                 dividend_growth_rate_3y = self._calculate_dividend_growth_rate(dividend_group, 3)
                 dividend_growth_rate_5y = self._calculate_dividend_growth_rate(dividend_group, 5)
+                dividend_frequency = self._calculate_dividend_frequency(dividend_group)
 
                 # 최신 배당 정보
                 if len(dividend_group) > 0:
@@ -1064,6 +1065,7 @@ class ETFDividendFactorExtractor:
                         {
                             "ticker": ticker,
                             "dividend_count": dividend_count,
+                            "dividend_frequency": dividend_frequency,
                             "last_dividend_date": latest_dividend["payment_date"],
                             "last_dividend_per_share": latest_dividend["per_share"],
                             "recent_dividend_yield": recent_dividend_yield,
@@ -1309,6 +1311,66 @@ class ETFDividendFactorExtractor:
 
         return growth_rate
 
+    def _calculate_dividend_frequency(self, ticker_dividends):
+        """
+        배당 주기 계산 함수
+
+        Args:
+            ticker_dividends (DataFrame): 특정 ETF의 배당 데이터
+
+        Returns:
+            str: 배당 주기 (week, month, quarter, semi_annual, annual, no_dividend, insufficient_data)
+        """
+        if len(ticker_dividends) == 0:
+            return "no_dividend"
+
+        if len(ticker_dividends) == 1:
+            return "insufficient_data"
+
+        # 최근 5년치 데이터 고려 (올해 제외)
+        current_year = datetime.datetime.now().year
+        five_years_ago = current_year - 5
+
+        # payment_date가 datetime 타입인지 확인
+        if pd.api.types.is_datetime64_any_dtype(ticker_dividends["payment_date"]):
+            # 올해를 제외한 최근 5년 데이터만 필터링
+            historical_dividends = ticker_dividends[
+                (ticker_dividends["payment_date"].dt.year < current_year)
+                & (ticker_dividends["payment_date"].dt.year >= five_years_ago)
+            ]
+
+            if len(historical_dividends) == 0:
+                return "insufficient_data"
+
+            # 연도별 배당 횟수 계산
+            yearly_counts = historical_dividends["payment_date"].dt.year.value_counts().sort_index()
+
+            # 데이터가 있는 총 연도 수
+            data_years = len(yearly_counts)
+
+            if data_years == 0:
+                return "insufficient_data"
+
+            # 평균 배당 횟수 계산
+            total_payments = sum(yearly_counts)
+            avg_yearly_payments = total_payments / data_years
+
+            # 배당 주기 결정
+            if avg_yearly_payments >= 45:  # 주간 배당 (연 45회 이상)
+                return "week"
+            elif avg_yearly_payments >= 10:  # 월간 배당 (연 10회 이상)
+                return "month"
+            elif avg_yearly_payments >= 3.5:  # 분기 배당 (연 3.5회 이상)
+                return "quarter"
+            elif avg_yearly_payments >= 1.8:  # 반기 배당 (연 1.8회 이상)
+                return "semi_annual"
+            elif avg_yearly_payments >= 0.8:  # 연간 배당 (연 0.8회 이상)
+                return "annual"
+            else:
+                return "no_dividend"
+        else:
+            return "insufficient_data"
+
 
 # 데이터 전처리
 class ETFDataPreprocessor:
@@ -1546,6 +1608,7 @@ class ETFDataPreprocessor:
         all_columns = [
             "ticker",
             "dividend_count",
+            "dividend_frequency",
             "last_dividend_date",
             "last_dividend_per_share",
             "recent_dividend_yield",
