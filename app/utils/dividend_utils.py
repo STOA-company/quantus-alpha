@@ -282,10 +282,17 @@ class DividendUtils:
         if not tickers:
             return {}
 
+        # 배당 횟수 정보 가져오기
+        dividend_count_dict = self.get_dividend_count(tickers)
         payment_dates_dict = self.get_dividend_payment_dates(tickers)
         frequency_dict = {}
 
         for ticker, dates in payment_dates_dict.items():
+            # 배당 횟수가 0이면 no_dividend로 설정
+            if dividend_count_dict.get(ticker, 0) == 0:
+                frequency_dict[ticker] = "no_dividend"
+                continue
+
             if not dates:
                 frequency_dict[ticker] = "no_dividend"
                 continue
@@ -346,7 +353,7 @@ class DividendUtils:
 
         # 배당금이 없는 종목들에 대해 'no_dividend' 설정
         for ticker in tickers:
-            if ticker not in frequency_dict:
+            if ticker not in frequency_dict or dividend_count_dict.get(ticker, 0) == 0:
                 frequency_dict[ticker] = "no_dividend"
 
         return frequency_dict
