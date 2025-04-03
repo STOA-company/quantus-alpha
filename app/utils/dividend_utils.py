@@ -117,7 +117,7 @@ class DividendUtils:
         if not tickers:
             return {}
 
-        two_years_ago = datetime.now() - timedelta(days=2 * 365)
+        five_years_ago = datetime.now() - timedelta(days=5 * 365)
 
         batch_size = 500
         dividend_data_all = []
@@ -128,7 +128,7 @@ class DividendUtils:
             batch_dividend_data = self.db._select(
                 table="dividend_information",
                 columns=["ticker", "ex_date", "per_share"],
-                ex_date__gte=two_years_ago.strftime("%Y-%m-%d"),
+                ex_date__gte=five_years_ago.strftime("%Y-%m-%d"),
                 ticker__in=batch_tickers,
             )
 
@@ -156,7 +156,7 @@ class DividendUtils:
             total_years = len(year_counts)
 
             if total_years > 0:
-                avg_frequency = round(total_payments / total_years)
+                avg_frequency = round(total_payments / total_years, 2)
                 frequency_dict[ticker] = avg_frequency
             else:
                 frequency_dict[ticker] = 0
