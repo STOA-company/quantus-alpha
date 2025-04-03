@@ -485,5 +485,6 @@ SELECT_MAP = {
         {"value": "month", "display": "월간"},
         {"value": "week", "display": "주간"},
         {"value": "no_dividend", "display": ""},
+        {"value": "insufficient_data", "display": ""},
     ],
 }

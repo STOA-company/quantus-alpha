@@ -324,3 +324,11 @@ class ScreenerStockService(BaseScreenerService):
                 all_sectors = self.get_available_sectors()
                 await self.create_group(user_id=user.id, sector_filter=all_sectors)
                 await self.create_group(user_id=user.id, type=StockType.ETF)
+
+    def get_multi_select_factors(self):
+        """멀티 셀렉트 팩터 정보를 FACTOR_MAP으로 매핑하여 반환"""
+        mapped_select_map = {}
+        for key, value in SELECT_MAP.items():
+            mapped_key = FACTOR_MAP.get(key, key)
+            mapped_select_map[mapped_key] = value
+        return mapped_select_map

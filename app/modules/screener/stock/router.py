@@ -441,3 +441,8 @@ def download_filtered_stocks(
 async def init_screener(screener_service: ScreenerStockService = Depends(ScreenerStockService)):
     await screener_service.initialize()
     return {"message": "Screener initialized successfully"}
+
+
+@router.get("/multi")
+def get_multi_select_factors(screener_service: ScreenerStockService = Depends(ScreenerStockService)):
+    return screener_service.get_multi_select_factors()
