@@ -9,7 +9,7 @@ from app.modules.screener.stock.schemas import MarketEnum, ExcludeEnum
 from app.modules.screener.utils import screener_utils
 from app.common.constants import (
     FACTOR_MAP,
-    NON_NUMERIC_COLUMNS,
+    BASE_COLUMNS,
     FACTOR_MAP_EN,
     UNIT_MAP,
     SELECT_MAP,
@@ -137,21 +137,18 @@ class ScreenerStockService(BaseScreenerService):
                 stock_data = {}
 
                 for col in selected_columns:
-                    if col in NON_NUMERIC_COLUMNS:
-                        if col in row:
-                            raw_value = row[col]
-                            if col in SELECT_MAP:
-                                value_info = next(
-                                    (
-                                        {"value": item["value"], "display": item["display"]}
-                                        for item in SELECT_MAP[col]
-                                        if item["value"] == raw_value
-                                    ),
-                                    {"value": raw_value, "display": raw_value},
-                                )
-                                stock_data[col] = value_info
-                            else:
-                                stock_data[col] = raw_value
+                    if col in BASE_COLUMNS:
+                        stock_data[col] = row[col]
+                    elif col in SELECT_MAP:
+                        value_info = next(
+                            (
+                                {"value": item["value"], "display": item["display"]}
+                                for item in SELECT_MAP[col]
+                                if item["value"] == row[col]
+                            ),
+                            {"value": row[col], "display": row[col]},
+                        )
+                        stock_data[col] = value_info
                     elif col == "score":
                         stock_data[col] = {"value": float(row[col]), "unit": ""}
                     elif col in row:
@@ -291,7 +288,7 @@ class ScreenerStockService(BaseScreenerService):
 
             factors = factors_cache.get_configs()
             for col in ordered_columns:
-                if col in NON_NUMERIC_COLUMNS or col in ["Code", "Name"]:
+                if col in BASE_COLUMNS or col in ["Code", "Name"]:
                     continue
                 elif col == "score":
                     sorted_df[col] = sorted_df[col].astype(float)
