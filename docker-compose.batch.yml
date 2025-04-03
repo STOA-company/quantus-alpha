@@ -2,7 +2,7 @@ services:
     celery_worker:
         build:
             context: .
-            dockerfile: Dockerfile
+            dockerfile: Dockerfile.batch
         command: python -m app.celery_worker
         env_file:
             - .env.${ENV:-dev}

@@ -172,6 +172,7 @@ def is_us_market_open_or_recently_closed(extra_hours=1):
     try:
         calendar = ecals.get_calendar("XNYS")  # 뉴욕 증권거래소
         current_time = now_utc()
+        current_time_aware = current_time.replace(tzinfo=utc_tz)
 
         # 오늘이 거래일인지 확인
         today_date = current_time.date()
@@ -179,31 +180,21 @@ def is_us_market_open_or_recently_closed(extra_hours=1):
             return False
 
         # 현재 시장이 열려있는지 확인
-        if calendar.is_open_on_minute(current_time):
+        if calendar.is_open_on_minute(current_time_aware):
             return True
 
         # 시장 마감 시간 확인
         today_schedule = calendar.schedule.loc[today_date.strftime("%Y-%m-%d")]
         close_time = today_schedule["close"].to_pydatetime()  # Pandas Timestamp를 datetime 객체로 변환
 
-        # timezone-aware인 close_time도 naive로 변환
-        close_time_naive = datetime(
-            close_time.year, close_time.month, close_time.day, close_time.hour, close_time.minute, close_time.second
-        )
+        # close_time을 UTC로 변환
+        close_time_utc = close_time.astimezone(utc_tz)
 
-        # 현재 시간을 timezone-naive로 변환
-        current_time_naive = datetime(
-            current_time.year,
-            current_time.month,
-            current_time.day,
-            current_time.hour,
-            current_time.minute,
-            current_time.second,
-        )
+        # 현재 시간과 마감 시간의 차이를 계산 (모두 UTC 기준)
+        time_diff = (current_time_aware - close_time_utc).total_seconds()
 
-        # 마감 후 extra_hours 시간 이내인지 확인
-        time_since_close = close_time_naive - current_time_naive
-        return time_since_close.total_seconds() <= extra_hours * 3600
+        # 현재 시간이 마감 시간 이후이고, 그 차이가 extra_hours 이내인지 확인
+        return 0 <= time_diff <= extra_hours * 3600
 
     except Exception as e:
         logging.error(f"Error in is_us_market_open_or_recently_closed: {str(e)}")

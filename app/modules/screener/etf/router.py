@@ -1,6 +1,8 @@
-import io
 from typing import Dict, List, Literal
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
+import time
+from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 
 from app.batches.run_etf_screener import run_etf_screener_data
 from app.enum.type import StockType
@@ -42,6 +44,7 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
             custom_filters = [
                 {
                     "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "values": condition.values,
                     "above": condition.above,
                     "below": condition.below,
                 }
@@ -74,6 +77,9 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
             lang=filtered_etf.lang,
         )
 
+        if not etfs_data:
+            return {"data": [], "has_next": False}
+
         has_next = filtered_etf.offset * filtered_etf.limit + filtered_etf.limit < total_count
 
         print("ETF", etfs_data[0].keys())
@@ -104,6 +110,7 @@ def get_filtered_etfs_count(
                 "factor": REVERSE_FACTOR_MAP[condition.factor],
                 "above": condition.above,
                 "below": condition.below,
+                "values": condition.values,
             }
             for condition in filtered_etf.custom_filters
         ]
@@ -116,37 +123,6 @@ def get_filtered_etfs_count(
     )
 
     return {"count": total_count}
-
-
-@router.post("/download", response_model=Dict)
-def download_filtered_etfs(
-    filtered_etf: FilteredETF, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)
-):
-    custom_filters = []
-    if filtered_etf.custom_filters:
-        custom_filters = [
-            {
-                "factor": condition.factor,
-                "above": condition.above,
-                "below": condition.below,
-            }
-            for condition in filtered_etf.custom_filters
-        ]
-    sorted_df = screener_etf_service.get_filtered_data(
-        market_filter=filtered_etf.market_filter,
-        sector_filter=filtered_etf.sector_filter,
-        custom_filters=custom_filters,
-        columns=[REVERSE_FACTOR_MAP[column] for column in filtered_etf.factor_filters],
-    )
-
-    stream = io.StringIO()
-    sorted_df.to_csv(stream, index=False, encoding="utf-8-sig")  # 한글 인코딩
-
-    return Response(
-        content=stream.getvalue(),
-        media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="filtered_etfs.csv"'},
-    )
 
 
 @router.get("/groups", response_model=List[GroupMetaData])
@@ -257,7 +233,7 @@ def get_group_filters(
 
     for stock_filter in stock_filters:
         if stock_filter["factor"] == "시장":
-            market_filter = stock_filter["value"]
+            market_filter = stock_filter["values"][0]
         elif stock_filter["factor"] == "산업":
             continue
         else:
@@ -357,8 +333,57 @@ def update_parquet(ctry: Literal["KR", "US"], screener_etf_service: ScreenerETFS
 @router.get("/old/parquet")
 def get_old_parquet(screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)):
     try:
-        run_etf_screener_data()
+        run_etf_screener_data("KR")
+        run_etf_screener_data("US")
         return True
     except Exception as e:
         logger.exception(e)
         raise e
+
+
+@router.post("/download")
+async def download_filtered_etfs(
+    filtered_etfs: FilteredETF, screener_service: ScreenerETFService = Depends(ScreenerETFService)
+):
+    custom_filters = []
+    if filtered_etfs.custom_filters:
+        custom_filters = [
+            {
+                "factor": REVERSE_FACTOR_MAP[condition.factor],
+                "above": condition.above,
+                "below": condition.below,
+            }
+            for condition in filtered_etfs.custom_filters
+        ]
+
+    request_columns = ["Code", "Name", "country"]
+    reverse_factor_map = REVERSE_FACTOR_MAP
+    if filtered_etfs.lang == "en":
+        reverse_factor_map = REVERSE_FACTOR_MAP_EN
+
+    for column in [reverse_factor_map[column] for column in filtered_etfs.factor_filters]:
+        if column not in request_columns:
+            request_columns.append(column)
+
+    sort_by = "score"
+    ascending = False
+    if filtered_etfs.sort_info:
+        sort_by = reverse_factor_map[filtered_etfs.sort_info.sort_by]
+        ascending = filtered_etfs.sort_info.ascending
+
+    df = screener_service.get_filtered_etfs_download(
+        market_filter=filtered_etfs.market_filter,
+        custom_filters=custom_filters,
+        columns=request_columns,
+        sort_by=sort_by,
+        ascending=ascending,
+        lang=filtered_etfs.lang,
+    )
+
+    if df is None or df.empty:
+        return JSONResponse(content={"error": "No data found"}, status_code=404)
+
+    filename = f"temp_export_{int(time.time())}.csv"
+    df.to_csv(filename, index=False)
+
+    return FileResponse(path=filename, filename="etfs_export.csv", media_type="text/csv")

@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from app.cache.factors import factors_cache, etf_factors_cache
 from app.utils.test_utils import time_it
-from app.common.constants import NON_NUMERIC_COLUMNS, NON_NUMERIC_COLUMNS_ETF
+from app.models.models_factors import FactorTypeEnum
 
 
 class ScoreUtils:
@@ -18,20 +18,30 @@ class ScoreUtils:
         df_copy = df.copy()
         columns = df_copy.columns.tolist()
 
-        non_numeric_columns = NON_NUMERIC_COLUMNS_ETF if self.asset_type == "etf" else NON_NUMERIC_COLUMNS
+        # 데이터 타입을 직접 확인하여 숫자형 컬럼 식별
+        numeric_columns = [col for col in columns if pd.api.types.is_numeric_dtype(df_copy[col])]
 
-        # 비수치 컬럼 사전 필터링
-        numeric_columns = [col for col in columns if col not in non_numeric_columns]
-
-        # NaN -> 중앙값
+        # SLIDER 타입 팩터 식별
+        slider_factors = []
         for col in numeric_columns:
-            df_copy[col] = pd.to_numeric(df_copy[col], errors="coerce")
-            df_copy[col] = df_copy[col].fillna(df_copy[col].median())
+            config = self.factors_cache.get_configs().get(col)
+            if not config:
+                continue
+            factor = self.factors_cache.get_configs().get(col)
+            if factor and factor.get("type") == FactorTypeEnum.SLIDER.value:
+                slider_factors.append(col)
+
+        # SLIDER 타입 팩터에서 NULL 값을 가진 종목 제외
+        for col in slider_factors:
+            df_copy = df_copy[~df_copy[col].isna()]
+
+        if df_copy.empty:
+            return pd.DataFrame()
 
         n_rows = len(df_copy)
 
         factor_ranks = np.ones((n_rows, 0))  # 각 팩터 별 순위 초기화
-        max_ranks_per_factor = []  # 각 팩터의 최대 순위(꼴등) 저장
+        max_ranks_per_factor = []
 
         for col in numeric_columns:
             config = self.factors_cache.get_configs().get(col)
@@ -59,7 +69,7 @@ class ScoreUtils:
 
             factor_ranks = np.column_stack((factor_ranks, ranks.values))
 
-        score_df = pd.DataFrame({"Code": df["Code"].values, "score": np.zeros(n_rows)})
+        score_df = pd.DataFrame({"Code": df_copy["Code"].values, "score": np.zeros(n_rows)})
 
         if factor_ranks.shape[1] > 0:
             # 종목 별 순위를 정규화 (1: 최고 순위, 0: 최저 순위)

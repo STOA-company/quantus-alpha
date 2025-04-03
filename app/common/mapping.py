@@ -60,3 +60,15 @@ etf_column_mapping = {
     "NumShrs": "num_shrs",
     "거래대금": "trade_amount",
 }
+
+
+lang_mapper = {
+    "ko": {
+        "RRO 1년권": "RRO 1년권",
+        "RRO 1개월권": "RRO 1개월권",
+    },
+    "en": {
+        "RRO 1년권": "RRO 1 Year",
+        "RRO 1개월권": "RRO 1 Month",
+    },
+}

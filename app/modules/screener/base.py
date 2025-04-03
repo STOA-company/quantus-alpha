@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Union
 
 from app.database.crud import database_service
-from app.modules.screener.stock.schemas import MarketEnum, SortInfo
+from app.modules.screener.stock.schemas import MarketEnum, SortInfo, ExcludeEnum
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
@@ -60,17 +60,32 @@ class BaseScreenerService(ABC):
             custom_factor_filters = sorted(custom_factor_filters, key=lambda x: x.order)
             has_custom = len(custom_factor_filters) > 0
 
-            return {
-                "name": group[0].name,
-                "stock_filters": [
-                    {
-                        "factor": FACTOR_MAP[stock_filter.factor],
-                        "value": stock_filter.value if stock_filter.value else None,
+            # 같은 factor를 가진 필터들을 그룹화
+            grouped_filters = {}
+            for stock_filter in stock_filters:
+                factor = FACTOR_MAP[stock_filter.factor]
+                if factor not in grouped_filters:
+                    grouped_filters[factor] = {
+                        "factor": factor,
+                        "values": [],
                         "above": stock_filter.above if stock_filter.above else None,
                         "below": stock_filter.below if stock_filter.below else None,
+                        "type": stock_filter.type.lower() if stock_filter.type else None,
                     }
-                    for stock_filter in stock_filters
-                ],
+                if stock_filter.value:
+                    grouped_filters[factor]["values"].append(stock_filter.value)
+
+            # 그룹화된 필터들을 리스트로 변환
+            stock_filters_list = []
+            for filter_data in grouped_filters.values():
+                if not filter_data["values"]:  # values가 비어있으면 null로 설정
+                    filter_data["values"] = None
+                stock_filters_list.append(filter_data)
+
+            return {
+                "id": group_id,
+                "name": group[0].name,
+                "stock_filters": stock_filters_list,
                 "custom_factor_filters": [FACTOR_MAP[factor_filter.factor] for factor_filter in custom_factor_filters],
                 "has_custom": has_custom,
             }
@@ -228,10 +243,11 @@ class BaseScreenerService(ABC):
         기본 팩터 필터 생성
         """
         try:
-            technical = screener_utils.get_default_columns(category=CategoryEnum.TECHNICAL)
-            fundamental = screener_utils.get_default_columns(category=CategoryEnum.FUNDAMENTAL)
-            valuation = screener_utils.get_default_columns(category=CategoryEnum.VALUATION)
-            dividend = screener_utils.get_default_columns(category=CategoryEnum.DIVIDEND)
+            technical = screener_utils.get_default_columns(category=CategoryEnum.TECHNICAL, type=type)
+            fundamental = screener_utils.get_default_columns(category=CategoryEnum.FUNDAMENTAL, type=type)
+            valuation = screener_utils.get_default_columns(category=CategoryEnum.VALUATION, type=type)
+            dividend = screener_utils.get_default_columns(category=CategoryEnum.DIVIDEND, type=type)
+            growth = screener_utils.get_default_columns(category=CategoryEnum.GROWTH, type=type)
 
             insert_tasks = []
 
@@ -274,6 +290,32 @@ class BaseScreenerService(ABC):
                         )
                     )
 
+                for idx, factor in enumerate(dividend):
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_factor_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": factor,
+                                "order": idx + 1,
+                                "category": CategoryEnum.DIVIDEND,
+                            },
+                        )
+                    )
+
+                for idx, factor in enumerate(growth):
+                    insert_tasks.append(
+                        self.database.insert_wrapper(
+                            table="screener_factor_filters",
+                            sets={
+                                "group_id": group_id,
+                                "factor": factor,
+                                "order": idx + 1,
+                                "category": CategoryEnum.GROWTH,
+                            },
+                        )
+                    )
+
                 insert_tasks.append(
                     self.database.insert_wrapper(
                         table="screener_sort_infos",
@@ -311,11 +353,20 @@ class BaseScreenerService(ABC):
                         },
                     )
                 )
+                insert_tasks.append(
+                    self.database.insert_wrapper(
+                        table="screener_sort_infos",
+                        sets={
+                            "group_id": group_id,
+                            "category": CategoryEnum.GROWTH,
+                            "sort_by": "score",
+                            "ascending": False,
+                            "type": StockType.STOCK,
+                        },
+                    )
+                )
 
             elif type == StockType.ETF:
-                technical.remove("sector")
-                technical.remove("beta")
-                dividend.remove("sector")
                 for idx, factor in enumerate(technical):
                     insert_tasks.append(
                         self.database.insert_wrapper(
@@ -385,10 +436,13 @@ class BaseScreenerService(ABC):
         type: Optional[StockType] = StockType.STOCK,
         market_filter: Optional[Union[MarketEnum, ETFMarketEnum]] = None,
         sector_filter: Optional[List[str]] = [],
+        exclude_filters: Optional[List[ExcludeEnum]] = [],
         custom_filters: Optional[List[Dict]] = [],
-    ) -> bool:
+    ) -> Dict:
         """
         그룹 생성
+        Returns:
+            Dict: 생성된 그룹의 상세 정보 (get_group_filters와 동일한 형식)
         """
         existing_groups = self.database._select(table="screener_groups", user_id=user_id, name=name, type=type)
         if existing_groups:
@@ -432,23 +486,54 @@ class BaseScreenerService(ABC):
                         )
                     )
 
-            if custom_filters:
-                for condition in custom_filters:
+            if exclude_filters:
+                for exclude_filter in exclude_filters:
                     insert_tasks.append(
                         self.database.insert_wrapper(
                             table="screener_stock_filters",
                             sets={
                                 "group_id": group_id,
-                                "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                "above": condition.above,
-                                "below": condition.below,
+                                "factor": "exclude",
+                                "value": exclude_filter,
                             },
                         )
                     )
 
+            if custom_filters:
+                for condition in custom_filters:
+                    if condition.values:
+                        for value in condition.values:
+                            insert_tasks.append(
+                                self.database.insert_wrapper(
+                                    table="screener_stock_filters",
+                                    sets={
+                                        "group_id": group_id,
+                                        "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                        "above": condition.above,
+                                        "below": condition.below,
+                                        "value": value,
+                                    },
+                                )
+                            )
+                    else:
+                        insert_tasks.append(
+                            self.database.insert_wrapper(
+                                table="screener_stock_filters",
+                                sets={
+                                    "group_id": group_id,
+                                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                    "type": condition.type,
+                                    "above": condition.above,
+                                    "below": condition.below,
+                                    "value": None,
+                                },
+                            )
+                        )
+
             await asyncio.gather(*insert_tasks)
 
-            return True
+            # get_group_filters와 동일한 형식으로 반환
+            return group_id
 
         except Exception as e:
             if hasattr(e, "orig") and "1062" in str(getattr(e, "orig", "")):
@@ -465,12 +550,15 @@ class BaseScreenerService(ABC):
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
         factor_filters: Optional[Dict[str, List[str]]] = None,
+        exclude_filters: Optional[List[ExcludeEnum]] = None,
         category: Optional[CategoryEnum] = CategoryEnum.CUSTOM,
         sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None,
         type: Optional[StockType] = StockType.STOCK,
-    ) -> bool:
+    ) -> Dict:
         """
         그룹 업데이트
+        Returns:
+            Dict: 업데이트된 그룹의 상세 정보 (get_group_filters와 동일한 형식)
         """
         try:
             insert_tasks = []
@@ -491,7 +579,7 @@ class BaseScreenerService(ABC):
                 self.database._update(table="screener_groups", id=group_id, sets={"name": name})
 
             # 종목 필터
-            if custom_filters or market_filter or sector_filter:
+            if custom_filters or market_filter or sector_filter or exclude_filters:
                 self.database._delete(table="screener_stock_filters", group_id=group_id)
 
             if market_filter:
@@ -519,19 +607,49 @@ class BaseScreenerService(ABC):
                         )
                     )
 
-            if custom_filters:
-                for condition in custom_filters:
+            if exclude_filters:
+                for exclude_filter in exclude_filters:
                     insert_tasks.append(
                         self.database.insert_wrapper(
                             table="screener_stock_filters",
                             sets={
                                 "group_id": group_id,
-                                "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                "above": condition.above,
-                                "below": condition.below,
+                                "factor": "exclude",
+                                "value": exclude_filter,
                             },
                         )
                     )
+
+            if custom_filters:
+                for condition in custom_filters:
+                    if condition.values:
+                        for value in condition.values:
+                            insert_tasks.append(
+                                self.database.insert_wrapper(
+                                    table="screener_stock_filters",
+                                    sets={
+                                        "group_id": group_id,
+                                        "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                        "type": condition.type,
+                                        "above": condition.above,
+                                        "below": condition.below,
+                                        "value": value,
+                                    },
+                                )
+                            )
+                    else:
+                        insert_tasks.append(
+                            self.database.insert_wrapper(
+                                table="screener_stock_filters",
+                                sets={
+                                    "group_id": group_id,
+                                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                    "above": condition.above,
+                                    "below": condition.below,
+                                    "value": None,
+                                },
+                            )
+                        )
 
             # 팩터 필터
             if factor_filters:
@@ -551,7 +669,9 @@ class BaseScreenerService(ABC):
 
             await asyncio.gather(*insert_tasks)
 
-            return True
+            # get_group_filters와 동일한 형식으로 반환
+            return group_id
+
         except Exception as e:
             if hasattr(e, "orig") and "1062" in str(getattr(e, "orig", "")):
                 raise CustomException(status_code=409, message="Group name already exists for this type")
@@ -572,3 +692,89 @@ class BaseScreenerService(ABC):
         필터링된 데이터 조회 추상 메서드
         """
         pass
+
+    async def add_default_growth_factors_if_missing(self):
+        """
+        모든 스크리너 그룹에 성장 카테고리 팩터가 없으면 기본 성장 팩터를 추가하는 함수
+        """
+        try:
+            # 모든 스크리너 그룹 가져오기
+            groups = self.database._select(table="screener_groups")
+
+            # 성장 카테고리의 기본 팩터 리스트
+            default_growth_factors = [
+                "rv_growth_yoy",  # 매출액 성장률 (연간)
+                "op_growth_yoy",  # 영업이익 성장률 (연간)
+                "net_profit_growth_yoy",  # 순이익 성장률 (연간)
+                "operating_cashflow_growth_yoy",  # 영업활동현금흐름 성장률 (연간)
+                "rev_acceleration_yoy",  # 매출액 성장 가속 (연간)
+            ]
+
+            insert_tasks = []
+            processed_groups = 0
+
+            # 각 그룹에 대해 성장 카테고리 팩터가 있는지 확인
+            for group in groups:
+                group_id = group.id
+                print(f"처리 중인 group_id: {group_id}")
+
+                # 해당 그룹에 성장 카테고리 팩터가 있는지 확인
+                existing_growth_factors = self.database._select(
+                    table="screener_factor_filters", columns=["id"], group_id=group_id, category=CategoryEnum.GROWTH
+                )
+
+                # 성장 카테고리 팩터가 없으면 기본 팩터 추가
+                if not existing_growth_factors:
+                    print(f"성장 팩터 추가 - group_id: {group_id}")
+                    for idx, factor in enumerate(default_growth_factors):
+                        insert_tasks.append(
+                            self.database.insert_wrapper(
+                                table="screener_factor_filters",
+                                sets={
+                                    "group_id": group_id,
+                                    "factor": factor,
+                                    "order": idx + 1,
+                                    "category": CategoryEnum.GROWTH,
+                                },
+                            )
+                        )
+                    processed_groups += 1
+
+            if insert_tasks:
+                print(f"총 {processed_groups}개 그룹에 성장 팩터 추가 중...")
+                results = await asyncio.gather(*insert_tasks)
+                print(f"성공적으로 {len(results)}개의 팩터가 추가되었습니다.")
+
+                # 추가로 sort_info도 추가
+                sort_tasks = []
+                for group in groups:
+                    # 해당 그룹에 growth 카테고리의 sort_info가 있는지 확인
+                    sort_info = self.database._select(
+                        table="screener_sort_infos", group_id=group.id, category=CategoryEnum.GROWTH
+                    )
+
+                    if not sort_info:
+                        sort_tasks.append(
+                            self.database.insert_wrapper(
+                                table="screener_sort_infos",
+                                sets={
+                                    "group_id": group.id,
+                                    "category": CategoryEnum.GROWTH,
+                                    "sort_by": "score",
+                                    "ascending": False,
+                                    "type": group.type,
+                                },
+                            )
+                        )
+
+                if sort_tasks:
+                    await asyncio.gather(*sort_tasks)
+                    print("정렬 정보도 추가 완료")
+
+                return True
+            else:
+                print("모든 그룹에 이미 성장 팩터가 존재합니다.")
+                return False
+        except Exception as e:
+            print(f"에러 발생: {str(e)}")
+            raise e

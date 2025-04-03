@@ -962,7 +962,6 @@ class ETFDataLoader:
 class ETFDividendFactorExtractor:
     """
     한국 ETF 배당 팩터 추출기
-    - 배당 주기 (dividend_frequency)
     - 주당 배당금 (last_dividend_per_share)
     - 배당 수익률(최근) (recent_dividend_yield)
     - 배당 성장률 (dividend_growth_rate)
@@ -1314,30 +1313,63 @@ class ETFDividendFactorExtractor:
 
     def _calculate_dividend_frequency(self, ticker_dividends):
         """
-        배당 주기 계산 함수 - dividend_count 값을 기반으로 배당 주기 문자열 반환
+        배당 주기 계산 함수
 
         Args:
             ticker_dividends (DataFrame): 특정 ETF의 배당 데이터
 
         Returns:
-            str: 배당 주기 문자열 (yearly, half, quarter, month, week 또는 unknown)
+            str: 배당 주기 (week, month, quarter, semi_annual, annual, no_dividend, insufficient_data)
         """
-        # dividend_count 계산
-        dividend_count = self._calculate_dividend_count(ticker_dividends)
+        if len(ticker_dividends) == 0:
+            return "no_dividend"
 
-        # 배당 주기 결정
-        if dividend_count == 0:
-            return None  # 배당 데이터 없음
-        elif dividend_count <= 1.5:
-            return "yearly"  # 연 1회 배당 (연간)
-        elif dividend_count <= 2.5:
-            return "half"  # 연 2회 배당 (반기)
-        elif dividend_count <= 4.5:
-            return "quarter"  # 연 4회 배당 (분기)
-        elif dividend_count <= 13:
-            return "month"  # 연 12회 배당 (월간)
+        if len(ticker_dividends) == 1:
+            return "insufficient_data"
+
+        # 최근 5년치 데이터 고려 (올해 제외)
+        current_year = datetime.datetime.now().year
+        five_years_ago = current_year - 5
+
+        # payment_date가 datetime 타입인지 확인
+        if pd.api.types.is_datetime64_any_dtype(ticker_dividends["payment_date"]):
+            # 올해를 제외한 최근 5년 데이터만 필터링
+            historical_dividends = ticker_dividends[
+                (ticker_dividends["payment_date"].dt.year < current_year)
+                & (ticker_dividends["payment_date"].dt.year >= five_years_ago)
+            ]
+
+            if len(historical_dividends) == 0:
+                return "insufficient_data"
+
+            # 연도별 배당 횟수 계산
+            yearly_counts = historical_dividends["payment_date"].dt.year.value_counts().sort_index()
+
+            # 데이터가 있는 총 연도 수
+            data_years = len(yearly_counts)
+
+            if data_years == 0:
+                return "insufficient_data"
+
+            # 평균 배당 횟수 계산
+            total_payments = sum(yearly_counts)
+            avg_yearly_payments = total_payments / data_years
+
+            # 배당 주기 결정
+            if avg_yearly_payments >= 45:  # 주간 배당 (연 45회 이상)
+                return "week"
+            elif avg_yearly_payments >= 10:  # 월간 배당 (연 10회 이상)
+                return "month"
+            elif avg_yearly_payments >= 3.5:  # 분기 배당 (연 3.5회 이상)
+                return "quarter"
+            elif avg_yearly_payments >= 1.8:  # 반기 배당 (연 1.8회 이상)
+                return "semi-annual"
+            elif avg_yearly_payments >= 0.8:  # 연간 배당 (연 0.8회 이상)
+                return "annual"
+            else:
+                return "no_dividend"
         else:
-            return "week"  # 연 52회 배당 (주간)
+            return "insufficient_data"
 
 
 # 데이터 전처리

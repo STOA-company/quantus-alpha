@@ -7,11 +7,23 @@ from app.models.models_dividend import Dividend
 from app.models.models_news import News
 from app.models.models_stock_indices import StockIndices
 from app.models.models_disclosure import Disclosure
-from app.models.models_users import AlphafinderUser, UserStockInterest, TossPaymentHistory
+from app.models.models_users import (
+    AlphafinderUser,
+    UserStockInterest,
+    TossPaymentHistory,
+    InterestGroup,
+    AlphaFinderOAuthToken,
+)
 from app.models.models_screener import ScreenerStockFilter, ScreenerFactorFilter, ScreenerGroup, ScreenerSortInfo
 from app.models.models_etf import etf_us_1d, etf_kr_1d
 
 # from app.models.models_payments import AlphafinderLicense, AlphafinderMembership, AlphafinderPaymentHistory
+from app.models.models_payments import (
+    AlphafinderLevel,
+    AlphafinderPrice,
+    AlphafinderPaymentHistory,
+    TossReceipt,
+)
 from app.models.models_community import (
     Category,
     Post,
@@ -58,6 +70,14 @@ __all__ = [
     "etf_us_1d",
     "etf_kr_1d",
     "TossPaymentHistory",
+    "InterestGroup",
+    "AlphaFinderOAuthToken",
+    "AlphafinderLevel",
+    "AlphafinderPrice",
+    "AlphafinderPaymentHistory",
+    "TossReceipt",
+    "MembershipFeature",
+    "SubscriptionStatusChange",
 ]
 
 # Category relationships
@@ -106,3 +126,23 @@ AlphafinderUser.comments = relationship("Comment", back_populates="user", passiv
 AlphafinderUser.post_likes = relationship("PostLike", back_populates="user", passive_deletes=True)
 AlphafinderUser.comment_likes = relationship("CommentLike", back_populates="user", passive_deletes=True)
 AlphafinderUser.bookmarks = relationship("Bookmark", back_populates="user")
+
+# 멤버십 관련 관계 설정
+# AlphafinderLevel 관계
+AlphafinderLevel.prices = relationship("AlphafinderPrice", back_populates="level_info")
+AlphafinderLevel.features = relationship("MembershipFeature", back_populates="level_info")
+
+# AlphafinderPrice 관계
+AlphafinderPrice.level_info = relationship("AlphafinderLevel", back_populates="prices")
+
+# AlphafinderPaymentHistory 관계
+AlphafinderPaymentHistory.user = relationship("AlphafinderUser", back_populates="payment_history")
+AlphafinderPaymentHistory.level_info = relationship("AlphafinderLevel")
+
+# TossReceipt 관계
+TossReceipt.user = relationship("AlphafinderUser")
+
+# AlphafinderUser 멤버십 관련 관계
+AlphafinderUser.level_info = relationship("AlphafinderLevel", foreign_keys=[AlphafinderUser.subscription_level])
+AlphafinderUser.payment_history = relationship("AlphafinderPaymentHistory", back_populates="user")
+AlphafinderUser.subscription_changes = relationship("SubscriptionStatusChange", back_populates="user")

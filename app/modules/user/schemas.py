@@ -11,6 +11,9 @@ class UserInfoResponse(BaseModel):
     image_format: Optional[str] = None
     is_subscribed: bool = False
     subscription_end: Optional[datetime] = None
+    level: Optional[str] = None
+    period_days: Optional[int] = None
+    product_type: Optional[str] = None
 
 
 class RefreshTokenResponse(BaseModel):

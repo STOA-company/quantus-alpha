@@ -423,6 +423,10 @@ class UserService:
         if not groups:
             self.db._insert(table="interest_group", sets={"user_id": user_id, "name": "기본"})
 
+    def get_level_info(self, level: int):
+        level_info = self.db._select(table="alphafinder_level", level=level)
+        return level_info[0]
+
 
 def get_user_service() -> UserService:
     """UserService 의존성 주입을 위한 팩토리 함수"""

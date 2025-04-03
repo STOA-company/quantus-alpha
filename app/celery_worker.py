@@ -1,6 +1,7 @@
 import logging
 from functools import wraps
 
+from app.batches import run_etf_price
 from app.batches.run_etf_screener import run_etf_screener_data
 from app.batches.run_news import (
     run_news_batch,
@@ -349,30 +350,6 @@ def check_warned_stock_us():
         raise
 
 
-# @CELERY_APP.task(name="community_trending_stock_update", ignore_result=True)
-# def community_trending_stock_update():
-#     """커뮤니티 인기 종목 업데이트"""
-#     notifier.notify_info("Community_trending_stock_update process started")
-#     try:
-#         update_stock_statistics()
-#         notifier.notify_success("Community_trending_stock_update process completed")
-#     except Exception as e:
-#         notifier.notify_error(f"Community_trending_stock_update process failed: {str(e)}", "고경민")
-#         raise
-
-
-# @CELERY_APP.task(name="community_trending_post_update", ignore_result=True)
-# def community_trending_post_update():
-#     """커뮤니티 인기 게시글 업데이트"""
-#     notifier.notify_info("Community_trending_post_update process started")
-#     try:
-#         update_post_statistics()
-#         notifier.notify_success("Community_trending_post_update process completed")
-#     except Exception as e:
-#         notifier.notify_error(f"Community_trending_post_update process failed: {str(e)}", "고경민")
-#         raise
-
-
 @CELERY_APP.task(name="reset_daily_leaderboard", ignore_result=True)
 def reset_daily_leaderboard():
     """일일 리더보드 초기화"""
@@ -573,6 +550,30 @@ def update_kr_dividend_rds():
             )
     else:
         notifier_1d.notify_info("KR market is not open. update_kr_dividend_rds process skipped.")
+
+
+@CELERY_APP.task(name="update_us_etf_price", ignore_result=True)
+def update_us_etf_price():
+    """미국 ETF 시세 업데이트"""
+    notifier_1d.notify_info("update_us_etf_price process started")
+    try:
+        run_etf_price("US")
+        notifier_1d.notify_success("update_us_etf_price process completed")
+    except Exception as e:
+        notifier_1d.notify_error(f"update_us_etf_price process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="update_kr_etf_price", ignore_result=True)
+def update_kr_etf_price():
+    """한국 ETF 시세 업데이트"""
+    notifier_1d.notify_info("update_kr_etf_price process started")
+    try:
+        run_etf_price("KR")
+        notifier_1d.notify_success("update_kr_etf_price process completed")
+    except Exception as e:
+        notifier_1d.notify_error(f"update_kr_etf_price process failed: {str(e)}")
+        raise
 
 
 # Worker 시작점
