@@ -228,7 +228,7 @@ def get_group_filters(
 
     for stock_filter in stock_filters:
         if stock_filter["factor"] == "시장":
-            market_filter = stock_filter["value"]
+            market_filter = stock_filter["values"][0]
         elif stock_filter["factor"] == "산업":
             continue
         else:
