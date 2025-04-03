@@ -586,11 +586,11 @@ class ScreenerUtils:
                 factor = filter["factor"]
                 if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
-                if filter["above"] is not None:
+                if filter.get("above") is not None:
                     df = df[df[factor] >= filter["above"]]
-                if filter["below"] is not None:
+                if filter.get("below") is not None:
                     df = df[df[factor] <= filter["below"]]
-                if filter["values"] is not None:
+                if filter.get("values") is not None:
                     # OR
                     value_conditions = pd.Series(False, index=df.index)
                     for value in filter["values"]:
