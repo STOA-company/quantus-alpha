@@ -44,6 +44,7 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
             custom_filters = [
                 {
                     "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "values": condition.values,
                     "above": condition.above,
                     "below": condition.below,
                 }
