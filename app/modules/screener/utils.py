@@ -530,6 +530,12 @@ class ScreenerUtils:
                 factor = filter["factor"]
                 if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
+
+                # SLIDER 타입 팩터인 경우 NULL 값을 가진 종목 제외
+                factor_info = self.db._select(table="factors", factor=factor)
+                if factor_info and factor_info[0].type == FactorTypeEnum.SLIDER:
+                    df = df[~df[factor].isna()]
+
                 if filter["above"] is not None:
                     df = df[df[factor] >= filter["above"]]
                 if filter["below"] is not None:
