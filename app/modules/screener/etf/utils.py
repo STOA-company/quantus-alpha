@@ -1608,6 +1608,7 @@ class ETFDataPreprocessor:
         all_columns = [
             "ticker",
             "dividend_count",
+            "dividend_frequency",
             "last_dividend_date",
             "last_dividend_per_share",
             "recent_dividend_yield",
