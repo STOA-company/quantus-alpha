@@ -32,6 +32,10 @@ class AlphafinderPrice(ServiceBase, BaseMixin):
     event_price: Mapped[Float] = mapped_column(Float, nullable=True)
     is_active: Mapped[Boolean] = mapped_column(Boolean, nullable=False, default=True)
     price_type: Mapped[String] = mapped_column(String(length=100), nullable=False)
+    event_type: Mapped[String] = mapped_column(String(length=100), nullable=True)
+    event_end_date: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    is_banner: Mapped[Boolean] = mapped_column(Boolean, nullable=False, default=False)
+    is_event: Mapped[Boolean] = mapped_column(Boolean, nullable=False, default=False)
 
     # 관계
     level_info = relationship("AlphafinderLevel", back_populates="prices")
