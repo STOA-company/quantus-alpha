@@ -77,6 +77,9 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
             lang=filtered_etf.lang,
         )
 
+        if not etfs_data:
+            return {"data": [], "has_next": False}
+
         has_next = filtered_etf.offset * filtered_etf.limit + filtered_etf.limit < total_count
 
         print("ETF", etfs_data[0].keys())
