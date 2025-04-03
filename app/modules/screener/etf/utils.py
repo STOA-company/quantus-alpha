@@ -1363,7 +1363,7 @@ class ETFDividendFactorExtractor:
             elif avg_yearly_payments >= 3.5:  # 분기 배당 (연 3.5회 이상)
                 return "quarter"
             elif avg_yearly_payments >= 1.8:  # 반기 배당 (연 1.8회 이상)
-                return "semi_annual"
+                return "semi-annual"
             elif avg_yearly_payments >= 0.8:  # 연간 배당 (연 0.8회 이상)
                 return "annual"
             else:
