@@ -10,15 +10,7 @@ USE = pytz.timezone("America/New_York")
 
 NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6", "momentum_12", "current_ratio"]
 
-BASE_COLUMNS = [
-    "Code",
-    "Name",
-    "Name_en",
-    "market",
-    "sector",
-    "sector_en",
-    "country",
-]
+BASE_COLUMNS = ["Code", "Name", "Name_en", "market", "sector", "sector_en", "country", "score"]
 
 BASE_COLUMNS_ETF = [
     "Code",
@@ -28,6 +20,7 @@ BASE_COLUMNS_ETF = [
     "sector",
     "sector_en",
     "country",
+    "score",
 ]
 
 UNIT_MAP = {"percentage": "%", "times": "회", "score": "점", "multiple": "배", "ratio": ""}

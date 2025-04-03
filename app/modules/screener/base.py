@@ -83,6 +83,7 @@ class BaseScreenerService(ABC):
                 stock_filters_list.append(filter_data)
 
             return {
+                "id": group_id,
                 "name": group[0].name,
                 "stock_filters": stock_filters_list,
                 "custom_factor_filters": [FACTOR_MAP[factor_filter.factor] for factor_filter in custom_factor_filters],
@@ -437,9 +438,11 @@ class BaseScreenerService(ABC):
         sector_filter: Optional[List[str]] = [],
         exclude_filters: Optional[List[ExcludeEnum]] = [],
         custom_filters: Optional[List[Dict]] = [],
-    ) -> bool:
+    ) -> Dict:
         """
         그룹 생성
+        Returns:
+            Dict: 생성된 그룹의 상세 정보 (get_group_filters와 동일한 형식)
         """
         existing_groups = self.database._select(table="screener_groups", user_id=user_id, name=name, type=type)
         if existing_groups:
@@ -529,7 +532,8 @@ class BaseScreenerService(ABC):
 
             await asyncio.gather(*insert_tasks)
 
-            return True
+            # get_group_filters와 동일한 형식으로 반환
+            return group_id
 
         except Exception as e:
             if hasattr(e, "orig") and "1062" in str(getattr(e, "orig", "")):
@@ -550,9 +554,11 @@ class BaseScreenerService(ABC):
         category: Optional[CategoryEnum] = CategoryEnum.CUSTOM,
         sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None,
         type: Optional[StockType] = StockType.STOCK,
-    ) -> bool:
+    ) -> Dict:
         """
         그룹 업데이트
+        Returns:
+            Dict: 업데이트된 그룹의 상세 정보 (get_group_filters와 동일한 형식)
         """
         try:
             insert_tasks = []
@@ -663,7 +669,9 @@ class BaseScreenerService(ABC):
 
             await asyncio.gather(*insert_tasks)
 
-            return True
+            # get_group_filters와 동일한 형식으로 반환
+            return group_id
+
         except Exception as e:
             if hasattr(e, "orig") and "1062" in str(getattr(e, "orig", "")):
                 raise CustomException(status_code=409, message="Group name already exists for this type")

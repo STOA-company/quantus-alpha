@@ -118,7 +118,7 @@ class ScreenerUtils:
             return base_columns
 
         # technical_columns = ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
-        technical_columns = ["close", "marketCap", "median_trade", "abs_beta", "sharpe"]
+        technical_columns = ["close", "marketCap", "median_trade", "abs_beta", "Log_RS_100", "sharpe"]
         dividend_columns = [
             "dividend_count",
             "ttm_dividend_yield",
