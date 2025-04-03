@@ -515,6 +515,20 @@ class ScreenerUtils:
         df = self.get_df_from_parquet(market_filter)
         if exclude_filters:
             df = self.add_exclude_flags_to_dataframe(df, exclude_filters)
+            # 제외 필터 적용
+            if ExcludeEnum.FINANCIAL in exclude_filters:
+                df = df[~df["is_financial"]]
+            if ExcludeEnum.HOLDING in exclude_filters:
+                df = df[~df["is_holding"]]
+            if ExcludeEnum.WARNED in exclude_filters:
+                df = df[~df["is_warned"]]
+            if ExcludeEnum.DEFICIT in exclude_filters:
+                df = df[~df["is_deficit"]]
+            if ExcludeEnum.ANNUAL_DEFICIT in exclude_filters:
+                df = df[~df["is_annual_deficit"]]
+            if ExcludeEnum.PTP in exclude_filters:
+                df = df[~df["is_ptp"]]
+
         # 종목 필터링
         if market_filter:
             if market_filter == MarketEnum.SNP500:
@@ -530,6 +544,12 @@ class ScreenerUtils:
                 factor = filter["factor"]
                 if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
+
+                # SLIDER 타입 팩터인 경우 NULL 값을 가진 종목 제외
+                factor_info = self.db._select(table="factors", factor=factor)
+                if factor_info and factor_info[0].type == FactorTypeEnum.SLIDER:
+                    df = df[~df[factor].isna()]
+
                 if filter["above"] is not None:
                     df = df[df[factor] >= filter["above"]]
                 if filter["below"] is not None:
