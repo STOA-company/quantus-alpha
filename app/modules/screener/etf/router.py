@@ -107,6 +107,7 @@ def get_filtered_etfs_count(
                 "factor": REVERSE_FACTOR_MAP[condition.factor],
                 "above": condition.above,
                 "below": condition.below,
+                "values": condition.values,
             }
             for condition in filtered_etf.custom_filters
         ]
