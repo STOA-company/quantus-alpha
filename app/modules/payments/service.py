@@ -1,4 +1,3 @@
-import base64
 import json
 from typing import List
 from fastapi import HTTPException
@@ -160,7 +159,7 @@ class PaymentService:
                     "amount": amount,
                 }
             )
-            auth_string = base64.b64encode(f"{self.toss_secret_key}:".encode()).decode()
+            auth_string = self.toss_secret_key
             conn = https_conn("api.tosspayments.com")
             headers = {"Authorization": f"Basic {auth_string}", "Content-Type": "application/json"}
             conn.request("POST", "/v1/payments/confirm", payload, headers)
@@ -298,9 +297,8 @@ class PaymentService:
     def verify_toss_payment(self, payment_key: str, order_id: str, amount: int):
         """Toss API를 통해 결제 정보를 가져옵니다."""
         # Basic 인증을 위한 헤더 (Secret Key와 빈 문자열을 Base64로 인코딩)
-        import base64
 
-        auth_string = base64.b64encode(f"{self.toss_secret_key}:".encode()).decode()
+        auth_string = self.toss_secret_key
 
         headers = {"Authorization": f"Basic {auth_string}"}
         # Toss API에 결제 정보 요청
@@ -330,7 +328,7 @@ class PaymentService:
         return payment_data
 
     def cancel_toss_payments(self, payment_key: str, cancel_reason: str):
-        auth_string = base64.b64encode(f"{self.toss_secret_key}:".encode()).decode()
+        auth_string = self.toss_secret_key
         headers = {"Authorization": f"Basic {auth_string}", "Content-Type": "application/json"}
         payload = json.dumps({"cancelReason": cancel_reason})
         response = requests.post(f"{self.toss_api_url}/payments/{payment_key}/cancel", headers=headers, data=payload)
