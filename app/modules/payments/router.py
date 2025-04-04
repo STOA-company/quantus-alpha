@@ -8,9 +8,9 @@ from app.modules.common.schemas import BaseResponse
 from app.modules.payments.service import PaymentService
 from app.modules.payments.schema import (
     Coupon,
-    PriceTemplate,
     RequestCouponNumber,
     ResponseMembership,
+    ResponsePriceTemplate,
     ResponseUserUsingHistory,
     StoreCoupon,
     TradePayments,
@@ -25,7 +25,7 @@ router = APIRouter()
 
 
 # 가격 정보
-@router.get("/price_template", response_model=BaseResponse[List[PriceTemplate]], summary="가격 정보 조회")
+@router.get("/price_template", response_model=BaseResponse[ResponsePriceTemplate], summary="가격 정보 조회")
 def get_price_template(
     payment_service: PaymentService = Depends(PaymentService),
 ):

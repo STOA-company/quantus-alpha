@@ -139,6 +139,7 @@ class ScreenerStockService(BaseScreenerService):
 
             for _, row in sorted_df.iterrows():
                 stock_data = {}
+                skip_this_stock = False
 
                 for col in selected_columns:
                     if col in BASE_COLUMNS:
@@ -152,6 +153,10 @@ class ScreenerStockService(BaseScreenerService):
                             ),
                             {"value": row[col], "display": row[col]},
                         )
+                        # display가 null인 경우 이 주식을 건너뛰기
+                        if value_info["display"] is None:
+                            skip_this_stock = True
+                            break
                         stock_data[col] = value_info
                     elif col == "score":
                         stock_data[col] = {"value": float(row[col]), "unit": ""}
@@ -167,7 +172,8 @@ class ScreenerStockService(BaseScreenerService):
                             )
                             stock_data[col] = {"value": value, "unit": unit}
 
-                result.append(stock_data)
+                if not skip_this_stock:
+                    result.append(stock_data)
 
             factor_map = FACTOR_MAP
             if lang == "en":
