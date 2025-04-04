@@ -31,7 +31,7 @@ class FactorsCache:
 
         factors = database._select(
             "factors",
-            columns=["factor", "description", "unit", "category", "sort_direction", "min_value", "max_value"],
+            columns=["factor", "description", "unit", "category", "sort_direction", "min_value", "max_value", "type"],
             **condition,
         )
 
@@ -44,6 +44,7 @@ class FactorsCache:
                 "direction": factor.sort_direction,
                 "min_value": factor.min_value,
                 "max_value": factor.max_value,
+                "type": factor.type,
             }
 
         self.redis.set(self.factors_key, json.dumps(configs))
