@@ -120,9 +120,8 @@ class ScreenerUtils:
         # technical_columns = ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
         technical_columns = ["close", "marketCap", "median_trade", "abs_beta", "Log_RS_100", "sharpe"]
         dividend_columns = [
-            "dividend_count",
+            "dividend_frequency",
             "ttm_dividend_yield",
-            "consecutive_dividend_growth_count",
             "div_yield_growth_qoq",
             "div_yield_growth_yoy",
         ]
@@ -131,11 +130,10 @@ class ScreenerUtils:
             technical_columns = ["close", "marketCap", "median_trade", "momentum_6", "sharpe", "sortino"]
 
             dividend_columns = [
+                "dividend_frequency",
                 "ttm_dividend_yield",
-                "dividend_count",
                 "last_dividend_per_share",
                 "dividend_growth_rate_5y",
-                "risk_rating",
             ]
 
         additional_columns = {
@@ -545,11 +543,6 @@ class ScreenerUtils:
                 if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
 
-                # SLIDER 타입 팩터인 경우 NULL 값을 가진 종목 제외
-                factor_info = self.db._select(table="factors", factor=factor)
-                if factor_info and factor_info[0].type == FactorTypeEnum.SLIDER:
-                    df = df[~df[factor].isna()]
-
                 if filter["above"] is not None:
                     df = df[df[factor] >= filter["above"]]
                 if filter["below"] is not None:
@@ -629,6 +622,9 @@ class ScreenerUtils:
 
         df = self.get_df_from_parquet(market_filter)
         filtered_df = df[df["Code"].isin(codes)][required_columns]
+
+        for column in filtered_df.columns:
+            filtered_df = filtered_df[~filtered_df[column].isna()]
 
         return filtered_df
 
