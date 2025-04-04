@@ -110,6 +110,10 @@ class ScreenerStockService(BaseScreenerService):
             if scored_df.empty:
                 return [], 0
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
+
+            # 스코어가 null인 항목 제외
+            merged_df = merged_df[~merged_df["score"].isna()]
+
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
@@ -269,6 +273,11 @@ class ScreenerStockService(BaseScreenerService):
 
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
             print(f"merged_df shape: {merged_df.shape}")
+
+            # 스코어가 null인 항목 제외
+            merged_df = merged_df[~merged_df["score"].isna()]
+            print(f"after filtering null scores shape: {merged_df.shape}")
+
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             print(f"sorted_df shape: {sorted_df.shape}")
 
