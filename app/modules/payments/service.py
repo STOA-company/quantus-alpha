@@ -1,5 +1,4 @@
 import json
-from typing import List
 from fastapi import HTTPException
 import requests
 
@@ -11,7 +10,8 @@ from http.client import HTTPSConnection as https_conn
 
 from app.models.models_users import AlphafinderUser
 from app.modules.payments.schema import (
-    PriceTemplate,
+    PriceTemplateItem,
+    ResponsePriceTemplate,
     StoreCoupon,
     StorePaymentsHistory,
     StoreUserUsingHistory,
@@ -28,25 +28,55 @@ class PaymentService:
         self.toss_api_url = "https://api.tosspayments.com/v1"
         self.db = database_service
 
-    def get_price_template(self) -> List[PriceTemplate]:
+    def get_price_template(self) -> ResponsePriceTemplate:
         data = self.get_price()
         price_template = []
+        is_banner = False
+        max_remaining_days = 0
         for price in data:
+            remaining_days = (price.event_end_date.date() - now_kr().date()).days if price.event_end_date else None
             price_template.append(
-                PriceTemplate(
+                PriceTemplateItem(
                     id=price.id,
                     name=price.name,
                     original_price=price.price,
                     event_price=price.event_price,
                     period_days=price.period_days,
+                    is_event=price.is_event,
+                    event_type=price.event_type or None,
+                    event_end_date=max(0, remaining_days) if remaining_days else None,
                 )
             )
-        return price_template
+            if price.is_banner:
+                is_banner = True
+                max_remaining_days = max(max_remaining_days, remaining_days)
+        response_price_template = ResponsePriceTemplate(
+            is_banner=is_banner,
+            banner={
+                "event_type": "얼리버드",
+                "event_end_date": max_remaining_days,
+                "title": "얼리버드 기간 내 구매 시 할인 혜택 제공 (2025년 4월 15일까지)",
+                "description": "2025년 4월 15일부터 PRO 이용 가능 (쿠폰함에서 사용)",
+            },
+            price_templete=price_template,
+        )
+        return response_price_template
 
     def get_price(self):
         data = self.db._select(
             table="alphafinder_price",
-            columns=["id", "name", "price", "event_price", "period_days"],
+            columns=[
+                "id",
+                "name",
+                "price",
+                "event_price",
+                "period_days",
+                "event_type",
+                "event_end_date",
+                "is_banner",
+                "is_event",
+            ],
+            is_active=True,
         )
         return data
 

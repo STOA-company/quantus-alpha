@@ -76,12 +76,21 @@ class CouponId(BaseModel):
     coupon_id: int
 
 
-class PriceTemplate(BaseModel):
-    id: int
-    name: str
-    original_price: int
-    event_price: Optional[int] = None
-    period_days: int
+class PriceTemplateItem(BaseModel):
+    id: int = Field(description="가격 템플릿의 고유 식별자")
+    name: str = Field(description="가격 템플릿의 이름")
+    original_price: int = Field(description="원래 가격 (원 단위)")
+    event_price: Optional[int] = Field(default=None, description="이벤트 가격 (원 단위), 설정하지 않으면 None")
+    period_days: int = Field(description="구독 기간 (일 단위)")
+    is_event: bool = Field(description="이벤트 배너 표시 여부")
+    event_type: Optional[str] = Field(default=None, description="이벤트 타입")
+    event_end_date: Optional[int] = Field(default=None, description="이벤트 종료까지 남은 기간")
+
+
+class ResponsePriceTemplate(BaseModel):
+    is_banner: bool = Field(description="배너 표시 여부")
+    banner: dict = Field(description="배너 정보")
+    price_templete: list[PriceTemplateItem] = Field(description="가격 템플릿 아이템 리스트")
 
 
 class UpdateUserSubscription(BaseModel):
