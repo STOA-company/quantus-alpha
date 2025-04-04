@@ -129,7 +129,7 @@ class ScreenerETFService(BaseScreenerService):
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             # 페이징
             total_count = len(sorted_df)
-            sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit + 1]
+            sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
 
             factors = etf_factors_cache.get_configs()
             result = []
