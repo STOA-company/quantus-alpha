@@ -1249,7 +1249,7 @@ class ETFDividendFactorExtractor:
 
     def _calculate_dividend_growth_rate(self, ticker_dividends, period=5):
         """
-        배당 성장률 계산 함수
+        배당 성장률 계산 함수 - 보수적 방식 (항상 작년 데이터 사용)
 
         Args:
             ticker_dividends (DataFrame): 특정 ETF의 배당 데이터
@@ -1268,20 +1268,16 @@ class ETFDividendFactorExtractor:
         current_year = datetime.datetime.now().year
         latest_year = current_year - 1
 
-        # 5년 전 연도 계산
-        period_years_ago = latest_year - (period - 1)
-
         # 연도별 배당금 합계 계산
         yearly_dividends = ticker_dividends.groupby(ticker_dividends["payment_date"].dt.year)["per_share"].sum()
 
-        # 최근 완료된 연도의 배당금이 있는지 확인
+        # 최근 완료된 연도(작년)의 배당금이 있는지 확인
         if latest_year not in yearly_dividends.index:
-            # 최근 연도 데이터가 없으면 가장 최근의 완료된 연도 찾기
-            available_years = [year for year in yearly_dividends.index if year < current_year]
-            if not available_years:
-                return None
-            latest_year = max(available_years)
-            period_years_ago = latest_year - (period - 1)  # 5년 범위 재조정
+            # 보수적 접근: 작년 데이터가 없으면 None 반환
+            return None
+
+        # 5년 전 연도 계산
+        period_years_ago = latest_year - (period - 1)
 
         # 5년 전 연도 데이터가 있는지 확인
         if period_years_ago not in yearly_dividends.index:
