@@ -111,6 +111,9 @@ class ScreenerStockService(BaseScreenerService):
                 return [], 0
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
 
+            # 티커(Code) 기준으로 중복 데이터 제거 (첫번째 항목만 유지)
+            merged_df = merged_df.drop_duplicates(subset=["Code"])
+
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
@@ -175,7 +178,17 @@ class ScreenerStockService(BaseScreenerService):
                 factor_map = FACTOR_MAP_EN
 
             mapped_result = []
+            # 티커 중복 방지를 위한 세트
+            seen_codes = set()
             for item in result:
+                # 티커 코드가 이미 처리된 경우 스킵
+                if "Code" in item and item["Code"] in seen_codes:
+                    continue
+
+                # 새로운 티커 코드 기록
+                if "Code" in item:
+                    seen_codes.add(item["Code"])
+
                 # NULL display 값 포함 - 모든 항목 결과에 포함
                 mapped_item = {}
                 for key in ordered_columns:
