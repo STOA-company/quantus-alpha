@@ -10,12 +10,14 @@ from app.modules.news.schemas import (
     NewsResponse,
     TopStoriesResponse,
 )
+from app.cache.cache_decorator import one_minute_cache
 
 
 router = APIRouter()
 
 
 @router.get("/renewal/real_time", summary="실시간 뉴스", response_model=BaseResponse[NewsRenewalResponse])
+@one_minute_cache(prefix="news_real_time")
 def news_main(
     ctry: Annotated[str, Query(description="국가 코드, 예시: kr, us")] = None,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
@@ -25,17 +27,18 @@ def news_main(
 
     response_data = NewsRenewalResponse(news=news_data, disclosure=disclosure_data)
 
-    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data)
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data).dict()
 
 
 @router.get("/top_stories", summary="주요소식 모아보기", response_model=BaseResponse[List[TopStoriesResponse]])
+@one_minute_cache(prefix="news_top_stories")
 def top_stories(
     request: Request,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
     news_service: NewsService = Depends(get_news_service),
 ):
     data = news_service.top_stories(request=request, lang=lang)
-    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data).dict()
 
 
 @router.post("/api/stories/{ticker}/{type}/{id}", summary="주요소식 조회 여부 업데이트")
