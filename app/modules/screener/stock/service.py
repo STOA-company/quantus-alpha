@@ -175,18 +175,28 @@ class ScreenerStockService(BaseScreenerService):
                 if not skip_this_stock:
                     result.append(stock_data)
 
+            # 결과를 매핑 및 필터링
             factor_map = FACTOR_MAP
             if lang == "en":
                 factor_map = FACTOR_MAP_EN
 
             mapped_result = []
             for item in result:
-                mapped_item = {}
-                for key in ordered_columns:
-                    if key in item:
-                        mapped_key = factor_map.get(key, key)
-                        mapped_item[mapped_key] = item[key]
-                mapped_result.append(mapped_item)
+                # display가 null인 항목이 있는지 확인
+                has_null_display = False
+                for key, value in item.items():
+                    if isinstance(value, dict) and "display" in value and value["display"] is None:
+                        has_null_display = True
+                        break
+
+                # null display가 없는 경우에만 결과에 포함
+                if not has_null_display:
+                    mapped_item = {}
+                    for key in ordered_columns:
+                        if key in item:
+                            mapped_key = factor_map.get(key, key)
+                            mapped_item[mapped_key] = item[key]
+                    mapped_result.append(mapped_item)
 
             return mapped_result, total_count
 

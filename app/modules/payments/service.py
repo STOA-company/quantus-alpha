@@ -58,7 +58,7 @@ class PaymentService:
                 "title": "얼리버드 기간 내 구매 시 할인 혜택 제공 (2025년 4월 15일까지)",
                 "description": "2025년 4월 15일부터 PRO 이용 가능 (쿠폰함에서 사용)",
             },
-            price_templete=price_template,
+            price_template=price_template,
         )
         return response_price_template
 

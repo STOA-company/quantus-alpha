@@ -90,7 +90,7 @@ class PriceTemplateItem(BaseModel):
 class ResponsePriceTemplate(BaseModel):
     is_banner: bool = Field(description="배너 표시 여부")
     banner: dict = Field(description="배너 정보")
-    price_templete: list[PriceTemplateItem] = Field(description="가격 템플릿 아이템 리스트")
+    price_template: list[PriceTemplateItem] = Field(description="가격 템플릿 아이템 리스트")
 
 
 class UpdateUserSubscription(BaseModel):

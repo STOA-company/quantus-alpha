@@ -1,7 +1,7 @@
 import datetime
 from io import BytesIO
 import os
-from typing import List, Literal, Optional, Dict
+from typing import List, Literal, Optional, Dict, Tuple
 import numpy as np
 import pandas as pd
 from Aws.logic.s3 import get_data_from_bucket
@@ -17,6 +17,7 @@ from app.core.exception.base import CustomException
 from app.core.logging.config import get_logger
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.base import BaseScreenerService
+from app.modules.screener.stock.schemas import ExcludeEnum
 from app.utils.date_utils import get_business_days
 from app.utils.score_utils import etf_score_utils
 from app.modules.screener.utils import screener_utils
@@ -80,6 +81,8 @@ class ScreenerETFService(BaseScreenerService):
     def get_filtered_etfs(
         self,
         market_filter: Optional[ETFMarketEnum] = None,
+        sector_filter: Optional[List[str]] = None,
+        exclude_filters: Optional[List[ExcludeEnum]] = None,
         custom_filters: Optional[List[Dict]] = None,
         columns: Optional[List[str]] = None,
         limit: Optional[int] = 50,
@@ -87,104 +90,118 @@ class ScreenerETFService(BaseScreenerService):
         sort_by: Optional[str] = "score",
         ascending: Optional[bool] = False,
         lang: Optional[str] = "kr",
-    ):
+    ) -> Tuple[List[Dict], int]:
         """
         필터링된 ETF 목록 조회
         """
-        if columns is None:
-            columns = []
+        try:
+            if columns is None:
+                columns = []
 
-        if sort_by not in columns and sort_by not in BASE_COLUMNS_ETF:
-            raise CustomException(status_code=400, message="sort_by must be in columns")
+            if sort_by not in columns and sort_by not in BASE_COLUMNS_ETF:
+                raise CustomException(status_code=400, message="sort_by must be in columns")
 
-        etfs = screener_utils.filter_etfs(market_filter, custom_filters)
+            etfs = screener_utils.filter_etfs(market_filter, custom_filters)
+            filtered_df = screener_utils.get_filtered_etfs_df(market_filter, etfs, columns)
 
-        if not etfs:
-            return [], 0
+            # 여기서 display가 null인 값들을 미리 필터링
+            for col in filtered_df.columns:
+                if col in SELECT_MAP:
+                    # 해당 컬럼의 값이 SELECT_MAP에 있고, display가 null인 값들을 찾아내기
+                    values_with_null_display = [item["value"] for item in SELECT_MAP[col] if item["display"] is None]
 
-        # 필터링
-        filtered_df = screener_utils.get_filtered_etfs_df(market_filter, etfs, columns)
-        # 점수 계산
-        scored_df = etf_score_utils.calculate_factor_score(filtered_df)
-        if scored_df.empty:
-            return [], 0
+                    if values_with_null_display:
+                        # 해당 값을 가진 행 제외
+                        filtered_df = filtered_df[~filtered_df[col].isin(values_with_null_display)]
 
-        # 병합
-        merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
-        # 정렬
-        sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
-        # 페이징
-        total_count = len(sorted_df)
-        sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit + 1]
+            # 이제 필터링된 데이터프레임으로 점수 계산
+            scored_df = etf_score_utils.calculate_factor_score(filtered_df)
+            if scored_df.empty:
+                return [], 0
 
-        factors = etf_factors_cache.get_configs()
-        result = []
+            # 병합
+            merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
+            # 정렬
+            sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
+            # 페이징
+            total_count = len(sorted_df)
+            sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit + 1]
 
-        if columns:
-            ordered_columns = []
-            for col in columns:
-                mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
-                if mapped_col not in ordered_columns:
-                    ordered_columns.append(mapped_col)
-        else:
-            ordered_columns = ["Code", "Name", "manager", "score", "country"]
+            factors = etf_factors_cache.get_configs()
+            result = []
 
-        selected_columns = ordered_columns.copy()
-        existing_columns = sorted_df.columns.tolist()
-        selected_columns = [col for col in selected_columns if col in existing_columns]
-        sorted_df = sorted_df[selected_columns]
+            if columns:
+                ordered_columns = []
+                for col in columns:
+                    mapped_col = next((k for k, v in FACTOR_MAP.items() if v == col), col)
+                    if mapped_col not in ordered_columns:
+                        ordered_columns.append(mapped_col)
+            else:
+                ordered_columns = ["Code", "Name", "manager", "score", "country"]
 
-        for _, row in sorted_df.iterrows():
-            # 기본으로 표시될 컬럼들
-            etf_data = {}
+            selected_columns = ordered_columns.copy()
+            existing_columns = sorted_df.columns.tolist()
+            selected_columns = [col for col in selected_columns if col in existing_columns]
+            sorted_df = sorted_df[selected_columns]
 
-            # 숫자형 데이터 처리
-            for col in sorted_df.columns:
-                if col in BASE_COLUMNS_ETF:
-                    etf_data[col] = row[col]
-                elif col in SELECT_MAP:
-                    value_info = next(
-                        (
-                            {"value": item["value"], "display": item["display"]}
-                            for item in SELECT_MAP[col]
-                            if item["value"] == row[col]
-                        ),
-                        {"value": row[col], "display": row[col]},
-                    )
-                    etf_data[col] = value_info
-                elif col == "score":
-                    etf_data[col] = float(row[col])
-                elif col in row:
-                    if col in row:
-                        if isinstance(row[col], (int, float)):  # 값이 숫자인지 확인
-                            if pd.isna(row[col]) or np.isinf(row[col]):
-                                etf_data[col] = {"value": "", "unit": ""}
-                            else:
-                                value, unit = screener_utils.convert_unit_and_value(
-                                    market_filter,
-                                    float(row[col]),
-                                    factors[col].get("unit", "") if col in factors else "",
-                                    lang,
-                                )
-                                etf_data[col] = {"value": value, "unit": unit}
-                        else:  # 숫자가 아닌 타입 처리
-                            if pd.isna(row[col]):
-                                etf_data[col] = {"value": "", "unit": ""}
-                            else:
-                                etf_data[col] = {"value": str(row[col]), "unit": ""}
+            for _, row in sorted_df.iterrows():
+                # 기본으로 표시될 컬럼들
+                etf_data = {}
 
-            result.append(etf_data)
+                # 숫자형 데이터 처리
+                for col in sorted_df.columns:
+                    if col in BASE_COLUMNS_ETF:
+                        etf_data[col] = row[col]
+                    elif col in SELECT_MAP:
+                        value_info = next(
+                            (
+                                {"value": item["value"], "display": item["display"]}
+                                for item in SELECT_MAP[col]
+                                if item["value"] == row[col]
+                            ),
+                            {"value": row[col], "display": row[col]},
+                        )
+                        # display가 None인 경우 value 값을 display로 사용
+                        if value_info["display"] is None:
+                            value_info["display"] = value_info["value"]
+                        etf_data[col] = value_info
+                    elif col == "score":
+                        etf_data[col] = float(row[col])
+                    elif col in row:
+                        if col in row:
+                            if isinstance(row[col], (int, float)):  # 값이 숫자인지 확인
+                                if pd.isna(row[col]) or np.isinf(row[col]):
+                                    etf_data[col] = {"value": "", "unit": ""}
+                                else:
+                                    value, unit = screener_utils.convert_unit_and_value(
+                                        market_filter,
+                                        float(row[col]),
+                                        factors[col].get("unit", "") if col in factors else "",
+                                        lang,
+                                    )
+                                    etf_data[col] = {"value": value, "unit": unit}
+                            else:  # 숫자가 아닌 타입 처리
+                                if pd.isna(row[col]):
+                                    etf_data[col] = {"value": "", "unit": ""}
+                                else:
+                                    etf_data[col] = {"value": str(row[col]), "unit": ""}
 
-        mapped_result = []
-        factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
-        for item in result:
-            mapped_item = {}
-            for key, value in item.items():
-                mapped_key = factor_map.get(key, key)
-                mapped_item[mapped_key] = value
-            mapped_result.append(mapped_item)
+                result.append(etf_data)
 
-        return mapped_result, total_count
+            mapped_result = []
+            factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
+            for item in result:
+                mapped_item = {}
+                for key, value in item.items():
+                    mapped_key = factor_map.get(key, key)
+                    mapped_item[mapped_key] = value
+                mapped_result.append(mapped_item)
+
+            return mapped_result, total_count
+
+        except Exception as e:
+            logger.error(f"Error in get_filtered_etfs: {e}")
+            raise e
 
     def get_filtered_data(self, **kwargs):
         """
