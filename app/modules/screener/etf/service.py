@@ -121,11 +121,15 @@ class ScreenerETFService(BaseScreenerService):
 
             # 병합
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
+
+            # 티커(Code) 기준으로 중복 데이터 제거 (첫번째 항목만 유지)
+            merged_df = merged_df.drop_duplicates(subset=["Code"])
+
             # 정렬
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             # 페이징
             total_count = len(sorted_df)
-            sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit + 1]
+            sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
 
             factors = etf_factors_cache.get_configs()
             result = []
@@ -190,7 +194,18 @@ class ScreenerETFService(BaseScreenerService):
 
             mapped_result = []
             factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
+
+            # 티커 중복 방지를 위한 세트
+            seen_codes = set()
             for item in result:
+                # 티커 코드가 이미 처리된 경우 스킵
+                if "Code" in item and item["Code"] in seen_codes:
+                    continue
+
+                # 새로운 티커 코드 기록
+                if "Code" in item:
+                    seen_codes.add(item["Code"])
+
                 mapped_item = {}
                 for key, value in item.items():
                     mapped_key = factor_map.get(key, key)
