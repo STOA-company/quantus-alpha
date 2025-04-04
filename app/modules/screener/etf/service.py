@@ -161,6 +161,9 @@ class ScreenerETFService(BaseScreenerService):
                             ),
                             {"value": row[col], "display": row[col]},
                         )
+                        # display가 None인 경우 value 값을 display로 사용
+                        if value_info["display"] is None:
+                            value_info["display"] = value_info["value"]
                         etf_data[col] = value_info
                     elif col == "score":
                         etf_data[col] = float(row[col])
