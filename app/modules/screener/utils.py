@@ -515,6 +515,20 @@ class ScreenerUtils:
         df = self.get_df_from_parquet(market_filter)
         if exclude_filters:
             df = self.add_exclude_flags_to_dataframe(df, exclude_filters)
+            # 제외 필터 적용
+            if ExcludeEnum.FINANCIAL in exclude_filters:
+                df = df[~df["is_financial"]]
+            if ExcludeEnum.HOLDING in exclude_filters:
+                df = df[~df["is_holding"]]
+            if ExcludeEnum.WARNED in exclude_filters:
+                df = df[~df["is_warned"]]
+            if ExcludeEnum.DEFICIT in exclude_filters:
+                df = df[~df["is_deficit"]]
+            if ExcludeEnum.ANNUAL_DEFICIT in exclude_filters:
+                df = df[~df["is_annual_deficit"]]
+            if ExcludeEnum.PTP in exclude_filters:
+                df = df[~df["is_ptp"]]
+
         # 종목 필터링
         if market_filter:
             if market_filter == MarketEnum.SNP500:
@@ -530,6 +544,12 @@ class ScreenerUtils:
                 factor = filter["factor"]
                 if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
+
+                # SLIDER 타입 팩터인 경우 NULL 값을 가진 종목 제외
+                factor_info = self.db._select(table="factors", factor=factor)
+                if factor_info and factor_info[0].type == FactorTypeEnum.SLIDER:
+                    df = df[~df[factor].isna()]
+
                 if filter["above"] is not None:
                     df = df[df[factor] >= filter["above"]]
                 if filter["below"] is not None:
@@ -551,6 +571,8 @@ class ScreenerUtils:
         custom_filters: Optional[List[Dict]] = None,
     ) -> List[str]:
         df = self.etf_factor_loader.load_etf_factors(market_filter)
+        print(f"Initial DataFrame shape: {df.shape}")
+        print(f"DataFrame columns: {df.columns.tolist()}")
 
         # 종목 필터링
         if market_filter:
@@ -560,24 +582,34 @@ class ScreenerUtils:
                 df = df[df["country"] == "kr"]
             elif market_filter in [ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
                 df = df[df["market"] == market_filter.value.upper()]
+            print(f"After market filter shape: {df.shape}")
 
         if custom_filters:
             for filter in custom_filters:
                 factor = filter["factor"]
+                if factor == "배당 주기":
+                    factor = "dividend_frequency"
                 if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
-                if filter["above"] is not None:
+
+                print(f"\nProcessing filter for {factor}:")
+                print(f"Unique values before filtering: {df[factor].value_counts().to_dict()}")
+                print(f"Filter values: {filter.get('values')}")
+
+                if filter.get("above") is not None:
                     df = df[df[factor] >= filter["above"]]
-                if filter["below"] is not None:
+                    print(f"After 'above' filter shape: {df.shape}")
+                if filter.get("below") is not None:
                     df = df[df[factor] <= filter["below"]]
-                if filter["values"] is not None:
-                    # OR
-                    value_conditions = pd.Series(False, index=df.index)
-                    for value in filter["values"]:
-                        value_conditions = value_conditions | (df[factor] == value)
-                    df = df[value_conditions]
+                    print(f"After 'below' filter shape: {df.shape}")
+                if filter.get("values") is not None and len(filter.get("values", [])) > 0:
+                    print(f"Filtering for values: {filter['values']}")
+                    df = df[df[factor].isin(filter["values"])]
+                    print(f"After value filter shape: {df.shape}")
+                    print(f"Remaining unique values: {df[factor].value_counts().to_dict()}")
 
         etf_tickers = df["Code"].tolist()
+        print(f"Final number of tickers: {len(etf_tickers)}")
         return etf_tickers
 
     @time_it

@@ -44,6 +44,7 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
             custom_filters = [
                 {
                     "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "values": condition.values,
                     "above": condition.above,
                     "below": condition.below,
                 }
@@ -76,6 +77,9 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
             lang=filtered_etf.lang,
         )
 
+        if not etfs_data:
+            return {"data": [], "has_next": False}
+
         has_next = filtered_etf.offset * filtered_etf.limit + filtered_etf.limit < total_count
 
         print("ETF", etfs_data[0].keys())
@@ -106,6 +110,7 @@ def get_filtered_etfs_count(
                 "factor": REVERSE_FACTOR_MAP[condition.factor],
                 "above": condition.above,
                 "below": condition.below,
+                "values": condition.values,
             }
             for condition in filtered_etf.custom_filters
         ]

@@ -98,6 +98,10 @@ class ScreenerETFService(BaseScreenerService):
             raise CustomException(status_code=400, message="sort_by must be in columns")
 
         etfs = screener_utils.filter_etfs(market_filter, custom_filters)
+
+        if not etfs:
+            return [], 0
+
         # 필터링
         filtered_df = screener_utils.get_filtered_etfs_df(market_filter, etfs, columns)
         # 점수 계산
