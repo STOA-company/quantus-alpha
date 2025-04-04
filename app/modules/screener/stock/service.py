@@ -111,9 +111,6 @@ class ScreenerStockService(BaseScreenerService):
                 return [], 0
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
 
-            # 스코어가 null인 항목 제외
-            merged_df = merged_df[~merged_df["score"].isna()]
-
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
@@ -139,7 +136,6 @@ class ScreenerStockService(BaseScreenerService):
 
             for _, row in sorted_df.iterrows():
                 stock_data = {}
-                skip_this_stock = False
 
                 for col in selected_columns:
                     if col in BASE_COLUMNS:
@@ -153,13 +149,14 @@ class ScreenerStockService(BaseScreenerService):
                             ),
                             {"value": row[col], "display": row[col]},
                         )
-                        # display가 null인 경우 이 주식을 건너뛰기
-                        if value_info["display"] is None:
-                            skip_this_stock = True
-                            break
+                        # NULL 값을 그대로 노출 (display가 null인 경우에도 보여줌)
                         stock_data[col] = value_info
                     elif col == "score":
-                        stock_data[col] = {"value": float(row[col]), "unit": ""}
+                        # score가 NULL인 경우에도 표시
+                        if pd.isna(row[col]) or np.isinf(row[col]):
+                            stock_data[col] = {"value": "", "unit": ""}
+                        else:
+                            stock_data[col] = {"value": float(row[col]), "unit": ""}
                     elif col in row:
                         if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
                             stock_data[col] = {"value": "", "unit": ""}
@@ -172,8 +169,7 @@ class ScreenerStockService(BaseScreenerService):
                             )
                             stock_data[col] = {"value": value, "unit": unit}
 
-                if not skip_this_stock:
-                    result.append(stock_data)
+                result.append(stock_data)
 
             # 결과를 매핑 및 필터링
             factor_map = FACTOR_MAP
@@ -182,21 +178,13 @@ class ScreenerStockService(BaseScreenerService):
 
             mapped_result = []
             for item in result:
-                # display가 null인 항목이 있는지 확인
-                has_null_display = False
-                for key, value in item.items():
-                    if isinstance(value, dict) and "display" in value and value["display"] is None:
-                        has_null_display = True
-                        break
-
-                # null display가 없는 경우에만 결과에 포함
-                if not has_null_display:
-                    mapped_item = {}
-                    for key in ordered_columns:
-                        if key in item:
-                            mapped_key = factor_map.get(key, key)
-                            mapped_item[mapped_key] = item[key]
-                    mapped_result.append(mapped_item)
+                # NULL display 값 포함 - 모든 항목 결과에 포함
+                mapped_item = {}
+                for key in ordered_columns:
+                    if key in item:
+                        mapped_key = factor_map.get(key, key)
+                        mapped_item[mapped_key] = item[key]
+                mapped_result.append(mapped_item)
 
             return mapped_result, total_count
 
@@ -289,10 +277,6 @@ class ScreenerStockService(BaseScreenerService):
 
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
             print(f"merged_df shape: {merged_df.shape}")
-
-            # 스코어가 null인 항목 제외
-            merged_df = merged_df[~merged_df["score"].isna()]
-            print(f"after filtering null scores shape: {merged_df.shape}")
 
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             print(f"sorted_df shape: {sorted_df.shape}")
