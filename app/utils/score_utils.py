@@ -41,7 +41,6 @@ class ScoreUtils:
             min_value = config.get("min_value")
             max_value = config.get("max_value")
 
-            # NULL 값을 중위값으로 대체
             if nan_mask.any():
                 column_median = temp_df[col].median()
                 temp_df.loc[nan_mask, col] = column_median

@@ -149,10 +149,8 @@ class ScreenerStockService(BaseScreenerService):
                             ),
                             {"value": row[col], "display": row[col]},
                         )
-                        # NULL 값을 그대로 노출 (display가 null인 경우에도 보여줌)
                         stock_data[col] = value_info
                     elif col == "score":
-                        # score가 NULL인 경우에도 표시
                         if pd.isna(row[col]) or np.isinf(row[col]):
                             stock_data[col] = {"value": "", "unit": ""}
                         else:
