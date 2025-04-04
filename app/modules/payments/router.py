@@ -199,8 +199,8 @@ def use_coupon(
         raise HTTPException(status_code=400, detail="로그인이 필요합니다.")
 
     coupon_id = coupon_id.coupon_id
-    # if settings.ENV == "stage":
-    if settings.ENV == "dev":
+    if settings.ENV == "stage":
+        # if settings.ENV == "dev":
         today = now_kr().date()
         if today < datetime(2025, 4, 15).date():
             raise HTTPException(status_code=425, detail="쿠폰 사용 기간이 아직 안 됐습니다.")
