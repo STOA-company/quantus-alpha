@@ -101,8 +101,8 @@ class ScreenerETFService(BaseScreenerService):
             if sort_by not in columns and sort_by not in BASE_COLUMNS_ETF:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
 
-            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters, exclude_filters)
-            filtered_df = screener_utils.get_filtered_stocks_df(market_filter, stocks, columns)
+            etfs = screener_utils.filter_etfs(market_filter, custom_filters)
+            filtered_df = screener_utils.get_filtered_etfs_df(market_filter, etfs, columns)
 
             # 여기서 display가 null인 값들을 미리 필터링
             for col in filtered_df.columns:
