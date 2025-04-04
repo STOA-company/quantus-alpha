@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from app.cache.factors import factors_cache, etf_factors_cache
 from app.utils.test_utils import time_it
-from app.models.models_factors import FactorTypeEnum
 
 
 class ScoreUtils:
@@ -21,20 +20,6 @@ class ScoreUtils:
         # 데이터 타입을 직접 확인하여 숫자형 컬럼 식별
         numeric_columns = [col for col in columns if pd.api.types.is_numeric_dtype(df_copy[col])]
 
-        # SLIDER 타입 팩터 식별
-        slider_factors = []
-        for col in numeric_columns:
-            config = self.factors_cache.get_configs().get(col)
-            if not config:
-                continue
-            factor = self.factors_cache.get_configs().get(col)
-            if factor and factor.get("type") == FactorTypeEnum.SLIDER.value:
-                slider_factors.append(col)
-
-        # SLIDER 타입 팩터에서 NULL 값을 가진 종목 제외
-        for col in slider_factors:
-            df_copy = df_copy[~df_copy[col].isna()]
-
         if df_copy.empty:
             return pd.DataFrame()
 
@@ -44,6 +29,8 @@ class ScoreUtils:
         max_ranks_per_factor = []
 
         for col in numeric_columns:
+            df_copy = df_copy[~df_copy[col].isna()]
+
             config = self.factors_cache.get_configs().get(col)
             if not config:
                 continue
