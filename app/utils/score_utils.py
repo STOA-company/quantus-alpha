@@ -41,6 +41,10 @@ class ScoreUtils:
             min_value = config.get("min_value")
             max_value = config.get("max_value")
 
+            if nan_mask.any():
+                column_median = temp_df[col].median()
+                temp_df.loc[nan_mask, col] = column_median
+
             outlier_mask = pd.Series(False, index=temp_df.index)
             if min_value is not None:
                 outlier_mask = temp_df[col] < min_value
@@ -48,9 +52,9 @@ class ScoreUtils:
                 outlier_mask |= temp_df[col] > max_value
 
             if ascending:
-                temp_df.loc[nan_mask | outlier_mask, col] = float("inf")
+                temp_df.loc[outlier_mask, col] = float("inf")
             else:
-                temp_df.loc[nan_mask | outlier_mask, col] = float("-inf")
+                temp_df.loc[outlier_mask, col] = float("-inf")
 
             ranks = temp_df[col].rank(method="min", ascending=ascending)
             max_ranks_per_factor.append(ranks.max())  # 해당 팩터의 최대 순위(꼴등) 저장
@@ -91,13 +95,6 @@ class ScoreUtils:
             scores[all_last] = 0.0
 
             score_df["score"] = np.round(scores, 2)
-
-        check_columns = [col for col in df_copy.columns if col != "Code"]
-
-        nan_rows = df_copy[check_columns].isna().any(axis=1)
-
-        valid_codes = df_copy.loc[~nan_rows, "Code"].values
-        score_df = score_df[score_df["Code"].isin(valid_codes)]
 
         return score_df.sort_values("score", ascending=False)
 

@@ -1323,49 +1323,71 @@ class ETFDividendFactorExtractor:
         if len(ticker_dividends) == 1:
             return "insufficient_data"
 
-        # 최근 5년치 데이터 고려 (올해 제외)
-        current_year = datetime.datetime.now().year
-        five_years_ago = current_year - 5
-
         # payment_date가 datetime 타입인지 확인
-        if pd.api.types.is_datetime64_any_dtype(ticker_dividends["payment_date"]):
-            # 올해를 제외한 최근 5년 데이터만 필터링
-            historical_dividends = ticker_dividends[
-                (ticker_dividends["payment_date"].dt.year < current_year)
-                & (ticker_dividends["payment_date"].dt.year >= five_years_ago)
-            ]
-
-            if len(historical_dividends) == 0:
-                return "insufficient_data"
-
-            # 연도별 배당 횟수 계산
-            yearly_counts = historical_dividends["payment_date"].dt.year.value_counts().sort_index()
-
-            # 데이터가 있는 총 연도 수
-            data_years = len(yearly_counts)
-
-            if data_years == 0:
-                return "insufficient_data"
-
-            # 평균 배당 횟수 계산
-            total_payments = sum(yearly_counts)
-            avg_yearly_payments = total_payments / data_years
-
-            # 배당 주기 결정
-            if avg_yearly_payments >= 45:  # 주간 배당 (연 45회 이상)
-                return "week"
-            elif avg_yearly_payments >= 10:  # 월간 배당 (연 10회 이상)
-                return "month"
-            elif avg_yearly_payments >= 3.5:  # 분기 배당 (연 3.5회 이상)
-                return "quarter"
-            elif avg_yearly_payments >= 1.8:  # 반기 배당 (연 1.8회 이상)
-                return "semi-annual"
-            elif avg_yearly_payments >= 0.8:  # 연간 배당 (연 0.8회 이상)
-                return "annual"
-            else:
-                return "no_dividend"
-        else:
+        if not pd.api.types.is_datetime64_any_dtype(ticker_dividends["payment_date"]):
             return "insufficient_data"
+
+        # 최근 1년치 데이터 고려
+        one_year_ago = datetime.datetime.now() - datetime.timedelta(days=365)
+        recent_dividends = ticker_dividends[ticker_dividends["payment_date"] >= one_year_ago]
+
+        # 최근 데이터가 충분한지 확인
+        if len(recent_dividends) <= 1:
+            # 1년 데이터가 부족하면 전체 데이터 사용
+            dates = ticker_dividends["payment_date"].sort_values().tolist()
+        else:
+            dates = recent_dividends["payment_date"].sort_values().tolist()
+
+        # 날짜 간 간격 계산 (일 단위)
+        intervals = []
+        for i in range(len(dates) - 1):
+            interval_days = (dates[i + 1] - dates[i]).days
+            if interval_days > 0:  # 유효한 간격만 추가
+                intervals.append(interval_days)
+
+        if not intervals:
+            return "insufficient_data"
+
+        # 평균 간격 계산
+        avg_interval = sum(intervals) / len(intervals)
+
+        # 간격의 모드(최빈값) 계산
+        from collections import Counter
+
+        interval_counter = Counter(intervals)
+        if interval_counter:
+            mode_interval = interval_counter.most_common(1)[0][0]
+        else:
+            mode_interval = avg_interval  # 모드를 계산할 수 없으면 평균값 사용
+
+        # 주기 결정 기준 (평균 간격에 기반)
+        if avg_interval < 45:  # ~1.5개월
+            if avg_interval < 15:  # ~2주
+                cycle = "week"
+            else:
+                cycle = "month"
+        elif avg_interval < 135:  # ~4.5개월
+            cycle = "quarter"
+        elif avg_interval < 270:  # ~9개월
+            cycle = "semi-annual"
+        else:
+            cycle = "annual"
+
+        # 최빈값이 평균과 매우 다른 경우, 최빈값 기준으로 재판단
+        if abs(mode_interval - avg_interval) > avg_interval * 0.5:
+            if mode_interval < 45:
+                if mode_interval < 15:
+                    cycle = "week"
+                else:
+                    cycle = "month"
+            elif mode_interval < 135:
+                cycle = "quarter"
+            elif mode_interval < 270:
+                cycle = "semi-annual"
+            else:
+                cycle = "annual"
+
+        return cycle
 
 
 # 데이터 전처리
