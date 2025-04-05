@@ -79,7 +79,7 @@ class BaseScreenerService(ABC):
             stock_filters_list = []
             for filter_data in grouped_filters.values():
                 if not filter_data["values"]:  # values가 비어있으면 null로 설정
-                    filter_data["values"] = None
+                    filter_data["values"] = []
                 stock_filters_list.append(filter_data)
 
             return {

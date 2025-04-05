@@ -298,7 +298,7 @@ def get_group_filters(
             market_filter=market_filter,
             sector_filter=sector_filter,
             custom_filters=custom_filters,
-            exclude_filters=exclude_filters,
+            exclude_filters=exclude_filters if exclude_filters else [],
             factor_filters={
                 "technical": technical_columns,
                 "fundamental": fundamental_columns,
