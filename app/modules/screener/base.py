@@ -509,6 +509,7 @@ class BaseScreenerService(ABC):
                                     sets={
                                         "group_id": group_id,
                                         "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                        "type": condition.type,
                                         "above": condition.above,
                                         "below": condition.below,
                                         "value": value,
@@ -644,6 +645,7 @@ class BaseScreenerService(ABC):
                                 sets={
                                     "group_id": group_id,
                                     "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                    "type": condition.type,
                                     "above": condition.above,
                                     "below": condition.below,
                                     "value": None,
