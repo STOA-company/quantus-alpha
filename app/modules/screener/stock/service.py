@@ -276,21 +276,16 @@ class ScreenerStockService(BaseScreenerService):
                         raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
 
             stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters)
-            print(f"Filtered stocks count: {len(stocks)}")
             filtered_df = screener_utils.get_filtered_stocks_df(market_filter, stocks, columns)
-            print(f"filtered_df shape: {filtered_df.shape}")
             scored_df = score_utils.calculate_factor_score(filtered_df)
-            print(f"scored_df shape: {scored_df.shape}")
             if scored_df.empty:
                 print(f"scored_df is empty. filtered_df columns: {filtered_df.columns.tolist()}")
 
                 return pd.DataFrame()
 
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
-            print(f"merged_df shape: {merged_df.shape}")
 
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
-            print(f"sorted_df shape: {sorted_df.shape}")
 
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
@@ -315,15 +310,22 @@ class ScreenerStockService(BaseScreenerService):
                 elif col in sorted_df.columns:
 
                     def convert_value(x):
-                        if pd.isna(x) or np.isinf(x):
-                            return ""
-                        value, _ = screener_utils.convert_unit_and_value(
-                            market_filter,
-                            float(x),
-                            factors[col].get("unit", "") if col in factors else "",
-                            lang,
-                        )
-                        return value
+                        try:
+                            if pd.isna(x):
+                                return ""
+                            if isinstance(x, (int, float)) and np.isinf(x):
+                                return ""
+                            if not isinstance(x, (int, float)):
+                                return x
+                            value, _ = screener_utils.convert_unit_and_value(
+                                market_filter,
+                                float(x),
+                                factors[col].get("unit", "") if col in factors else "",
+                                lang,
+                            )
+                            return value
+                        except Exception:
+                            return x
 
                     sorted_df[col] = sorted_df[col].apply(convert_value)
 

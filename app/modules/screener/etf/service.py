@@ -326,15 +326,22 @@ class ScreenerETFService(BaseScreenerService):
                 elif col in sorted_df.columns:
 
                     def convert_value(x):
-                        if pd.isna(x) or np.isinf(x):
-                            return ""
-                        value, _ = screener_utils.convert_unit_and_value(
-                            market_filter,
-                            float(x),
-                            factors[col].get("unit", "") if col in factors else "",
-                            lang,
-                        )
-                        return value
+                        try:
+                            if pd.isna(x):
+                                return ""
+                            if isinstance(x, (int, float)) and np.isinf(x):
+                                return ""
+                            if not isinstance(x, (int, float)):
+                                return x
+                            value, _ = screener_utils.convert_unit_and_value(
+                                market_filter,
+                                float(x),
+                                factors[col].get("unit", "") if col in factors else "",
+                                lang,
+                            )
+                            return value
+                        except Exception:
+                            return x
 
                     sorted_df[col] = sorted_df[col].apply(convert_value)
 
