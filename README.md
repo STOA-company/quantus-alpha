@@ -166,3 +166,55 @@ services:
 ```
 
 `.env.prod` 파일을 사용하여 프로덕션 환경 변수를 관리할 수 있습니다. 필요에 따라 `.env.dev` 파일을 생성하여 개발 환경 변수를 별도로 관리할 수 있습니다.
+
+## 배포 자동화 (GitHub Actions)
+
+GitHub Actions을 사용하여 자동 배포를 설정했습니다. 배포는 다음과 같은 조건에서 자동으로 실행됩니다:
+
+1. `staging` 브랜치에 변경사항이 푸시될 때 (Staging 환경)
+2. `dev` 브랜치에 변경사항이 푸시될 때 (Development 환경)
+
+또한 GitHub UI에서 수동으로 워크플로우를 실행할 수 있습니다:
+
+1. GitHub 저장소의 "Actions" 탭으로 이동
+2. "Deploy Service" 워크플로우 선택
+3. "Run workflow" 버튼 클릭
+4. 배포 환경 선택 (dev, staging)
+5. 캐시 정리 여부 선택 (필요한 경우)
+6. "Run workflow" 클릭
+
+### GitHub Actions 배포를 위한 설정
+
+배포 자동화를 사용하려면 GitHub 저장소의 Secrets에 다음 값들을 설정해야 합니다:
+
+1. `SSH_PRIVATE_KEY`: 모든 서버에 접속 가능한 SSH 개인키 내용 (BEGIN부터 END까지 전체)
+
+2. 개발 환경(dev):
+   - `DEV_SERVER_HOST`: 개발 서버 호스트명 또는 IP 주소
+   - `DEV_SSH_USER`: 개발 서버 SSH 접속 계정명
+
+3. 스테이징 환경(staging):
+   - `STAGING_SERVER_HOST`: 스테이징 서버 호스트명 또는 IP 주소
+   - `STAGING_SSH_USER`: 스테이징 서버 SSH 접속 계정명
+
+이 값들은 GitHub 저장소의 Settings > Secrets and variables > Actions 메뉴에서 설정할 수 있습니다.
+
+#### Secrets 설정 방법:
+1. GitHub 프로젝트 저장소로 이동
+2. 상단 메뉴의 "Settings" 탭 클릭
+3. 왼쪽 사이드바에서 "Secrets and variables" > "Actions" 선택
+4. "New repository secret" 버튼을 클릭하여 각 Secret 추가
+5. 각 Secret의 이름과 값을 정확히 입력
+
+**SSH_PRIVATE_KEY 값 예시:**
+```
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAABlwAAAAdzc2gtcn
+...
+(키 내용 전체)
+...
+AAB3KbJmKTkaz/0hTJkOQJYTL9Ieaa8EMJMSBQiN/GJT1mA4nY=
+-----END OPENSSH PRIVATE KEY-----
+```
+
+**주의**: SSH 키는 절대 공개되어서는 안 됩니다. 반드시 비공개 Secret으로 관리하세요.
