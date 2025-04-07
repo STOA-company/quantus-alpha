@@ -429,6 +429,7 @@ async def download_filtered_etfs(
                 "factor": REVERSE_FACTOR_MAP[condition.factor],
                 "above": condition.above,
                 "below": condition.below,
+                "values": condition.values,
             }
             for condition in filtered_etfs.custom_filters
         ]
@@ -458,9 +459,9 @@ async def download_filtered_etfs(
     )
 
     if df is None or df.empty:
-        return JSONResponse(content={"error": "No data found"}, status_code=404)
+        return JSONResponse(content={"error": "데이터가 없습니다"}, status_code=404)
 
     filename = f"temp_export_{int(time.time())}.csv"
     df.to_csv(filename, index=False)
 
-    return FileResponse(path=filename, filename="etfs_export.csv", media_type="text/csv")
+    return FileResponse(path=filename, filename="etf_export.csv", media_type="text/csv")
