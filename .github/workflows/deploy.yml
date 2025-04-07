@@ -1,0 +1,76 @@
+name: Deploy Service
+
+on:
+  push:
+    branches:
+      - staging
+      - dev
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+      clean_cache:
+        description: 'Clean pip/poetry cache'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Determine environment
+        id: determine-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "ENVIRONMENT=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+            echo "CLEAN_CACHE=${{ github.event.inputs.clean_cache }}" >> $GITHUB_ENV
+          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+            echo "ENVIRONMENT=staging" >> $GITHUB_ENV
+            echo "CLEAN_CACHE=false" >> $GITHUB_ENV
+          elif [ "${{ github.ref }}" == "refs/heads/dev" ]; then
+            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+            echo "CLEAN_CACHE=false" >> $GITHUB_ENV
+          else
+            echo "Unsupported branch for deployment"
+            exit 1
+          fi
+
+      - name: Set environment-specific variables
+        id: set-env-vars
+        run: |
+          if [ "${{ env.ENVIRONMENT }}" == "staging" ]; then
+            echo "SERVER_HOST=${{ secrets.STAGING_SERVER_HOST }}" >> $GITHUB_ENV
+            echo "SSH_USER=${{ secrets.STAGING_SSH_USER }}" >> $GITHUB_ENV
+          else  # default to dev
+            echo "SERVER_HOST=${{ secrets.DEV_SERVER_HOST }}" >> $GITHUB_ENV
+            echo "SSH_USER=${{ secrets.DEV_SSH_USER }}" >> $GITHUB_ENV
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Install SSH dependencies
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -t rsa ${{ env.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Server
+        run: |
+          echo "Deploying to ${{ env.ENVIRONMENT }} environment on ${{ env.SERVER_HOST }}"
+          ssh ${{ env.SSH_USER }}@${{ env.SERVER_HOST }} "cd ~/quantus-alpha && git checkout ${{ github.ref_name }} && git pull origin ${{ github.ref_name }} && ./scripts/service-deploy.sh ${{ env.ENVIRONMENT }} ${{ env.CLEAN_CACHE }}"
