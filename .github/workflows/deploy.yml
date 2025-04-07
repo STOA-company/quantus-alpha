@@ -1,7 +1,8 @@
 name: Deploy Service
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches:
       - staging
       - dev
@@ -23,6 +24,7 @@ on:
 
 jobs:
   deploy:
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -32,10 +34,10 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "ENVIRONMENT=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
             echo "CLEAN_CACHE=${{ github.event.inputs.clean_cache }}" >> $GITHUB_ENV
-          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+          elif [ "${{ github.base_ref }}" == "staging" ] || [ "${{ github.ref }}" == "refs/heads/staging" ]; then
             echo "ENVIRONMENT=staging" >> $GITHUB_ENV
             echo "CLEAN_CACHE=false" >> $GITHUB_ENV
-          elif [ "${{ github.ref }}" == "refs/heads/dev" ]; then
+          elif [ "${{ github.base_ref }}" == "dev" ] || [ "${{ github.ref }}" == "refs/heads/dev" ]; then
             echo "ENVIRONMENT=dev" >> $GITHUB_ENV
             echo "CLEAN_CACHE=false" >> $GITHUB_ENV
           else
@@ -89,4 +91,5 @@ jobs:
       - name: Deploy to Server
         run: |
           echo "Deploying to ${{ env.ENVIRONMENT }} environment on ${{ env.SERVER_HOST }}"
-          ssh -v ${{ env.SSH_USER }}@${{ env.SERVER_HOST }} "cd ~/quantus-alpha && git checkout ${{ github.ref_name }} && git pull origin ${{ github.ref_name }} && ./scripts/service-deploy.sh ${{ env.ENVIRONMENT }} ${{ env.CLEAN_CACHE }}"
+          TARGET_BRANCH="${{ github.base_ref || github.ref_name }}"
+          ssh -v ${{ env.SSH_USER }}@${{ env.SERVER_HOST }} "cd ~/quantus-alpha && git checkout ${TARGET_BRANCH} && git pull origin ${TARGET_BRANCH} && ./scripts/service-deploy.sh ${{ env.ENVIRONMENT }} ${{ env.CLEAN_CACHE }}"

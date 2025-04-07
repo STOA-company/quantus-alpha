@@ -171,8 +171,16 @@ services:
 
 GitHub Actions을 사용하여 자동 배포를 설정했습니다. 배포는 다음과 같은 조건에서 자동으로 실행됩니다:
 
-1. `staging` 브랜치에 변경사항이 푸시될 때 (Staging 환경)
-2. `dev` 브랜치에 변경사항이 푸시될 때 (Development 환경)
+1. PR(Pull Request)이 `staging` 브랜치로 머지될 때 (Staging 환경)
+2. PR(Pull Request)이 `dev` 브랜치로 머지될 때 (Development 환경)
+
+### 배포 워크플로우
+
+1. 변경사항을 위한 새 브랜치 생성
+2. 작업 완료 후 dev 또는 staging 브랜치로 PR 생성
+3. 코드 리뷰 진행
+4. PR 승인 및 머지
+5. 자동 배포 워크플로우 실행
 
 또한 GitHub UI에서 수동으로 워크플로우를 실행할 수 있습니다:
 
