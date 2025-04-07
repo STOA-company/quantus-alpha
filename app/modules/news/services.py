@@ -8,6 +8,7 @@ from fastapi import Request, Response
 import pytz
 from sqlalchemy import text
 from app.core.exception.custom import DataNotFoundException
+from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.disclosure.mapping import (
     CATEGORY_TYPE_MAPPING_EN,
@@ -837,6 +838,7 @@ class NewsService:
         page: int = 1,
         size: int = 6,
         lang: TranslateCountry | None = None,
+        user: AlphafinderUser | None = None,
     ):
         if lang is None:
             lang = TranslateCountry.KO
@@ -887,7 +889,7 @@ class NewsService:
         )
         condition = {
             "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-            "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            # "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
             "is_exist": True,
             "is_related": True,
             "lang": lang,
@@ -925,6 +927,27 @@ class NewsService:
             else:
                 raise DataNotFoundException(ticker=ticker, data_type="news")
 
+        user_level = user.subscription_level if user else 1
+        # 최근 10개를 제외한 데이터 마스킹
+        if user_level == 1:
+            df_news = self.mask_fields(df_news)
+
+        # 타입 체크 및 날짜 필터링 최적화
+        print(f'df_news: {type(df_news["date"])}')
+
+        # 날짜 범위를 문자열 형식으로 필터링 (타입 이슈 우회)
+        start_date_str = utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        end_date_str = utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S")
+
+        # 문자열 비교를 위해 날짜를 문자열로 변환
+        df_news["date_str"] = df_news["date"].astype(str)
+        date_mask = (df_news["date_str"] >= start_date_str) & (df_news["date_str"] <= end_date_str)
+        df_news = df_news[date_mask]
+        df_news = df_news.drop("date_str", axis=1)  # 임시 컬럼 제거
+
+        # to_datetime을 다시 적용하여 일관된 형식 유지
+        df_news["date"] = pd.to_datetime(df_news["date"])
+
         offset = (page - 1) * size
         df_news["emotion"] = df_news["emotion"].str.lower()
         total_count = df_news.shape[0]
@@ -936,7 +959,7 @@ class NewsService:
             offset = (page - 1) * size
 
         df_news = df_news[offset : offset + size]
-        df_news["date"] = pd.to_datetime(df_news["date"]).dt.tz_localize(utc).dt.tz_convert(kst)
+        df_news["date"] = df_news["date"].dt.tz_localize(utc).dt.tz_convert(kst)
         df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
 
         # df_price = pd.DataFrame(
@@ -1051,6 +1074,32 @@ class NewsService:
     def increase_disclosure_search_count(self, disclosure_id: int, ticker: str) -> None:
         redis = DisclosureLeaderboard()
         redis.increment_score(disclosure_id, ticker)
+
+    def mask_fields(self, df: pd.DataFrame, masked_count: int = 10) -> pd.DataFrame:
+        # 최근 10개를 제외한 모든 데이터를 마스킹
+        if df.empty:
+            return df
+
+        # 데이터를 날짜순으로 정렬
+        df_sorted = df.sort_values(by=["date"], ascending=[False])
+
+        # 마스킹할 컬럼
+        mask_columns = ["summary", "impact_reason", "key_points"]
+
+        # 마스킹 메시지
+        mask_message = ""
+
+        # 복사본 생성
+        df_masked = df_sorted.copy()
+
+        # 최근 10개를 제외한 행들에 대해 마스킹 적용
+        mask_indices = df_masked.index[masked_count:]
+
+        for column in mask_columns:
+            if column in df_masked.columns:
+                df_masked.loc[mask_indices, column] = mask_message
+
+        return df_masked
 
 
 def get_news_service() -> NewsService:
