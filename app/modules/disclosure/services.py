@@ -1,13 +1,16 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict
 
 import pandas as pd
+from app.common.constants import KST
 from app.core.exception.custom import DataNotFoundException
 from app.database.crud import JoinInfo, database
 from app.core.logging.config import get_logger
+from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.utils import check_ticker_country_len_2, check_ticker_country_len_3
+from app.utils.date_utils import now_kr
 from .mapping import CATEGORY_TYPE_MAPPING_EN, DOCUMENT_TYPE_MAPPING, DOCUMENT_TYPE_MAPPING_EN, FORM_TYPE_MAPPING
 
 
@@ -198,7 +201,9 @@ class DisclosureService:
             "neutral_count": int(emotion_counts.get("neutral", 0)),
         }
 
-    async def renewal_disclosure(self, ticker: str, date: str, page: int, size: int, lang: TranslateCountry):
+    async def renewal_disclosure(
+        self, ticker: str, date: str, page: int, size: int, lang: TranslateCountry, user: AlphafinderUser
+    ):
         if not date:
             year = datetime.now().strftime("%Y")
         elif len(date) == 8:
@@ -276,6 +281,11 @@ class DisclosureService:
             lambda x: json.loads(x) if isinstance(x, str) else x
         )
 
+        # 권한에 따른 데이터 마스킹
+        user_level = user.subscription_level if user else 1
+        if user_level == 1:
+            df_disclosure = self.mask_fields_disclosure(df_disclosure)
+
         data = []
         for _, row in df_disclosure.iterrows():
             form_type = document_type_mapping.get(row["form_type"], row["form_type"])
@@ -290,11 +300,11 @@ class DisclosureService:
                     "date": row["date"],
                     "emotion": row["emotion"],
                     "impact_reason": row["impact_reason"],
-                    "key_points_1": row["key_points"][0],
-                    "key_points_2": row["key_points"][1],
-                    "key_points_3": row["key_points"][2],
-                    "key_points_4": row["key_points"][3],
-                    "key_points_5": row["key_points"][4],
+                    "key_points_1": row["key_points"][0] if row["key_points"] else "",
+                    "key_points_2": row["key_points"][1] if row["key_points"] else "",
+                    "key_points_3": row["key_points"][2] if row["key_points"] else "",
+                    "key_points_4": row["key_points"][3] if row["key_points"] else "",
+                    "key_points_5": row["key_points"][4] if row["key_points"] else "",
                     "summary": row["summary"],
                     "document_url": row["url"],
                     "price_impact": row["price_impact"],
@@ -302,6 +312,51 @@ class DisclosureService:
             )
 
         return data, total_count, total_pages, offset, emotion_counts
+
+    def mask_fields_disclosure(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        사용자 레벨에 따라 민감 정보 필드를 필터링하는 함수
+
+        Parameters:
+        - df: 필터링할 데이터프레임
+
+        Returns:
+        - 필터링된 데이터프레임
+        """
+
+        # 필터링할 필드 리스트
+        fields_to_filter = ["impact_reason", "key_points"]
+
+        # df에 date 컬럼이 없거나 비어있는 경우 처리
+        if "date" not in df.columns or df.empty:
+            return df
+
+        try:
+            # 날짜 컬럼의 타임존 정보 확인
+            if pd.api.types.is_datetime64tz_dtype(df["date"]):
+                # 타임존이 있는 경우
+                # 기준 날짜 계산 (6시간 전) 타임존 적용
+                cutoff_date = pd.Timestamp(now_kr() - timedelta(days=7)).tz_localize(KST)
+            else:
+                # 타임존이 없는 경우
+                cutoff_date = pd.Timestamp(now_kr() - timedelta(days=7))
+
+            # 마스크 생성 - 7일보다 오래된 데이터 필터링 (최근 7일 데이터는 유지)
+            old_data_mask = df["date"] < cutoff_date
+
+            # 마스크 적용 - 오래된 데이터의 필드 비우기
+            if old_data_mask.any():
+                for field in fields_to_filter:
+                    if field in df.columns:
+                        df.loc[old_data_mask, field] = ""
+
+        except Exception as e:
+            # 오류 로깅
+            import logging
+
+            logging.error(f"Error in filter_sensitive_fields_by_user_level: {str(e)}")
+
+        return df
 
 
 def get_disclosure_service() -> DisclosureService:
