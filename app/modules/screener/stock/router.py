@@ -172,7 +172,9 @@ def get_paginated_stocks(
 
         result = {
             "data": stocks_data,
-            "pagination": {"total_count": total_count, "total_pages": total_pages, "current_page": page},
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "current_page": page,
         }
         return result
 
