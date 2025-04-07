@@ -1,8 +1,10 @@
 from typing import Annotated, Optional
 from fastapi import APIRouter, Query, Depends
+from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.disclosure.schemas import DisclosureResponse
 from app.modules.disclosure.services import DisclosureService, get_disclosure_service
+from app.utils.oauth_utils import get_current_user
 
 router = APIRouter()
 
@@ -28,9 +30,10 @@ async def renewal_disclosure(
     page: Annotated[Optional[int], Query(description="페이지 번호, 기본값: 1")] = 1,
     size: Annotated[Optional[int], Query(description="페이지 크기, 기본값: 6")] = 6,
     service: DisclosureService = Depends(get_disclosure_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ):
     data, total_count, total_pages, offset, emotion_counts = await service.renewal_disclosure(
-        ticker=ticker, date=date, page=page, size=size, lang=lang
+        ticker=ticker, date=date, page=page, size=size, lang=lang, user=user
     )
 
     return DisclosureResponse(

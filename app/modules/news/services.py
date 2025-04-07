@@ -962,25 +962,6 @@ class NewsService:
         df_news["date"] = df_news["date"].dt.tz_localize(utc).dt.tz_convert(kst)
         df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
 
-        # df_price = pd.DataFrame(
-        #     self.db._select(
-        #         table="stock_trend",
-        #         columns=["ticker", "current_price"],
-        #         **{"ticker": ticker},
-        #     )
-        # )
-
-        df_news["price_impact"] = 0.0
-        # if not df_price.empty:
-        #     df_price["current_price"] = df_price["current_price"].fillna(0.0)
-
-        #     df_news = pd.merge(df_news, df_price, on="ticker", how="left")
-
-        #     df_news["price_impact"] = (
-        #         (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100
-        #     )
-        #     df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
-
         data = []
         for _, row in df_news.iterrows():
             data.append(
@@ -993,7 +974,7 @@ class NewsService:
                     impact_reason=row["impact_reason"],
                     key_points=row["key_points"],
                     emotion=row["emotion"],
-                    price_impact=row["price_impact"],
+                    price_impact=0,
                 )
             )
         return data, total_count, total_page, offset, emotion_count, ctry
