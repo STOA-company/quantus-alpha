@@ -49,9 +49,11 @@ jobs:
           if [ "${{ env.ENVIRONMENT }}" == "staging" ]; then
             echo "SERVER_HOST=${{ secrets.STAGING_SERVER_HOST }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.STAGING_SSH_USER }}" >> $GITHUB_ENV
+            echo "::set-output name=ssh_key::STAGING_SSH_PRIVATE_KEY"
           else  # default to dev
             echo "SERVER_HOST=${{ secrets.DEV_SERVER_HOST }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.DEV_SSH_USER }}" >> $GITHUB_ENV
+            echo "::set-output name=ssh_key::DEV_SSH_PRIVATE_KEY"
           fi
 
       - name: Checkout code
@@ -60,17 +62,31 @@ jobs:
           submodules: 'false'
           fetch-depth: 0
 
-      - name: Set up SSH
+      - name: Set up SSH for DEV environment
+        if: env.ENVIRONMENT == 'dev'
         uses: webfactory/ssh-agent@v0.8.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
+
+      - name: Set up SSH for STAGING environment
+        if: env.ENVIRONMENT == 'staging'
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
 
       - name: Install SSH dependencies
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -t rsa ${{ env.SERVER_HOST }} >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          echo "SSH setup completed"
+
+      - name: Debug connection
+        run: |
+          echo "Attempting to connect to ${{ env.SERVER_HOST }} as ${{ env.SSH_USER }}"
+          ssh -v ${{ env.SSH_USER }}@${{ env.SERVER_HOST }} "echo Connection successful"
 
       - name: Deploy to Server
         run: |
           echo "Deploying to ${{ env.ENVIRONMENT }} environment on ${{ env.SERVER_HOST }}"
-          ssh ${{ env.SSH_USER }}@${{ env.SERVER_HOST }} "cd ~/quantus-alpha && git checkout ${{ github.ref_name }} && git pull origin ${{ github.ref_name }} && ./scripts/service-deploy.sh ${{ env.ENVIRONMENT }} ${{ env.CLEAN_CACHE }}"
+          ssh -v ${{ env.SSH_USER }}@${{ env.SERVER_HOST }} "cd ~/quantus-alpha && git checkout ${{ github.ref_name }} && git pull origin ${{ github.ref_name }} && ./scripts/service-deploy.sh ${{ env.ENVIRONMENT }} ${{ env.CLEAN_CACHE }}"
