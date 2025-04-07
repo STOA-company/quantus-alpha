@@ -98,6 +98,18 @@ class FilteredStocks(BaseModel):
     lang: Optional[str] = "kr"
 
 
+class PaginatedFilteredStocks(BaseModel):
+    market_filter: Optional[MarketEnum] = MarketEnum.US
+    sector_filter: Optional[List[str]] = None
+    custom_filters: Optional[List[FilterCondition]] = None
+    exclude_filters: Optional[List[ExcludeEnum]] = None
+    factor_filters: Optional[List[str]] = None
+    limit: Optional[int] = 20
+    page: Optional[int] = 1
+    sort_info: Optional[SortInfo] = None
+    lang: Optional[str] = "kr"
+
+
 class ColumnSet(BaseModel):
     id: Optional[int] = None
     name: Optional[str] = None

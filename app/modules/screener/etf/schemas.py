@@ -13,3 +13,13 @@ class FilteredETF(BaseModel):
     offset: Optional[int] = 0
     sort_info: Optional[SortInfo] = None
     lang: Optional[str] = "kr"
+
+
+class PaginatedFilteredETF(BaseModel):
+    market_filter: Optional[ETFMarketEnum] = ETFMarketEnum.US
+    custom_filters: Optional[List[FilterCondition]] = []
+    factor_filters: Optional[List[str]] = []
+    limit: Optional[int] = 20
+    page: Optional[int] = 1
+    sort_info: Optional[SortInfo] = None
+    lang: Optional[str] = "kr"
