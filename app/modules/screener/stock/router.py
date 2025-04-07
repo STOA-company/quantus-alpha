@@ -8,6 +8,7 @@ from app.modules.screener.stock.schemas import (
     FactorResponse,
     GroupMetaData,
     FilteredStocks,
+    PaginatedFilteredStocks,
     GroupFilter,
     GroupFilterResponse,
 )
@@ -109,6 +110,78 @@ def get_filtered_stocks(
 
     except Exception as e:
         logger.exception(f"Error getting filtered stocks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/stocks/paginated", response_model=Dict)
+def get_paginated_stocks(
+    filtered_stocks: PaginatedFilteredStocks, screener_service: ScreenerStockService = Depends(ScreenerStockService)
+):
+    """
+    page: 페이지 번호 (1부터 시작)
+    """
+    try:
+        custom_filters = []
+        if filtered_stocks.custom_filters:
+            custom_filters = [
+                {
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "above": condition.above,
+                    "below": condition.below,
+                    "values": condition.values,
+                }
+                for condition in filtered_stocks.custom_filters
+            ]
+
+        request_columns = ["Code", "Name", "country"]
+        reverse_factor_map = REVERSE_FACTOR_MAP
+        if filtered_stocks.lang == "en":
+            reverse_factor_map = REVERSE_FACTOR_MAP_EN
+
+        for column in [reverse_factor_map[column] for column in filtered_stocks.factor_filters]:
+            if column not in request_columns:
+                request_columns.append(column)
+
+        sort_by = "score"
+        ascending = False
+        if filtered_stocks.sort_info:
+            sort_by = reverse_factor_map[filtered_stocks.sort_info.sort_by]
+            ascending = filtered_stocks.sort_info.ascending
+
+        page = filtered_stocks.page if filtered_stocks.page > 0 else 1
+        offset = page - 1
+
+        stocks_data, total_count = screener_service.get_filtered_data(
+            market_filter=filtered_stocks.market_filter,
+            sector_filter=filtered_stocks.sector_filter,
+            exclude_filters=filtered_stocks.exclude_filters,
+            custom_filters=custom_filters,
+            columns=request_columns,
+            limit=filtered_stocks.limit,
+            offset=offset,
+            sort_by=sort_by,
+            ascending=ascending,
+            lang=filtered_stocks.lang,
+        )
+
+        total_pages = (total_count + filtered_stocks.limit - 1) // filtered_stocks.limit if total_count > 0 else 0
+
+        if filtered_stocks.lang == "en":
+            for stock in stocks_data:
+                stock["Market"] = MARKET_KOREAN_TO_ENGLISH_MAP[stock["Market"]]
+
+        result = {
+            "data": stocks_data,
+            "pagination": {"total_count": total_count, "total_pages": total_pages, "current_page": page},
+        }
+        return result
+
+    except CustomException as e:
+        logger.exception(f"Error getting paginated stocks: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+    except Exception as e:
+        logger.exception(f"Error getting paginated stocks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
