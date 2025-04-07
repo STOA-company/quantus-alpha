@@ -2,12 +2,14 @@ import logging
 from fastapi import Request, HTTPException
 from requests import Session
 from app.core.exception.handler import exception_handler
+from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import FinancialCountry, TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from fastapi import APIRouter, Depends, Query
 from app.database.conn import db
 from app.modules.common.utils import async_check_ticker_country_len_3, check_ticker_country_len_3
 from app.modules.financial.services import FinancialService, get_financial_service
+from app.utils.oauth_utils import get_current_user
 from .schemas import (
     CashFlowResponse,
     FinPosResponse,
@@ -62,11 +64,14 @@ def get_income_analysis(
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ) -> BaseResponse[IncomeStatementResponse]:
     try:
         country_code = check_ticker_country_len_3(ticker).upper()
         ctry = FinancialCountry(country_code)
-        result = financial_service.get_income_analysis(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+        result = financial_service.get_income_analysis(
+            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, user=user
+        )
         return result
 
     except Exception as error:
@@ -85,12 +90,13 @@ def get_cashflow_analysis(
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ) -> BaseResponse[CashFlowResponse]:
     try:
         country_code = check_ticker_country_len_3(ticker).upper()
         ctry = FinancialCountry(country_code)
         result = financial_service.get_cashflow_analysis(
-            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date
+            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, user=user
         )
         return result
 
@@ -110,11 +116,14 @@ def get_finpos_analysis(
     start_date: Annotated[Optional[str], Query(description="시작일자 (YYYYMM)")] = None,
     end_date: Annotated[Optional[str], Query(description="종료일자 (YYYYMM)")] = None,
     financial_service: FinancialService = Depends(get_financial_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ) -> BaseResponse[FinPosResponse]:
     try:
         country_code = check_ticker_country_len_3(ticker).upper()
         ctry = FinancialCountry(country_code)
-        result = financial_service.get_finpos_analysis(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+        result = financial_service.get_finpos_analysis(
+            ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, user=user
+        )
 
         return result
 

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.crud import database
 from app.database.conn import db
 from app.models.models_stock import StockInformation
+from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import FinancialCountry, TranslateCountry
 from app.modules.common.services import CommonService, get_common_service
 from app.modules.financial.crud import FinancialCrud
@@ -32,6 +33,7 @@ from app.modules.financial.schemas import (
 from app.modules.common.schemas import BaseResponse
 from app.core.exception.custom import DataNotFoundException, InvalidCountryException, AnalysisException
 from app.modules.common.utils import contry_mapping
+from app.utils.oauth_utils import get_current_user
 
 logger = get_logger(__name__)
 
@@ -56,14 +58,17 @@ class FinancialService:
         self.cashflow_tables = create_table_mapping("cashflow")
         self.finpos_tables = create_table_mapping("finpos")
 
-    def _get_date_conditions(self, start_date: Optional[str], end_date: Optional[str]) -> Dict:
+    def _get_date_conditions(self, start_date: Optional[str], end_date: Optional[str], user: AlphafinderUser) -> Dict:
         """
         날짜 조건 생성
         start_date (Optional[str]): YYYYMM 형식의 시작일
         end_date (Optional[str]): YYYYMM 형식의 종료일
         기본값은 2000년도부터 현재까지
         """
+        level_map = {1: 4, 3: 9}  # 무료=5년, 유료 10년
         from datetime import datetime
+
+        user_level = user.subscription_level if user else 1
 
         conditions = {}
         current_date = datetime.now()
@@ -78,8 +83,7 @@ class FinancialService:
         latest_quarter_month = str(latest_quarter_month).zfill(2)  # 한 자리 월을 두 자리로 변환
 
         if not start_date:
-            # 2000년부터 현재까지의 데이터 조회
-            conditions["period_q__gte"] = "200001"  # 2000년 1월부터
+            conditions["period_q__gte"] = f"{current_year - level_map[user_level]}01"  # 10년 전부터
             conditions["period_q__lte"] = f"{current_year}{latest_quarter_month}"  # 현재 연도의 마지막 분기
         else:
             conditions["period_q__gte"] = f"{start_date[:4]}01"  # 시작년도의 1월
@@ -244,6 +248,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[IncomeStatementResponse]:
         """
         손익계산서 시계열 분석
@@ -251,7 +256,9 @@ class FinancialService:
         logger.info(f"Starting income analysis for {ticker}")
 
         try:
-            income_data = self.get_income_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+            income_data = self.get_income_data(
+                ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, user=user
+            )
             # data를 details로 변경
             if not income_data.data.details:
                 logger.warning(f"No data found for ticker: {ticker}")
@@ -275,12 +282,15 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[CashFlowResponse]:
         """
         현금흐름 시계열 분석
         """
         try:
-            cashflow_data = self.get_cashflow_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+            cashflow_data = self.get_cashflow_data(
+                ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, user=user
+            )
             if not cashflow_data.data.details:
                 logger.warning(f"No data found for ticker: {ticker}")
                 return BaseResponse[CashFlowResponse](
@@ -303,12 +313,15 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[FinPosResponse]:
         """
         재무상태표 시계열 분석
         """
         try:
-            finpos_data = self.get_finpos_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+            finpos_data = self.get_finpos_data(
+                ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, user=user
+            )
 
             if not finpos_data.data.details:
                 return BaseResponse[FinPosResponse](
@@ -401,6 +414,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[IncomeStatementResponse]:
         """
         손익계산서 데이터 조회
@@ -412,7 +426,7 @@ class FinancialService:
                 raise InvalidCountryException(country=ctry)
 
             db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
-            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date, user)}
 
             logger.debug(f"Querying income data for {ticker} with conditions: {conditions}")
 
@@ -427,7 +441,7 @@ class FinancialService:
                 ticker_list = [ticker[0] for ticker in same_company_tickers]
                 ticker_list = [f"{t}-US" if ctry == FinancialCountry.USA else t for t in ticker_list if t != ticker]
                 if len(ticker_list) == 1:
-                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date)}
+                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date, user)}
                     result = self.db._select(table=table_name, **conditions)
                 elif not ticker_list and len(ticker_list) > 1:
                     logger.warning(f"No income data found for ticker: {ticker}")
@@ -475,6 +489,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[CashFlowResponse]:
         """
         현금흐름표 데이터 조회
@@ -486,7 +501,7 @@ class FinancialService:
                 raise InvalidCountryException(country=ctry)
 
             db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
-            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date, user)}
 
             logger.debug(f"Querying cashflow data for {ticker} with conditions: {conditions}")
             result = self.db._select(table=table_name, **conditions)
@@ -499,7 +514,7 @@ class FinancialService:
                 ticker_list = [ticker[0] for ticker in same_company_tickers]
                 ticker_list = [f"{t}-US" if ctry == FinancialCountry.USA else t for t in ticker_list if t != ticker]
                 if len(ticker_list) == 1:
-                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date)}
+                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date, user)}
                     result = self.db._select(table=table_name, **conditions)
                 elif not ticker_list and len(ticker_list) > 1:
                     logger.warning(f"No cashflow data found for ticker: {ticker}")
@@ -539,6 +554,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[FinPosResponse]:
         """
         재무상태표 데이터 조회
@@ -550,7 +566,7 @@ class FinancialService:
                 raise InvalidCountryException(country=ctry)
 
             db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
-            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date, user)}
 
             logger.debug(f"Querying finpos data for {ticker} with conditions: {conditions}")
             result = self.db._select(table=table_name, **conditions)
@@ -563,7 +579,7 @@ class FinancialService:
                 ticker_list = [ticker[0] for ticker in same_company_tickers]
                 ticker_list = [f"{t}-US" if ctry == FinancialCountry.USA else t for t in ticker_list if t != ticker]
                 if len(ticker_list) == 1:
-                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date)}
+                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date, user)}
                     result = self.db._select(table=table_name, **conditions)
                 elif not ticker_list and len(ticker_list) > 1:
                     logger.warning(f"No finpos data found for ticker: {ticker}")
