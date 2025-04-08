@@ -230,3 +230,11 @@ jobs:
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Upload Deployment Logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deployment-logs-${{ env.ENVIRONMENT }}
+          path: logs/
+          retention-days: 30
