@@ -623,9 +623,6 @@ class ScreenerUtils:
         df = self.get_df_from_parquet(market_filter)
         filtered_df = df[df["Code"].isin(codes)][required_columns]
 
-        for column in filtered_df.columns:
-            filtered_df = filtered_df[~filtered_df[column].isna()]
-
         return filtered_df
 
     def get_filtered_etfs_df(

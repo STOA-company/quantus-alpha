@@ -79,7 +79,7 @@ class BaseScreenerService(ABC):
             stock_filters_list = []
             for filter_data in grouped_filters.values():
                 if not filter_data["values"]:  # values가 비어있으면 null로 설정
-                    filter_data["values"] = None
+                    filter_data["values"] = []
                 stock_filters_list.append(filter_data)
 
             return {
@@ -509,6 +509,7 @@ class BaseScreenerService(ABC):
                                     sets={
                                         "group_id": group_id,
                                         "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                        "type": condition.type,
                                         "above": condition.above,
                                         "below": condition.below,
                                         "value": value,
@@ -644,6 +645,7 @@ class BaseScreenerService(ABC):
                                 sets={
                                     "group_id": group_id,
                                     "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                    "type": condition.type,
                                     "above": condition.above,
                                     "below": condition.below,
                                     "value": None,

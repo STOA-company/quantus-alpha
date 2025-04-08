@@ -101,8 +101,8 @@ class ScreenerETFService(BaseScreenerService):
             if sort_by not in columns and sort_by not in BASE_COLUMNS_ETF:
                 raise CustomException(status_code=400, message="sort_by must be in columns")
 
-            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters, exclude_filters)
-            filtered_df = screener_utils.get_filtered_stocks_df(market_filter, stocks, columns)
+            etfs = screener_utils.filter_etfs(market_filter, custom_filters)
+            filtered_df = screener_utils.get_filtered_etfs_df(market_filter, etfs, columns)
 
             # 여기서 display가 null인 값들을 미리 필터링
             for col in filtered_df.columns:
@@ -121,11 +121,15 @@ class ScreenerETFService(BaseScreenerService):
 
             # 병합
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
+
+            # 티커(Code) 기준으로 중복 데이터 제거 (첫번째 항목만 유지)
+            merged_df = merged_df.drop_duplicates(subset=["Code"])
+
             # 정렬
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             # 페이징
             total_count = len(sorted_df)
-            sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit + 1]
+            sorted_df = sorted_df.iloc[offset * limit : offset * limit + limit]
 
             factors = etf_factors_cache.get_configs()
             result = []
@@ -161,6 +165,9 @@ class ScreenerETFService(BaseScreenerService):
                             ),
                             {"value": row[col], "display": row[col]},
                         )
+                        # display가 None인 경우 value 값을 display로 사용
+                        if value_info["display"] is None:
+                            value_info["display"] = value_info["value"]
                         etf_data[col] = value_info
                     elif col == "score":
                         etf_data[col] = float(row[col])
@@ -187,7 +194,18 @@ class ScreenerETFService(BaseScreenerService):
 
             mapped_result = []
             factor_map = FACTOR_MAP if lang == "kr" else FACTOR_MAP_EN
+
+            # 티커 중복 방지를 위한 세트
+            seen_codes = set()
             for item in result:
+                # 티커 코드가 이미 처리된 경우 스킵
+                if "Code" in item and item["Code"] in seen_codes:
+                    continue
+
+                # 새로운 티커 코드 기록
+                if "Code" in item:
+                    seen_codes.add(item["Code"])
+
                 mapped_item = {}
                 for key, value in item.items():
                     mapped_key = factor_map.get(key, key)
@@ -308,15 +326,22 @@ class ScreenerETFService(BaseScreenerService):
                 elif col in sorted_df.columns:
 
                     def convert_value(x):
-                        if pd.isna(x) or np.isinf(x):
-                            return ""
-                        value, _ = screener_utils.convert_unit_and_value(
-                            market_filter,
-                            float(x),
-                            factors[col].get("unit", "") if col in factors else "",
-                            lang,
-                        )
-                        return value
+                        try:
+                            if pd.isna(x):
+                                return ""
+                            if isinstance(x, (int, float)) and np.isinf(x):
+                                return ""
+                            if not isinstance(x, (int, float)):
+                                return x
+                            value, _ = screener_utils.convert_unit_and_value(
+                                market_filter,
+                                float(x),
+                                factors[col].get("unit", "") if col in factors else "",
+                                lang,
+                            )
+                            return value
+                        except Exception:
+                            return x
 
                     sorted_df[col] = sorted_df[col].apply(convert_value)
 

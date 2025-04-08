@@ -111,8 +111,8 @@ class ScreenerStockService(BaseScreenerService):
                 return [], 0
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
 
-            # 스코어가 null인 항목 제외
-            merged_df = merged_df[~merged_df["score"].isna()]
+            # 티커(Code) 기준으로 중복 데이터 제거 (첫번째 항목만 유지)
+            merged_df = merged_df.drop_duplicates(subset=["Code"])
 
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
@@ -139,7 +139,6 @@ class ScreenerStockService(BaseScreenerService):
 
             for _, row in sorted_df.iterrows():
                 stock_data = {}
-                skip_this_stock = False
 
                 for col in selected_columns:
                     if col in BASE_COLUMNS:
@@ -153,13 +152,12 @@ class ScreenerStockService(BaseScreenerService):
                             ),
                             {"value": row[col], "display": row[col]},
                         )
-                        # display가 null인 경우 이 주식을 건너뛰기
-                        if value_info["display"] is None:
-                            skip_this_stock = True
-                            break
                         stock_data[col] = value_info
                     elif col == "score":
-                        stock_data[col] = {"value": float(row[col]), "unit": ""}
+                        if pd.isna(row[col]) or np.isinf(row[col]):
+                            stock_data[col] = {"value": "", "unit": ""}
+                        else:
+                            stock_data[col] = {"value": float(row[col]), "unit": ""}
                     elif col in row:
                         if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
                             stock_data[col] = {"value": "", "unit": ""}
@@ -172,8 +170,7 @@ class ScreenerStockService(BaseScreenerService):
                             )
                             stock_data[col] = {"value": value, "unit": unit}
 
-                if not skip_this_stock:
-                    result.append(stock_data)
+                result.append(stock_data)
 
             # 결과를 매핑 및 필터링
             factor_map = FACTOR_MAP
@@ -181,22 +178,24 @@ class ScreenerStockService(BaseScreenerService):
                 factor_map = FACTOR_MAP_EN
 
             mapped_result = []
+            # 티커 중복 방지를 위한 세트
+            seen_codes = set()
             for item in result:
-                # display가 null인 항목이 있는지 확인
-                has_null_display = False
-                for key, value in item.items():
-                    if isinstance(value, dict) and "display" in value and value["display"] is None:
-                        has_null_display = True
-                        break
+                # 티커 코드가 이미 처리된 경우 스킵
+                if "Code" in item and item["Code"] in seen_codes:
+                    continue
 
-                # null display가 없는 경우에만 결과에 포함
-                if not has_null_display:
-                    mapped_item = {}
-                    for key in ordered_columns:
-                        if key in item:
-                            mapped_key = factor_map.get(key, key)
-                            mapped_item[mapped_key] = item[key]
-                    mapped_result.append(mapped_item)
+                # 새로운 티커 코드 기록
+                if "Code" in item:
+                    seen_codes.add(item["Code"])
+
+                # NULL display 값 포함 - 모든 항목 결과에 포함
+                mapped_item = {}
+                for key in ordered_columns:
+                    if key in item:
+                        mapped_key = factor_map.get(key, key)
+                        mapped_item[mapped_key] = item[key]
+                mapped_result.append(mapped_item)
 
             return mapped_result, total_count
 
@@ -277,25 +276,16 @@ class ScreenerStockService(BaseScreenerService):
                         raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
 
             stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters)
-            print(f"Filtered stocks count: {len(stocks)}")
             filtered_df = screener_utils.get_filtered_stocks_df(market_filter, stocks, columns)
-            print(f"filtered_df shape: {filtered_df.shape}")
             scored_df = score_utils.calculate_factor_score(filtered_df)
-            print(f"scored_df shape: {scored_df.shape}")
             if scored_df.empty:
                 print(f"scored_df is empty. filtered_df columns: {filtered_df.columns.tolist()}")
 
                 return pd.DataFrame()
 
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
-            print(f"merged_df shape: {merged_df.shape}")
-
-            # 스코어가 null인 항목 제외
-            merged_df = merged_df[~merged_df["score"].isna()]
-            print(f"after filtering null scores shape: {merged_df.shape}")
 
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
-            print(f"sorted_df shape: {sorted_df.shape}")
 
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
@@ -320,15 +310,22 @@ class ScreenerStockService(BaseScreenerService):
                 elif col in sorted_df.columns:
 
                     def convert_value(x):
-                        if pd.isna(x) or np.isinf(x):
-                            return ""
-                        value, _ = screener_utils.convert_unit_and_value(
-                            market_filter,
-                            float(x),
-                            factors[col].get("unit", "") if col in factors else "",
-                            lang,
-                        )
-                        return value
+                        try:
+                            if pd.isna(x):
+                                return ""
+                            if isinstance(x, (int, float)) and np.isinf(x):
+                                return ""
+                            if not isinstance(x, (int, float)):
+                                return x
+                            value, _ = screener_utils.convert_unit_and_value(
+                                market_filter,
+                                float(x),
+                                factors[col].get("unit", "") if col in factors else "",
+                                lang,
+                            )
+                            return value
+                        except Exception:
+                            return x
 
                     sorted_df[col] = sorted_df[col].apply(convert_value)
 

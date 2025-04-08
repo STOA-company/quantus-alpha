@@ -235,7 +235,7 @@ class DividendUtils:
         if not tickers:
             return {}
 
-        five_years_ago = datetime.now() - timedelta(days=5 * 365)
+        one_year_ago = datetime.now() - timedelta(days=1 * 365)
         payment_dates_dict = defaultdict(list)
 
         batch_size = 500
@@ -247,7 +247,7 @@ class DividendUtils:
             batch_dividend_data = self.db._select(
                 table="dividend_information",
                 columns=["ticker", "payment_date"],
-                payment_date__gte=five_years_ago.strftime("%Y-%m-%d"),
+                payment_date__gte=one_year_ago.strftime("%Y-%m-%d"),
                 ticker__in=batch_tickers,
                 order="payment_date",
             )

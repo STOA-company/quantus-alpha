@@ -9,7 +9,7 @@ from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
 from app.modules.screener.stock.schemas import FactorResponse, GroupMetaData, ETFGroupFilter, ETFGroupFilterResponse
 from app.modules.screener.etf.enum import ETFMarketEnum
-from app.modules.screener.etf.schemas import FilteredETF
+from app.modules.screener.etf.schemas import FilteredETF, PaginatedFilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
 from app.utils.oauth_utils import get_current_user
 from app.core.logging.config import get_logger
@@ -99,6 +99,84 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/paginated", response_model=Dict)
+def get_paginated_etfs(
+    filtered_etf: PaginatedFilteredETF, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)
+):
+    """
+    페이지네이션을 포함한 필터링된 ETF 목록 조회
+
+    page: 페이지 번호 (1부터 시작)
+    """
+    try:
+        custom_filters = []
+        if filtered_etf.custom_filters:
+            custom_filters = [
+                {
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "values": condition.values,
+                    "above": condition.above,
+                    "below": condition.below,
+                }
+                for condition in filtered_etf.custom_filters
+            ]
+
+        request_columns = ["Code", "Name", "manager", "country"]
+        reverse_factor_map = REVERSE_FACTOR_MAP
+        if filtered_etf.lang == "en":
+            reverse_factor_map = REVERSE_FACTOR_MAP_EN
+
+        for column in [reverse_factor_map[column] for column in filtered_etf.factor_filters]:
+            if column not in request_columns:
+                request_columns.append(column)
+
+        sort_by = "score"
+        ascending = False
+        if filtered_etf.sort_info:
+            sort_by = reverse_factor_map[filtered_etf.sort_info.sort_by]
+            ascending = filtered_etf.sort_info.ascending
+
+        page = filtered_etf.page if filtered_etf.page > 0 else 1
+        offset = page - 1
+
+        etfs_data, total_count = screener_etf_service.get_filtered_data(
+            market_filter=filtered_etf.market_filter,
+            custom_filters=custom_filters,
+            columns=request_columns,
+            limit=filtered_etf.limit,
+            offset=offset,
+            sort_by=sort_by,
+            ascending=ascending,
+            lang=filtered_etf.lang,
+        )
+
+        if not etfs_data:
+            return {"data": [], "pagination": {"total_count": 0, "total_pages": 0, "current_page": page}}
+
+        total_pages = (total_count + filtered_etf.limit - 1) // filtered_etf.limit if total_count > 0 else 0
+
+        if filtered_etf.lang == "kr":
+            for etf in etfs_data:
+                if "시장" in etf and etf["시장"] in ETF_MARKET_MAP:
+                    etf["시장"] = ETF_MARKET_MAP[etf["시장"]]
+
+        result = {
+            "data": etfs_data,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "current_page": page,
+        }
+        return result
+
+    except CustomException as e:
+        logger.exception(f"Error getting paginated etfs: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+    except Exception as e:
+        logger.exception(f"Error getting paginated etfs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/count", response_model=Dict)
 def get_filtered_etfs_count(
     filtered_etf: FilteredETF, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)
@@ -153,8 +231,9 @@ async def create_or_update_group(
     필터 생성 또는 업데이트
     """
     try:
+        group_id = None
         if group_filter.id:
-            is_success = await screener_etf_service.update_group(
+            group_id = await screener_etf_service.update_group(
                 group_id=group_filter.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
@@ -165,9 +244,8 @@ async def create_or_update_group(
                 sort_info=group_filter.sort_info,
                 type=group_filter.type,
             )
-            message = "Filter updated successfully"
         else:
-            is_success = await screener_etf_service.create_group(
+            group_id = await screener_etf_service.create_group(
                 user_id=current_user.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
@@ -175,9 +253,8 @@ async def create_or_update_group(
                 custom_filters=group_filter.custom_filters,
                 type=group_filter.type,
             )
-            message = "Group created successfully"
-        if is_success:
-            return {"message": message}
+        return {"group_id": group_id}
+
     except CustomException as e:
         logger.error(f"Error creating group: {e}")
         raise HTTPException(status_code=e.status_code, detail=e.message)
@@ -352,6 +429,7 @@ async def download_filtered_etfs(
                 "factor": REVERSE_FACTOR_MAP[condition.factor],
                 "above": condition.above,
                 "below": condition.below,
+                "values": condition.values,
             }
             for condition in filtered_etfs.custom_filters
         ]
@@ -381,9 +459,9 @@ async def download_filtered_etfs(
     )
 
     if df is None or df.empty:
-        return JSONResponse(content={"error": "No data found"}, status_code=404)
+        return JSONResponse(content={"error": "데이터가 없습니다"}, status_code=404)
 
     filename = f"temp_export_{int(time.time())}.csv"
     df.to_csv(filename, index=False)
 
-    return FileResponse(path=filename, filename="etfs_export.csv", media_type="text/csv")
+    return FileResponse(path=filename, filename="etf_export.csv", media_type="text/csv")

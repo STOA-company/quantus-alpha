@@ -8,6 +8,7 @@ from fastapi import Request, Response
 import pytz
 from sqlalchemy import text
 from app.core.exception.custom import DataNotFoundException
+from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.disclosure.mapping import (
     CATEGORY_TYPE_MAPPING_EN,
@@ -465,7 +466,13 @@ class NewsService:
             for _, row in df.iterrows()
         ]
 
-    def top_stories(self, request: Request, tickers: Optional[List[str]] = None, lang: TranslateCountry | None = None):
+    def top_stories(
+        self,
+        request: Request,
+        tickers: Optional[List[str]] = None,
+        lang: TranslateCountry | None = None,
+        stories_count: int = 30,
+    ):
         viewed_stories = set()
         if request.cookies.get("viewed_stories"):
             cookie_data = request.cookies.get("viewed_stories", "[]")
@@ -691,7 +698,7 @@ class NewsService:
             news_items = []
             ticker_has_unviewed = False
             for _, row in ticker_news.iterrows():
-                if len(news_items) >= 30:
+                if len(news_items) >= stories_count:
                     break
                 news_key = f'{ticker}_{row["type"]}_{row["id"]}'
                 is_viewed = news_key in viewed_stories
@@ -837,6 +844,7 @@ class NewsService:
         page: int = 1,
         size: int = 6,
         lang: TranslateCountry | None = None,
+        user: AlphafinderUser | None = None,
     ):
         if lang is None:
             lang = TranslateCountry.KO
@@ -892,11 +900,25 @@ class NewsService:
             "is_related": True,
             "lang": lang,
         }
+        recent_news_condition = {"is_related": True, "lang": lang}
+
         if len(duplicate_stock_info) == 2:
             unique_tickers = [info[0] for info in duplicate_stock_info]
             condition["ticker__in"] = unique_tickers
+            recent_news_condition["ticker__in"] = unique_tickers
         else:
             condition["ticker"] = ticker
+            recent_news_condition["ticker"] = ticker
+
+        recent_news_id = self.db._select(
+            table="news_analysis",
+            columns=["id"],
+            order="date",
+            ascending=False,
+            limit=10,
+            **recent_news_condition,
+        )
+        recent_news_id = [id[0] for id in recent_news_id]
 
         df_news = pd.DataFrame(
             self.db._select(
@@ -925,6 +947,11 @@ class NewsService:
             else:
                 raise DataNotFoundException(ticker=ticker, data_type="news")
 
+        user_level = user.subscription_level if user else 1
+        # 최근 10개를 제외한 데이터 마스킹
+        if user_level == 1:
+            df_news = self.mask_fields(df=df_news, recent_news_id=recent_news_id)
+
         offset = (page - 1) * size
         df_news["emotion"] = df_news["emotion"].str.lower()
         total_count = df_news.shape[0]
@@ -939,25 +966,6 @@ class NewsService:
         df_news["date"] = pd.to_datetime(df_news["date"]).dt.tz_localize(utc).dt.tz_convert(kst)
         df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
 
-        # df_price = pd.DataFrame(
-        #     self.db._select(
-        #         table="stock_trend",
-        #         columns=["ticker", "current_price"],
-        #         **{"ticker": ticker},
-        #     )
-        # )
-
-        df_news["price_impact"] = 0.0
-        # if not df_price.empty:
-        #     df_price["current_price"] = df_price["current_price"].fillna(0.0)
-
-        #     df_news = pd.merge(df_news, df_price, on="ticker", how="left")
-
-        #     df_news["price_impact"] = (
-        #         (df_news["current_price"] - df_news["that_time_price"]) / df_news["that_time_price"] * 100
-        #     )
-        #     df_news["price_impact"] = round(df_news["price_impact"].replace([np.inf, -np.inf, np.nan], 0), 2)
-
         data = []
         for _, row in df_news.iterrows():
             data.append(
@@ -970,7 +978,7 @@ class NewsService:
                     impact_reason=row["impact_reason"],
                     key_points=row["key_points"],
                     emotion=row["emotion"],
-                    price_impact=row["price_impact"],
+                    price_impact=0,
                 )
             )
         return data, total_count, total_page, offset, emotion_count, ctry
@@ -1051,6 +1059,107 @@ class NewsService:
     def increase_disclosure_search_count(self, disclosure_id: int, ticker: str) -> None:
         redis = DisclosureLeaderboard()
         redis.increment_score(disclosure_id, ticker)
+
+    def mask_fields(self, df: pd.DataFrame, masked_count: int = 10, recent_news_id: list[int] = []) -> pd.DataFrame:
+        # 최근 10개를 제외한 모든 데이터를 마스킹
+        if df.empty:
+            return df
+
+        # 복사본 생성
+        df_masked = df.copy()
+
+        # 마스킹할 컬럼
+        mask_columns = ["impact_reason", "key_points"]
+
+        # 마스킹 메시지
+        mask_message = ""
+
+        # recent_ten_news_id에 포함되지 않은 뉴스에 대해 마스킹 적용
+        if recent_news_id:
+            # ID가 recent_ten_news_id에 없는 행 찾기
+            mask_indices = df_masked[~df_masked["id"].isin(recent_news_id)].index
+
+            # 마스킹 적용
+            for column in mask_columns:
+                if column in df_masked.columns:
+                    df_masked.loc[mask_indices, column] = mask_message
+        else:
+            # recent_ten_news_id가 제공되지 않은 경우 기존 로직 사용 (최근 10개 제외 마스킹)
+            # 데이터를 날짜순으로 정렬
+            df_masked = df_masked.sort_values(by=["date"], ascending=[False])
+            mask_indices = df_masked.index[masked_count:]
+
+            for column in mask_columns:
+                if column in df_masked.columns:
+                    df_masked.loc[mask_indices, column] = mask_message
+
+        return df_masked
+
+    def mask_news_items(self, items: list, masked_count: int = 10) -> list:
+        """
+        뉴스 아이템 리스트에 마스킹을 적용합니다.
+        최근 masked_count개의 아이템은 원래대로 유지하고 나머지는 특정 필드를 마스킹합니다.
+
+        Args:
+            items: 마스킹할 뉴스 아이템 리스트 (NewsRenewalItem 객체)
+            masked_count: 마스킹하지 않을 뉴스 아이템 개수 (기본값: 10)
+
+        Returns:
+            마스킹이 적용된 아이템 리스트
+        """
+        if not items or len(items) <= masked_count:
+            return items
+
+        # 마스킹되지 않을 아이템
+        unmasked_items = items[:masked_count]
+
+        # 마스킹될 아이템
+        masked_items = []
+        masked_item = items[masked_count].model_copy(update={"impact_reason": "", "key_points": ""})
+        masked_items.append(masked_item)
+
+        # 마스킹되지 않은 아이템과 마스킹된 아이템 결합
+        return unmasked_items + masked_items
+
+    def mask_disclosure_items(self, items: list, days: int = 7) -> list:
+        """
+        공시 아이템 리스트에 시간 기준 마스킹을 적용합니다.
+        최근 days일 이내 공시는 원래대로 유지하고, 그 이전 공시는 마스킹합니다.
+
+        Args:
+            items: 마스킹할 공시 아이템 리스트 (DisclosureRenewalItem 객체)
+            days: 마스킹하지 않을 기간(일) (기본값: 7)
+
+        Returns:
+            마스킹이 적용된 아이템 리스트
+        """
+        if not items:
+            return items
+
+        from datetime import datetime, timedelta
+        from app.common.constants import KST
+
+        # 기준일 계산
+        now = datetime.now(KST)
+        cutoff_date = now - timedelta(days=days)
+
+        # 기준일 이내/이전 아이템 분류
+        recent_items = []
+        older_items = []
+
+        for item in items:
+            if item.date >= cutoff_date:
+                recent_items.append(item)
+            else:
+                older_items.append(item)
+
+        # 오래된 아이템 마스킹
+        masked_older_items = []
+        masked_item = older_items[0].model_copy(update={"impact_reason": "", "key_points": ""})
+        masked_older_items.append(masked_item)
+
+        # 최신 아이템과 마스킹된 오래된 아이템 결합
+        return recent_items + masked_older_items
 
 
 def get_news_service() -> NewsService:
