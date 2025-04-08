@@ -14,6 +14,8 @@ on:
 
 jobs:
   lint-and-test:
+    # PR 머지 커밋인 경우 Skip
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, 'Merge pull request')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
