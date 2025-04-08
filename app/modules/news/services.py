@@ -466,7 +466,13 @@ class NewsService:
             for _, row in df.iterrows()
         ]
 
-    def top_stories(self, request: Request, tickers: Optional[List[str]] = None, lang: TranslateCountry | None = None):
+    def top_stories(
+        self,
+        request: Request,
+        tickers: Optional[List[str]] = None,
+        lang: TranslateCountry | None = None,
+        stories_count: int = 30,
+    ):
         viewed_stories = set()
         if request.cookies.get("viewed_stories"):
             cookie_data = request.cookies.get("viewed_stories", "[]")
@@ -692,7 +698,7 @@ class NewsService:
             news_items = []
             ticker_has_unviewed = False
             for _, row in ticker_news.iterrows():
-                if len(news_items) >= 30:
+                if len(news_items) >= stories_count:
                     break
                 news_key = f'{ticker}_{row["type"]}_{row["id"]}'
                 is_viewed = news_key in viewed_stories
@@ -1088,6 +1094,72 @@ class NewsService:
                     df_masked.loc[mask_indices, column] = mask_message
 
         return df_masked
+
+    def mask_news_items(self, items: list, masked_count: int = 10) -> list:
+        """
+        뉴스 아이템 리스트에 마스킹을 적용합니다.
+        최근 masked_count개의 아이템은 원래대로 유지하고 나머지는 특정 필드를 마스킹합니다.
+
+        Args:
+            items: 마스킹할 뉴스 아이템 리스트 (NewsRenewalItem 객체)
+            masked_count: 마스킹하지 않을 뉴스 아이템 개수 (기본값: 10)
+
+        Returns:
+            마스킹이 적용된 아이템 리스트
+        """
+        if not items or len(items) <= masked_count:
+            return items
+
+        # 마스킹되지 않을 아이템
+        unmasked_items = items[:masked_count]
+
+        # 마스킹될 아이템
+        masked_items = []
+        masked_item = items[masked_count].model_copy(update={"impact_reason": "", "key_points": ""})
+        masked_items.append(masked_item)
+
+        # 마스킹되지 않은 아이템과 마스킹된 아이템 결합
+        return unmasked_items + masked_items
+
+    def mask_disclosure_items(self, items: list, days: int = 7) -> list:
+        """
+        공시 아이템 리스트에 시간 기준 마스킹을 적용합니다.
+        최근 days일 이내 공시는 원래대로 유지하고, 그 이전 공시는 마스킹합니다.
+
+        Args:
+            items: 마스킹할 공시 아이템 리스트 (DisclosureRenewalItem 객체)
+            days: 마스킹하지 않을 기간(일) (기본값: 7)
+
+        Returns:
+            마스킹이 적용된 아이템 리스트
+        """
+        if not items:
+            return items
+
+        from datetime import datetime, timedelta
+        from app.common.constants import KST
+
+        # 기준일 계산
+        now = datetime.now(KST)
+        cutoff_date = now - timedelta(days=days)
+
+        # 기준일 이내/이전 아이템 분류
+        recent_items = []
+        older_items = []
+
+        for item in items:
+            if item.date >= cutoff_date:
+                recent_items.append(item)
+            else:
+                older_items.append(item)
+
+        # 오래된 아이템 마스킹
+        masked_older_items = []
+        masked_item = older_items[0].model_copy(update={"impact_reason": "", "key_points": ""})
+        masked_older_items.append(masked_item)
+
+        # 최신 아이템과 마스킹된 오래된 아이템 결합
+        return recent_items + masked_older_items
 
 
 def get_news_service() -> NewsService:

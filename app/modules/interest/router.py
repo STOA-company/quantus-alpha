@@ -167,6 +167,7 @@ def interest_news(
     limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ):
     ticker_infos = service.get_interest_tickers(group_id)
     if len(ticker_infos) == 0:
@@ -177,8 +178,15 @@ def interest_news(
         )
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     total_news_data = news_service.get_news(lang=lang, tickers=tickers)
+    if user.subscription_level < 3:
+        total_news_data = news_service.mask_news_items(total_news_data)
     news_data = total_news_data[offset * limit : offset * limit + limit]
-    has_next = len(total_news_data) > offset * limit + limit
+
+    if user.subscription_level >= 3:
+        has_next = len(total_news_data) > offset * limit + limit
+    else:
+        current_position = offset * limit + len(news_data)
+        has_next = current_position < len(total_news_data)
 
     response_data = InterestNewsResponse(news=news_data, has_next=has_next)
 
@@ -193,6 +201,7 @@ def interest_disclosure(
     limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ):
     ticker_infos = service.get_interest_tickers(group_id)
     if len(ticker_infos) == 0:
@@ -203,8 +212,19 @@ def interest_disclosure(
         )
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     total_disclosure_data = news_service.get_disclosure(lang=lang, tickers=tickers)
+
+    # 레벨 3 미만 사용자의 경우 데이터 마스킹 적용
+    if user.subscription_level < 3:
+        # 7일 이내 공시는 원본 그대로, 7일 이전 공시는 마스킹
+        total_disclosure_data = news_service.mask_disclosure_items(total_disclosure_data)
+
     disclosure_data = total_disclosure_data[offset * limit : offset * limit + limit]
-    has_next = len(total_disclosure_data) > offset * limit + limit
+
+    if user.subscription_level >= 3:
+        has_next = len(total_disclosure_data) > offset * limit + limit
+    else:
+        current_position = offset * limit + len(disclosure_data)
+        has_next = current_position < len(total_disclosure_data)
 
     response_data = InterestDisclosureResponse(disclosure=disclosure_data, has_next=has_next)
 
@@ -218,12 +238,15 @@ def top_stories(
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ):
     ticker_infos = service.get_interest_tickers(group_id)
     if len(ticker_infos) == 0:
         return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
-    data = news_service.top_stories(request=request, tickers=tickers, lang=lang)
+    subscription_level = user.subscription_level if user else 1
+    stories_count = 30 if subscription_level >= 3 else 10
+    data = news_service.top_stories(request=request, tickers=tickers, lang=lang, stories_count=stories_count)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
 
