@@ -1,11 +1,6 @@
 name: CI Pipeline
 
 on:
-  push:
-    branches: ['*']
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
   pull_request:
     branches: ['*']
     paths-ignore:
@@ -17,53 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 최초 검사만 실행하는 작업
-  should-run:
-    runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
-    steps:
-      - id: check
-        run: |
-          # PR 머지 커밋인 경우 건너뛰기
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.event.head_commit.message }}" == *"Merge pull request"* ]]; then
-            echo "머지 커밋은 자동으로 CI를 건너뜁니다."
-            echo "should_run=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          echo "CI 파이프라인을 실행합니다."
-          echo "should_run=true" >> $GITHUB_OUTPUT
-
-      - name: Notify Slack - CI Skipped
-        if: steps.check.outputs.should_run == 'false'
-        uses: 8398a7/action-slack@v3
-        with:
-          status: custom
-          fields: workflow,job,commit,repo,ref,author,took
-          custom_payload: |
-            {
-              "attachments": [
-                {
-                  "color": "#808080",
-                  "blocks": [
-                    {
-                      "type": "section",
-                      "text": {
-                        "type": "mrkdwn",
-                        "text": ":fast_forward: *CI Pipeline Skipped*\n*Reason:* Merge commit detected\n*Branch:* ${{ github.ref_name }}"
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
   lint-and-test:
-    needs: should-run
-    if: needs.should-run.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -72,7 +21,7 @@ jobs:
       - name: Extract Commit Info
         id: commit-info
         run: |
-          COMMIT_MSG=$(echo "${{ github.event.head_commit.message || github.event.pull_request.title }}" | head -n 1)
+          COMMIT_MSG=$(echo "${{ github.event.pull_request.title }}" | head -n 1)
           echo "commit_msg=${COMMIT_MSG}" >> $GITHUB_OUTPUT
 
       - name: Notify Slack - CI Started
