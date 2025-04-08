@@ -71,6 +71,14 @@ jobs:
         run: |
           poetry install --no-interaction
 
+      - name: Install Ruff
+        run: |
+          pip install ruff
+
+      - name: Install pytest
+        run: |
+          pip install pytest
+
       - name: Notify Slack - Tests Running
         uses: 8398a7/action-slack@v3
         with:
@@ -99,7 +107,7 @@ jobs:
       - name: Run linter (Ruff)
         id: lint
         run: |
-          poetry run ruff check app/ || echo "LINT_FAILED=true" >> $GITHUB_ENV
+          ruff check app/ || echo "LINT_FAILED=true" >> $GITHUB_ENV
         continue-on-error: true
 
       - name: Run tests
@@ -107,12 +115,12 @@ jobs:
         run: |
           mkdir -p test-results
           # 표준 테스트 실행 및 결과 저장
-          poetry run pytest tests/ -v --junitxml=test-results/junit.xml > test-results/pytest-output.txt 2>&1 || echo "TESTS_FAILED=true" >> $GITHUB_ENV
+          python -m pytest tests/ -v --junitxml=test-results/junit.xml > test-results/pytest-output.txt 2>&1 || echo "TESTS_FAILED=true" >> $GITHUB_ENV
 
           # 테스트 실패 시 실패한 테스트 정보 추출
           if [ "${{ env.TESTS_FAILED }}" == "true" ]; then
             echo "FAILED_TESTS<<EOF" >> $GITHUB_ENV
-            grep -A 10 "FAILED" test-results/pytest-output.txt | head -n 15 >> $GITHUB_ENV
+            cat test-results/pytest-output.txt | grep -A 10 "FAILED" | head -n 15 >> $GITHUB_ENV
             echo "EOF" >> $GITHUB_ENV
           fi
         continue-on-error: true
