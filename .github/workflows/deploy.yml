@@ -31,7 +31,8 @@ jobs:
       - name: Set PR Title
         run: |
           if [ "${{ github.event.pull_request.title }}" != "" ]; then
-            echo "PR_TITLE=${{ github.event.pull_request.title }}" >> $GITHUB_ENV
+            PR_TITLE=$(echo "${{ github.event.pull_request.title }}" | head -n 1)
+            echo "PR_TITLE=${PR_TITLE}" >> $GITHUB_ENV
           else
             echo "PR_TITLE=Manual deployment" >> $GITHUB_ENV
           fi

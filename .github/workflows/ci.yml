@@ -19,6 +19,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Extract Commit Info
+        id: commit-info
+        run: |
+          COMMIT_MSG=$(echo "${{ github.event.head_commit.message || github.event.pull_request.title }}" | head -n 1)
+          echo "commit_msg=${COMMIT_MSG}" >> $GITHUB_OUTPUT
+
       - name: Notify Slack - CI Started
         uses: 8398a7/action-slack@v3
         with:
@@ -34,7 +40,7 @@ jobs:
                       "type": "section",
                       "text": {
                         "type": "mrkdwn",
-                        "text": ":test_tube: *CI Pipeline Started*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.event.head_commit.message || github.event.pull_request.title }}\n*Author:* ${{ github.actor }}"
+                        "text": ":test_tube: *CI Pipeline Started*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ steps.commit-info.outputs.commit_msg }}\n*Author:* ${{ github.actor }}"
                       }
                     }
                   ]
@@ -94,7 +100,7 @@ jobs:
                       "type": "section",
                       "text": {
                         "type": "mrkdwn",
-                        "text": ":mag: *Running Tests*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.event.head_commit.message || github.event.pull_request.title }}\n*Linting & Testing in progress...*"
+                        "text": ":mag: *Running Tests*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ steps.commit-info.outputs.commit_msg }}\n*Linting & Testing in progress...*"
                       }
                     }
                   ]
@@ -150,7 +156,7 @@ jobs:
                       "type": "section",
                       "text": {
                         "type": "mrkdwn",
-                        "text": ":white_check_mark: *CI Pipeline Passed*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.event.head_commit.message || github.event.pull_request.title }}\n*Author:* ${{ github.actor }}"
+                        "text": ":white_check_mark: *CI Pipeline Passed*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ steps.commit-info.outputs.commit_msg }}\n*Author:* ${{ github.actor }}"
                       }
                     }
                   ]
@@ -176,7 +182,7 @@ jobs:
                       "type": "section",
                       "text": {
                         "type": "mrkdwn",
-                        "text": ":x: *CI Pipeline Failed*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.event.head_commit.message || github.event.pull_request.title }}\n*Author:* ${{ github.actor }}\n\n${{ env.LINT_FAILED == 'true' && '*Linting failed!*\n' || '' }}${{ env.TESTS_FAILED == 'true' && '*Tests failed!*\n```\n' || '' }}${{ env.TESTS_FAILED == 'true' && env.FAILED_TESTS || '' }}${{ env.TESTS_FAILED == 'true' && '\n```' || '' }}\n\nCheck the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
+                        "text": ":x: *CI Pipeline Failed*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ steps.commit-info.outputs.commit_msg }}\n*Author:* ${{ github.actor }}\n\n${{ env.LINT_FAILED == 'true' && '*Linting failed!*\n' || '' }}${{ env.TESTS_FAILED == 'true' && '*Tests failed!*\n```\n' || '' }}${{ env.TESTS_FAILED == 'true' && env.FAILED_TESTS || '' }}${{ env.TESTS_FAILED == 'true' && '\n```' || '' }}\n\nCheck the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
                       }
                     }
                   ]
