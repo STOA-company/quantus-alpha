@@ -238,3 +238,4 @@ jobs:
           name: deployment-logs-${{ env.ENVIRONMENT }}
           path: logs/
           retention-days: 30
+          if-no-files-found: ignore
