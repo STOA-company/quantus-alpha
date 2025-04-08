@@ -9,7 +9,10 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.logging.config import configure_logging
 from app.middlewares.trusted_hosts import get_current_username
+from app.middlewares.monitoring import setup_monitoring
 import logging
+from fastapi.staticfiles import StaticFiles
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,10 @@ app.include_router(routers.router)
 
 db_config = get_database_config()
 db.init_app(app, **db_config.__dict__)
+
+# 정적 파일 마운트
+static_dir = os.path.join(os.getcwd(), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 @app.get("/")
@@ -77,6 +84,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*", "Authorization", "Authorization_Swagger"],
 )
+
+# API 모니터링 설정
+setup_monitoring(app, slow_api_threshold_ms=1000)  # 1초 이상 걸리는 요청은 느린 요청으로 로깅
 
 
 class HealthCheckDetails(BaseModel):

@@ -177,8 +177,6 @@ services:
 
 ## CI 워크플로우 (GitHub Actions)
 
-Quantus Alpha는 GitHub Actions를 사용하여 지속적 통합(CI) 파이프라인을 구현하고 있습니다. CI 워크플로우는 코드 품질을 유지하고 버그를 조기에 발견하는 데 도움이 됩니다.
-
 ### CI 워크플로우 실행 조건
 
 CI 워크플로우는 다음과 같은 경우에만 실행됩니다:
