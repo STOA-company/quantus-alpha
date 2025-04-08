@@ -889,16 +889,30 @@ class NewsService:
         )
         condition = {
             "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-            # "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
             "is_exist": True,
             "is_related": True,
             "lang": lang,
         }
+        recent_news_condition = {"is_related": True, "lang": lang}
+
         if len(duplicate_stock_info) == 2:
             unique_tickers = [info[0] for info in duplicate_stock_info]
             condition["ticker__in"] = unique_tickers
+            recent_news_condition["ticker__in"] = unique_tickers
         else:
             condition["ticker"] = ticker
+            recent_news_condition["ticker"] = ticker
+
+        recent_news_id = self.db._select(
+            table="news_analysis",
+            columns=["id"],
+            order="date",
+            ascending=False,
+            limit=10,
+            **recent_news_condition,
+        )
+        recent_news_id = [id[0] for id in recent_news_id]
 
         df_news = pd.DataFrame(
             self.db._select(
@@ -930,23 +944,7 @@ class NewsService:
         user_level = user.subscription_level if user else 1
         # 최근 10개를 제외한 데이터 마스킹
         if user_level == 1:
-            df_news = self.mask_fields(df_news)
-
-        # 타입 체크 및 날짜 필터링 최적화
-        print(f'df_news: {type(df_news["date"])}')
-
-        # 날짜 범위를 문자열 형식으로 필터링 (타입 이슈 우회)
-        start_date_str = utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S")
-        end_date_str = utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S")
-
-        # 문자열 비교를 위해 날짜를 문자열로 변환
-        df_news["date_str"] = df_news["date"].astype(str)
-        date_mask = (df_news["date_str"] >= start_date_str) & (df_news["date_str"] <= end_date_str)
-        df_news = df_news[date_mask]
-        df_news = df_news.drop("date_str", axis=1)  # 임시 컬럼 제거
-
-        # to_datetime을 다시 적용하여 일관된 형식 유지
-        df_news["date"] = pd.to_datetime(df_news["date"])
+            df_news = self.mask_fields(df=df_news, recent_news_id=recent_news_id)
 
         offset = (page - 1) * size
         df_news["emotion"] = df_news["emotion"].str.lower()
@@ -959,7 +957,7 @@ class NewsService:
             offset = (page - 1) * size
 
         df_news = df_news[offset : offset + size]
-        df_news["date"] = df_news["date"].dt.tz_localize(utc).dt.tz_convert(kst)
+        df_news["date"] = pd.to_datetime(df_news["date"]).dt.tz_localize(utc).dt.tz_convert(kst)
         df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
 
         data = []
@@ -1056,29 +1054,38 @@ class NewsService:
         redis = DisclosureLeaderboard()
         redis.increment_score(disclosure_id, ticker)
 
-    def mask_fields(self, df: pd.DataFrame, masked_count: int = 10) -> pd.DataFrame:
+    def mask_fields(self, df: pd.DataFrame, masked_count: int = 10, recent_news_id: list[int] = []) -> pd.DataFrame:
         # 최근 10개를 제외한 모든 데이터를 마스킹
         if df.empty:
             return df
 
-        # 데이터를 날짜순으로 정렬
-        df_sorted = df.sort_values(by=["date"], ascending=[False])
+        # 복사본 생성
+        df_masked = df.copy()
 
         # 마스킹할 컬럼
-        mask_columns = ["summary", "impact_reason", "key_points"]
+        mask_columns = ["impact_reason", "key_points"]
 
         # 마스킹 메시지
         mask_message = ""
 
-        # 복사본 생성
-        df_masked = df_sorted.copy()
+        # recent_ten_news_id에 포함되지 않은 뉴스에 대해 마스킹 적용
+        if recent_news_id:
+            # ID가 recent_ten_news_id에 없는 행 찾기
+            mask_indices = df_masked[~df_masked["id"].isin(recent_news_id)].index
 
-        # 최근 10개를 제외한 행들에 대해 마스킹 적용
-        mask_indices = df_masked.index[masked_count:]
+            # 마스킹 적용
+            for column in mask_columns:
+                if column in df_masked.columns:
+                    df_masked.loc[mask_indices, column] = mask_message
+        else:
+            # recent_ten_news_id가 제공되지 않은 경우 기존 로직 사용 (최근 10개 제외 마스킹)
+            # 데이터를 날짜순으로 정렬
+            df_masked = df_masked.sort_values(by=["date"], ascending=[False])
+            mask_indices = df_masked.index[masked_count:]
 
-        for column in mask_columns:
-            if column in df_masked.columns:
-                df_masked.loc[mask_indices, column] = mask_message
+            for column in mask_columns:
+                if column in df_masked.columns:
+                    df_masked.loc[mask_indices, column] = mask_message
 
         return df_masked
 
