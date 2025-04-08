@@ -65,7 +65,7 @@ class FinancialService:
         end_date (Optional[str]): YYYYMM 형식의 종료일
         기본값은 2000년도부터 현재까지
         """
-        level_map = {1: 4, 3: 9}  # 무료=5년, 유료 10년
+        level_map = {1: 5, 3: 10}  # 무료=5년, 유료 10년
         from datetime import datetime
 
         user_level = user.subscription_level if user else 1
