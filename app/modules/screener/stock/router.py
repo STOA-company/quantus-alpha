@@ -474,6 +474,7 @@ def download_filtered_stocks(
                 "factor": REVERSE_FACTOR_MAP[condition.factor],
                 "above": condition.above,
                 "below": condition.below,
+                "values": condition.values,
             }
             for condition in filtered_stocks.custom_filters
         ]
@@ -504,12 +505,12 @@ def download_filtered_stocks(
     )
 
     if df is None or df.empty:
-        return JSONResponse(content={"error": "No data found"}, status_code=404)
+        return JSONResponse(content={"error": "데이터가 없습니다"}, status_code=404)
 
     filename = f"temp_export_{int(time.time())}.csv"
     df.to_csv(filename, index=False)
 
-    return FileResponse(path=filename, filename="stocks_export.csv", media_type="text/csv")
+    return FileResponse(path=filename, filename="stock_export.csv", media_type="text/csv")
 
 
 @router.post("/init")

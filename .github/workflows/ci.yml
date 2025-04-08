@@ -1,0 +1,183 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: ['*']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: ['*']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Notify Slack - CI Started
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: workflow,job,commit,repo,ref,author,took
+          custom_payload: |
+            {
+              "attachments": [
+                {
+                  "color": "#3498DB",
+                  "blocks": [
+                    {
+                      "type": "section",
+                      "text": {
+                        "type": "mrkdwn",
+                        "text": ":test_tube: *CI Pipeline Started*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.event.head_commit.message || github.event.pull_request.title }}\n*Author:* ${{ github.actor }}"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.poetry/bin" >> $GITHUB_PATH
+
+      - name: Configure Poetry
+        run: |
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: ./.venv
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction
+
+      - name: Notify Slack - Tests Running
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: workflow,job,commit,repo,ref,author,took
+          custom_payload: |
+            {
+              "attachments": [
+                {
+                  "color": "#3498DB",
+                  "blocks": [
+                    {
+                      "type": "section",
+                      "text": {
+                        "type": "mrkdwn",
+                        "text": ":mag: *Running Tests*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.event.head_commit.message || github.event.pull_request.title }}\n*Linting & Testing in progress...*"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Run linter (Ruff)
+        id: lint
+        run: |
+          poetry run ruff check app/ || echo "LINT_FAILED=true" >> $GITHUB_ENV
+        continue-on-error: true
+
+      - name: Run tests
+        id: run_tests
+        run: |
+          mkdir -p test-results
+          # 표준 테스트 실행 및 결과 저장
+          poetry run pytest tests/ -v --junitxml=test-results/junit.xml > test-results/pytest-output.txt 2>&1 || echo "TESTS_FAILED=true" >> $GITHUB_ENV
+
+          # 테스트 실패 시 실패한 테스트 정보 추출
+          if [ "${{ env.TESTS_FAILED }}" == "true" ]; then
+            echo "FAILED_TESTS<<EOF" >> $GITHUB_ENV
+            grep -A 10 "FAILED" test-results/pytest-output.txt | head -n 15 >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          fi
+        continue-on-error: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 7
+
+      - name: Notify Slack - Success
+        if: env.LINT_FAILED != 'true' && env.TESTS_FAILED != 'true'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: workflow,job,commit,repo,ref,author,took
+          custom_payload: |
+            {
+              "attachments": [
+                {
+                  "color": "good",
+                  "blocks": [
+                    {
+                      "type": "section",
+                      "text": {
+                        "type": "mrkdwn",
+                        "text": ":white_check_mark: *CI Pipeline Passed*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.event.head_commit.message || github.event.pull_request.title }}\n*Author:* ${{ github.actor }}"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify Slack - Failure
+        if: env.LINT_FAILED == 'true' || env.TESTS_FAILED == 'true'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: workflow,job,commit,repo,ref,author,took
+          custom_payload: |
+            {
+              "attachments": [
+                {
+                  "color": "danger",
+                  "blocks": [
+                    {
+                      "type": "section",
+                      "text": {
+                        "type": "mrkdwn",
+                        "text": ":x: *CI Pipeline Failed*\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.event.head_commit.message || github.event.pull_request.title }}\n*Author:* ${{ github.actor }}\n\n${{ env.LINT_FAILED == 'true' && '*Linting failed!*\n' || '' }}${{ env.TESTS_FAILED == 'true' && '*Tests failed!*\n```\n' || '' }}${{ env.TESTS_FAILED == 'true' && env.FAILED_TESTS || '' }}${{ env.TESTS_FAILED == 'true' && '\n```' || '' }}\n\nCheck the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      # 최종 결과 확인 - 실패 시 워크플로우도 실패로 표시
+      - name: Check final status
+        if: env.LINT_FAILED == 'true' || env.TESTS_FAILED == 'true'
+        run: exit 1

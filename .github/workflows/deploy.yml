@@ -28,6 +28,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Set PR Title
+        run: |
+          if [ "${{ github.event.pull_request.title }}" != "" ]; then
+            echo "PR_TITLE=${{ github.event.pull_request.title }}" >> $GITHUB_ENV
+          else
+            echo "PR_TITLE=Manual deployment" >> $GITHUB_ENV
+          fi
+
       - name: Notify Slack - Deployment Started
         uses: 8398a7/action-slack@v3
         with:
@@ -43,7 +51,7 @@ jobs:
                       "type": "section",
                       "text": {
                         "type": "mrkdwn",
-                        "text": ":rocket: *Deployment Started*\n*Env:* ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.base_ref || github.ref_name }}\n*Triggered by:* ${{ github.actor }}"
+                        "text": ":rocket: *Deployment Started*\n*Title:* ${{ env.PR_TITLE || github.event.pull_request.title || 'Manual deployment' }}\n*Env:* ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.base_ref || github.ref_name }}\n*Triggered by:* ${{ github.actor }}"
                       }
                     }
                   ]
@@ -128,7 +136,7 @@ jobs:
                       "type": "section",
                       "text": {
                         "type": "mrkdwn",
-                        "text": ":gear: *Deployment In Progress*\n*Env:* ${{ env.ENVIRONMENT }}\n*Branch:* ${{ github.base_ref || github.ref_name }}\n*Executing:* ./scripts/service-deploy.sh ${{ env.ENVIRONMENT }} ${{ env.CLEAN_CACHE }}"
+                        "text": ":gear: *Deployment In Progress*\n*Title:* ${{ env.PR_TITLE || github.event.pull_request.title || 'Manual deployment' }}\n*Env:* ${{ env.ENVIRONMENT }}\n*Branch:* ${{ github.base_ref || github.ref_name }}\n*Executing:* ./scripts/service-deploy.sh ${{ env.ENVIRONMENT }} ${{ env.CLEAN_CACHE }}"
                       }
                     }
                   ]
@@ -187,7 +195,7 @@ jobs:
                       "type": "section",
                       "text": {
                         "type": "mrkdwn",
-                        "text": ":white_check_mark: *Deployment Successful*\n*Env:* ${{ env.ENVIRONMENT }}\n*Branch:* ${{ github.base_ref || github.ref_name }}\n*Deployed by:* ${{ github.actor }}\n*Duration:* ${{ steps.deploy.outputs.duration || 'N/A' }}"
+                        "text": ":white_check_mark: *Deployment Successful*\n*Title:* ${{ env.PR_TITLE || github.event.pull_request.title || 'Manual deployment' }}\n*Env:* ${{ env.ENVIRONMENT }}\n*Branch:* ${{ github.base_ref || github.ref_name }}\n*Deployed by:* ${{ github.actor }}\n*Duration:* ${{ steps.deploy.outputs.duration || 'N/A' }}"
                       }
                     }
                   ]
@@ -213,7 +221,7 @@ jobs:
                       "type": "section",
                       "text": {
                         "type": "mrkdwn",
-                        "text": ":x: *Deployment Failed*\n*Env:* ${{ env.ENVIRONMENT }}\n*Branch:* ${{ github.base_ref || github.ref_name }}\n*Triggered by:* ${{ github.actor }}\n\n*Error Log:*\n```${{ steps.deploy.outputs.error_log || 'No detailed error log available' }}```\n\nCheck the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for full details."
+                        "text": ":x: *Deployment Failed*\n*Title:* ${{ env.PR_TITLE || github.event.pull_request.title || 'Manual deployment' }}\n*Env:* ${{ env.ENVIRONMENT }}\n*Branch:* ${{ github.base_ref || github.ref_name }}\n*Triggered by:* ${{ github.actor }}\n\n*Error Log:*\n```${{ steps.deploy.outputs.error_log || 'No detailed error log available' }}```\n\nCheck the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for full details."
                       }
                     }
                   ]
@@ -222,3 +230,11 @@ jobs:
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Upload Deployment Logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deployment-logs-${{ env.ENVIRONMENT }}
+          path: logs/
+          retention-days: 30
