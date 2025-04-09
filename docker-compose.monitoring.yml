@@ -30,7 +30,6 @@ services:
     restart: always
     networks:
       - monitoring
-      - alpha-network
 
   node-exporter:
     image: prom/node-exporter:latest
