@@ -1289,34 +1289,37 @@ class NewsService:
 
         return masked_items
 
-    def mask_disclosure_items_by_id(
-        self, items: List[DisclosureRenewalItem], ticker_based_ids: Dict[str, List[int]]
+    def mask_disclosure_items_by_date(
+        self, items: List[DisclosureRenewalItem], days: int = 7
     ) -> List[DisclosureRenewalItem]:
         """
-        공시 아이템 리스트에 티커별 ID 기반으로 마스킹을 적용합니다.
+        공시 아이템 리스트에 날짜 기반으로 마스킹을 적용합니다.
+        최근 days일 이내 공시는 원래대로 유지하고, 그 이전 공시는 마스킹합니다.
 
         Args:
             items: 마스킹할 공시 아이템 리스트 (DisclosureRenewalItem 객체)
-            ticker_based_ids: 티커별 마스킹하지 않을 공시 ID 딕셔너리 {ticker: [id1, id2, ...]}
+            days: 마스킹하지 않을 기간(일) (기본값: 7)
 
         Returns:
             마스킹이 적용된 아이템 리스트
         """
-        if not items or not ticker_based_ids:
+        if not items:
             return items
+
+        from datetime import datetime, timedelta
+        from app.common.constants import KST
+
+        # 기준일 계산
+        now = datetime.now(KST)
+        cutoff_date = now - timedelta(days=days)
 
         # 결과 리스트
         masked_items = []
 
         # 각 아이템에 대해 마스킹 적용 여부 결정
         for item in items:
-            ticker = item.ticker
-
-            # 해당 티커의 허용된 ID 목록 가져오기
-            allowed_ids = ticker_based_ids.get(ticker, [])
-
-            # ID가 허용 목록에 있으면 원본 그대로, 없으면 마스킹 적용
-            if item.id in allowed_ids:
+            # 날짜가 cutoff_date보다 최신이면 원본 그대로, 아니면 마스킹 적용
+            if item.date >= cutoff_date:
                 masked_items.append(item)
             else:
                 # 마스킹 적용 (impact_reason과 key_points 필드를 비움)
