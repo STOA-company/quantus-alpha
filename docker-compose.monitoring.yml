@@ -91,4 +91,3 @@ networks:
     driver: bridge
   alpha-network:
     external: true
-    name: alpha-network
