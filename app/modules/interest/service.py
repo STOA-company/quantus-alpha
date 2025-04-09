@@ -211,6 +211,7 @@ class InterestService:
         self,
         group_id: int,
         lang: Literal["ko", "en"] = "ko",
+        subscription_level: int = 1,
     ) -> List[NewsRenewalItem]:
         redis = NewsLeaderboard()
         news_service = get_news_service()
@@ -220,13 +221,20 @@ class InterestService:
         tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
         leaderboard_data = redis.get_leaderboard(tickers=tickers)[:5]
 
-        news_items = []
-        for item in leaderboard_data:
-            news_id = item.get("news_id")
-            if news_id:
-                news_item = news_service.get_news_by_id(news_id, lang)
-                if news_item:
-                    news_items.append(news_item)
+        news_ids = [item.get("news_id") for item in leaderboard_data]
+        news_items = news_service.get_news_by_id(news_ids, lang)
+        if news_items is None:
+            return []
+
+        news_tickers = [item.ticker for item in news_items]
+
+        # 구독 레벨이 3 미만인 경우에만 마스킹 적용
+        if subscription_level < 3 and news_items:
+            # 각 티커별 최신 10개 뉴스 ID 조회
+            recent_news_ids = news_service.get_recent_news_ids_by_ticker(news_tickers, limit=10, lang=lang)
+
+            # 티커별 ID를 이용한 최적화된 마스킹 적용
+            return news_service.mask_news_items_by_id(news_items, recent_news_ids)
 
         return news_items
 
@@ -234,6 +242,7 @@ class InterestService:
         self,
         group_id: int,
         lang: Literal["ko", "en"] = "ko",
+        subscription_level: int = 1,
     ) -> List[DisclosureRenewalItem]:
         redis = DisclosureLeaderboard()
         news_service = get_news_service()
@@ -242,16 +251,22 @@ class InterestService:
             return []
         tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
         leaderboard_data = redis.get_leaderboard(tickers=tickers)[:5]
-
+        disclosure_ids = [item.get("disclosure_id") for item in leaderboard_data]
+        disclosure_items = news_service.get_disclosure_by_id(disclosure_ids, lang)
         # 리더보드 데이터를 기반으로 공시 아이템 조회 및 정렬
-        disclosure_items = []
-        for item in leaderboard_data:
-            print("ITEM", item)
-            disclosure_id = item.get("disclosure_id")
-            if disclosure_id:
-                disclosure_item = news_service.get_disclosure_by_id(disclosure_id, lang)
-                if disclosure_item:
-                    disclosure_items.append(disclosure_item)
+
+        # 공시 아이템의 티커 목록 추출
+        disclosure_tickers = [item.ticker for item in disclosure_items]
+
+        # 구독 레벨이 3 미만인 경우에만 마스킹 적용
+        if subscription_level < 3 and disclosure_items:
+            # 각 티커별 최신 10개 공시 ID 조회
+            recent_disclosure_ids = news_service.get_recent_disclosure_ids_by_ticker(
+                disclosure_tickers, limit=10, lang=lang
+            )
+
+            # 티커별 ID를 이용한 최적화된 마스킹 적용
+            return news_service.mask_disclosure_items_by_id(disclosure_items, recent_disclosure_ids)
 
         return disclosure_items
 
