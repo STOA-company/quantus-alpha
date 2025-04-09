@@ -23,6 +23,8 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=secure_password
+      - GF_SERVER_ROOT_URL=https://alpha-${ENV:-dev}.quantus.kr/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     ports:
       - "3000:3000"
     restart: always
