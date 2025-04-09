@@ -127,9 +127,6 @@ EOF
 
 echo "Preparing deployment for $target_service..."
 
-echo "Ensuring network exists..."
-docker network create alpha-network 2>/dev/null || true
-
 if docker-compose ps $target_service | grep -q $target_service; then
     echo "Removing existing container for $target_service..."
     docker-compose rm -f $target_service
