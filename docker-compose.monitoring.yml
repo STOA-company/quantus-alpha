@@ -57,6 +57,18 @@ services:
     networks:
       - monitoring
 
+  alertmanager:
+    image: prom/alertmanager:latest
+    volumes:
+      - ./alertmanager:/etc/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+    ports:
+      - "9093:9093"
+    restart: always
+    networks:
+      - monitoring
+
   nginx-exporter:
     image: nginx/nginx-prometheus-exporter:latest
     command:
