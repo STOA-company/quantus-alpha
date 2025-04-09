@@ -10,6 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.logging.config import configure_logging
 from app.middlewares.trusted_hosts import get_current_username
 import logging
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from app.metrics import MetricsMiddleware
+from starlette.responses import Response
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,9 @@ app = FastAPI(
     redoc_url=None,
 )
 handler.initialize(app)
+
+# 메트릭 미들웨어 추가
+app.add_middleware(MetricsMiddleware)
 
 app.include_router(routers.router)
 
@@ -154,3 +160,8 @@ def request_test(request: TestRequest):
         return request.num / 0
     else:
         return request.num / 1
+
+
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
