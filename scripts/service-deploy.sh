@@ -145,7 +145,7 @@ echo "Starting nginx service..."
 docker-compose -f docker-compose.yml up -d nginx
 
 echo "Starting monitoring services..."
-docker-compose -f docker-compose.monitoring.yml -p quantus-alpha up -d
+docker-compose -f docker-compose.monitoring.yml up -d
 
 echo "Waiting for container to initialize..."
 sleep 10
