@@ -184,10 +184,7 @@ def interest_news(
     total_news_data = news_service.get_news(lang=lang, tickers=tickers)
 
     if user.subscription_level < 3:
-        # 각 티커별 최신 10개 뉴스 ID 조회
-        recent_news_ids = news_service.get_recent_news_ids_by_ticker(tickers, limit=10, lang=lang)
-        # 티커별 ID를 이용한 최적화된 마스킹 적용
-        total_news_data = news_service.mask_news_items_by_id(total_news_data, recent_news_ids)
+        total_news_data = news_service.mask_news_items(total_news_data)
 
     news_data = total_news_data[offset * limit : offset * limit + limit]
 
@@ -227,10 +224,7 @@ def interest_disclosure(
 
     # 레벨 3 미만 사용자의 경우 데이터 마스킹 적용
     if user.subscription_level < 3:
-        # 각 티커별 최신 10개 공시 ID 조회
-        recent_disclosure_ids = news_service.get_recent_disclosure_ids_by_ticker(tickers, limit=10, lang=lang)
-        # 티커별 ID를 이용한 최적화된 마스킹 적용
-        total_disclosure_data = news_service.mask_disclosure_items_by_id(total_disclosure_data, recent_disclosure_ids)
+        total_disclosure_data = news_service.mask_disclosure_items(total_disclosure_data)
 
     disclosure_data = total_disclosure_data[offset * limit : offset * limit + limit]
 
