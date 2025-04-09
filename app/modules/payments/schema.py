@@ -121,6 +121,16 @@ class ResponseUserUsingHistory(BaseModel):
     is_refunded: bool
 
 
+class ResponsePayment(BaseModel):
+    payment_id: int
+    product_name: str
+    paid_amount: int
+    payment_method: str
+    # payment_company: str
+    is_refunded: bool
+    created_at: datetime
+
+
 # Server is listening...
 
 # 3/26/2025, 4:44:25 PM

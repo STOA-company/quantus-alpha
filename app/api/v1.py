@@ -18,6 +18,7 @@ from app.modules.screener.etf.router import router as screener_etf_router
 from app.modules.payments.router import router as payments_router
 from app.modules.interest.router import router as interest_router
 from app.modules.chat.router import router as chat_router
+from app.modules.CS.router import router as cs_router
 
 api_router = APIRouter()
 
@@ -40,3 +41,4 @@ api_router.include_router(screener_etf_router, prefix="/screener/etf", tags=["sc
 api_router.include_router(payments_router, prefix="/payments", tags=["payments"])
 api_router.include_router(interest_router, prefix="/interest", tags=["interest"])
 api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
+api_router.include_router(cs_router, prefix="/cs", tags=["cs"])
