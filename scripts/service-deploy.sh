@@ -38,10 +38,10 @@ fi
 echo "Changing to project directory..."
 cd ~/quantus-alpha || exit 1
 
-echo "Fetching latest changes..."
-git fetch origin || exit 1
-git checkout $BRANCH || exit 1
-git pull origin $BRANCH || exit 1
+# echo "Fetching latest changes..."
+# git fetch origin || exit 1
+# git checkout $BRANCH || exit 1
+# git pull origin $BRANCH || exit 1
 
 echo "Updating git submodules..."
 git submodule update --init --recursive || exit 1
@@ -137,12 +137,6 @@ docker-compose -f docker-compose.yml build $target_service
 
 echo "Starting $target_service container..."
 docker-compose -f docker-compose.yml up -d --no-deps $target_service
-
-echo "Starting nginx service..."
-docker-compose -f docker-compose.yml up -d nginx
-
-echo "Starting monitoring services..."
-docker-compose -f docker-compose.monitoring.yml up -d
 
 echo "Waiting for container to initialize..."
 sleep 10

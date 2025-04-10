@@ -8,9 +8,6 @@ from app.database.crud import database
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from app.middlewares.trusted_hosts import get_current_username
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-from app.metrics import MetricsMiddleware
-from starlette.responses import Response
 from app.core.logger import configure, get_logger
 
 
@@ -55,9 +52,6 @@ app = FastAPI(
 )
 handler.initialize(app)
 
-# 메트릭 미들웨어 추가
-app.add_middleware(MetricsMiddleware)
-
 app.include_router(routers.router)
 
 db_config = get_database_config()
@@ -80,6 +74,7 @@ origins = [
     "https://stage.alphafinder.dev",
     "https://live.alphafinder.dev",
     "https://www.alphafinder.dev",
+    "https://alphafinder-l2xhjep9g-quantus-68c7517d.vercel.app",
 ]
 
 if settings.ENV == "stage":
@@ -181,8 +176,3 @@ def request_test(request: TestRequest):
         return request.num / 0
     else:
         return request.num / 1
-
-
-@app.get("/metrics")
-async def metrics():
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
