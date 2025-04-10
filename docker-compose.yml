@@ -153,7 +153,6 @@ services:
             - alpha-network
         restart: unless-stopped
 
-
     # Grafana - 대시보드
     grafana:
         image: grafana/grafana:latest
@@ -169,7 +168,6 @@ services:
             - GF_SERVER_SERVE_FROM_SUB_PATH=true
             - GF_AUTH_PROXY_ENABLED=true
             - GF_AUTH_DISABLE_LOGIN_FORM=false
-            - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL}
         ports:
             - "3000:3000"
         networks:
