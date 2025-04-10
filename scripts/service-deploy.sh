@@ -38,10 +38,10 @@ fi
 echo "Changing to project directory..."
 cd ~/quantus-alpha || exit 1
 
-echo "Fetching latest changes..."
-git fetch origin || exit 1
-git checkout $BRANCH || exit 1
-git pull origin $BRANCH || exit 1
+# echo "Fetching latest changes..."
+# git fetch origin || exit 1
+# git checkout $BRANCH || exit 1
+# git pull origin $BRANCH || exit 1
 
 echo "Updating git submodules..."
 git submodule update --init --recursive || exit 1
@@ -115,6 +115,28 @@ server {
         proxy_pass http://${service}:8000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+    }
+
+    # Grafana 설정
+    location /grafana/ {
+        proxy_pass http://grafana:3000/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+
+        # Grafana 서브패스 지원을 위한 추가 헤더
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Path /grafana;
+
+        # 웹소켓 지원
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # 캐싱 방지
+        proxy_no_cache 1;
+        proxy_cache_bypass 1;
     }
 }
 EOF
