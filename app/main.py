@@ -51,6 +51,7 @@ origins = [
     "https://stage.alphafinder.dev",
     "https://live.alphafinder.dev",
     "https://www.alphafinder.dev",
+    "https://alphafinder-l2xhjep9g-quantus-68c7517d.vercel.app",
 ]
 
 stage_webhook_url = "https://hooks.slack.com/services/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"
