@@ -159,6 +159,7 @@ services:
         volumes:
             - grafana_data:/var/lib/grafana
             - ./grafana/provisioning:/etc/grafana/provisioning
+            - ./grafana/dashboards:/var/lib/grafana/dashboards
         environment:
             - GF_SECURITY_ADMIN_PASSWORD=secure_password_here
             - GF_USERS_ALLOW_SIGN_UP=false
