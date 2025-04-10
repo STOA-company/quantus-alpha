@@ -11,16 +11,19 @@ case $ENVIRONMENT in
         ENV_FILE=.env
         ENV=prod
         BRANCH=main
+        export GRAFANA_ROOT_URL="https://alpha-live.quantus.kr/grafana"
         ;;
     stage|staging)
         ENV_FILE=.env
         ENV=stage
         BRANCH=staging
+        export GRAFANA_ROOT_URL="https://alpha-live.quantus.kr/grafana"
         ;;
     dev|development)
         ENV_FILE=.env
         ENV=dev
         BRANCH=dev
+        export GRAFANA_ROOT_URL="https://alpha-dev.quantus.kr/grafana"
         ;;
     *)
         echo "Unknown environment: $ENVIRONMENT"
@@ -38,10 +41,10 @@ fi
 echo "Changing to project directory..."
 cd ~/quantus-alpha || exit 1
 
-# echo "Fetching latest changes..."
-# git fetch origin || exit 1
-# git checkout $BRANCH || exit 1
-# git pull origin $BRANCH || exit 1
+echo "Fetching latest changes..."
+git fetch origin || exit 1
+git checkout $BRANCH || exit 1
+git pull origin $BRANCH || exit 1
 
 echo "Updating git submodules..."
 git submodule update --init --recursive || exit 1
@@ -129,7 +132,7 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
 
         # Grafana 서브패스 지원을 위한 추가 헤더
-        proxy_set_header X-Grafana-Root-Url \$scheme://\$http_host/grafana;
+        proxy_set_header X-Grafana-Root-Url ${GRAFANA_ROOT_URL};
 
         # 웹소켓 지원
         proxy_http_version 1.1;
