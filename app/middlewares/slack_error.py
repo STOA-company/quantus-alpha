@@ -61,8 +61,7 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
             return response
 
         except CustomException as exc:
-            # 커스텀 예외 로깅
-            logger.error(f"CustomException: {exc.message}", exc_info=True)
+            # 로깅 코드 제거 - 전역 예외 핸들러에서 한 번만 로깅하도록 함
 
             # 특정 환경에서만 슬랙 알림 전송
             if self.environment in self.notify_environments:
@@ -80,8 +79,7 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
             raise
 
         except Exception as exc:
-            # 일반 예외 로깅
-            logger.exception(f"Unhandled exception: {exc}")
+            # 로깅 코드 제거 - 전역 예외 핸들러에서 한 번만 로깅하도록 함
 
             # 특정 환경에서만 슬랙 알림 전송
             if self.environment in self.notify_environments:

@@ -38,7 +38,6 @@ def _make_json_resp(
     headers: dict[str, Any] | None = None,
 ) -> JSONResponse:
     content = {"error": {"code": status_code, "message": message, "errors": errors}}
-    logger.info(content)
     return JSONResponse(
         status_code=status_code,
         content=jsonable_encoder(content),
@@ -124,7 +123,6 @@ async def request_validation_exception_handler(request: Request, exc: RequestVal
 
 
 async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
-    logger.error(exc, exc_info=True)
     return _make_json_resp(
         status_code=HTTP_500_INTERNAL_SERVER_ERROR,
         message="서버 오류가 발생했습니다",
@@ -137,7 +135,6 @@ async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JS
 
 
 def exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.error(exc, exc_info=True)
     return _make_json_resp(
         status_code=HTTP_500_INTERNAL_SERVER_ERROR,
         message="서버 오류가 발생했습니다",
