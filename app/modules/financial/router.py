@@ -1,6 +1,6 @@
 import csv
 import io
-import logging
+from app.core.logger import setup_logger
 from fastapi import Request, HTTPException, Response
 from requests import Session
 from app.core.exception.handler import exception_handler
@@ -22,7 +22,7 @@ from .schemas import (
 from typing import Optional, Annotated
 from app.modules.common.utils import contry_mapping
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 router = APIRouter()
 
 

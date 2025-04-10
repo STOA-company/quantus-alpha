@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select, text
 from app.core.exception.custom import DataNotFoundException
-from app.core.logging.config import get_logger
+from app.core.logger import setup_logger
 from app.models.models_stock import StockInformation
 from app.modules.common.enum import Country
 from app.modules.common.cache import MemoryCache
@@ -17,7 +17,7 @@ from app.database.crud import database
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.common.utils import contry_mapping
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 @dataclass

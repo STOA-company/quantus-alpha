@@ -1,11 +1,10 @@
 import asyncio
-import logging
 from app.database.crud import database_service
 from app.modules.user.service import UserService
+from app.core.logger import setup_logger
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 async def main():

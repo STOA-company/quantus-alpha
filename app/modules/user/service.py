@@ -1,9 +1,10 @@
 import json
-import logging
+
 import hashlib
 from typing import List, Tuple, Optional
 from fastapi import HTTPException
 
+from app.core.logger import setup_logger
 from app.database.crud import database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.community.schemas import CommentItemWithPostInfo, PostInfo, ResponsePost, UserInfo
@@ -13,7 +14,7 @@ from app.enum.type import StockType
 
 from sqlalchemy import text
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class UserService:

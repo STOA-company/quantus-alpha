@@ -1,12 +1,13 @@
 from app.database.crud import database
 from typing import Literal
 from app.kispy.sdk import CustomKisClientV2
-import logging
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
+from app.core.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+
+logger = setup_logger(__name__)
 
 
 class StockUtils:

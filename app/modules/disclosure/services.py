@@ -6,7 +6,7 @@ import pandas as pd
 from app.common.constants import KST
 from app.core.exception.custom import DataNotFoundException
 from app.database.crud import JoinInfo, database
-from app.core.logging.config import get_logger
+from app.core.logger import setup_logger
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.utils import check_ticker_country_len_2, check_ticker_country_len_3
@@ -14,7 +14,7 @@ from app.utils.date_utils import now_kr
 from .mapping import CATEGORY_TYPE_MAPPING_EN, DOCUMENT_TYPE_MAPPING, DOCUMENT_TYPE_MAPPING_EN, FORM_TYPE_MAPPING
 
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 class DisclosureService:
@@ -351,10 +351,7 @@ class DisclosureService:
                         df.loc[old_data_mask, field] = ""
 
         except Exception as e:
-            # 오류 로깅
-            import logging
-
-            logging.error(f"Error in filter_sensitive_fields_by_user_level: {str(e)}")
+            logger.error(f"Error in filter_sensitive_fields_by_user_level: {str(e)}")
 
         return df
 

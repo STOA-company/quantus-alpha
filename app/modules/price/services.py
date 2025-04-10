@@ -1,4 +1,3 @@
-import logging
 import asyncio
 from datetime import date, datetime, timedelta
 from functools import lru_cache
@@ -11,6 +10,7 @@ from dataclasses import dataclass, field
 
 from sse_starlette import EventSourceResponse
 from app.common.constants import KST, MARKET_MAP_EN, MARKET_MAP
+from app.core.logger import setup_logger
 from app.modules.common.cache import MemoryCache
 from app.modules.common.enum import Country, Frequency, TranslateCountry
 from app.modules.common.schemas import BaseResponse
@@ -22,8 +22,7 @@ from app.core.exception.custom import DataNotFoundException
 from app.modules.common.utils import contry_mapping
 from app.utils.date_utils import check_market_status
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 @dataclass

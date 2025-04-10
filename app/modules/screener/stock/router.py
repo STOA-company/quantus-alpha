@@ -12,7 +12,7 @@ from app.modules.screener.stock.schemas import (
     GroupFilter,
     GroupFilterResponse,
 )
-import logging
+from app.core.logger import setup_logger
 from app.utils.oauth_utils import get_current_user
 from app.modules.screener.utils import screener_utils
 from app.cache.factors import factors_cache
@@ -26,7 +26,7 @@ from app.common.constants import (
 from app.modules.screener.stock.schemas import MarketEnum, StockType
 from app.core.exception.custom import CustomException
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 router = APIRouter()
 
