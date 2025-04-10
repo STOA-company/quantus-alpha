@@ -38,10 +38,10 @@ fi
 echo "Changing to project directory..."
 cd ~/quantus-alpha || exit 1
 
-# echo "Fetching latest changes..."
-# git fetch origin || exit 1
-# git checkout $BRANCH || exit 1
-# git pull origin $BRANCH || exit 1
+echo "Fetching latest changes..."
+git fetch origin || exit 1
+git checkout $BRANCH || exit 1
+git pull origin $BRANCH || exit 1
 
 echo "Updating git submodules..."
 git submodule update --init --recursive || exit 1
@@ -176,3 +176,12 @@ docker-compose stop $idle_service
 
 echo "Blue-Green deployment completed successfully!"
 echo "Active service is now: $target_service"
+
+# 모니터링 서비스가 실행 중이 아니면 시작
+if ! docker-compose ps | grep -q prometheus; then
+    echo "Starting monitoring services..."
+    docker-compose -f docker-compose.yml up -d prometheus grafana node_exporter cadvisor nginx_exporter blackbox_exporter
+    echo "Monitoring services started!"
+else
+    echo "Monitoring services are already running."
+fi

@@ -10,8 +10,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.logging.config import configure_logging
 from app.middlewares.trusted_hosts import get_current_username
 import logging
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Counter, Histogram, generate_latest
+import time
 
 logger = logging.getLogger(__name__)
+
+# Prometheus 메트릭 정의
+REQUESTS_TOTAL = Counter(
+    "api_requests_total", "Total count of API requests by method and path", ["method", "path", "status_code"]
+)
+
+RESPONSES_TIME = Histogram("api_response_time_seconds", "Histogram of API response time in seconds", ["method", "path"])
+
+USER_COUNTER = Counter("active_users_total", "Total count of active users", ["user_type"])
 
 configure_logging()
 
@@ -29,10 +41,26 @@ app = FastAPI(
 )
 handler.initialize(app)
 
+# Prometheus Instrumentator 설정 및 커스텀 메트릭 추가
+instrumentator = Instrumentator()
+instrumentator.instrument(app).add(lambda metric: metric.instrument_app(app))
+
 app.include_router(routers.router)
 
 db_config = get_database_config()
 db.init_app(app, **db_config.__dict__)
+
+
+# 애플리케이션 시작 시 Prometheus 메트릭 엔드포인트 활성화
+@app.on_event("startup")
+async def startup():
+    instrumentator.expose(app, include_in_schema=False, should_gzip=True)
+
+
+# 수동 메트릭 엔드포인트 추가
+@app.get("/metrics", include_in_schema=False)
+async def metrics():
+    return generate_latest()
 
 
 @app.get("/")
@@ -155,3 +183,22 @@ def request_test(request: TestRequest):
         return request.num / 0
     else:
         return request.num / 1
+
+
+@app.middleware("http")
+async def add_metrics(request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+
+    path = request.url.path
+    method = request.method
+    status_code = response.status_code
+
+    # 기본 API 요청 카운터 증가
+    REQUESTS_TOTAL.labels(method=method, path=path, status_code=status_code).inc()
+
+    # 응답 시간 히스토그램 업데이트
+    RESPONSES_TIME.labels(method=method, path=path).observe(process_time)
+
+    return response
