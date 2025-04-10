@@ -61,8 +61,6 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
             return response
 
         except CustomException as exc:
-            # 로깅 코드 제거 - 전역 예외 핸들러에서 한 번만 로깅하도록 함
-
             # 특정 환경에서만 슬랙 알림 전송
             if self.environment in self.notify_environments:
                 await self._send_slack_notification(

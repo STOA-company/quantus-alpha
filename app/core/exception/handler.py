@@ -1,4 +1,3 @@
-import logging
 from typing import Any, Sequence
 
 from app.core.exception.base import CustomException
@@ -27,8 +26,9 @@ from app.core.exception.custom import (
     DataNotFoundException,
     AnalysisException,
 )
+from app.core.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(name=__name__, use_console_handler=False)
 
 
 def _make_json_resp(
@@ -176,4 +176,20 @@ def initialize(app: FastAPI) -> None:
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(SQLAlchemyError, sqlalchemy_error_handler)
     app.add_exception_handler(CustomException, custom_exception_handler)  # 기본 CustomException을 더 뒤로
-    app.add_exception_handler(Exception, exception_handler)
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request, exc):
+        logger.error(f"Uncaught exception: {exc}", exc_info=True)
+
+        # 사용자에게 에러 응답 반환
+        return _make_json_resp(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+            message="서버 오류가 발생했습니다",
+            errors=[
+                {
+                    "domain": "Exception",
+                    "reason": type(exc).__name__,
+                    "message": str(exc),
+                }
+            ],
+        )
