@@ -2,7 +2,7 @@ from collections import defaultdict
 import statistics
 from requests import Session
 from sqlalchemy import select
-from app.core.logging.config import get_logger
+from app.core.logger import setup_logger
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional, Dict, List, Union
 from fastapi import HTTPException, Depends
@@ -35,7 +35,7 @@ from app.core.exception.custom import DataNotFoundException, InvalidCountryExcep
 from app.modules.common.utils import contry_mapping
 from app.utils.oauth_utils import get_current_user
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 class FinancialService:

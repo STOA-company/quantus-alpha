@@ -5,9 +5,9 @@ from app.database.crud import database
 from app.modules.common.enum import TranslateCountry
 from app.modules.community.services import CommunityService, get_community_service
 from app.modules.search.schemas import CommunitySearchItem, SearchItem
-import logging
+from app.core.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class SearchService:

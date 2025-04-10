@@ -2,11 +2,12 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from decimal import Decimal
 import json
-import logging
+
 from app.core.redis import redis_client
+from app.core.logger import setup_logger
 from app.modules.common.enum import TranslateCountry
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class DecimalEncoder(json.JSONEncoder):

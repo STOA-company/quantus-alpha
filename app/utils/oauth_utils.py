@@ -8,9 +8,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.models.models_users import AlphafinderUser
 from app.database.crud import database_service
 from typing import Optional
-import logging
+from app.core.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7

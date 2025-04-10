@@ -12,7 +12,7 @@ from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.news.schemas import LatestNewsResponse, NewsItem, TopStoriesResponse
 from Aws.common.configs import s3_client
 from app.database.crud import database
-from app.core.logging.config import get_logger
+from app.core.logger import setup_logger
 
 
 KST_TIMEZONE = pytz.timezone("Asia/Seoul")
@@ -23,7 +23,7 @@ NEWS_CONTRY_MAP = {
     "hk": "HK",
 }
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 class NewsService:

@@ -7,12 +7,12 @@ from app.models.models_stock import StockInformation
 from app.modules.common.enum import StabilityStatus, StabilityType, TranslateCountry
 from app.modules.stock_info.mapping import STABILITY_INFO
 from app.modules.stock_info.schemas import Indicators, SimilarStock, StockInfo
-from app.core.logging.config import get_logger
+from app.core.logger import setup_logger
 from app.modules.common.utils import contry_mapping
 from typing import Dict
 from app.cache.leaderboard import StockLeaderboard
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 class StockInfoService:

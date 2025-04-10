@@ -4,10 +4,12 @@ from sqlalchemy import MetaData, bindparam
 from sqlalchemy import select, insert, update, delete, desc, asc, or_, and_
 from sqlalchemy.exc import IntegrityError
 from contextlib import contextmanager
-import logging
 from sqlalchemy import func
 from app.core.config import get_database_config
+from app.core.logger import setup_logger
 from app.database.conn import db, db_service
+
+logger = setup_logger(__name__)
 
 
 @dataclass
@@ -69,7 +71,7 @@ class BaseDatabase:
                 connection.execute(select(1))
             return True
         except Exception as e:
-            logging.error(f"Database connection check failed: {str(e)}")
+            logger.error(f"Database connection check failed: {str(e)}")
             return False
 
     def _execute(self, query, *args):
@@ -79,10 +81,10 @@ class BaseDatabase:
                 result = connection.execute(query, *args)
                 return result
             except IntegrityError as e:
-                logging.error(f"Integrity Error in query execution: {str(e)}")
+                logger.error(f"Integrity Error in query execution: {str(e)}")
                 raise
             except Exception as e:
-                logging.error(f"Error in query execution: {str(e)}")
+                logger.error(f"Error in query execution: {str(e)}")
                 raise
 
     def get_condition(self, obj: object, **kwargs) -> list:
@@ -167,7 +169,7 @@ class BaseDatabase:
                 result = connection.execute(stmt)
                 return result
         except Exception as e:
-            logging.error(f"Error in update operation: {str(e)}")
+            logger.error(f"Error in update operation: {str(e)}")
             raise
 
     def _delete(self, table: str, **kwargs):
@@ -184,7 +186,7 @@ class BaseDatabase:
                 result = connection.execute(stmt)
                 return result
         except Exception as e:
-            logging.error(f"Error in delete operation: {str(e)}")
+            logger.error(f"Error in delete operation: {str(e)}")
             raise
 
     def _insert(self, table: str, sets: dict | list):
@@ -204,7 +206,7 @@ class BaseDatabase:
                 result = connection.execute(stmt)
                 return result
         except Exception as e:
-            logging.error(f"Error in insert operation: {str(e)}")
+            logger.error(f"Error in insert operation: {str(e)}")
             raise
 
     def _select(
@@ -296,7 +298,7 @@ class BaseDatabase:
                 return result.fetchall()
 
         except Exception as e:
-            logging.error(f"Error in select operation: {str(e)}")
+            logger.error(f"Error in select operation: {str(e)}")
             raise
 
     def _join(self, join_info: JoinInfo):
@@ -319,7 +321,7 @@ class BaseDatabase:
 
             return join_obj
         except Exception as e:
-            logging.error(f"Error in join operation: {str(e)}")
+            logger.error(f"Error in join operation: {str(e)}")
             raise
 
     def _count(self, table: str, join_info: JoinInfo | None = None, **kwargs) -> int:
@@ -339,7 +341,7 @@ class BaseDatabase:
                 return result.scalar() or 0
 
         except Exception as e:
-            logging.error(f"Error in count operation: {str(e)}")
+            logger.error(f"Error in count operation: {str(e)}")
             raise
 
     def _bulk_update(self, table: str, data: list[dict], key_column: str, chunk_size: int = 1000):
@@ -374,13 +376,13 @@ class BaseDatabase:
                 with self.get_connection() as connection:
                     connection.execute(stmt, update_params)
 
-                logging.info(
+                logger.info(
                     f"Bulk update completed for chunk {i//chunk_size + 1}, " f"processed {len(chunk)} records in {table}"
                 )
                 time.sleep(1)
 
         except Exception as e:
-            logging.error(f"Error in bulk update operation: {str(e)}")
+            logger.error(f"Error in bulk update operation: {str(e)}")
             raise
 
     async def insert_wrapper(self, table: str, sets: dict | list):
@@ -388,7 +390,7 @@ class BaseDatabase:
         try:
             return self._insert(table, sets)
         except Exception as e:
-            logging.error(f"Error in insert operation: {str(e)}")
+            logger.error(f"Error in insert operation: {str(e)}")
             raise
 
 

@@ -9,7 +9,7 @@ import numpy as np
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.models.models_factors import CategoryEnum, FactorTypeEnum
-import logging
+from app.core.logger import setup_logger
 from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.date_utils import is_holiday
 from datetime import datetime, timedelta
@@ -20,7 +20,7 @@ from app.utils.test_utils import time_it
 from app.kispy.manager import KISAPIManager
 from app.utils.dividend_utils import DividendUtils
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 notifier = SlackNotifier()
 

@@ -1,14 +1,14 @@
-import logging
 from typing import Tuple
 import asyncio
+
 from datetime import datetime, timedelta, timezone
 from app.database.crud import database
 from app.modules.stock_indices.schemas import IndexSummary, IndicesData, IndicesResponse, TimeData
 from app.utils.date_utils import check_market_status
 from app.core.config import korea_tz
+from app.core.logger import setup_logger
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class StockIndicesService:
