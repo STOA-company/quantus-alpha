@@ -32,7 +32,7 @@ class ScreenerUtils:
         self.etf_factor_loader = ETFDataLoader()
 
     def get_factors(self, market: MarketEnum) -> List[dict]:
-        factors = self.db._select(table="factors", is_stock=True)
+        factors = self.db._select(table="factors", is_stock=True, order="order", ascending=True)
         # 시장별 팩터 최소/최대값 계산
         market_data = self.get_df_from_parquet(market)
 
@@ -65,7 +65,7 @@ class ScreenerUtils:
         return result
 
     def get_etf_factors(self, market: ETFMarketEnum) -> List[dict]:
-        factors = self.db._select(table="factors", is_etf=True)
+        factors = self.db._select(table="factors", is_etf=True, order="order", ascending=True)
         market_data = self.etf_factor_loader.load_etf_factors(market.value)
 
         result = []
