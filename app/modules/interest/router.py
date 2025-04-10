@@ -10,9 +10,9 @@ from app.modules.news.schemas import TopStoriesResponse, InterestNewsResponse, I
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.enum import TranslateCountry
 from app.core.exception.base import DuplicateException, NotFoundException
-import logging
+from app.core.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 router = APIRouter()
 

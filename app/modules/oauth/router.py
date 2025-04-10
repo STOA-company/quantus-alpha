@@ -3,7 +3,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 import httpx
 import os
-import logging
+from app.core.logger import setup_logger
 from app.utils.oauth_utils import create_email_token, create_jwt_token, create_refresh_token
 from app.modules.oauth.schemas import (
     GoogleLoginResponse,
@@ -12,7 +12,7 @@ from app.modules.user.service import get_user_service, UserService
 from fastapi.responses import RedirectResponse
 from urllib.parse import urlencode
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 router = APIRouter()
 

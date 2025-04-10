@@ -12,13 +12,13 @@ from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.etf.schemas import FilteredETF, PaginatedFilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
 from app.utils.oauth_utils import get_current_user
-from app.core.logging.config import get_logger
+from app.core.logger import setup_logger
 from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN, ETF_MARKET_MAP
 from app.core.exception.base import CustomException
 from app.modules.screener.utils import screener_utils
 
 router = APIRouter()
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 @router.get("/factors/{market}", response_model=List[FactorResponse])

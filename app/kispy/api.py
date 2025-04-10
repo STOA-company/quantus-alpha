@@ -1,4 +1,4 @@
-import logging
+from app.core.logger import setup_logger
 import requests
 from datetime import datetime, timedelta
 from kispy.base import BaseAPI
@@ -8,7 +8,7 @@ import json
 import time
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class KISAPI(BaseAPI):

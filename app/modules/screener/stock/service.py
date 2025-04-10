@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Tuple
-import logging
+from app.core.logger import setup_logger
 from app.utils.score_utils import score_utils
 from app.cache.factors import factors_cache
 import pandas as pd
@@ -20,7 +20,7 @@ from app.modules.screener.base import BaseScreenerService
 from app.utils.test_utils import time_it
 from app.core.redis import redis_client
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class ScreenerStockService(BaseScreenerService):

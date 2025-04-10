@@ -2,7 +2,9 @@ from datetime import datetime
 from typing import Literal
 import exchange_calendars as ecals
 from app.core.config import korea_tz, utc_tz, us_eastern_tz
-import logging
+from app.core.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 def now_kr(is_date: bool = False):
@@ -87,7 +89,7 @@ def get_time_checker(country: Literal["KR", "US"]) -> bool:
             return calendar.is_open_on_minute(current_time)
 
     except Exception as e:
-        logging.error(f"Error in get_time_checker: {str(e)}")
+        logger.error(f"Error in get_time_checker: {str(e)}")
         return False
 
 
@@ -109,18 +111,18 @@ def check_market_status(country: Literal["KR", "US"]) -> bool:
     try:
         # 휴장 여부 확인
         if not is_business_day(country):
-            logging.info(f"{country} market is not a business day")
+            logger.info(f"{country} market is not a business day")
             return False
 
         # 개장 여부 확인
         if not get_time_checker(country):
-            logging.info(f"{country} market is not open")
+            logger.info(f"{country} market is not open")
             return False
 
         return True
 
     except Exception as e:
-        logging.error(f"Error checking market status: {str(e)}")
+        logger.error(f"Error checking market status: {str(e)}")
         return False
 
 
@@ -155,7 +157,7 @@ def is_holiday(country: Literal["KR", "US"], date_str: str) -> bool:
         return not is_trading_day
 
     except Exception as e:
-        logging.error(f"Error in is_holiday: {str(e)}")
+        logger.error(f"Error in is_holiday: {str(e)}")
         return False
 
 
@@ -197,5 +199,5 @@ def is_us_market_open_or_recently_closed(extra_hours=1):
         return 0 <= time_diff <= extra_hours * 3600
 
     except Exception as e:
-        logging.error(f"Error in is_us_market_open_or_recently_closed: {str(e)}")
+        logger.error(f"Error in is_us_market_open_or_recently_closed: {str(e)}")
         return False
