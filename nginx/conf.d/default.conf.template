@@ -27,7 +27,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
 
         # Grafana 서브패스 지원을 위한 추가 헤더
-        proxy_set_header X-Grafana-Root-Url http://$http_host/grafana;
+        proxy_set_header X-Grafana-Root-Url $scheme://$http_host/grafana;
 
         # 웹소켓 지원
         proxy_http_version 1.1;
