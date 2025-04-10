@@ -68,7 +68,7 @@ handler.initialize(app)
 
 # Prometheus Instrumentator, Metric Configuration
 instrumentator = Instrumentator()
-instrumentator.instrument(app).add(lambda metric: metric.instrument_app(app))
+instrumentator.instrument(app)
 
 app.include_router(routers.router)
 
