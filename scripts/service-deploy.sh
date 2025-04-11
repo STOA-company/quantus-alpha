@@ -31,6 +31,9 @@ case $ENVIRONMENT in
         ;;
 esac
 
+# Export ROOT_URL for docker-compose
+export ROOT_URL
+
 echo "Deploying for environment: $ENV using $ENV_FILE (Branch: $BRANCH)"
 
 if [ ! -f "$ENV_FILE" ]; then
@@ -103,6 +106,12 @@ update_nginx_upstream() {
     echo "Updating NGINX upstream to point to $service..."
 
     cat > ./nginx/conf.d/default.conf << EOF
+# This is required to proxy Grafana Live WebSocket connections.
+map \$http_upgrade \$connection_upgrade {
+  default upgrade;
+  '' close;
+}
+
 server {
     listen 80;
 
@@ -127,15 +136,25 @@ server {
     location /grafana/ {
         rewrite ^/grafana/(.*) /\$1 break;
         proxy_pass http://grafana:3000/;
-        proxy_set_header Host \$host;
+        proxy_set_header Host \$http_host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
 
-        # Websocket support
+        # WebSocket support
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection \$connection_upgrade;
+    }
+
+    # Grafana Live WebSocket connections
+    location /grafana/api/live/ {
+        rewrite ^/grafana/(.*) /\$1 break;
+        proxy_pass http://grafana:3000/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header Host \$http_host;
     }
 }
 EOF
