@@ -101,4 +101,5 @@ class DataDownloadHistory(ServiceBase):
     id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=False)
     data_type: Mapped[String] = mapped_column(String(length=100), nullable=False)
+    data_detail: Mapped[String] = mapped_column(String(length=100), nullable=True)
     download_datetime: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
