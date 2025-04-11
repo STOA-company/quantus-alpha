@@ -164,12 +164,10 @@ services:
             - ./grafana/provisioning/alerting:/etc/grafana/provisioning/alerting
         environment:
             - GF_SERVER_SERVE_FROM_SUB_PATH=true
-            - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana
-            - GF_SERVER_PROTOCOL=http
-            - GF_SERVER_DOMAIN=${DOMAIN}
+            - GF_SERVER_ROOT_URL=https://alpha-dev.quantus.kr/grafana
+            - GF_SECURITY_ALLOW_EMBEDDING=true
             - GF_SECURITY_ADMIN_USER=admin
             - GF_SECURITY_ADMIN_PASSWORD=admin
-            - GF_SERVER_ENFORCE_DOMAIN=false
         ports:
             - "3000:3000"
         networks:
