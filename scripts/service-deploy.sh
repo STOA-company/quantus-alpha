@@ -31,8 +31,9 @@ case $ENVIRONMENT in
         ;;
 esac
 
-# Export ROOT_URL for docker-compose
+# Export variables for docker-compose
 export ROOT_URL
+export DOMAIN=${ROOT_URL#https://}
 
 echo "Deploying for environment: $ENV using $ENV_FILE (Branch: $BRANCH)"
 
