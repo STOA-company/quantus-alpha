@@ -519,7 +519,7 @@ def download_filtered_stocks(
         return JSONResponse(content={"error": "데이터가 없습니다"}, status_code=404)
 
     csv_data = StringIO()
-    df.to_csv(csv_data, index=False)
+    df.to_csv(csv_data, index=False, encoding="utf-8-sig")
 
     data_download_history = DataDownloadHistory(
         user_id=user.id,
@@ -529,10 +529,13 @@ def download_filtered_stocks(
     )
     user_service.save_data_download_history(data_download_history)
 
+    market = filtered_stocks.market_filter
+    filename = f"stock_export_{market}.csv"
+
     return Response(
         content=csv_data.getvalue(),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=stock_export.csv"},
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
