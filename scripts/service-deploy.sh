@@ -11,19 +11,19 @@ case $ENVIRONMENT in
         ENV_FILE=.env
         ENV=prod
         BRANCH=main
-        ROOT_URL="https://alpha-live.quantus.kr"
+        export ROOT_URL="https://alpha-live.quantus.kr"
         ;;
     stage|staging)
         ENV_FILE=.env
         ENV=stage
         BRANCH=staging
-        ROOT_URL="https://alpha-live.quantus.kr"
+        export ROOT_URL="https://alpha-live.quantus.kr"
         ;;
     dev|development)
         ENV_FILE=.env
         ENV=dev
         BRANCH=dev
-        ROOT_URL="https://alpha-dev.quantus.kr"
+        export ROOT_URL="https://alpha-dev.quantus.kr"
         ;;
     *)
         echo "Unknown environment: $ENVIRONMENT"
@@ -126,13 +126,17 @@ server {
         proxy_pass http://grafana:3000/;
 
         # 기본 프록시 헤더
-        proxy_set_header Host \$http_host;
+        proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
 
         # Grafana 서브패스 지원을 위한 추가 헤더
         proxy_set_header X-Grafana-Root-Url ${ROOT_URL}/grafana;
+
+        # 리다이렉트 처리
+        proxy_redirect / /grafana/;
+        proxy_redirect /user/ /grafana/user/;
 
         # 웹소켓 지원
         proxy_http_version 1.1;

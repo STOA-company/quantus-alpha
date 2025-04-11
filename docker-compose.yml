@@ -153,6 +153,7 @@ services:
             - alpha-network
         restart: unless-stopped
 
+
     # Grafana - 대시보드
     grafana:
         image: grafana/grafana:latest
@@ -163,10 +164,9 @@ services:
             - ./grafana/provisioning/plugins:/etc/grafana/provisioning/plugins
             - ./grafana/provisioning/alerting:/etc/grafana/provisioning/alerting
         environment:
-            - GF_SECURITY_ADMIN_PASSWORD=secure_password_here
-            - GF_USERS_ALLOW_SIGN_UP=false
             - GF_SERVER_SERVE_FROM_SUB_PATH=true
-            - GF_AUTH_PROXY_ENABLED=true
+            - GF_SERVER_ROOT_URL=${ROOT_URL}/grafana
+            - GF_AUTH_PROXY_ENABLED=false
             - GF_AUTH_DISABLE_LOGIN_FORM=false
         ports:
             - "3000:3000"
