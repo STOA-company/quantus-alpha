@@ -167,6 +167,8 @@ services:
             - GF_SERVER_ROOT_URL=${ROOT_URL}/grafana
             - GF_SECURITY_ADMIN_USER=admin
             - GF_SECURITY_ADMIN_PASSWORD=admin
+            - GF_SERVER_DOMAIN=${ROOT_URL}
+            - GF_SERVER_ENFORCE_DOMAIN=false
         ports:
             - "3000:3000"
         networks:
