@@ -112,6 +112,10 @@ map \$http_upgrade \$connection_upgrade {
   '' close;
 }
 
+upstream grafana {
+    server grafana:3000;
+}
+
 server {
     listen 80;
 
@@ -129,13 +133,9 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
     }
 
-    location /grafana {
-        rewrite ^/grafana\$ /grafana/ permanent;
-    }
-
     location /grafana/ {
-        rewrite ^/grafana/(.*) /\$1 break;
-        proxy_pass http://grafana:3000/;
+        rewrite  ^/grafana/(.*) /\$1 break;
+        proxy_pass http://grafana/;
         proxy_set_header Host \$http_host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -147,10 +147,10 @@ server {
         proxy_set_header Connection \$connection_upgrade;
     }
 
-    # Grafana Live WebSocket connections
+    # Proxy Grafana Live WebSocket connections
     location /grafana/api/live/ {
-        rewrite ^/grafana/(.*) /\$1 break;
-        proxy_pass http://grafana:3000/;
+        rewrite  ^/grafana/(.*) /\$1 break;
+        proxy_pass http://grafana/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
