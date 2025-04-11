@@ -1,8 +1,8 @@
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict
-from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
-import time
+from app.models.models_users import AlphafinderUser
 from app.modules.screener.stock.service import ScreenerStockService
 from app.modules.screener.stock.schemas import (
     FactorResponse,
@@ -13,6 +13,8 @@ from app.modules.screener.stock.schemas import (
     GroupFilterResponse,
 )
 from app.core.logger import setup_logger
+from app.modules.user.schemas import DataDownloadHistory
+from app.modules.user.service import UserService, get_user_service
 from app.utils.oauth_utils import get_current_user
 from app.modules.screener.utils import screener_utils
 from app.cache.factors import factors_cache
@@ -25,6 +27,8 @@ from app.common.constants import (
 )
 from app.modules.screener.stock.schemas import MarketEnum, StockType
 from app.core.exception.custom import CustomException
+from io import StringIO
+from fastapi.responses import Response
 
 logger = setup_logger(__name__)
 
@@ -465,8 +469,15 @@ def update_parquet(country: str):
 
 @router.post("/download")
 def download_filtered_stocks(
-    filtered_stocks: FilteredStocks, screener_service: ScreenerStockService = Depends(ScreenerStockService)
+    filtered_stocks: FilteredStocks,
+    screener_service: ScreenerStockService = Depends(ScreenerStockService),
+    user: AlphafinderUser = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
 ):
+    if user is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    if user.subscription_level == 1:
+        raise HTTPException(status_code=403, detail="구독 레벨이 낮습니다.")
     custom_filters = []
     if filtered_stocks.custom_filters:
         custom_filters = [
@@ -507,10 +518,22 @@ def download_filtered_stocks(
     if df is None or df.empty:
         return JSONResponse(content={"error": "데이터가 없습니다"}, status_code=404)
 
-    filename = f"temp_export_{int(time.time())}.csv"
-    df.to_csv(filename, index=False)
+    csv_data = StringIO()
+    df.to_csv(csv_data, index=False)
 
-    return FileResponse(path=filename, filename="stock_export.csv", media_type="text/csv")
+    data_download_history = DataDownloadHistory(
+        user_id=user.id,
+        data_type="screener",
+        data_detail="stock",
+        download_datetime=datetime.now(),
+    )
+    user_service.save_data_download_history(data_download_history)
+
+    return Response(
+        content=csv_data.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=stock_export.csv"},
+    )
 
 
 @router.post("/init")
