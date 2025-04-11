@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer, String, BigInteger, Boolean, Date, UniqueConstraint
+from sqlalchemy import ForeignKey, Integer, String, BigInteger, Boolean, Date, UniqueConstraint, DateTime, Index
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.models_base import ServiceBase, BaseMixin
@@ -88,3 +88,17 @@ class TossPaymentHistory(BaseMixin, ServiceBase):
     payment_method: Mapped[String] = mapped_column(String(length=100), nullable=True)
 
     user = relationship("AlphafinderUser", back_populates="toss_payment_history")
+
+
+class DataDownloadHistory(ServiceBase):
+    __tablename__ = "data_download_history"
+    __table_args__ = (
+        Index("idx_user_id", "user_id"),
+        Index("idx_user_id_download_datetime", "user_id", "download_datetime"),
+        {"extend_existing": True},
+    )
+
+    id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=False)
+    data_type: Mapped[String] = mapped_column(String(length=100), nullable=False)
+    download_datetime: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
