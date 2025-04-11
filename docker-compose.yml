@@ -164,15 +164,14 @@ services:
             - ./grafana/provisioning/alerting:/etc/grafana/provisioning/alerting
         environment:
             - GF_SERVER_SERVE_FROM_SUB_PATH=true
-            - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana
-            - GF_SERVER_PROTOCOL=http
+            - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/
+            - GF_SERVER_PROTOCOL=https
+            - GF_SERVER_DOMAIN=${ROOT_URL#https://}
             - GF_SECURITY_ADMIN_USER=admin
             - GF_SECURITY_ADMIN_PASSWORD=admin
-            - GF_SERVER_DOMAIN=${ROOT_URL}
             - GF_SERVER_ENFORCE_DOMAIN=false
-            - GF_LIVE_ALLOWED_ORIGINS=${ROOT_URL}
         ports:
-            - "3001:3001"
+            - "3000:3000"
         networks:
             - alpha-network
         depends_on:
