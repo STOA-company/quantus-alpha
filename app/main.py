@@ -1,4 +1,5 @@
 from app.middlewares.slack_error import add_slack_middleware
+from app.middlewares.rate_limiter_admin import router as rate_limiter_admin_router
 from fastapi import FastAPI, HTTPException, Security
 from app.core.config import get_database_config, settings
 from app.api import routers
@@ -71,6 +72,8 @@ instrumentator = Instrumentator()
 instrumentator.instrument(app)
 
 app.include_router(routers.router)
+# Include rate limiter admin router
+app.include_router(rate_limiter_admin_router)
 
 db_config = get_database_config()
 db.init_app(app, **db_config.__dict__)
@@ -114,6 +117,7 @@ if settings.ENV == "stage":
 else:
     webhook_url = dev_webhook_url
 
+# Slack 오류 알림 미들웨어 설정
 add_slack_middleware(
     app=app,
     webhook_url=webhook_url,
@@ -124,6 +128,7 @@ add_slack_middleware(
     notify_environments=["stage", "dev"],
 )
 
+# CORS 미들웨어 설정
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -131,6 +136,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*", "Authorization", "Authorization_Swagger"],
 )
+
+
+# # 레이트 리미팅 미들웨어 설정
+# exclude_paths = [
+#     "/health-check",
+#     "/metrics",
+#     "/docs",
+#     "/redoc",
+#     "/admin",
+# ]
+
+# app.add_middleware(
+#     GlobalRateLimitMiddleware,
+#     max_requests=100,
+#     window_seconds=60,
+#     exclude_paths=exclude_paths,
+# )
 
 
 class HealthCheckDetails(BaseModel):
