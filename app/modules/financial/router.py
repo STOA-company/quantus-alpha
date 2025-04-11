@@ -335,7 +335,7 @@ async def get_income_download(
         user_service.save_data_download_history(data_download_history)
 
         # 일반 응답으로 반환
-        return Response(content=csv_buffer.getvalue().encode("utf-8"), headers=headers)
+        return Response(content=csv_buffer.getvalue().encode("utf-8-sig"), headers=headers)
     except Exception as error:
         logger.error(f"Income statement download 실패: {str(error)}, ticker: {ticker}")
         raise HTTPException(status_code=500, detail="내부 서버 오류")
@@ -496,7 +496,7 @@ async def get_cashflow_download(
         user_service.save_data_download_history(data_download_history)
 
         # 일반 응답으로 반환
-        return Response(content=csv_buffer.getvalue().encode("utf-8"), headers=headers)
+        return Response(content=csv_buffer.getvalue().encode("utf-8-sig"), headers=headers)
 
     except Exception as error:
         logger.error(f"Cashflow download 실패: {str(error)}, ticker: {ticker}")
@@ -692,7 +692,7 @@ async def get_finpos_download(
         user_service.save_data_download_history(data_download_history)
 
         # 일반 응답으로 반환
-        return Response(content=csv_buffer.getvalue().encode("utf-8"), headers=headers)
+        return Response(content=csv_buffer.getvalue().encode("utf-8-sig"), headers=headers)
 
     except Exception as error:
         logger.error(f"Financial position download 실패: {str(error)}, ticker: {ticker}")
