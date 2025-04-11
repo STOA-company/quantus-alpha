@@ -482,8 +482,12 @@ async def download_filtered_etfs(
     )
     user_service.save_data_download_history(data_download_history)
 
-    market = filtered_etfs.market_filter
-    filename = f"etf_export_{market}.csv"
+    market_str = (
+        filtered_etfs.market_filter.value
+        if hasattr(filtered_etfs.market_filter, "value")
+        else str(filtered_etfs.market_filter)
+    )
+    filename = f"etf_export_{market_str}.csv"
 
     return Response(
         content=csv_data.getvalue(),

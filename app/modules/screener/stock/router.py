@@ -529,8 +529,12 @@ def download_filtered_stocks(
     )
     user_service.save_data_download_history(data_download_history)
 
-    market = filtered_stocks.market_filter
-    filename = f"stock_export_{market}.csv"
+    market_str = (
+        filtered_stocks.market_filter.value
+        if hasattr(filtered_stocks.market_filter, "value")
+        else str(filtered_stocks.market_filter)
+    )
+    filename = f"stock_export_{market_str}.csv"
 
     return Response(
         content=csv_data.getvalue(),
