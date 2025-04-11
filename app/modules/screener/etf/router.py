@@ -1,7 +1,6 @@
+from io import StringIO
 from typing import Dict, List, Literal
-from fastapi import APIRouter, Depends, HTTPException
-import time
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
 
 from app.batches.run_etf_screener import run_etf_screener_data
@@ -16,6 +15,10 @@ from app.core.logger import setup_logger
 from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN, ETF_MARKET_MAP
 from app.core.exception.base import CustomException
 from app.modules.screener.utils import screener_utils
+from app.models.models_users import AlphafinderUser
+from app.modules.user.service import UserService, get_user_service
+from app.modules.user.schemas import DataDownloadHistory
+from datetime import datetime
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -420,8 +423,15 @@ def get_old_parquet(screener_etf_service: ScreenerETFService = Depends(ScreenerE
 
 @router.post("/download")
 async def download_filtered_etfs(
-    filtered_etfs: FilteredETF, screener_service: ScreenerETFService = Depends(ScreenerETFService)
+    filtered_etfs: FilteredETF,
+    screener_service: ScreenerETFService = Depends(ScreenerETFService),
+    user: AlphafinderUser = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
 ):
+    if user is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    if user.subscription_level == 1:
+        raise HTTPException(status_code=403, detail="구독 레벨이 낮습니다.")
     custom_filters = []
     if filtered_etfs.custom_filters:
         custom_filters = [
@@ -461,7 +471,19 @@ async def download_filtered_etfs(
     if df is None or df.empty:
         return JSONResponse(content={"error": "데이터가 없습니다"}, status_code=404)
 
-    filename = f"temp_export_{int(time.time())}.csv"
-    df.to_csv(filename, index=False)
+    csv_data = StringIO()
+    df.to_csv(csv_data, index=False)
 
-    return FileResponse(path=filename, filename="etf_export.csv", media_type="text/csv")
+    data_download_history = DataDownloadHistory(
+        user_id=user.id,
+        data_type="screener",
+        data_detail="etf",
+        download_datetime=datetime.now(),
+    )
+    user_service.save_data_download_history(data_download_history)
+
+    return Response(
+        content=csv_data.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=etf_export.csv"},
+    )
