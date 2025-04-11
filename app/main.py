@@ -100,6 +100,8 @@ origins = [
     "http://127.0.0.1:8000",
     "https://alpha-dev.quantus.kr",
     "https://develop.alphafinder.dev",
+    "https://develop.alphafinder.dev/ko",
+    "https://develop.alphafinder.dev/en",
     "https://alphafinder-stage.vercel.app",
     "https://stage.alphafinder.dev",
     "https://live.alphafinder.dev",
