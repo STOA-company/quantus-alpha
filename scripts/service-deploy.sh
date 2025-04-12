@@ -190,12 +190,3 @@ docker-compose stop $idle_service
 
 echo "Blue-Green deployment completed successfully!"
 echo "Active service is now: $target_service"
-
-# 모니터링 서비스가 실행 중이 아니면 시작
-if ! docker-compose ps | grep -q prometheus; then
-    echo "Starting monitoring services..."
-    docker-compose -f docker-compose.yml up -d prometheus grafana node_exporter cadvisor nginx_exporter blackbox_exporter
-    echo "Monitoring services started!"
-else
-    echo "Monitoring services are already running."
-fi
