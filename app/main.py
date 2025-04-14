@@ -11,6 +11,7 @@ from app.database.crud import database
 from app.middlewares.slack_error import add_slack_middleware
 from app.middlewares.trusted_hosts import get_current_username
 
+
 # 여기로 로거 설정 이동
 stage_webhook_url = "https://hooks.slack.com/services/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"
 dev_webhook_url = "https://hooks.slack.com/services/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"
@@ -24,7 +25,8 @@ configure(
     log_level="INFO",
     log_dir="logs",
     separate_error_logs=True,
-    exception_handlers=["file"],
+    console_output=True,
+    exception_handlers=["file", "console"],
     send_error_to_slack=True,
     slack_webhook_url=slack_webhook_url,
     slack_webhook_urls={"default": slack_webhook_url},
@@ -37,7 +39,6 @@ logger = get_logger(__name__)
 
 # 로그 테스트
 logger.info("Application starting...")
-
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

@@ -479,5 +479,7 @@ def get_logger(name: str) -> Logger:
     """
     global _loggers
     if name not in _loggers:
-        _loggers[name] = Logger(name)
+        # root_logger의 설정을 상속받는 새로운 로거 생성
+        logger = logging.getLogger(name)
+        _loggers[name] = Logger(name, _logger=logger)
     return _loggers[name]
