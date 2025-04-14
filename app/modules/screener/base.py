@@ -13,9 +13,9 @@ from app.common.constants import (
     REVERSE_FACTOR_MAP,
 )
 from app.core.exception.base import CustomException
-from app.core.logging.config import get_logger
+from app.core.logger import setup_logger
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 class BaseScreenerService(ABC):

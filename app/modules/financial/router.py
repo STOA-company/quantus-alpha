@@ -1,6 +1,7 @@
 import csv
+from datetime import datetime
 import io
-import logging
+from app.core.logger import setup_logger
 from fastapi import Request, HTTPException, Response
 from requests import Session
 from app.core.exception.handler import exception_handler
@@ -21,8 +22,10 @@ from .schemas import (
 )
 from typing import Optional, Annotated
 from app.modules.common.utils import contry_mapping
+from app.modules.user.service import UserService, get_user_service
+from app.modules.user.schemas import DataDownloadHistory
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 router = APIRouter()
 
 
@@ -181,6 +184,7 @@ async def get_income_download(
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     financial_service: FinancialService = Depends(get_financial_service),
     user: AlphafinderUser = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
 ) -> Response:
     # 사용자 인증 확인
     if user is None:
@@ -321,8 +325,17 @@ async def get_income_download(
         # 응답 헤더 설정
         headers = {"Content-Disposition": f"attachment; filename={file_name}", "Content-Type": "text/csv"}
 
+        # 데이터 다운로드 기록 저장
+        data_download_history = DataDownloadHistory(
+            user_id=user.id,
+            data_type="income",
+            data_detail=ticker,
+            download_datetime=datetime.now(),
+        )
+        user_service.save_data_download_history(data_download_history)
+
         # 일반 응답으로 반환
-        return Response(content=csv_buffer.getvalue().encode("utf-8"), headers=headers)
+        return Response(content=csv_buffer.getvalue().encode("utf-8-sig"), headers=headers)
     except Exception as error:
         logger.error(f"Income statement download 실패: {str(error)}, ticker: {ticker}")
         raise HTTPException(status_code=500, detail="내부 서버 오류")
@@ -337,6 +350,7 @@ async def get_cashflow_download(
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     financial_service: FinancialService = Depends(get_financial_service),
     user: AlphafinderUser = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
 ) -> Response:
     # 사용자 인증 확인
     if user is None:
@@ -472,8 +486,17 @@ async def get_cashflow_download(
         # 응답 헤더 설정
         headers = {"Content-Disposition": f"attachment; filename={file_name}", "Content-Type": "text/csv"}
 
+        # 데이터 다운로드 기록 저장
+        data_download_history = DataDownloadHistory(
+            user_id=user.id,
+            data_type="cashflow",
+            data_detail=ticker,
+            download_datetime=datetime.now(),
+        )
+        user_service.save_data_download_history(data_download_history)
+
         # 일반 응답으로 반환
-        return Response(content=csv_buffer.getvalue().encode("utf-8"), headers=headers)
+        return Response(content=csv_buffer.getvalue().encode("utf-8-sig"), headers=headers)
 
     except Exception as error:
         logger.error(f"Cashflow download 실패: {str(error)}, ticker: {ticker}")
@@ -489,6 +512,7 @@ async def get_finpos_download(
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     financial_service: FinancialService = Depends(get_financial_service),
     user: AlphafinderUser = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
 ) -> Response:
     # 사용자 인증 확인
     if user is None:
@@ -658,34 +682,18 @@ async def get_finpos_download(
         # 응답 헤더 설정
         headers = {"Content-Disposition": f"attachment; filename={file_name}", "Content-Type": "text/csv"}
 
+        # 데이터 다운로드 기록 저장
+        data_download_history = DataDownloadHistory(
+            user_id=user.id,
+            data_type="finpos",
+            data_detail=ticker,
+            download_datetime=datetime.now(),
+        )
+        user_service.save_data_download_history(data_download_history)
+
         # 일반 응답으로 반환
-        return Response(content=csv_buffer.getvalue().encode("utf-8"), headers=headers)
+        return Response(content=csv_buffer.getvalue().encode("utf-8-sig"), headers=headers)
 
     except Exception as error:
         logger.error(f"Financial position download 실패: {str(error)}, ticker: {ticker}")
         raise HTTPException(status_code=500, detail="내부 서버 오류")
-
-
-@router.get("/download-csv")
-def download_csv():
-    # 1. CSV 데이터를 생성할 StringIO 객체 생성
-    output = io.StringIO()
-    writer = csv.writer(output)
-
-    # 2. CSV 헤더 작성
-    writer.writerow(["이름", "나이", "직업"])
-
-    # 3. CSV 내용 작성
-    writer.writerow(["홍길동", 30, "개발자"])
-    writer.writerow(["김철수", 25, "디자이너"])
-    writer.writerow(["이영희", 28, "기획자"])
-
-    # 4. StringIO 포인터를 시작 위치로 되돌림
-    output.seek(0)
-
-    # 5. 응답으로 CSV 파일 내려주기
-    return Response(
-        content=output.getvalue(),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=sample.csv"},
-    )

@@ -1,5 +1,6 @@
 import pytz
 
+from app.core.config import settings
 
 KR_EXCLUDE_DATES = ["2024-12-30", "2025-01-27"]
 US_EXCLUDE_DATES = ["2025-01-09"]
@@ -499,3 +500,8 @@ SELECT_MAP = {
         {"value": "insufficient_data", "display": None},
     ],
 }
+
+
+stage_webhook_url = "https://hooks.slack.com/services/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"
+dev_webhook_url = "https://hooks.slack.com/services/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"
+SLACK_WEBHOOK_URL_ERROR = stage_webhook_url if settings.ENV == "stage" else dev_webhook_url

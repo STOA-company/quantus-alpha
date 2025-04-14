@@ -1,19 +1,20 @@
 import json
-import logging
+
 import hashlib
 from typing import List, Tuple, Optional
 from fastapi import HTTPException
 
+from app.core.logger import setup_logger
 from app.database.crud import database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.community.schemas import CommentItemWithPostInfo, PostInfo, ResponsePost, UserInfo
-from app.modules.user.schemas import UserProfileResponse
+from app.modules.user.schemas import UserProfileResponse, DataDownloadHistory
 from app.modules.screener.stock.service import ScreenerStockService
 from app.enum.type import StockType
 
 from sqlalchemy import text
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class UserService:
@@ -426,6 +427,17 @@ class UserService:
     def get_level_info(self, level: int):
         level_info = self.db._select(table="alphafinder_level", level=level)
         return level_info[0]
+
+    def save_data_download_history(self, data_download_history: DataDownloadHistory):
+        self.db._insert(
+            table="data_download_history",
+            sets={
+                "user_id": data_download_history.user_id,
+                "data_type": data_download_history.data_type,
+                "data_detail": data_download_history.data_detail,
+                "download_datetime": data_download_history.download_datetime,
+            },
+        )
 
 
 def get_user_service() -> UserService:

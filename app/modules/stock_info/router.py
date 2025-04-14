@@ -1,7 +1,6 @@
-import logging
 import random
 from fastapi import APIRouter, Depends, HTTPException
-
+from app.core.logger import setup_logger
 from app.modules.common.enum import FearAndGreedIndex, TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2
@@ -14,7 +13,7 @@ from app.database.conn import db
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 # @router.get("", response_model=BaseResponse[StockInfo], summary="주식 정보 조회")

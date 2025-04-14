@@ -2,7 +2,7 @@ from datetime import datetime, time, timedelta
 import json
 import math
 import re
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Union, Optional, Dict
 
 from fastapi import Request, Response
 import pytz
@@ -259,7 +259,7 @@ class NewsService:
 
         return disclosure_data
 
-    def get_news_by_id(self, news_id: int, lang: TranslateCountry | None = None) -> Optional[NewsRenewalItem]:
+    def get_news_by_id(self, news_id: int | List[int], lang: TranslateCountry | None = None) -> Optional[NewsRenewalItem]:
         if lang is None:
             lang = TranslateCountry.KO
 
@@ -271,6 +271,11 @@ class NewsService:
         else:
             condition["lang"] = "en-US"
             news_name = "en_name"
+
+        if isinstance(news_id, list):
+            condition["id__in"] = news_id
+        else:
+            condition["id"] = news_id
 
         change_rate_column = "change_rt"
 
@@ -303,28 +308,24 @@ class NewsService:
                     change_rate_column,
                 ],
                 join_info=join_info,
-                id=news_id,
                 **condition,
             )
         )
 
-        print("DF NEWS", df_news)
-
         if df_news.empty:
             return None
-
         processed_df = self._process_dataframe_news(df_news)
         news_items = self._process_price_data(df=processed_df, lang=lang)
 
-        return news_items[0] if news_items else None
+        return news_items
 
     def get_disclosure_by_id(
-        self, disclosure_id: int, lang: TranslateCountry | None = None
+        self, disclosure_id: int | List[int], lang: TranslateCountry | None = None
     ) -> Optional[DisclosureRenewalItem]:
         if lang is None:
             lang = TranslateCountry.KO
 
-        condition = {"is_exist": True, "id": disclosure_id}
+        condition = {"is_exist": True}
 
         if lang == TranslateCountry.KO:
             condition["lang"] = "ko-KR"
@@ -332,6 +333,11 @@ class NewsService:
         else:
             condition["lang"] = "en-US"
             disclosure_name = "en_name"
+
+        if isinstance(disclosure_id, list):
+            condition["id__in"] = disclosure_id
+        else:
+            condition["id"] = disclosure_id
 
         change_rate_column = "change_rt"
 
@@ -375,7 +381,7 @@ class NewsService:
         processed_df = self._process_dataframe_disclosure(df_disclosure)
         disclosure_items = self._process_price_data(processed_df, lang=lang, is_disclosure=True)
 
-        return disclosure_items[0] if disclosure_items else None
+        return disclosure_items
 
     def _process_price_data(
         self, df: pd.DataFrame, lang: TranslateCountry, is_disclosure: bool = False
@@ -1160,6 +1166,167 @@ class NewsService:
 
         # 최신 아이템과 마스킹된 오래된 아이템 결합
         return recent_items + masked_older_items
+
+    def get_recent_news_ids_by_ticker(
+        self, tickers: List[str], limit: int = 10, lang: TranslateCountry | None = None
+    ) -> Dict[str, List[int]]:
+        """
+        각 티커별로 최신 뉴스 ID를 가져옵니다.
+
+        Args:
+            tickers: 티커 리스트
+            limit: 각 티커별로 가져올 최신 뉴스 개수
+            lang: 언어 설정
+
+        Returns:
+            {ticker: [news_id1, news_id2, ...]} 형태의 딕셔너리
+        """
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        condition = {"is_exist": True, "is_related": True}
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+        else:
+            condition["lang"] = "en-US"
+
+        result = {}
+
+        for ticker in tickers:
+            ticker_condition = condition.copy()
+            ticker_condition["ticker"] = ticker
+
+            news_ids = self.db._select(
+                table="news_analysis",
+                columns=["id"],
+                order="date",
+                ascending=False,
+                limit=limit,
+                **ticker_condition,
+            )
+
+            result[ticker] = [news_id.id for news_id in news_ids]
+
+        return result
+
+    def get_recent_disclosure_ids_by_ticker(
+        self, tickers: List[str], limit: int = 10, lang: TranslateCountry | None = None
+    ) -> Dict[str, List[int]]:
+        """
+        각 티커별로 최신 공시 ID를 가져옵니다.
+
+        Args:
+            tickers: 티커 리스트
+            limit: 각 티커별로 가져올 최신 공시 개수
+            lang: 언어 설정
+
+        Returns:
+            {ticker: [disclosure_id1, disclosure_id2, ...]} 형태의 딕셔너리
+        """
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        condition = {"is_exist": True}
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+        else:
+            condition["lang"] = "en-US"
+
+        result = {}
+
+        for ticker in tickers:
+            ticker_condition = condition.copy()
+            ticker_condition["ticker"] = ticker
+
+            disclosure_ids = self.db._select(
+                table="disclosure_information",
+                columns=["id"],
+                order="date",
+                ascending=False,
+                limit=limit,
+                **ticker_condition,
+            )
+
+            result[ticker] = [disclosure_id[0] for disclosure_id in disclosure_ids]
+
+        return result
+
+    def mask_news_items_by_id(
+        self, items: List[NewsRenewalItem], ticker_based_ids: Dict[str, List[int]]
+    ) -> List[NewsRenewalItem]:
+        """
+        뉴스 아이템 리스트에 티커별 ID 기반으로 마스킹을 적용합니다.
+
+        Args:
+            items: 마스킹할 뉴스 아이템 리스트 (NewsRenewalItem 객체)
+            ticker_based_ids: 티커별 마스킹하지 않을 뉴스 ID 딕셔너리 {ticker: [id1, id2, ...]}
+
+        Returns:
+            마스킹이 적용된 아이템 리스트
+        """
+        if not items or not ticker_based_ids:
+            return items
+
+        # 결과 리스트
+        masked_items = []
+
+        # 각 아이템에 대해 마스킹 적용 여부 결정
+        for item in items:
+            ticker = item.ticker
+
+            # 해당 티커의 허용된 ID 목록 가져오기
+            allowed_ids = ticker_based_ids.get(ticker, [])
+
+            # ID가 허용 목록에 있으면 원본 그대로, 없으면 마스킹 적용
+            if item.id in allowed_ids:
+                masked_items.append(item)
+            else:
+                # 마스킹 적용 (impact_reason과 key_points 필드를 비움)
+                masked_item = item.model_copy(update={"impact_reason": "", "key_points": ""})
+                masked_items.append(masked_item)
+
+        return masked_items
+
+    def mask_disclosure_items_by_date(
+        self, items: List[DisclosureRenewalItem], days: int = 7
+    ) -> List[DisclosureRenewalItem]:
+        """
+        공시 아이템 리스트에 날짜 기반으로 마스킹을 적용합니다.
+        최근 days일 이내 공시는 원래대로 유지하고, 그 이전 공시는 마스킹합니다.
+
+        Args:
+            items: 마스킹할 공시 아이템 리스트 (DisclosureRenewalItem 객체)
+            days: 마스킹하지 않을 기간(일) (기본값: 7)
+
+        Returns:
+            마스킹이 적용된 아이템 리스트
+        """
+        if not items:
+            return items
+
+        from datetime import datetime, timedelta
+        from app.common.constants import KST
+
+        # 기준일 계산
+        now = datetime.now(KST)
+        cutoff_date = now - timedelta(days=days)
+
+        # 결과 리스트
+        masked_items = []
+
+        # 각 아이템에 대해 마스킹 적용 여부 결정
+        for item in items:
+            # 날짜가 cutoff_date보다 최신이면 원본 그대로, 아니면 마스킹 적용
+            if item.date >= cutoff_date:
+                masked_items.append(item)
+            else:
+                # 마스킹 적용 (impact_reason과 key_points 필드를 비움)
+                masked_item = item.model_copy(update={"impact_reason": "", "key_points": ""})
+                masked_items.append(masked_item)
+
+        return masked_items
 
 
 def get_news_service() -> NewsService:

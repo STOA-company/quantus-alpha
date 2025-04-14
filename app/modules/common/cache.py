@@ -2,9 +2,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, Optional, Tuple, Any
 import pandas as pd
-import logging
+from app.core.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class CacheStrategy(Enum):

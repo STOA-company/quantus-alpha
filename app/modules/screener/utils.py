@@ -9,7 +9,7 @@ import numpy as np
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.models.models_factors import CategoryEnum, FactorTypeEnum
-import logging
+from app.core.logger import setup_logger
 from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.date_utils import is_holiday
 from datetime import datetime, timedelta
@@ -20,7 +20,7 @@ from app.utils.test_utils import time_it
 from app.kispy.manager import KISAPIManager
 from app.utils.dividend_utils import DividendUtils
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 notifier = SlackNotifier()
 
@@ -32,7 +32,7 @@ class ScreenerUtils:
         self.etf_factor_loader = ETFDataLoader()
 
     def get_factors(self, market: MarketEnum) -> List[dict]:
-        factors = self.db._select(table="factors", is_stock=True)
+        factors = self.db._select(table="factors", is_stock=True, order="order", ascending=True)
         # 시장별 팩터 최소/최대값 계산
         market_data = self.get_df_from_parquet(market)
 
@@ -65,7 +65,7 @@ class ScreenerUtils:
         return result
 
     def get_etf_factors(self, market: ETFMarketEnum) -> List[dict]:
-        factors = self.db._select(table="factors", is_etf=True)
+        factors = self.db._select(table="factors", is_etf=True, order="order", ascending=True)
         market_data = self.etf_factor_loader.load_etf_factors(market.value)
 
         result = []

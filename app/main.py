@@ -7,13 +7,37 @@ from app.database.conn import db
 from app.database.crud import database
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.logging.config import configure_logging
 from app.middlewares.trusted_hosts import get_current_username
-import logging
+from app.core.logger import configure, get_logger
 
-logger = logging.getLogger(__name__)
 
-configure_logging()
+# 여기로 로거 설정 이동
+stage_webhook_url = "https://hooks.slack.com/services/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"
+dev_webhook_url = "https://hooks.slack.com/services/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"
+
+slack_webhook_url = stage_webhook_url if settings.ENV == "stage" else dev_webhook_url
+
+# 전역 로거 모듈 설정 - 앱 초기화 전에 구성해야 함
+configure(
+    environment=settings.ENV,
+    app_name=settings.PROJECT_NAME,
+    log_level="INFO",
+    log_dir="logs",
+    separate_error_logs=True,
+    console_output=True,
+    exception_handlers=["file", "console"],
+    send_error_to_slack=True,
+    slack_webhook_url=slack_webhook_url,
+    slack_webhook_urls={"default": slack_webhook_url},
+    default_slack_channel="default",
+    notify_in_development=True,
+)
+
+# 로거 설정
+logger = get_logger(__name__)
+
+# 로그 테스트
+logger.info("Application starting...")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -47,14 +71,15 @@ origins = [
     "http://127.0.0.1:8000",
     "https://alpha-dev.quantus.kr",
     "https://develop.alphafinder.dev",
+    "https://develop.alphafinder.dev/ko",
+    "https://develop.alphafinder.dev/en",
     "https://alphafinder-stage.vercel.app",
     "https://stage.alphafinder.dev",
     "https://live.alphafinder.dev",
     "https://www.alphafinder.dev",
+    "https://alphafinder-l2xhjep9g-quantus-68c7517d.vercel.app",
 ]
 
-stage_webhook_url = "https://hooks.slack.com/services/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"
-dev_webhook_url = "https://hooks.slack.com/services/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"
 if settings.ENV == "stage":
     webhook_url = stage_webhook_url
 else:
@@ -65,7 +90,7 @@ add_slack_middleware(
     webhook_url=webhook_url,
     include_traceback=True,
     include_request_body=True,
-    error_status_codes=[500, 503],  # 이 상태 코드들에 대해 알림 발송
+    error_status_codes=[500, 503, 504],  # 이 상태 코드들에 대해 알림 발송
     environment=settings.ENV,
     notify_environments=["stage", "dev"],
 )

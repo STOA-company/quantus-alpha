@@ -11,22 +11,29 @@ case $ENVIRONMENT in
         ENV_FILE=.env
         ENV=prod
         BRANCH=main
+        ROOT_URL="https://alpha-live.quantus.kr"
         ;;
     stage|staging)
         ENV_FILE=.env
         ENV=stage
         BRANCH=staging
+        ROOT_URL="https://alpha-live.quantus.kr"
         ;;
     dev|development)
         ENV_FILE=.env
         ENV=dev
         BRANCH=dev
+        ROOT_URL="https://alpha-dev.quantus.kr"
         ;;
     *)
         echo "Unknown environment: $ENVIRONMENT"
         exit 1
         ;;
 esac
+
+# Export variables for docker-compose
+export ROOT_URL
+export DOMAIN=${ROOT_URL#https://}
 
 echo "Deploying for environment: $ENV using $ENV_FILE (Branch: $BRANCH)"
 
@@ -102,6 +109,13 @@ update_nginx_upstream() {
     cat > ./nginx/conf.d/default.conf << EOF
 server {
     listen 80;
+
+    location /stub_status {
+        stub_status on;
+        allow 127.0.0.1;
+        allow 172.16.0.0/12;
+        deny all;
+    }
 
     location / {
         proxy_pass http://${service}:8000;

@@ -1,11 +1,11 @@
-import logging
 from kispy import KisAuth, KisClientV2
 from kispy.models.market import OHLCV
 import pandas as pd
 from app.core.config import settings
 from datetime import datetime
+from app.core.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 auth = KisAuth(
     app_key=settings.KIS_APP_KEY,

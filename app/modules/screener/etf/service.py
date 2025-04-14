@@ -14,7 +14,7 @@ from app.common.constants import (
     UNIT_MAP,
 )
 from app.core.exception.base import CustomException
-from app.core.logging.config import get_logger
+from app.core.logger import setup_logger
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.base import BaseScreenerService
 from app.modules.screener.stock.schemas import ExcludeEnum
@@ -23,7 +23,7 @@ from app.utils.score_utils import etf_score_utils
 from app.modules.screener.utils import screener_utils
 from app.cache.factors import etf_factors_cache
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 class ScreenerETFService(BaseScreenerService):

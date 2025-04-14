@@ -10,9 +10,9 @@ from app.modules.news.schemas import TopStoriesResponse, InterestNewsResponse, I
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.enum import TranslateCountry
 from app.core.exception.base import DuplicateException, NotFoundException
-import logging
+from app.core.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 router = APIRouter()
 
@@ -32,8 +32,10 @@ def get_news_leaderboard(
     group_id: int,
     lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
     service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ):
-    data = service.get_interest_news_leaderboard(group_id, lang)
+    level = user.subscription_level if user else 1
+    data = service.get_interest_news_leaderboard(group_id, lang, level)
     return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
 
 
@@ -42,8 +44,10 @@ def get_disclosure_leaderboard(
     group_id: int,
     lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
     service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ):
-    data = service.get_interest_disclosure_leaderboard(group_id, lang)
+    level = user.subscription_level if user else 1
+    data = service.get_interest_disclosure_leaderboard(group_id, lang, level)
     return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
 
 
@@ -178,8 +182,10 @@ def interest_news(
         )
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     total_news_data = news_service.get_news(lang=lang, tickers=tickers)
+
     if user.subscription_level < 3:
         total_news_data = news_service.mask_news_items(total_news_data)
+
     news_data = total_news_data[offset * limit : offset * limit + limit]
 
     if user.subscription_level >= 3:
@@ -189,8 +195,11 @@ def interest_news(
         has_next = current_position < len(total_news_data)
 
     response_data = InterestNewsResponse(news=news_data, has_next=has_next)
-
-    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data)
+    return BaseResponse(
+        status_code=200,
+        message="Successfully retrieved news data",
+        data=response_data,
+    )
 
 
 @router.get("/disclosure/{group_id}", response_model=BaseResponse[InterestDisclosureResponse])
@@ -215,7 +224,6 @@ def interest_disclosure(
 
     # 레벨 3 미만 사용자의 경우 데이터 마스킹 적용
     if user.subscription_level < 3:
-        # 7일 이내 공시는 원본 그대로, 7일 이전 공시는 마스킹
         total_disclosure_data = news_service.mask_disclosure_items(total_disclosure_data)
 
     disclosure_data = total_disclosure_data[offset * limit : offset * limit + limit]
@@ -228,7 +236,11 @@ def interest_disclosure(
 
     response_data = InterestDisclosureResponse(disclosure=disclosure_data, has_next=has_next)
 
-    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data)
+    return BaseResponse(
+        status_code=200,
+        message="Successfully retrieved disclosure data",
+        data=response_data,
+    )
 
 
 @router.get("/stories/{group_id}", response_model=BaseResponse[List[TopStoriesResponse]])
