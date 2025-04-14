@@ -902,7 +902,7 @@ class KRXDownloader:
             driver.get(url)
 
             # 현재 날짜 가져오기 (파일명에 사용)
-            today = datetime.now().strftime("%Y%m%d")
+            today = datetime.datetime.now().strftime("%Y%m%d")
 
             # 페이지 로딩 대기
             print("페이지 로딩 중...")
