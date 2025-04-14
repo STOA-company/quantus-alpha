@@ -463,7 +463,7 @@ class BaseScreenerService(ABC):
         market_filter: Optional[Union[MarketEnum, ETFMarketEnum]] = None,
         sector_filter: Optional[List[str]] = [],
         exclude_filters: Optional[List[ExcludeEnum]] = [],
-        custom_filters: Optional[List[Dict]] = [],
+        custom_filters: Optional[List[Dict]] = None,
         factor_filters: Optional[Dict[str, List[str]]] = None,
         sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None,
     ) -> Dict:
@@ -553,19 +553,35 @@ class BaseScreenerService(ABC):
                         )
                     )
 
+            # Get default custom filters and merge with provided filters
+            if custom_filters is None:
+                custom_filters = []
+
+            default_filters = self.get_default_custom_filters()
+            # Map default filter factors using FACTOR_MAP
+            for filter in default_filters:
+                filter["factor"] = FACTOR_MAP[filter["factor"]]
+
+            existing_factors = {filter.get("factor") for filter in custom_filters}
+
+            # Add missing default filters
+            for default_filter in default_filters:
+                if default_filter["factor"] not in existing_factors:
+                    custom_filters.append(default_filter)
+
             if custom_filters:
                 for condition in custom_filters:
-                    if condition.values:
-                        for value in condition.values:
+                    if condition.get("values", None):
+                        for value in condition["values"]:
                             insert_tasks.append(
                                 self.database.insert_wrapper(
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
-                                        "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                        "type": condition.type,
-                                        "above": condition.above,
-                                        "below": condition.below,
+                                        "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                        "type": condition["type"],
+                                        "above": condition.get("above"),
+                                        "below": condition.get("below"),
                                         "value": value,
                                     },
                                 )
@@ -576,10 +592,10 @@ class BaseScreenerService(ABC):
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                    "type": condition.type,
-                                    "above": condition.above,
-                                    "below": condition.below,
+                                    "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                    "type": condition["type"],
+                                    "above": condition.get("above"),
+                                    "below": condition.get("below"),
                                     "value": None,
                                 },
                             )
