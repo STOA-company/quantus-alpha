@@ -30,7 +30,9 @@ from app.utils.date_utils import (
 from app.utils.stock_utils import kr_stock_utils, us_stock_utils
 
 notifier = SlackNotifier()
-notifier_1d = SlackNotifier()
+notifier_1d = SlackNotifier(
+    webhook_url="https://hooks.slack.com/services/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"
+)
 logger = logging.getLogger(__name__)
 
 
