@@ -107,18 +107,15 @@ update_nginx_upstream() {
     echo "Updating NGINX upstream to point to $service..."
 
     cat > ./nginx/conf.d/default.conf << EOF
-# This is required to proxy Grafana Live WebSocket connections.
-map \$http_upgrade \$connection_upgrade {
-  default upgrade;
-  '' close;
-}
-
-upstream grafana {
-    server grafana:3000;
-}
-
 server {
     listen 80;
+
+    location /stub_status {
+        stub_status on;
+        allow 127.0.0.1;
+        allow 172.16.0.0/12;
+        deny all;
+    }
 
     location / {
         proxy_pass http://${service}:8000;
@@ -132,30 +129,6 @@ server {
         proxy_pass http://${service}:8000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
-    }
-
-    location /grafana/ {
-        rewrite ^/grafana/(.*) /\$1 break;
-        proxy_pass http://grafana;
-        proxy_set_header Host \$http_host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-
-        # WebSocket support
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-    }
-
-    # Proxy Grafana Live WebSocket connections
-    location /grafana/api/live/ {
-        rewrite ^/grafana/(.*) /\$1 break;
-        proxy_pass http://grafana;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header Host \$http_host;
     }
 }
 EOF
@@ -217,12 +190,3 @@ docker-compose stop $idle_service
 
 echo "Blue-Green deployment completed successfully!"
 echo "Active service is now: $target_service"
-
-# 모니터링 서비스가 실행 중이 아니면 시작
-if ! docker-compose ps | grep -q prometheus; then
-    echo "Starting monitoring services..."
-    docker-compose -f docker-compose.yml up -d prometheus grafana node_exporter cadvisor nginx_exporter blackbox_exporter
-    echo "Monitoring services started!"
-else
-    echo "Monitoring services are already running."
-fi

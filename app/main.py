@@ -9,9 +9,6 @@ from app.database.crud import database
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from app.middlewares.trusted_hosts import get_current_username
-from prometheus_fastapi_instrumentator import Instrumentator
-from prometheus_client import Counter, Histogram, generate_latest
-import time
 from app.core.logger import configure, get_logger
 
 
@@ -28,7 +25,8 @@ configure(
     log_level="INFO",
     log_dir="logs",
     separate_error_logs=True,
-    exception_handlers=["file"],
+    console_output=True,
+    exception_handlers=["file", "console"],
     send_error_to_slack=True,
     slack_webhook_url=slack_webhook_url,
     slack_webhook_urls={"default": slack_webhook_url},
@@ -41,17 +39,6 @@ logger = get_logger(__name__)
 
 # 로그 테스트
 logger.info("Application starting...")
-
-
-# Prometheus 메트릭 정의
-REQUESTS_TOTAL = Counter(
-    "api_requests_total", "Total count of API requests by method and path", ["method", "path", "status_code"]
-)
-
-RESPONSES_TIME = Histogram("api_response_time_seconds", "Histogram of API response time in seconds", ["method", "path"])
-
-USER_COUNTER = Counter("active_users_total", "Total count of active users", ["user_type"])
-
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -67,28 +54,12 @@ app = FastAPI(
 )
 handler.initialize(app)
 
-# Prometheus Instrumentator, Metric Configuration
-instrumentator = Instrumentator()
-instrumentator.instrument(app)
-
 app.include_router(routers.router)
 # Include rate limiter admin router
 app.include_router(rate_limiter_admin_router)
 
 db_config = get_database_config()
 db.init_app(app, **db_config.__dict__)
-
-
-# Startup Metric Endpoint
-@app.on_event("startup")
-async def startup():
-    instrumentator.expose(app, include_in_schema=False, should_gzip=True)
-
-
-# Manual Metric Endpoint
-@app.get("/metrics", include_in_schema=False)
-async def metrics():
-    return generate_latest()
 
 
 @app.get("/")
@@ -230,20 +201,3 @@ def request_test(request: TestRequest):
         return request.num / 0
     else:
         return request.num / 1
-
-
-@app.middleware("http")
-async def add_metrics(request, call_next):
-    start_time = time.time()
-    response = await call_next(request)
-    process_time = time.time() - start_time
-
-    path = request.url.path
-    method = request.method
-    status_code = response.status_code
-
-    REQUESTS_TOTAL.labels(method=method, path=path, status_code=status_code).inc()
-
-    RESPONSES_TIME.labels(method=method, path=path).observe(process_time)
-
-    return response
