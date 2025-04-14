@@ -2,18 +2,18 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Union
 
-from app.database.crud import database_service
-from app.modules.screener.stock.schemas import MarketEnum, SortInfo, ExcludeEnum
-from app.modules.screener.etf.enum import ETFMarketEnum
-from app.enum.type import StockType
-from app.models.models_factors import CategoryEnum
-from app.modules.screener.utils import screener_utils
-from app.common.constants import (
-    FACTOR_MAP,
-    REVERSE_FACTOR_MAP,
-)
+import numpy as np
+import pandas as pd
+
+from app.common.constants import FACTOR_MAP, REVERSE_FACTOR_MAP
 from app.core.exception.base import CustomException
 from app.core.logger import setup_logger
+from app.database.crud import database_service
+from app.enum.type import StockType
+from app.models.models_factors import CategoryEnum, FactorTypeEnum
+from app.modules.screener.etf.enum import ETFMarketEnum
+from app.modules.screener.stock.schemas import ExcludeEnum, MarketEnum, SortInfo
+from app.modules.screener.utils import screener_utils
 
 logger = setup_logger(__name__)
 
@@ -468,7 +468,6 @@ class BaseScreenerService(ABC):
             if group_id is None:
                 raise CustomException(status_code=500, message="Failed to create group")
 
-            # 종목 필터
             if market_filter:
                 insert_tasks.append(
                     self.database.insert_wrapper(
@@ -779,4 +778,37 @@ class BaseScreenerService(ABC):
                 return False
         except Exception as e:
             print(f"에러 발생: {str(e)}")
+            raise e
+
+    def get_default_custom_filters(self):
+        try:
+            kr_df = pd.read_parquet("parquet/kr_stock_factors.parquet")
+            us_df = pd.read_parquet("parquet/us_stock_factors.parquet")
+
+            combined_df = pd.concat([kr_df, us_df])
+
+            default_factors = ["marketCap", "median_trade", "close"]
+            result = []
+
+            for factor in default_factors:
+                if factor in combined_df.columns:
+                    min_value = combined_df[factor].min()
+                    max_value = combined_df[factor].max()
+
+                    min_value = np.floor(min_value)
+                    max_value = np.ceil(max_value)
+
+                    result.append(
+                        {
+                            "factor": factor,
+                            "above": min_value,
+                            "below": max_value,
+                            "type": FactorTypeEnum.SLIDER,
+                        }
+                    )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in get_default_custom_filters: {e}")
             raise e

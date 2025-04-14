@@ -12,18 +12,16 @@ import numpy as np
 import pandas as pd
 import pyodbc
 from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
 from webdriver_manager.chrome import ChromeDriverManager
 
 # Local imports
 from app.common.constants import ETF_DATA_DIR, KRX_DIR, MORNINGSTAR_DIR, PARQUET_DIR
-from app.core.config import settings
-from app.database.crud import database
 from app.common.mapping import (
     base_asset_classification_map,
     etf_column_mapping,
@@ -31,6 +29,8 @@ from app.common.mapping import (
     multiplier_map,
     replication_map,
 )
+from app.core.config import settings
+from app.database.crud import database
 from app.modules.screener.etf.enum import ETFMarketEnum
 
 

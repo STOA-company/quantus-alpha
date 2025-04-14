@@ -1,5 +1,6 @@
 from sqlalchemy import DateTime, Float, PrimaryKeyConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.models.models_base import Base
 
 

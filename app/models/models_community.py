@@ -1,7 +1,8 @@
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Table, Text, Index, func
-from app.models.models_base import BaseMixin, ServiceBase
-from sqlalchemy.orm import validates
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, Text, func
 from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy.orm import validates
+
+from app.models.models_base import BaseMixin, ServiceBase
 
 post_stocks = Table(
     "post_stocks",

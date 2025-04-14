@@ -1,14 +1,15 @@
-import os
 import hashlib
+import os
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from jose import jwt, JWTError, ExpiredSignatureError
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from app.models.models_users import AlphafinderUser
-from app.database.crud import database_service
-from typing import Optional
+from jose import ExpiredSignatureError, JWTError, jwt
+
 from app.core.logger import setup_logger
+from app.database.crud import database_service
+from app.models.models_users import AlphafinderUser
 
 logger = setup_logger(__name__)
 

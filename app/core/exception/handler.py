@@ -1,6 +1,5 @@
 from typing import Any, Sequence
 
-from app.core.exception.base import CustomException
 from fastapi.applications import FastAPI
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -8,23 +7,22 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.status import (
-    HTTP_422_UNPROCESSABLE_ENTITY,
-    HTTP_500_INTERNAL_SERVER_ERROR,
-)
+from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY, HTTP_500_INTERNAL_SERVER_ERROR
+
+from app.core.exception.base import CustomException
 from app.core.exception.custom import (
+    AnalysisException,
     AuthException,
     CommunityException,
+    DataNotFoundException,
     InvalidCountryException,
     InvalidTickerException,
-    NoFinancialDataException,
-    UserException,
-    TokenExpiredException,
     InvalidTokenException,
-    UserNotFoundException,
+    NoFinancialDataException,
+    TokenExpiredException,
     UserAlreadyExistsException,
-    DataNotFoundException,
-    AnalysisException,
+    UserException,
+    UserNotFoundException,
 )
 from app.core.logger import setup_logger
 

@@ -1,5 +1,5 @@
-import pandas as pd
 import httpx
+import pandas as pd
 from fastapi import HTTPException
 
 

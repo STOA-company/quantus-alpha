@@ -11,29 +11,22 @@ case $ENVIRONMENT in
         ENV_FILE=.env
         ENV=prod
         BRANCH=main
-        ROOT_URL="https://alpha-live.quantus.kr"
         ;;
     stage|staging)
         ENV_FILE=.env
         ENV=stage
         BRANCH=staging
-        ROOT_URL="https://alpha-live.quantus.kr"
         ;;
     dev|development)
         ENV_FILE=.env
         ENV=dev
         BRANCH=dev
-        ROOT_URL="https://alpha-dev.quantus.kr"
         ;;
     *)
         echo "Unknown environment: $ENVIRONMENT"
         exit 1
         ;;
 esac
-
-# Export variables for docker-compose
-export ROOT_URL
-export DOMAIN=${ROOT_URL#https://}
 
 echo "Deploying for environment: $ENV using $ENV_FILE (Branch: $BRANCH)"
 
@@ -45,10 +38,10 @@ fi
 echo "Changing to project directory..."
 cd ~/quantus-alpha || exit 1
 
-echo "Fetching latest changes..."
-git fetch origin || exit 1
-git checkout $BRANCH || exit 1
-git pull origin $BRANCH || exit 1
+# echo "Fetching latest changes..."
+# git fetch origin || exit 1
+# git checkout $BRANCH || exit 1
+# git pull origin $BRANCH || exit 1
 
 echo "Updating git submodules..."
 git submodule update --init --recursive || exit 1

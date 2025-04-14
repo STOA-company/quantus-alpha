@@ -1,13 +1,14 @@
 import functools
+import inspect
 import json
 import time
-import inspect
 from typing import Any, Callable, TypeVar
 
 from fastapi import Request
-from app.core.redis import redis_client
 from fastapi.encoders import jsonable_encoder
+
 from app.core.logger import setup_logger
+from app.core.redis import redis_client
 
 T = TypeVar("T")
 logger = setup_logger(__name__)

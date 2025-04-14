@@ -1,13 +1,19 @@
-from datetime import datetime, time, timedelta
 import json
 import math
 import re
-from typing import List, Tuple, Union, Optional, Dict
+from datetime import datetime, time, timedelta
+from typing import Dict, List, Optional, Tuple, Union
 
-from fastapi import Request, Response
+import numpy as np
+import pandas as pd
 import pytz
+from fastapi import Request, Response
 from sqlalchemy import text
+
+from app.cache.leaderboard import DisclosureLeaderboard, NewsLeaderboard
+from app.common.constants import KST, UTC
 from app.core.exception.custom import DataNotFoundException
+from app.database.crud import JoinInfo, database
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.disclosure.mapping import (
@@ -16,10 +22,6 @@ from app.modules.disclosure.mapping import (
     DOCUMENT_TYPE_MAPPING_EN,
     FORM_TYPE_MAPPING,
 )
-from app.cache.leaderboard import NewsLeaderboard, DisclosureLeaderboard
-
-import numpy as np
-import pandas as pd
 from app.modules.news.schemas import (
     DisclosureRenewalItem,
     NewsDetailItem,
@@ -28,9 +30,7 @@ from app.modules.news.schemas import (
     TopStoriesItem,
     TopStoriesResponse,
 )
-from app.database.crud import database, JoinInfo
 from app.utils.ctry_utils import check_ticker_country_len_2
-from app.common.constants import KST, UTC
 from app.utils.date_utils import now_utc
 
 
@@ -1143,6 +1143,7 @@ class NewsService:
             return items
 
         from datetime import datetime, timedelta
+
         from app.common.constants import KST
 
         # 기준일 계산
@@ -1307,6 +1308,7 @@ class NewsService:
             return items
 
         from datetime import datetime, timedelta
+
         from app.common.constants import KST
 
         # 기준일 계산

@@ -1,38 +1,40 @@
-from collections import defaultdict
+import math
 import statistics
+from collections import defaultdict
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import Dict, List, Optional, Union
+
+from fastapi import Depends, HTTPException
 from requests import Session
 from sqlalchemy import select
-from app.core.logger import setup_logger
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Optional, Dict, List, Union
-from fastapi import HTTPException, Depends
-import math
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database.crud import database
+
+from app.core.exception.custom import AnalysisException, DataNotFoundException, InvalidCountryException
+from app.core.logger import setup_logger
 from app.database.conn import db
+from app.database.crud import database
 from app.models.models_stock import StockInformation
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import FinancialCountry, TranslateCountry
+from app.modules.common.schemas import BaseResponse
 from app.modules.common.services import CommonService, get_common_service
+from app.modules.common.utils import contry_mapping
 from app.modules.financial.crud import FinancialCrud
 from app.modules.financial.schemas import (
+    CashFlowDetail,
     CashFlowResponse,
-    FinPosDetail,
-    FinPosResponse,
     DebtRatioResponse,
     FinancialRatioResponse,
+    FinPosDetail,
+    FinPosResponse,
+    IncomeMetric,
     IncomePerformanceResponse,
     IncomeStatementDetail,
-    CashFlowDetail,
     IncomeStatementResponse,
     InterestCoverageRatioResponse,
     LiquidityRatioResponse,
     QuarterlyIncome,
-    IncomeMetric,
 )
-from app.modules.common.schemas import BaseResponse
-from app.core.exception.custom import DataNotFoundException, InvalidCountryException, AnalysisException
-from app.modules.common.utils import contry_mapping
 from app.utils.oauth_utils import get_current_user
 
 logger = setup_logger(__name__)
@@ -1710,11 +1712,11 @@ class FinancialService:
             처리된 데이터 리스트
         """
         from app.modules.financial.schemas import (
-            QuarterlyIncome,
-            IncomeMetric,
-            IncomeStatementDetail,
             CashFlowDetail,
             FinPosDetail,
+            IncomeMetric,
+            IncomeStatementDetail,
+            QuarterlyIncome,
         )
 
         if not data_list:

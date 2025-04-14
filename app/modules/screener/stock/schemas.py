@@ -1,9 +1,11 @@
+from enum import Enum
+from typing import Dict, List, Optional
+
 from pydantic import BaseModel
+
 from app.models.models_factors import CategoryEnum, FactorTypeEnum
 from app.models.models_screener import StockType
 from app.modules.screener.etf.enum import ETFMarketEnum
-from typing import Optional, List, Dict
-from enum import Enum
 
 
 class MarketEnum(str, Enum):

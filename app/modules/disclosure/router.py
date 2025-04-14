@@ -1,5 +1,7 @@
 from typing import Annotated, Optional
-from fastapi import APIRouter, Query, Depends
+
+from fastapi import APIRouter, Depends, Query
+
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.disclosure.schemas import DisclosureResponse

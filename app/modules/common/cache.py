@@ -1,7 +1,9 @@
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Optional, Tuple, Any
+from typing import Any, Dict, Optional, Tuple
+
 import pandas as pd
+
 from app.core.logger import setup_logger
 
 logger = setup_logger(__name__)

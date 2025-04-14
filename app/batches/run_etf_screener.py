@@ -1,7 +1,7 @@
 import os
 from typing import Literal
-from Aws.logic.s3 import upload_file_to_bucket
-from app.utils.date_utils import now_kr, now_us
+
+from app.common.constants import ETF_DATA_DIR, PARQUET_DIR
 from app.modules.screener.etf.utils import (
     ETFDataDownloader,
     ETFDataLoader,
@@ -9,7 +9,8 @@ from app.modules.screener.etf.utils import (
     ETFDividendFactorExtractor,
     ETFFactorExtractor,
 )
-from app.common.constants import ETF_DATA_DIR, PARQUET_DIR
+from app.utils.date_utils import now_kr, now_us
+from Aws.logic.s3 import upload_file_to_bucket
 
 # 데이터 타입에 따른 다운로드 함수 매핑
 DATA_MAPPING = {

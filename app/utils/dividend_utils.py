@@ -1,8 +1,8 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, List
+
 from app.database.crud import database
-from collections import Counter
 
 
 class DividendUtils:

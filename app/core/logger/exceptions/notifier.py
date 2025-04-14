@@ -5,11 +5,11 @@
 import functools
 import sys
 import traceback
-from typing import Any, Callable, Dict, List, Optional, Type, Union, TypeVar, cast, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union, cast
 
 from ..config import Config
+from .handlers import ConsoleHandler, DatabaseHandler, FileHandler, SlackHandler
 from .handlers.base import BaseHandler
-from .handlers import FileHandler, SlackHandler, DatabaseHandler, ConsoleHandler
 
 F = TypeVar("F", bound=Callable[..., Any])
 

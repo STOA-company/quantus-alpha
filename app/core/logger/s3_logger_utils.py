@@ -5,11 +5,11 @@ S3 로그 업로드 유틸리티
 """
 
 import os
-import time
 import threading
+import time
 
 # S3 모듈 import (경로는 실제 프로젝트 구조에 맞게 조정 필요)
-from Aws.logic.s3 import upload_dir_to_bucket, get_files_in_s3_directory
+from Aws.logic.s3 import get_files_in_s3_directory, upload_dir_to_bucket
 
 # 로그 전용 S3 설정
 DEFAULT_LOG_BUCKET = "quantus-logs"  # 실제 프로젝트에 맞는 버킷 이름으로 변경 필요

@@ -1,11 +1,13 @@
+import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import pandas as pd
+
 from app.common.constants import ETF_DATA_DIR
 from app.database.crud import database
 from app.modules.screener.etf.utils import ETFDataDownloader
-import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")

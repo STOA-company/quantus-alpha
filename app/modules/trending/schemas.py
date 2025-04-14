@@ -1,6 +1,7 @@
 from fastapi import Query
 from pydantic import BaseModel
-from app.modules.common.enum import TrendingPeriod, TrendingType, TrendingCountry
+
+from app.modules.common.enum import TrendingCountry, TrendingPeriod, TrendingType
 
 
 class TrendingStockRequest(BaseModel):

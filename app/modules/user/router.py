@@ -1,23 +1,24 @@
-from fastapi import APIRouter, Depends, File, Query, UploadFile, Form
+import json
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.security import HTTPBearer
+from jose import JWTError
+
 from app.models.models_users import AlphafinderUser
 from app.modules.common.schemas import BaseResponse, InfiniteScrollResponse
 from app.modules.community.schemas import CommentItemWithPostInfo, ResponsePost
 from app.modules.payments.service import PaymentService
-from app.utils.oauth_utils import get_current_user
-from app.modules.user.service import get_user_service, UserService
 from app.modules.user.schemas import UserInfoResponse, UserProfileResponse
-from fastapi import HTTPException
-from fastapi.security import HTTPBearer
+from app.modules.user.service import UserService, get_user_service
+from app.utils.image_utils import convert_file_to_base64
 from app.utils.oauth_utils import (
-    decode_email_token,
     create_jwt_token,
     create_refresh_token,
+    decode_email_token,
+    get_current_user,
     refresh_access_token,
 )
-from app.utils.image_utils import convert_file_to_base64
-import json
-from typing import Optional
-from jose import JWTError
 
 router = APIRouter()
 
