@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-import pandas as pd
 
 from app.common.constants import FACTOR_MAP, REVERSE_FACTOR_MAP
 from app.core.exception.base import CustomException
@@ -853,18 +852,16 @@ class BaseScreenerService(ABC):
 
     def get_default_custom_filters(self):
         try:
-            kr_df = pd.read_parquet("parquet/kr_stock_factors.parquet")
-            us_df = pd.read_parquet("parquet/us_stock_factors.parquet")
-
-            combined_df = pd.concat([kr_df, us_df])
+            # Get data using MarketEnum.ALL
+            market_data = screener_utils.get_df_from_parquet(MarketEnum.ALL)
 
             default_factors = ["marketCap", "median_trade", "close"]
             result = []
 
             for factor in default_factors:
-                if factor in combined_df.columns:
-                    min_value = combined_df[factor].min()
-                    max_value = combined_df[factor].max()
+                if factor in market_data.columns:
+                    min_value = market_data[factor].min()
+                    max_value = market_data[factor].max()
 
                     min_value = np.floor(min_value)
                     max_value = np.ceil(max_value)
