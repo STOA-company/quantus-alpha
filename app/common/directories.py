@@ -1,5 +1,5 @@
-from os import path
 import os
+from os import path
 
 data_dir = path.join(os.getcwd(), "data")
 

@@ -1,18 +1,14 @@
 from typing import Annotated, List, Literal
+
 from fastapi import APIRouter, Depends, Query, Request, Response
+
+from app.cache.cache_decorator import one_minute_cache
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
+from app.modules.news.schemas import NewsDetailItemV2, NewsRenewalResponse, NewsResponse, TopStoriesResponse
 from app.modules.news.services import NewsService, get_news_service
-from app.modules.news.schemas import (
-    NewsDetailItemV2,
-    NewsRenewalResponse,
-    NewsResponse,
-    TopStoriesResponse,
-)
-from app.cache.cache_decorator import one_minute_cache
 from app.utils.oauth_utils import get_current_user
-
 
 router = APIRouter()
 

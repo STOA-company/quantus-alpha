@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+
 from app.models.models_users import AlphafinderUser
 from app.modules.common.schemas import BaseResponse
 from app.modules.payments.schema import Coupon, ResponsePayment, ResponseUserUsingHistory
 from app.modules.payments.service import PaymentService
 from app.utils.oauth_utils import get_current_user
-
 
 router = APIRouter()
 

@@ -1,5 +1,6 @@
+from typing import List, Literal, Optional
+
 from pydantic import BaseModel
-from typing import Literal, Optional, List
 
 
 class InterestItem(BaseModel):

@@ -1,6 +1,7 @@
-from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, ForeignKey, BigInteger
-from app.models.models_base import BaseMixin, ServiceBase
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.models.models_base import BaseMixin, ServiceBase
 
 
 class AlphafinderLevel(ServiceBase):

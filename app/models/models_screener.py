@@ -1,8 +1,9 @@
-from app.models.models_base import ServiceBase, BaseMixin
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Enum, Boolean
-from sqlalchemy.schema import Index
+from sqlalchemy import Boolean, Column, Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
+from sqlalchemy.schema import Index
+
 from app.enum.type import StockType
+from app.models.models_base import BaseMixin, ServiceBase
 from app.models.models_factors import CategoryEnum, FactorTypeEnum
 
 

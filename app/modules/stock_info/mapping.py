@@ -1,6 +1,5 @@
-from app.modules.stock_info.schemas import StabilityTypeInfo, StabilityThreshold
 from app.modules.common.enum import StabilityType
-
+from app.modules.stock_info.schemas import StabilityThreshold, StabilityTypeInfo
 
 STABILITY_INFO = {
     StabilityType.FINANCIAL: StabilityTypeInfo(

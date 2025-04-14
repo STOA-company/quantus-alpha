@@ -1,7 +1,8 @@
 import json
+from typing import Literal
+
 from app.core.redis import redis_client
 from app.database.crud import database
-from typing import Literal
 
 
 class FactorsCache:

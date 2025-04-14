@@ -1,6 +1,7 @@
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import Float, String
 from pydantic import BaseModel
+from sqlalchemy import Float, String
+from sqlalchemy.orm import Mapped, mapped_column
+
 from app.modules.common.models import DateMixin
 
 

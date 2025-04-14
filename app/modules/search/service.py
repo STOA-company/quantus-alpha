@@ -1,11 +1,12 @@
 from typing import List
 
 from fastapi import Depends
+
+from app.core.logger import setup_logger
 from app.database.crud import database
 from app.modules.common.enum import TranslateCountry
 from app.modules.community.services import CommunityService, get_community_service
 from app.modules.search.schemas import CommunitySearchItem, SearchItem
-from app.core.logger import setup_logger
 
 logger = setup_logger(__name__)
 

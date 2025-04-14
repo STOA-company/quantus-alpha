@@ -6,7 +6,7 @@ import json
 import os
 import traceback
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .base import BaseHandler
 

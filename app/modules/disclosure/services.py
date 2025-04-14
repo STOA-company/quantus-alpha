@@ -3,16 +3,17 @@ from datetime import datetime, timedelta
 from typing import Dict
 
 import pandas as pd
+
 from app.common.constants import KST
 from app.core.exception.custom import DataNotFoundException
-from app.database.crud import JoinInfo, database
 from app.core.logger import setup_logger
+from app.database.crud import JoinInfo, database
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.utils import check_ticker_country_len_2, check_ticker_country_len_3
 from app.utils.date_utils import now_kr
-from .mapping import CATEGORY_TYPE_MAPPING_EN, DOCUMENT_TYPE_MAPPING, DOCUMENT_TYPE_MAPPING_EN, FORM_TYPE_MAPPING
 
+from .mapping import CATEGORY_TYPE_MAPPING_EN, DOCUMENT_TYPE_MAPPING, DOCUMENT_TYPE_MAPPING_EN, FORM_TYPE_MAPPING
 
 logger = setup_logger(__name__)
 

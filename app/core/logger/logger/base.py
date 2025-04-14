@@ -4,10 +4,10 @@
 
 import logging
 import os
-from typing import Optional, Union
 import sys
-from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime, timedelta
+from logging.handlers import TimedRotatingFileHandler
+from typing import Optional, Union
 
 from ..config import get_config
 from .formatter import CustomFormatter

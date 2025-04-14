@@ -2,33 +2,32 @@ import logging
 from functools import wraps
 
 from app.batches import run_etf_price
+from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_stat_cls_code_batch
+from app.batches.run_disclosure import run_disclosure_batch
+from app.batches.run_dividend import insert_dividend
 from app.batches.run_etf_screener import run_etf_screener_data
-from app.batches.run_news import (
-    run_news_batch,
+from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
+from app.batches.run_news import run_news_batch
+from app.batches.run_stock_indices import get_stock_indices_data, kr_run_stock_indices_batch, us_run_stock_indices_batch
+from app.batches.run_stock_trend import (
+    run_stock_trend_by_1d_batch,
+    run_stock_trend_by_realtime_batch,
+    run_stock_trend_reset_batch,
+    run_stock_trend_tickers_batch,
 )
 from app.common.celery_config import CELERY_APP
 from app.core.config import settings
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.modules.common.enum import TrendingCountry
-from app.batches.run_stock_trend import (
-    run_stock_trend_by_1d_batch,
-    run_stock_trend_tickers_batch,
-    run_stock_trend_by_realtime_batch,
-    run_stock_trend_reset_batch,
-)
-from app.batches.run_stock_indices import us_run_stock_indices_batch, kr_run_stock_indices_batch, get_stock_indices_data
-from app.utils.date_utils import get_session_checker, is_us_market_open_or_recently_closed, now_kr
-from app.batches.run_disclosure import (
-    run_disclosure_batch,
-)
-from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
-from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_stat_cls_code_batch
-
-from app.utils.date_utils import check_market_status, is_business_day
-from app.utils.stock_utils import kr_stock_utils, us_stock_utils
 from app.modules.screener.utils import screener_utils
-from app.batches.run_dividend import insert_dividend
-
+from app.utils.date_utils import (
+    check_market_status,
+    get_session_checker,
+    is_business_day,
+    is_us_market_open_or_recently_closed,
+    now_kr,
+)
+from app.utils.stock_utils import kr_stock_utils, us_stock_utils
 
 notifier = SlackNotifier()
 notifier_1d = SlackNotifier()

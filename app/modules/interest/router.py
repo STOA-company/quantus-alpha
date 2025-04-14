@@ -1,16 +1,18 @@
+from typing import Annotated, List, Literal, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from typing import Literal, List, Optional, Annotated
-from app.utils.oauth_utils import get_current_user
-from app.models.models_users import AlphafinderUser
-from app.modules.interest.service import InterestService, get_interest_service
-from app.modules.interest.response import InterestResponse, InterestTable
-from app.modules.interest.request import AddInterestRequest, DeleteInterestRequest, UpdateInterestRequest
-from app.modules.news.services import get_news_service, NewsService
-from app.modules.news.schemas import TopStoriesResponse, InterestNewsResponse, InterestDisclosureResponse
-from app.modules.common.schemas import BaseResponse
-from app.modules.common.enum import TranslateCountry
+
 from app.core.exception.base import DuplicateException, NotFoundException
 from app.core.logger import setup_logger
+from app.models.models_users import AlphafinderUser
+from app.modules.common.enum import TranslateCountry
+from app.modules.common.schemas import BaseResponse
+from app.modules.interest.request import AddInterestRequest, DeleteInterestRequest, UpdateInterestRequest
+from app.modules.interest.response import InterestResponse, InterestTable
+from app.modules.interest.service import InterestService, get_interest_service
+from app.modules.news.schemas import InterestDisclosureResponse, InterestNewsResponse, TopStoriesResponse
+from app.modules.news.services import NewsService, get_news_service
+from app.utils.oauth_utils import get_current_user
 
 logger = setup_logger(__name__)
 

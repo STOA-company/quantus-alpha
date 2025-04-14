@@ -1,8 +1,12 @@
-from app.models.models_base import Base
-from sqlalchemy.schema import Index
 from enum import Enum
-from sqlalchemy import Column, String, Text, Integer, Enum as SQLAlchemyEnum, Boolean, ForeignKey
+
+from sqlalchemy import Boolean, Column
+from sqlalchemy import Enum as SQLAlchemyEnum
+from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
+from sqlalchemy.schema import Index
+
+from app.models.models_base import Base
 
 
 class CategoryEnum(str, Enum):

@@ -1,6 +1,6 @@
 from pydantic import model_validator
+from sqlalchemy import Boolean, Column, Date, DateTime, Enum, Float, Integer, String
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy import Column, Date, DateTime, Enum, Float, Integer, String, Boolean
 
 from app.enum.type import StockType
 from app.models.models_base import Base
