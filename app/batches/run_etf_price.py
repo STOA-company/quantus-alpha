@@ -11,6 +11,50 @@ from app.database.crud import database
 slack_noti = SlackNotifier()
 
 
+def update_etf_information(ctry: str, df: pd.DataFrame):
+    if ctry not in ["US", "KR"]:
+        raise ValueError("ctry must be US or KR")
+
+    # KR 시장의 경우 ticker 변환을 먼저 수행
+    if ctry == "KR":
+        df["Ticker"] = df["Ticker"].str.replace("^K", "A", regex=True)
+
+    # Ticker 기준으로 중복 제거
+    df = df.drop_duplicates(subset=["Ticker"])
+
+    # Get existing tickers from database
+    stock_information_ticker = database._select(table="stock_information", columns=["ticker"], type="etf", ctry=ctry)
+    # 튜플 리스트에서 ticker 값만 추출
+    existing_tickers = [ticker[0] for ticker in stock_information_ticker]
+    print(f"existing_tickers: {existing_tickers}")
+
+    # stock_information에 없는 ticker만 필터링
+    df = df[~df["Ticker"].isin(existing_tickers)]
+    print(f"df: {df}")
+    if df.empty:
+        return
+
+    insert_data = []
+    for _, row in df.iterrows():
+        insert_data.append(
+            {
+                "ticker": row["Ticker"],
+                "en_name": row.get("DsQtName", None),
+                "ctry": ctry.lower(),
+                "market": row.get("Market", None),
+                "is_activate": False,
+                "is_pub": False,
+                "type": "etf",
+            }
+        )
+        if len(insert_data) >= 1000:
+            database._insert(table="stock_information", sets=insert_data)
+            insert_data = []
+    # Bulk insert remaining data
+    if insert_data:
+        database._insert(table="stock_information", sets=insert_data)
+
+
 def run_etf_price(ctry: str):
     try:
         if ctry == "US":
@@ -27,6 +71,7 @@ def run_etf_price(ctry: str):
             [
                 "Ticker",
                 "MarketDate",
+                "DsQtName",
                 "Open_",
                 "High",
                 "Low",
@@ -62,6 +107,10 @@ def run_etf_price(ctry: str):
 
         df["Date"] = pd.to_datetime(df["Date"])
 
+        # stock_information에 없는 종목 업데이트
+        update_etf_information(ctry=ctry, df=df)
+        df = df.drop(columns=["DsQtName"])
+
         print(f"{ctry} 데이터 전처리 완료###1")
         information_tickers = database._select(table="stock_information", columns=["ticker"], type="etf", ctry=country)
         print(f"{ctry} 데이터 전처리 완료###2")
@@ -70,6 +119,7 @@ def run_etf_price(ctry: str):
 
         df = df.replace({np.nan: None})
         print(f"{ctry} 데이터 전처리 완료###3")
+
         price_data = []
         for ticker in df["Ticker"].unique():
             df_price_ticker = df[df["Ticker"] == ticker]

@@ -709,6 +709,7 @@ class ETFDataDownloader:
         if ctry == "US":
             query = """
             SELECT
+                a.DsQtName,
                 c.Ticker,
                 b.MarketDate, b.Open_, b.High, b.Low, b.Close_, b.Volume, b.ExchIntCode, b.Bid, b.Ask,
                 d.MktCap, d.NumShrs,
@@ -749,7 +750,7 @@ class ETFDataDownloader:
         if ctry == "KR":
             query = """
             SELECT
-                a.DsLocalCode as 'Ticker',
+                a.DsLocalCode as 'Ticker', a.DsQtName,
                 b.MarketDate, b.Open_, b.High, b.Low, b.Close_, b.Volume, b.ExchIntCode, b.Bid, b.Ask,
                 d.MktCap, d.NumShrs,
                 e.VWAP
@@ -778,10 +779,6 @@ class ETFDataDownloader:
             """
 
         df = self._get_refinitiv_data(query)
-        list_db_tickers = self._get_db_tickers_list(ctry)
-        if ctry == "KR":
-            list_db_tickers = [self.kr_pattern.sub("K", ticker) for ticker in list_db_tickers]
-        df = df[df["Ticker"].isin(list_db_tickers)]
         if download:
             if ctry == "KR":
                 df.to_parquet(os.path.join(self.DATA_DIR, "kr_etf_price.parquet"), index=False)
