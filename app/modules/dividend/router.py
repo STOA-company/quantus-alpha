@@ -1,11 +1,11 @@
-from fastapi import APIRouter
 from typing import Annotated
-from fastapi import Depends, Query
+
+from fastapi import APIRouter, Depends, Query
+
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.dividend.schemas import DividendItem
 from app.modules.dividend.services import DividendService, get_dividend_service
-
 
 router = APIRouter()
 

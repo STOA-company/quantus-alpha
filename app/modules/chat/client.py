@@ -1,6 +1,7 @@
 # app/chat/client.py
 import time
-from typing import Dict, Any
+from typing import Any, Dict
+
 from app.modules.chat.worker import process_chat
 
 

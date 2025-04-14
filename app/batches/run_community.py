@@ -1,7 +1,9 @@
 import logging
 from datetime import datetime
-from app.database.crud import database
+
 from sqlalchemy import text
+
+from app.database.crud import database
 
 logger = logging.getLogger(__name__)
 

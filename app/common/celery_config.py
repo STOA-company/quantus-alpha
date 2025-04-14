@@ -1,6 +1,8 @@
 import os
+
 from celery import Celery
 from celery.schedules import crontab
+
 from app.core.config import settings
 
 IN_DOCKER = os.getenv("IN_DOCKER", "false").lower() == "true"

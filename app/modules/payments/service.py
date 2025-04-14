@@ -1,13 +1,14 @@
 import json
-from fastapi import HTTPException
-import requests
-
-from app.core.config import settings
 from datetime import timedelta
-from app.database.crud import JoinInfo, database_service
-from app.core.logger import setup_logger
 from http.client import HTTPSConnection as https_conn
 
+import requests
+from fastapi import HTTPException
+
+from app.common.constants import SLACK_WEBHOOK_URL_ERROR
+from app.core.config import settings
+from app.core.logger import setup_logger
+from app.database.crud import JoinInfo, database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.payments.schema import (
     PriceTemplateItem,
@@ -18,7 +19,6 @@ from app.modules.payments.schema import (
     UpdateUserSubscription,
 )
 from app.utils.date_utils import now_kr
-from app.common.constants import SLACK_WEBHOOK_URL_ERROR
 
 # 로그 레벨을 DEBUG로 명시적으로 설정
 logger = setup_logger(__name__, send_error_to_slack=True, slack_webhook_url=SLACK_WEBHOOK_URL_ERROR)

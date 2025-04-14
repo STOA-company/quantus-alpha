@@ -4,7 +4,7 @@
 
 import traceback
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class ExceptionFormatter:

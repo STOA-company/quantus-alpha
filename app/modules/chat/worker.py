@@ -1,9 +1,10 @@
 # app/chat/worker.py
+import json
 import os
 import time
-import json
+from typing import Any, Dict
+
 from celery import Celery
-from typing import Dict, Any
 from redis import Redis
 
 REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")

@@ -1,11 +1,12 @@
 import os
 import time
-from app.common.constants import ETF_DATA_DIR
-from app.database.crud import database
 
 import numpy as np
 import pandas as pd
+
+from app.common.constants import ETF_DATA_DIR
 from app.core.extra.SlackNotifier import SlackNotifier
+from app.database.crud import database
 
 slack_noti = SlackNotifier()
 

@@ -1,27 +1,22 @@
 import datetime
-from io import BytesIO
 import os
-from typing import List, Literal, Optional, Dict, Tuple
+from io import BytesIO
+from typing import Dict, List, Literal, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from Aws.logic.s3 import get_data_from_bucket
-from app.common.constants import (
-    FACTOR_MAP,
-    FACTOR_MAP_EN,
-    BASE_COLUMNS_ETF,
-    SELECT_MAP,
-    PARQUET_DIR,
-    UNIT_MAP,
-)
+
+from app.cache.factors import etf_factors_cache
+from app.common.constants import BASE_COLUMNS_ETF, FACTOR_MAP, FACTOR_MAP_EN, PARQUET_DIR, SELECT_MAP, UNIT_MAP
 from app.core.exception.base import CustomException
 from app.core.logger import setup_logger
-from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.base import BaseScreenerService
+from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.stock.schemas import ExcludeEnum
+from app.modules.screener.utils import screener_utils
 from app.utils.date_utils import get_business_days
 from app.utils.score_utils import etf_score_utils
-from app.modules.screener.utils import screener_utils
-from app.cache.factors import etf_factors_cache
+from Aws.logic.s3 import get_data_from_bucket
 
 logger = setup_logger(__name__)
 

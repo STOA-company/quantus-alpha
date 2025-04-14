@@ -1,8 +1,11 @@
+from typing import List, Optional
+
 from pydantic import BaseModel
-from app.modules.screener.stock.schemas import FilterCondition
-from .enum import ETFMarketEnum
-from typing import Optional, List
+
 from app.modules.screener.base import SortInfo
+from app.modules.screener.stock.schemas import FilterCondition
+
+from .enum import ETFMarketEnum
 
 
 class FilteredETF(BaseModel):

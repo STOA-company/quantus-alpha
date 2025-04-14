@@ -1,9 +1,11 @@
 from typing import Annotated
-from fastapi import APIRouter, Query, Depends
+
+from fastapi import APIRouter, Depends, Query
+
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
-from app.modules.news.schemas import LatestNewsResponse
 from app.modules.news.old_services import NewsService, get_news_service
+from app.modules.news.schemas import LatestNewsResponse
 
 router = APIRouter()
 

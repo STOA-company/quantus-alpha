@@ -1,5 +1,6 @@
 from pydantic import model_validator
-from sqlalchemy import Column, Date, Float, Integer, String, UniqueConstraint, Index
+from sqlalchemy import Column, Date, Float, Index, Integer, String, UniqueConstraint
+
 from app.models.models_base import Base
 
 

@@ -1,12 +1,14 @@
+from typing import Any, Callable, Dict, List, Optional
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from app.core.logger import setup_logger
-from typing import Callable, Dict, Any, Optional, List
+
 from app.core.exception.base import CustomException
 
 # 아래와 같이 수정: 직접 SlackNotifier 클래스를 가져오도록 함
 from app.core.extra.SlackNotifier import SlackNotifier
+from app.core.logger import setup_logger
 
 logger = setup_logger(__name__)
 

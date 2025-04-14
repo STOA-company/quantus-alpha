@@ -1,34 +1,37 @@
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Dict
-from fastapi.responses import JSONResponse
+from io import StringIO
+from typing import Dict, List
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse, Response
+
+from app.cache.factors import factors_cache
+from app.common.constants import (
+    FACTOR_KOREAN_TO_ENGLISH_MAP,
+    MARKET_KOREAN_TO_ENGLISH_MAP,
+    REVERSE_FACTOR_MAP,
+    REVERSE_FACTOR_MAP_EN,
+    FACTOR_MAP,
+)
+from app.core.exception.custom import CustomException
+from app.core.logger import setup_logger
+from app.models.models_factors import CategoryEnum
 from app.models.models_users import AlphafinderUser
-from app.modules.screener.stock.service import ScreenerStockService
 from app.modules.screener.stock.schemas import (
     FactorResponse,
-    GroupMetaData,
     FilteredStocks,
-    PaginatedFilteredStocks,
     GroupFilter,
     GroupFilterResponse,
+    GroupMetaData,
+    MarketEnum,
+    PaginatedFilteredStocks,
+    StockType,
 )
-from app.core.logger import setup_logger
+from app.modules.screener.stock.service import ScreenerStockService
+from app.modules.screener.utils import screener_utils
 from app.modules.user.schemas import DataDownloadHistory
 from app.modules.user.service import UserService, get_user_service
 from app.utils.oauth_utils import get_current_user
-from app.modules.screener.utils import screener_utils
-from app.cache.factors import factors_cache
-from app.models.models_factors import CategoryEnum
-from app.common.constants import (
-    REVERSE_FACTOR_MAP,
-    REVERSE_FACTOR_MAP_EN,
-    FACTOR_KOREAN_TO_ENGLISH_MAP,
-    MARKET_KOREAN_TO_ENGLISH_MAP,
-)
-from app.modules.screener.stock.schemas import MarketEnum, StockType
-from app.core.exception.custom import CustomException
-from io import StringIO
-from fastapi.responses import Response
 
 logger = setup_logger(__name__)
 
@@ -321,14 +324,17 @@ def get_group_filters(
 
         if group_id == -1:
             all_sectors = screener_service.get_available_sectors()
+            custom_filters = screener_service.get_default_custom_filters()
+            for filter in custom_filters:
+                filter["factor"] = FACTOR_MAP.get(filter["factor"], filter["factor"])
             return GroupFilterResponse(
                 id=-1,
                 name="기본",
-                market_filter=MarketEnum.US,
+                market_filter=MarketEnum.ALL,
                 has_custom=False,
                 exclude_filters=[],
                 sector_filter=all_sectors,
-                custom_filters=[],
+                custom_filters=custom_filters,
                 factor_filters={
                     "technical": technical_columns,
                     "fundamental": fundamental_columns,

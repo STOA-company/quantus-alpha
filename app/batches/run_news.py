@@ -1,10 +1,11 @@
 from datetime import timedelta
+
 import pandas as pd
 from sqlalchemy import text
 
-from app.utils.date_utils import now_utc
-from app.database.crud import database
 from app.core.logging.config import get_logger
+from app.database.crud import database
+from app.utils.date_utils import now_utc
 
 logger = get_logger(__name__)
 

@@ -1,4 +1,5 @@
 from datetime import datetime
+
 from pydantic import BaseModel
 
 from app.modules.common.schemas import PaginationBaseResponse

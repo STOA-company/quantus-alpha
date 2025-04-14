@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
 from typing import Optional
+
 from fastapi import FastAPI
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+
 from app.core.logger import setup_logger
 
 logger = setup_logger(__name__)

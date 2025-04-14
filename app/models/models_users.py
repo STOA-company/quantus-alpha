@@ -1,7 +1,8 @@
-from sqlalchemy import ForeignKey, Integer, String, BigInteger, Boolean, Date, UniqueConstraint, DateTime, Index
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.models.models_base import ServiceBase, BaseMixin
+
+from app.models.models_base import BaseMixin, ServiceBase
 
 
 class AlphafinderUser(BaseMixin, ServiceBase):

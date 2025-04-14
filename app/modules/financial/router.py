@@ -1,29 +1,24 @@
 import csv
-from datetime import datetime
 import io
-from app.core.logger import setup_logger
-from fastapi import Request, HTTPException, Response
+from datetime import datetime
+from typing import Annotated, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from requests import Session
+
 from app.core.exception.handler import exception_handler
+from app.core.logger import setup_logger
+from app.database.conn import db
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import FinancialCountry, TranslateCountry
 from app.modules.common.schemas import BaseResponse
-from fastapi import APIRouter, Depends, Query
-from app.database.conn import db
-from app.modules.common.utils import async_check_ticker_country_len_3, check_ticker_country_len_3
+from app.modules.common.utils import async_check_ticker_country_len_3, check_ticker_country_len_3, contry_mapping
 from app.modules.financial.services import FinancialService, get_financial_service
-from app.utils.oauth_utils import get_current_user
-from .schemas import (
-    CashFlowResponse,
-    FinPosResponse,
-    IncomePerformanceResponse,
-    IncomeStatementResponse,
-    RatioResponse,
-)
-from typing import Optional, Annotated
-from app.modules.common.utils import contry_mapping
-from app.modules.user.service import UserService, get_user_service
 from app.modules.user.schemas import DataDownloadHistory
+from app.modules.user.service import UserService, get_user_service
+from app.utils.oauth_utils import get_current_user
+
+from .schemas import CashFlowResponse, FinPosResponse, IncomePerformanceResponse, IncomeStatementResponse, RatioResponse
 
 logger = setup_logger(__name__)
 router = APIRouter()

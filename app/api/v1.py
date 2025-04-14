@@ -1,24 +1,25 @@
 from fastapi import APIRouter
-from app.modules.financial.router import router as financial_router
-from app.modules.price.router import router as price_router
-from app.modules.stock_indices.router import router as stock_indices_router
-from app.modules.news.old_router import router as news_router
-from app.modules.news.router import router as news_router_renewal
-from app.modules.stock_info.router import router as stock_info_router
+
+from app.modules.chat.router import router as chat_router
+from app.modules.community.router import router as community_router
+from app.modules.CS.router import router as cs_router
 from app.modules.disclosure.router import router as disclosure_router
 from app.modules.dividend.router import router as dividend_router
-from app.modules.sector.router import router as sector_router
-from app.modules.search.router import router as search_router
-from app.modules.trending.router import router as trending_router
-from app.modules.oauth.router import router as oauth_router
-from app.modules.user.router import router as user_router
-from app.modules.community.router import router as community_router
-from app.modules.screener.stock.router import router as screener_router
-from app.modules.screener.etf.router import router as screener_etf_router
-from app.modules.payments.router import router as payments_router
+from app.modules.financial.router import router as financial_router
 from app.modules.interest.router import router as interest_router
-from app.modules.chat.router import router as chat_router
-from app.modules.CS.router import router as cs_router
+from app.modules.news.old_router import router as news_router
+from app.modules.news.router import router as news_router_renewal
+from app.modules.oauth.router import router as oauth_router
+from app.modules.payments.router import router as payments_router
+from app.modules.price.router import router as price_router
+from app.modules.screener.etf.router import router as screener_etf_router
+from app.modules.screener.stock.router import router as screener_router
+from app.modules.search.router import router as search_router
+from app.modules.sector.router import router as sector_router
+from app.modules.stock_indices.router import router as stock_indices_router
+from app.modules.stock_info.router import router as stock_info_router
+from app.modules.trending.router import router as trending_router
+from app.modules.user.router import router as user_router
 
 api_router = APIRouter()
 

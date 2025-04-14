@@ -1,6 +1,7 @@
 from decimal import Decimal
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
 
 # class FinancialDataResponse(BaseModel):
 #     data: List[Dict[str, Any]] = Field(

@@ -11,29 +11,22 @@ case $ENVIRONMENT in
         ENV_FILE=.env
         ENV=prod
         BRANCH=main
-        ROOT_URL="https://alpha-live.quantus.kr"
         ;;
     stage|staging)
         ENV_FILE=.env
         ENV=stage
         BRANCH=staging
-        ROOT_URL="https://alpha-live.quantus.kr"
         ;;
     dev|development)
         ENV_FILE=.env
         ENV=dev
         BRANCH=dev
-        ROOT_URL="https://alpha-dev.quantus.kr"
         ;;
     *)
         echo "Unknown environment: $ENVIRONMENT"
         exit 1
         ;;
 esac
-
-# Export variables for docker-compose
-export ROOT_URL
-export DOMAIN=${ROOT_URL#https://}
 
 echo "Deploying for environment: $ENV using $ENV_FILE (Branch: $BRANCH)"
 
