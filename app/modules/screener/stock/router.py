@@ -8,10 +8,10 @@ from fastapi.responses import JSONResponse, Response
 from app.cache.factors import factors_cache
 from app.common.constants import (
     FACTOR_KOREAN_TO_ENGLISH_MAP,
+    FACTOR_MAP,
     MARKET_KOREAN_TO_ENGLISH_MAP,
     REVERSE_FACTOR_MAP,
     REVERSE_FACTOR_MAP_EN,
-    FACTOR_MAP,
 )
 from app.core.exception.custom import CustomException
 from app.core.logger import setup_logger
@@ -280,7 +280,9 @@ async def create_or_update_group(
                 market_filter=group_filter.market_filter,
                 exclude_filters=group_filter.exclude_filters,
                 sector_filter=group_filter.sector_filter,
+                factor_filters=group_filter.factor_filters,
                 custom_filters=group_filter.custom_filters,
+                sort_info=group_filter.sort_info,
                 type=group_filter.type,
             )
 

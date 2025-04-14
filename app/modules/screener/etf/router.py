@@ -253,8 +253,9 @@ async def create_or_update_group(
                 user_id=current_user.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
-                sector_filter=group_filter.sector_filter,
                 custom_filters=group_filter.custom_filters,
+                factor_filters=group_filter.factor_filters,
+                sort_info=group_filter.sort_info,
                 type=group_filter.type,
             )
         return {"group_id": group_id}
