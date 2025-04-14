@@ -11,6 +11,7 @@ import time
 import numpy as np
 import pandas as pd
 import pyodbc
+import yfinance as yf
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
 from selenium.webdriver.chrome.options import Options
@@ -32,6 +33,36 @@ from app.common.mapping import (
 from app.core.config import settings
 from app.database.crud import database
 from app.modules.screener.etf.enum import ETFMarketEnum
+
+
+def get_market_indice(alpha3_code):
+    market_indice = {
+        "USA": "^GSPC",  # S&P 500
+        "JPN": "^N225",  # Nikkei 225
+        "HKG": "^HSI",  # Hang Seng Index
+        "KOR": "^KS11",  # KOSPI
+    }
+    return market_indice.get(alpha3_code.upper(), "Unknown")
+
+
+def get_market_returns(alpha3_code: str, years: int = 5, max_retries: int = 3) -> pd.Series:
+    for attempt in range(max_retries):
+        try:
+            symbol = get_market_indice(alpha3_code)
+            if symbol == "Unknown":
+                raise ValueError(f"Invalid market code: {alpha3_code}")
+            df = yf.download(symbol, period=f"{years}y", progress=False, timeout=10)
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            returns = df["Close"].pct_change().dropna()
+            returns.name = f"{alpha3_code}_return"
+            return returns
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"Failed to fetch data after {max_retries} attempts: {str(e)}")
+                raise
+            print(f"Attempt {attempt + 1} failed, retrying...")
+            time.sleep(2)
 
 
 class ETFFactorExtractor:
@@ -110,6 +141,9 @@ class ETFFactorExtractor:
 
         # 52주 최고가, 최저가 계산
         df_sort = self._calculate_52week_high_low(df_sort)
+
+        # RS 계산 추가
+        df_sort = self._calculate_rs(df_sort, ctry)
 
         # 추가 팩터 계산
         df_sort = self._calculate_additional_factors(df_sort)
@@ -213,95 +247,151 @@ class ETFFactorExtractor:
         """변동성 및 베타 계산"""
         # 변동성 (60일, 1년)
         df["vol_60"] = df.groupby(["Ticker"])["수정주가수익률"].transform(lambda x: x.rolling(60).std() * np.sqrt(252))
-
         df["vol"] = df.groupby(["Ticker"])["수정주가수익률"].transform(lambda x: x.rolling(252).std() * np.sqrt(252))
 
-        # # 시장 수익률 데이터 가져오기
-        # try:
-        #     marketDf = self._get_market_returns(ctry, 2)
-        #     marketDf.index = pd.to_datetime(marketDf.index).tz_localize(None)
-        #     market_series = marketDf.squeeze()
-        #     market_series = market_series.sort_index(ascending=False)
+        try:
+            # 시장 수익률 데이터 가져오기
+            market_returns = get_market_returns("USA", 2)
+            market_returns.index = pd.to_datetime(market_returns.index).tz_localize(None)
+            market_series = market_returns.squeeze()
+            market_series = market_series.sort_index(ascending=False)
 
-        #     # 전체 데이터를 날짜로 피봇하여 한 번에 처리
-        #     pivot_data = df.sort_values('MarketDate').pivot(
-        #         index='MarketDate',
-        #         columns='Ticker',
-        #         values='수정주가수익률'
-        #     )
+            # 전체 데이터를 날짜로 피봇하여 한 번에 처리
+            pivot_data = df.sort_values("MarketDate").pivot(index="MarketDate", columns="Ticker", values="수정주가수익률")
 
-        #     # 인덱스를 datetime으로 변환하고 정렬
-        #     pivot_data.index = pd.to_datetime(pivot_data.index)
-        #     pivot_data = pivot_data.sort_index(ascending=False)
+            # 인덱스를 datetime으로 변환하고 정렬
+            pivot_data.index = pd.to_datetime(pivot_data.index)
+            pivot_data = pivot_data.sort_index(ascending=False)
 
-        #     # 중복된 인덱스 처리 (모든 종목에 대해 한 번에)
-        #     pivot_data = pivot_data[~pivot_data.index.duplicated(keep='last')]
+            # 중복된 인덱스 처리
+            pivot_data = pivot_data[~pivot_data.index.duplicated(keep="last")]
 
-        #     # 기간별 데이터 준비
-        #     one_year_data = pivot_data[:252]  # 약 1년치 데이터
-        #     days_60_data = pivot_data[:60]    # 약 3개월치 데이터
+            # 기간별 데이터 준비
+            one_year_data = pivot_data[:252]  # 약 1년치 데이터
+            days_60_data = pivot_data[:60]  # 약 3개월치 데이터
 
-        #     # market_series 정렬 및 기간 맞추기
-        #     market_aligned = market_series.reindex(pivot_data.index)
-        #     market_1y = market_aligned[:252]
-        #     market_60d = market_aligned[:60]
+            # market_series 정렬 및 기간 맞추기
+            market_aligned = market_series.reindex(pivot_data.index)
+            market_1y = market_aligned[:252]
+            market_60d = market_aligned[:60]
 
-        #     # 벡터화된 베타 계산
-        #     def vectorized_beta(returns, market, min_periods):
-        #         # 모든 종목에 대해 한 번에 공분산 계산
-        #         covariance = returns.apply(
-        #             lambda x: x.cov(market) if len(x.dropna()) >= min_periods else np.nan
-        #         )
-        #         market_variance = market.var()
-        #         return covariance / market_variance if market_variance != 0 else pd.Series(np.nan, index=returns.columns)
+            # 벡터화된 베타 계산
+            def vectorized_beta(returns, market, min_periods):
+                # 모든 종목에 대해 한 번에 공분산 계산
+                covariance = returns.apply(lambda x: x.cov(market) if len(x.dropna()) >= min_periods else np.nan)
+                market_variance = market.var()
+                return covariance / market_variance if market_variance != 0 else pd.Series(np.nan, index=returns.columns)
 
-        #     # 베타 계산
-        #     if len(one_year_data) > 0 and len(market_1y) > 0:
-        #         betas = vectorized_beta(one_year_data, market_1y, 200)
+            # 베타 계산
+            if len(one_year_data) > 0 and len(market_1y) > 0:
+                betas = vectorized_beta(one_year_data, market_1y, 200)
 
-        #         # 결과를 데이터프레임으로 변환
-        #         beta_df = pd.DataFrame({
-        #             'Ticker': betas.index,
-        #             'beta': betas.values
-        #         })
+                # 결과를 데이터프레임으로 변환
+                beta_df = pd.DataFrame({"Ticker": betas.index, "beta": betas.values})
 
-        #         # df와 병합
-        #         df = df.merge(beta_df, on='Ticker', how='left')
-        #     else:
-        #         df['beta'] = 1.0  # 기본값
+                # df와 병합
+                df = df.merge(beta_df, on="Ticker", how="left")
+            else:
+                df["beta"] = 1.0  # 기본값
 
-        #     # 60일 베타 계산
-        #     if len(days_60_data) > 0 and len(market_60d) > 0:
-        #         betas_60 = vectorized_beta(days_60_data, market_60d, 40)
+            # 60일 베타 계산
+            if len(days_60_data) > 0 and len(market_60d) > 0:
+                betas_60 = vectorized_beta(days_60_data, market_60d, 40)
 
-        #         # 결과를 데이터프레임으로 변환
-        #         beta_60_df = pd.DataFrame({
-        #             'Ticker': betas_60.index,
-        #             'beta_60': betas_60.values
-        #         })
+                # 결과를 데이터프레임으로 변환
+                beta_60_df = pd.DataFrame({"Ticker": betas_60.index, "beta_60": betas_60.values})
 
-        #         # df와 병합
-        #         df = df.merge(beta_60_df, on='Ticker', how='left')
-        #     else:
-        #         df['beta_60'] = 1.0  # 기본값
+                # df와 병합
+                df = df.merge(beta_60_df, on="Ticker", how="left")
+            else:
+                df["beta_60"] = 1.0  # 기본값
 
-        #     # 절대 베타 계산
-        #     df['abs_beta'] = df['beta'].abs()
-        #     df['abs_beta_60'] = df['beta_60'].abs()
+            # 절대 베타 계산
+            df["abs_beta"] = df["beta"].abs()
+            df["abs_beta_60"] = df["beta_60"].abs()
 
-        # except Exception as e:
-        #     print(f"베타 계산 중 오류 발생: {e}")
-        #     # 오류 발생 시 기본값 설정
-        #     df['beta'] = 1.0
-        #     df['beta_60'] = 1.0
-        #     df['abs_beta'] = 1.0
-        #     df['abs_beta_60'] = 1.0
+        except Exception as e:
+            print(f"베타 계산 중 오류 발생: {e}")
+            # 오류 발생 시 기본값 설정
+            df["beta"] = 1.0
+            df["beta_60"] = 1.0
+            df["abs_beta"] = 1.0
+            df["abs_beta_60"] = 1.0
 
         return df
 
-    def _get_market_returns(self, ctry, years=2):
-        """시장 수익률 데이터 가져오기"""
-        pass
+    def _calculate_rs(self, df, ctry):
+        """Relative Strength (RS) 계산"""
+        try:
+            # 시장 수익률 데이터 가져오기
+            market_returns = get_market_returns("USA", 2)
+            market_returns.index = pd.to_datetime(market_returns.index).tz_localize(None)
+            market_series = market_returns.squeeze()
+            market_series = market_series.sort_index(ascending=False)
+
+            # 전체 데이터를 날짜로 피봇하여 한 번에 처리
+            pivot_data = df.sort_values("MarketDate").pivot(index="MarketDate", columns="Ticker", values="수정주가수익률")
+
+            # 인덱스를 datetime으로 변환하고 정렬
+            pivot_data.index = pd.to_datetime(pivot_data.index)
+            pivot_data = pivot_data.sort_index(ascending=False)
+
+            # 중복된 인덱스 처리
+            pivot_data = pivot_data[~pivot_data.index.duplicated(keep="last")]
+
+            # 기간별 데이터 준비
+            periods = {
+                "5": {"days": 5, "min_periods": 4},
+                "20": {"days": 20, "min_periods": 16},
+                "50": {"days": 50, "min_periods": 40},
+                "100": {"days": 100, "min_periods": 80},
+                "200": {"days": 200, "min_periods": 160},
+            }
+
+            # 각 기간별 RS 계산
+            for period, config in periods.items():
+                days = config["days"]
+                min_periods = config["min_periods"]
+
+                # 해당 기간의 데이터 추출
+                period_data = pivot_data[:days]
+                market_period = market_series[:days]
+
+                # RS 계산
+                def calculate_log_rs(stock_returns, market_returns, min_periods):
+                    try:
+                        valid_data = pd.concat([stock_returns, market_returns], axis=1).dropna()
+                        if len(valid_data) < min_periods:
+                            return np.nan
+                        stock_returns_clean, market_returns_clean = valid_data.iloc[:, 0], valid_data.iloc[:, 1]
+                        cum_stock_return = (1 + stock_returns_clean).prod() - 1
+                        cum_market_return = (1 + market_returns_clean).prod() - 1
+                        log_rs = np.log(1 + cum_stock_return) - np.log(1 + cum_market_return)
+                        return log_rs
+                    except Exception as e:
+                        print(f"Log RS calculation error: {e}")
+                        return np.nan
+
+                # 각 종목별 RS 계산
+                rs_values = {}
+                for ticker in period_data.columns:
+                    stock_returns = period_data[ticker]
+                    rs = calculate_log_rs(stock_returns, market_period, min_periods)
+                    rs_values[ticker] = rs
+
+                # 결과를 데이터프레임으로 변환
+                rs_df = pd.DataFrame({"Ticker": rs_values.keys(), f"Log_RS_{period}": rs_values.values()})
+
+                # 원본 데이터프레임에 병합
+                df = df.merge(rs_df, on="Ticker", how="left")
+
+        except Exception as e:
+            print(f"RS 계산 중 오류 발생: {e}")
+            # 오류 발생 시 기본값 설정
+            for period in periods.keys():
+                df[f"Log_RS_{period}"] = np.nan
+
+        return df
 
     def _calculate_rsi(self, df):
         """RSI 계산"""
@@ -1542,9 +1632,18 @@ class ETFDataPreprocessor:
             "disparity_200",
             "vol_60",
             "vol",
+            "beta_60",
+            "beta",
+            "abs_beta_60",
+            "abs_beta",
             "rsi_9",
             "rsi_14",
             "rsi_25",
+            "Log_RS_5",
+            "Log_RS_20",
+            "Log_RS_50",
+            "Log_RS_100",
+            "Log_RS_200",
             "sharpe",
             "sortino",
             "return_1m",
@@ -1591,9 +1690,18 @@ class ETFDataPreprocessor:
             "disparity_200",
             "vol_60",
             "vol",
+            "beta_60",
+            "beta",
+            "abs_beta_60",
+            "abs_beta",
             "rsi_9",
             "rsi_14",
             "rsi_25",
+            "Log_RS_5",
+            "Log_RS_20",
+            "Log_RS_50",
+            "Log_RS_100",
+            "Log_RS_200",
             "sharpe",
             "sortino",
             "return_1m",
