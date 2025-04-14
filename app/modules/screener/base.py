@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-import pandas as pd
 
 from app.common.constants import FACTOR_MAP, REVERSE_FACTOR_MAP
 from app.core.exception.base import CustomException
@@ -557,7 +556,7 @@ class BaseScreenerService(ABC):
             if custom_filters is None:
                 custom_filters = []
 
-            default_filters = self.get_default_custom_filters(type)
+            default_filters = self.get_default_custom_filters()
             # Map default filter factors using FACTOR_MAP
             for filter in default_filters:
                 filter["factor"] = FACTOR_MAP[filter["factor"]]
@@ -873,39 +872,30 @@ class BaseScreenerService(ABC):
             print(f"에러 발생: {str(e)}")
             raise e
 
-    def get_default_custom_filters(self, type: Optional[StockType] = StockType.STOCK):
+    def get_default_custom_filters(self):
         try:
+            # Get data using MarketEnum.ALL
+            market_data = screener_utils.get_df_from_parquet(MarketEnum.ALL)
+
             default_factors = ["marketCap", "median_trade", "close"]
             result = []
 
-            if type == StockType.STOCK:
-                # Get data using MarketEnum.ALL for stocks
-                market_data = screener_utils.get_df_from_parquet(MarketEnum.ALL)
-            else:
-                # Get data using ETFMarketEnum.ALL for ETFs
-                market_data = screener_utils.etf_factor_loader.load_etf_factors(ETFMarketEnum.ALL.value)
-
             for factor in default_factors:
                 if factor in market_data.columns:
-                    # Convert to numeric and handle NaN values
-                    market_data[factor] = pd.to_numeric(market_data[factor], errors="coerce")
-                    valid_data = market_data[factor].dropna()
+                    min_value = market_data[factor].min()
+                    max_value = market_data[factor].max()
 
-                    if not valid_data.empty:
-                        min_value = valid_data.min()
-                        max_value = valid_data.max()
+                    min_value = np.floor(min_value)
+                    max_value = np.ceil(max_value)
 
-                        min_value = np.floor(min_value)
-                        max_value = np.ceil(max_value)
-
-                        result.append(
-                            {
-                                "factor": factor,
-                                "above": min_value,
-                                "below": max_value,
-                                "type": FactorTypeEnum.SLIDER,
-                            }
-                        )
+                    result.append(
+                        {
+                            "factor": factor,
+                            "above": min_value,
+                            "below": max_value,
+                            "type": FactorTypeEnum.SLIDER,
+                        }
+                    )
 
             return result
 
