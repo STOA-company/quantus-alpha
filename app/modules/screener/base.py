@@ -492,25 +492,31 @@ class BaseScreenerService(ABC):
             group_id = self.database._select(table="screener_groups", user_id=user_id, name=name, type=type)[0].id
 
             if factor_filters:
-                # Handle factor filters for each category
-                for category, factors in factor_filters.items():
-                    await self.create_factor_filters(group_id, category, factors)
+                # Check if all factor_filters are empty
+                all_empty = all(len(factors) == 0 for factors in factor_filters.values())
 
-                # Handle sort info for each category
-                if sort_info:
-                    for category, sort_data in sort_info.items():
-                        insert_tasks.append(
-                            self.database.insert_wrapper(
-                                table="screener_sort_infos",
-                                sets={
-                                    "group_id": group_id,
-                                    "category": category,
-                                    "sort_by": REVERSE_FACTOR_MAP[sort_data.sort_by],
-                                    "ascending": sort_data.ascending,
-                                    "type": type,
-                                },
+                if all_empty:
+                    await self.create_default_factor_filters(group_id=group_id, type=type)
+                else:
+                    # Handle factor filters for each category
+                    for category, factors in factor_filters.items():
+                        await self.create_factor_filters(group_id, category, factors)
+
+                    # Handle sort info for each category
+                    if sort_info:
+                        for category, sort_data in sort_info.items():
+                            insert_tasks.append(
+                                self.database.insert_wrapper(
+                                    table="screener_sort_infos",
+                                    sets={
+                                        "group_id": group_id,
+                                        "category": category,
+                                        "sort_by": REVERSE_FACTOR_MAP[sort_data.sort_by],
+                                        "ascending": sort_data.ascending,
+                                        "type": type,
+                                    },
+                                )
                             )
-                        )
             else:
                 await self.create_default_factor_filters(group_id=group_id, type=type)
 
