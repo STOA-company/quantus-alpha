@@ -31,7 +31,9 @@ from app.batches.run_dividend import insert_dividend
 
 
 notifier = SlackNotifier()
-notifier_1d = SlackNotifier()
+notifier_1d = SlackNotifier(
+    webhook_url="https://hooks.slack.com/services/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"
+)
 logger = logging.getLogger(__name__)
 
 

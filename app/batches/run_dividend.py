@@ -50,7 +50,7 @@ def process_dividend_data(ctry: str, type: str):
     df_dividend["payment_date"] = pd.to_datetime(df_dividend["payment_date"])
 
     # 한국 티커의 경우 'K'를 'A'로 변경
-    if ctry == "KR" and type == "stock":
+    if ctry == "KR":
         df_dividend["ticker"] = df_dividend["ticker"].apply(lambda x: "A" + x[1:] if x.startswith("K") else x)
 
     # adj_factor가 없으면 1로 설정
