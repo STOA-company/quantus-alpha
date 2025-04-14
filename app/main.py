@@ -8,9 +8,10 @@ from app.core.exception import handler
 from app.core.logger import configure, get_logger
 from app.database.conn import db
 from app.database.crud import database
+from app.middlewares.rate_limiter import GlobalRateLimitMiddleware
+from app.middlewares.rate_limiter_admin import router as rate_limiter_admin_router
 from app.middlewares.slack_error import add_slack_middleware
 from app.middlewares.trusted_hosts import get_current_username
-
 
 # 여기로 로거 설정 이동
 stage_webhook_url = "https://hooks.slack.com/services/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"
@@ -55,6 +56,8 @@ app = FastAPI(
 handler.initialize(app)
 
 app.include_router(routers.router)
+# Include rate limiter admin router
+app.include_router(rate_limiter_admin_router)
 
 db_config = get_database_config()
 db.init_app(app, **db_config.__dict__)
@@ -86,6 +89,7 @@ if settings.ENV == "stage":
 else:
     webhook_url = dev_webhook_url
 
+# Slack 오류 알림 미들웨어 설정
 add_slack_middleware(
     app=app,
     webhook_url=webhook_url,
@@ -96,12 +100,32 @@ add_slack_middleware(
     notify_environments=["stage", "dev"],
 )
 
+# CORS 미들웨어 설정
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*", "Authorization", "Authorization_Swagger"],
+)
+
+
+# 레이트 리미팅 미들웨어 설정
+exclude_paths = [
+    "/health-check",
+    "/metrics",
+    "/docs",
+    "/redoc",
+    "/admin",
+    "/api/v1/search",
+    "/api/v1/search/community",
+]
+
+app.add_middleware(
+    GlobalRateLimitMiddleware,
+    max_requests=150,
+    window_seconds=60,
+    exclude_paths=exclude_paths,
 )
 
 
