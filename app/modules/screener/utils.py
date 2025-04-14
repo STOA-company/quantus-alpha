@@ -117,7 +117,6 @@ class ScreenerUtils:
         if not category:
             return base_columns
 
-        # technical_columns = ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
         technical_columns = ["close", "marketCap", "median_trade", "abs_beta", "Log_RS_100", "sharpe"]
         dividend_columns = [
             "dividend_frequency",
@@ -126,9 +125,6 @@ class ScreenerUtils:
             "div_yield_growth_yoy",
         ]
         if type == StockType.ETF:
-            # technical_columns = ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"]
-            technical_columns = ["close", "marketCap", "median_trade", "momentum_6", "sharpe", "sortino"]
-
             dividend_columns = [
                 "dividend_frequency",
                 "ttm_dividend_yield",
