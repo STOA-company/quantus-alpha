@@ -12,8 +12,6 @@ from app.middlewares.rate_limiter import GlobalRateLimitMiddleware
 from app.middlewares.rate_limiter_admin import router as rate_limiter_admin_router
 from app.middlewares.slack_error import add_slack_middleware
 from app.middlewares.trusted_hosts import get_current_username
-from app.monitoring.endpoints import router as metrics_router
-from app.monitoring.middleware import PrometheusMiddleware
 
 # 여기로 로거 설정 이동
 stage_webhook_url = "https://hooks.slack.com/services/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"
@@ -60,7 +58,6 @@ handler.initialize(app)
 app.include_router(routers.router)
 # Include rate limiter admin router
 app.include_router(rate_limiter_admin_router)
-app.include_router(metrics_router)  # Add metrics endpoints
 
 db_config = get_database_config()
 db.init_app(app, **db_config.__dict__)
@@ -130,9 +127,6 @@ app.add_middleware(
     window_seconds=60,
     exclude_paths=exclude_paths,
 )
-
-# Add Prometheus middleware
-app.add_middleware(PrometheusMiddleware)
 
 
 class HealthCheckDetails(BaseModel):

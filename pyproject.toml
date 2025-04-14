@@ -46,8 +46,6 @@ selenium = "^4.29.0"
 webdriver-manager = "^4.0.2"
 requests-html = "^0.10.0"
 pyodbc = "^5.2.0"
-prometheus-client = "^0.21.1"
-psutil = "^5.9.8"
 
 [build-system]
 requires = ["poetry-core"]
