@@ -67,8 +67,8 @@ class BaseScreenerService(ABC):
                     grouped_filters[factor] = {
                         "factor": factor,
                         "values": [],
-                        "above": stock_filter.above if stock_filter.above else None,
-                        "below": stock_filter.below if stock_filter.below else None,
+                        "above": stock_filter.above if stock_filter.above is not None else None,
+                        "below": stock_filter.below if stock_filter.below is not None else None,
                         "type": stock_filter.type.lower() if stock_filter.type else None,
                     }
                 if stock_filter.value:
