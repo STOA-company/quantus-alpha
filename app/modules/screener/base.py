@@ -571,17 +571,26 @@ class BaseScreenerService(ABC):
 
             if custom_filters:
                 for condition in custom_filters:
-                    if condition.values:
-                        for value in condition.values:
+                    values = (
+                        condition.get("values", []) if isinstance(condition, dict) else getattr(condition, "values", [])
+                    )
+                    if values:
+                        for value in values:
                             insert_tasks.append(
                                 self.database.insert_wrapper(
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
-                                        "factor": condition.factor,
-                                        "type": condition.type,
-                                        "above": condition.above,
-                                        "below": condition.below,
+                                        "factor": condition.get("factor")
+                                        if isinstance(condition, dict)
+                                        else condition.factor,
+                                        "type": condition.get("type") if isinstance(condition, dict) else condition.type,
+                                        "above": condition.get("above")
+                                        if isinstance(condition, dict)
+                                        else condition.above,
+                                        "below": condition.get("below")
+                                        if isinstance(condition, dict)
+                                        else condition.below,
                                         "value": value,
                                     },
                                 )
@@ -592,10 +601,12 @@ class BaseScreenerService(ABC):
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": condition.factor,
-                                    "type": condition.type,
-                                    "above": condition.above,
-                                    "below": condition.below,
+                                    "factor": condition.get("factor")
+                                    if isinstance(condition, dict)
+                                    else condition.factor,
+                                    "type": condition.get("type") if isinstance(condition, dict) else condition.type,
+                                    "above": condition.get("above") if isinstance(condition, dict) else condition.above,
+                                    "below": condition.get("below") if isinstance(condition, dict) else condition.below,
                                     "value": None,
                                 },
                             )
@@ -693,17 +704,26 @@ class BaseScreenerService(ABC):
 
             if custom_filters:
                 for condition in custom_filters:
-                    if condition.values:
-                        for value in condition.values:
+                    values = (
+                        condition.get("values", []) if isinstance(condition, dict) else getattr(condition, "values", [])
+                    )
+                    if values:
+                        for value in values:
                             insert_tasks.append(
                                 self.database.insert_wrapper(
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
-                                        "factor": condition.factor,
-                                        "type": condition.type,
-                                        "above": condition.above,
-                                        "below": condition.below,
+                                        "factor": condition.get("factor")
+                                        if isinstance(condition, dict)
+                                        else condition.factor,
+                                        "type": condition.get("type") if isinstance(condition, dict) else condition.type,
+                                        "above": condition.get("above")
+                                        if isinstance(condition, dict)
+                                        else condition.above,
+                                        "below": condition.get("below")
+                                        if isinstance(condition, dict)
+                                        else condition.below,
                                         "value": value,
                                     },
                                 )
@@ -714,10 +734,12 @@ class BaseScreenerService(ABC):
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": condition.factor,
-                                    "type": condition.type,
-                                    "above": condition.above,
-                                    "below": condition.below,
+                                    "factor": condition.get("factor")
+                                    if isinstance(condition, dict)
+                                    else condition.factor,
+                                    "type": condition.get("type") if isinstance(condition, dict) else condition.type,
+                                    "above": condition.get("above") if isinstance(condition, dict) else condition.above,
+                                    "below": condition.get("below") if isinstance(condition, dict) else condition.below,
                                     "value": None,
                                 },
                             )
