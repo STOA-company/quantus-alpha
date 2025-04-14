@@ -1,13 +1,14 @@
 import json
-from fastapi import HTTPException
-import requests
-
-from app.core.config import settings
 from datetime import timedelta
-from app.database.crud import JoinInfo, database_service
-from app.core.extra.LoggerBox import LoggerBox
 from http.client import HTTPSConnection as https_conn
 
+import requests
+from fastapi import HTTPException
+
+from app.common.constants import SLACK_WEBHOOK_URL_ERROR
+from app.core.config import settings
+from app.core.logger import setup_logger
+from app.database.crud import JoinInfo, database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.payments.schema import (
     PriceTemplateItem,
@@ -19,7 +20,8 @@ from app.modules.payments.schema import (
 )
 from app.utils.date_utils import now_kr
 
-logger = LoggerBox().get_logger(__name__)
+# 로그 레벨을 DEBUG로 명시적으로 설정
+logger = setup_logger(__name__, send_error_to_slack=True, slack_webhook_url=SLACK_WEBHOOK_URL_ERROR)
 
 
 class PaymentService:
@@ -518,7 +520,6 @@ class PaymentService:
         )
         return data[0]
 
-    #####################################
     def cancel_membership(self, user_id: int):
         self.db._update(
             table="alphafinder_user",
@@ -538,6 +539,14 @@ class PaymentService:
         data = self.db._select(
             table="user_using_history",
             columns=["id", "start_date", "end_date", "product_name", "product_type", "product_relation_id", "refund_at"],
+            user_id=user_id,
+        )
+        return data
+
+    def get_payment_list_by_user_id(self, user_id: int):
+        data = self.db._select(
+            table="alphafinder_payment_history",
+            columns=["id", "level", "period_days", "paid_amount", "payment_method", "refund_at", "created_at"],
             user_id=user_id,
         )
         return data
@@ -610,55 +619,122 @@ class PaymentService:
         )
         return data[0]
 
-    def refund_payments(self, current_user: AlphafinderUser, using_history_id: int):
+    def refund_payments(self, current_user: AlphafinderUser, payment_id: int):
         ####
         # 사용 내역 확인하는 로직 추가하기
         ###
 
-        #
-        payment_history = self.db._select(
+        # payment_history에서 영수증 id 찾기
+        payment_history_data = self.db._select(
             table="alphafinder_payment_history",
-            columns=["receipt_id"],
-            id=using_history_id,
+            columns=["product_relation_id", "refund_at", "payment_company"],
+            id=payment_id,
         )
-        if payment_history[0].refund_at is not None:
-            raise HTTPException(status_code=422, detail="이미 환불된 결제입니다.")
-        elif payment_history is None:
-            raise HTTPException(status_code=404, detail="결제 내역이 없습니다.")
+        if payment_history_data is None:
+            raise HTTPException(status_code=404, detail="사용 내역을 찾을 수 없습니다.")
 
-        receipt_id = payment_history[0].receipt_id
+        if payment_history_data.refund_at is not None:
+            raise HTTPException(status_code=400, detail="이미 환불된 결제입니다.")
 
-        if payment_history[0].payment_company == "toss":
-            # 토스 결제 환불
+        # 결제 영수증에서 결제 키 찾기
+        if payment_history_data.payment_company == "toss":
             payment_key = self.db._select(
-                table="toss_receipt",
+                table="alphafinder_payment_history",
                 columns=["payment_key"],
-                id=receipt_id,
+                id=payment_history_data.product_relation_id,
             )
-            self.cancel_toss_payments(payment_key=payment_key[0].payment_key, cancel_reason="환불 요청")
-
-        elif payment_history[0].payment_company == "kakao":
-            # 카카오 결제 환불
+            if payment_key is None:
+                raise HTTPException(status_code=404, detail="결제 키를 찾을 수 없습니다.")
+            self.cancel_toss_payments(payment_key[0].payment_key, "환불 요청")
+        elif payment_history_data.payment_company == "kakao":
             pass
+        elif payment_history_data.payment_company == "google":
+            pass
+        elif payment_history_data.payment_company == "apple":
+            pass
+        else:
+            raise HTTPException(status_code=400, detail="지원하지 않는 결제 회사입니다.")
 
+        # 결제 내역 환불 처리
+        self.db._update(
+            table="alphafinder_payment_history",
+            sets={"refund_at": now_kr(), "updated_at": now_kr()},
+            id=payment_id,
+        )
+
+        # 사용 내역 환불 처리
         self.db._update(
             table="user_using_history",
-            sets={"refund_at": now_kr()},
-            id=using_history_id,
+            sets={"refund_at": now_kr(), "updated_at": now_kr()},
+            product_relation_id=payment_id,
         )
-
-        if current_user.subscription_end > now_kr().date():
+        # 유저 정보 업데이트
+        user_using_history_data = self.db._select(
+            table="user_using_history",
+            columns=[
+                "id",
+                "user_id",
+                "start_date",
+                "end_date",
+                "product_name",
+                "product_type",
+                "product_relation_id",
+                "refund_at",
+            ],
+            product_relation_id=payment_id,
+        )
+        end_date = user_using_history_data[0].end_date
+        start_date = user_using_history_data[0].start_date
+        if end_date > now_kr().date() and start_date < now_kr().date():
             self.db._update(
                 table="alphafinder_user",
-                sets={
-                    "is_subscribed": False,
-                    "subscription_end": now_kr().date(),
-                    "subscription_level": 1,
-                },
-                id=current_user.id,
+                sets={"is_subscribed": False, "end_date": now_kr(), "updated_at": now_kr(), "subscription_level": 1},
+                id=user_using_history_data[0].user_id,
             )
+        else:
+            un_refunded_using_history_data = self.db._select(
+                table="user_using_history",
+                columns=[
+                    "id",
+                    "user_id",
+                    "start_date",
+                    "end_date",
+                    "product_name",
+                    "product_type",
+                    "product_relation_id",
+                    "refund_at",
+                ],
+                user_id=user_using_history_data[0].user_id,
+                start_date__lte=now_kr().date(),
+                end_date__gt=now_kr().date(),
+            )
+            is_subscribed = (
+                un_refunded_using_history_data[0].refund_at is None if un_refunded_using_history_data else False
+            )
+            if is_subscribed:
+                end_date = un_refunded_using_history_data[0].end_date
+                level = self.get_product_level_by_product_name(un_refunded_using_history_data[0].product_name)
+                self.db._update(
+                    table="alphafinder_user",
+                    sets={
+                        "end_date": end_date,
+                        "updated_at": now_kr(),
+                        "subscription_level": level,
+                        "using_history_id": un_refunded_using_history_data[0].id,
+                    },
+                    id=user_using_history_data[0].user_id,
+                )
 
         return True
+
+    def get_product_name_by_level_period_days(self, level: int, period_days: int):
+        data = self.db._select(
+            table="alphafinder_price",
+            columns=["name"],
+            level=level,
+            period_days=period_days,
+        )
+        return data[0].name
 
     def update_is_extended(self, user_using_history_id: int):
         payment_history_id = self.db._select(
@@ -671,3 +747,35 @@ class PaymentService:
             sets={"is_extended": True},
             id=payment_history_id[0].product_relation_id,
         )
+
+    def issue_coupon(self, coupon_id: int, user_id: int):
+        coupon_data = self.db._select(
+            table="alphafinder_coupon",
+            columns=["coupon_name"],
+            id=coupon_id,
+        )
+        self.db._insert(
+            table="alphafinder_coupon_box",
+            sets={
+                "user_id": user_id,
+                "coupon_id": coupon_id,
+                "issued_at": now_kr().date(),
+                "expired_at": now_kr().date() + timedelta(days=365),
+                "coupon_status": "inactive",
+                "coupon_name": coupon_data[0].coupon_name,
+            },
+        )
+
+    def delete_coupon(self, coupon_id: int):
+        self.db._delete(
+            table="alphafinder_coupon_box",
+            id=coupon_id,
+        )
+
+    def get_product_level_by_product_name(self, product_name: str):
+        data = self.db._select(
+            table="alphafinder_price",
+            columns=["level"],
+            name=product_name,
+        )
+        return data[0].level

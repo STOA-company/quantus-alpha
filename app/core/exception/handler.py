@@ -1,7 +1,5 @@
-import logging
 from typing import Any, Sequence
 
-from app.core.exception.base import CustomException
 from fastapi.applications import FastAPI
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -9,26 +7,26 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.status import (
-    HTTP_422_UNPROCESSABLE_ENTITY,
-    HTTP_500_INTERNAL_SERVER_ERROR,
-)
+from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY, HTTP_500_INTERNAL_SERVER_ERROR
+
+from app.core.exception.base import CustomException
 from app.core.exception.custom import (
+    AnalysisException,
     AuthException,
     CommunityException,
+    DataNotFoundException,
     InvalidCountryException,
     InvalidTickerException,
-    NoFinancialDataException,
-    UserException,
-    TokenExpiredException,
     InvalidTokenException,
-    UserNotFoundException,
+    NoFinancialDataException,
+    TokenExpiredException,
     UserAlreadyExistsException,
-    DataNotFoundException,
-    AnalysisException,
+    UserException,
+    UserNotFoundException,
 )
+from app.core.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(name=__name__, use_console_handler=False)
 
 
 def _make_json_resp(
@@ -38,7 +36,6 @@ def _make_json_resp(
     headers: dict[str, Any] | None = None,
 ) -> JSONResponse:
     content = {"error": {"code": status_code, "message": message, "errors": errors}}
-    logger.info(content)
     return JSONResponse(
         status_code=status_code,
         content=jsonable_encoder(content),
@@ -124,7 +121,6 @@ async def request_validation_exception_handler(request: Request, exc: RequestVal
 
 
 async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
-    logger.error(exc, exc_info=True)
     return _make_json_resp(
         status_code=HTTP_500_INTERNAL_SERVER_ERROR,
         message="서버 오류가 발생했습니다",
@@ -137,7 +133,6 @@ async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JS
 
 
 def exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.error(exc, exc_info=True)
     return _make_json_resp(
         status_code=HTTP_500_INTERNAL_SERVER_ERROR,
         message="서버 오류가 발생했습니다",
@@ -179,4 +174,20 @@ def initialize(app: FastAPI) -> None:
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(SQLAlchemyError, sqlalchemy_error_handler)
     app.add_exception_handler(CustomException, custom_exception_handler)  # 기본 CustomException을 더 뒤로
-    app.add_exception_handler(Exception, exception_handler)
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request, exc):
+        logger.error(f"Uncaught exception: {exc}", exc_info=True)
+
+        # 사용자에게 에러 응답 반환
+        return _make_json_resp(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+            message="서버 오류가 발생했습니다",
+            errors=[
+                {
+                    "domain": "Exception",
+                    "reason": type(exc).__name__,
+                    "message": str(exc),
+                }
+            ],
+        )

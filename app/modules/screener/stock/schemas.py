@@ -1,9 +1,11 @@
+from enum import Enum
+from typing import Dict, List, Optional
+
 from pydantic import BaseModel
+
 from app.models.models_factors import CategoryEnum, FactorTypeEnum
 from app.models.models_screener import StockType
 from app.modules.screener.etf.enum import ETFMarketEnum
-from typing import Optional, List, Dict
-from enum import Enum
 
 
 class MarketEnum(str, Enum):
@@ -94,6 +96,18 @@ class FilteredStocks(BaseModel):
     factor_filters: Optional[List[str]] = None
     limit: Optional[int] = 50
     offset: Optional[int] = 0
+    sort_info: Optional[SortInfo] = None
+    lang: Optional[str] = "kr"
+
+
+class PaginatedFilteredStocks(BaseModel):
+    market_filter: Optional[MarketEnum] = MarketEnum.US
+    sector_filter: Optional[List[str]] = None
+    custom_filters: Optional[List[FilterCondition]] = None
+    exclude_filters: Optional[List[ExcludeEnum]] = None
+    factor_filters: Optional[List[str]] = None
+    limit: Optional[int] = 20
+    page: Optional[int] = 1
     sort_info: Optional[SortInfo] = None
     lang: Optional[str] = "kr"
 

@@ -1,13 +1,14 @@
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
+
 import numpy as np
 import pandas as pd
 
 from app.common.constants import KR_EXCLUDE_DATES, US_EXCLUDE_DATES
+from app.common.mapping import market_close_times_map, timezone_map
 from app.database.crud import database
 from app.modules.common.enum import TrendingCountry
 from app.utils.date_utils import get_business_days
-from app.common.mapping import timezone_map, market_close_times_map
 
 
 def run_stock_trend_tickers_batch():

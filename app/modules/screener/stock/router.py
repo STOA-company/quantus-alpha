@@ -1,31 +1,39 @@
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Dict
-from fastapi.responses import FileResponse
-from fastapi.responses import JSONResponse
-import time
-from app.modules.screener.stock.service import ScreenerStockService
+from datetime import datetime
+from io import StringIO
+from typing import Dict, List
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse, Response
+
+from app.cache.factors import factors_cache
+from app.common.constants import (
+    FACTOR_KOREAN_TO_ENGLISH_MAP,
+    FACTOR_MAP,
+    MARKET_KOREAN_TO_ENGLISH_MAP,
+    REVERSE_FACTOR_MAP,
+    REVERSE_FACTOR_MAP_EN,
+)
+from app.core.exception.custom import CustomException
+from app.core.logger import setup_logger
+from app.models.models_factors import CategoryEnum
+from app.models.models_users import AlphafinderUser
 from app.modules.screener.stock.schemas import (
     FactorResponse,
-    GroupMetaData,
     FilteredStocks,
     GroupFilter,
     GroupFilterResponse,
+    GroupMetaData,
+    MarketEnum,
+    PaginatedFilteredStocks,
+    StockType,
 )
-import logging
-from app.utils.oauth_utils import get_current_user
+from app.modules.screener.stock.service import ScreenerStockService
 from app.modules.screener.utils import screener_utils
-from app.cache.factors import factors_cache
-from app.models.models_factors import CategoryEnum
-from app.common.constants import (
-    REVERSE_FACTOR_MAP,
-    REVERSE_FACTOR_MAP_EN,
-    FACTOR_KOREAN_TO_ENGLISH_MAP,
-    MARKET_KOREAN_TO_ENGLISH_MAP,
-)
-from app.modules.screener.stock.schemas import MarketEnum, StockType
-from app.core.exception.custom import CustomException
+from app.modules.user.schemas import DataDownloadHistory
+from app.modules.user.service import UserService, get_user_service
+from app.utils.oauth_utils import get_current_user
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 router = APIRouter()
 
@@ -109,6 +117,80 @@ def get_filtered_stocks(
 
     except Exception as e:
         logger.exception(f"Error getting filtered stocks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/stocks/paginated", response_model=Dict)
+def get_paginated_stocks(
+    filtered_stocks: PaginatedFilteredStocks, screener_service: ScreenerStockService = Depends(ScreenerStockService)
+):
+    """
+    page: 페이지 번호 (1부터 시작)
+    """
+    try:
+        custom_filters = []
+        if filtered_stocks.custom_filters:
+            custom_filters = [
+                {
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "above": condition.above,
+                    "below": condition.below,
+                    "values": condition.values,
+                }
+                for condition in filtered_stocks.custom_filters
+            ]
+
+        request_columns = ["Code", "Name", "country"]
+        reverse_factor_map = REVERSE_FACTOR_MAP
+        if filtered_stocks.lang == "en":
+            reverse_factor_map = REVERSE_FACTOR_MAP_EN
+
+        for column in [reverse_factor_map[column] for column in filtered_stocks.factor_filters]:
+            if column not in request_columns:
+                request_columns.append(column)
+
+        sort_by = "score"
+        ascending = False
+        if filtered_stocks.sort_info:
+            sort_by = reverse_factor_map[filtered_stocks.sort_info.sort_by]
+            ascending = filtered_stocks.sort_info.ascending
+
+        page = filtered_stocks.page if filtered_stocks.page > 0 else 1
+        offset = page - 1
+
+        stocks_data, total_count = screener_service.get_filtered_data(
+            market_filter=filtered_stocks.market_filter,
+            sector_filter=filtered_stocks.sector_filter,
+            exclude_filters=filtered_stocks.exclude_filters,
+            custom_filters=custom_filters,
+            columns=request_columns,
+            limit=filtered_stocks.limit,
+            offset=offset,
+            sort_by=sort_by,
+            ascending=ascending,
+            lang=filtered_stocks.lang,
+        )
+
+        total_pages = (total_count + filtered_stocks.limit - 1) // filtered_stocks.limit if total_count > 0 else 0
+
+        if filtered_stocks.lang == "en":
+            for stock in stocks_data:
+                stock["Market"] = MARKET_KOREAN_TO_ENGLISH_MAP[stock["Market"]]
+
+        result = {
+            "data": stocks_data,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "current_page": page,
+        }
+        return result
+
+    except CustomException as e:
+        logger.exception(f"Error getting paginated stocks: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+    except Exception as e:
+        logger.exception(f"Error getting paginated stocks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -198,7 +280,9 @@ async def create_or_update_group(
                 market_filter=group_filter.market_filter,
                 exclude_filters=group_filter.exclude_filters,
                 sector_filter=group_filter.sector_filter,
+                factor_filters=group_filter.factor_filters,
                 custom_filters=group_filter.custom_filters,
+                sort_info=group_filter.sort_info,
                 type=group_filter.type,
             )
 
@@ -242,14 +326,17 @@ def get_group_filters(
 
         if group_id == -1:
             all_sectors = screener_service.get_available_sectors()
+            custom_filters = screener_service.get_default_custom_filters()
+            for filter in custom_filters:
+                filter["factor"] = FACTOR_MAP.get(filter["factor"], filter["factor"])
             return GroupFilterResponse(
                 id=-1,
                 name="기본",
-                market_filter=MarketEnum.US,
+                market_filter=MarketEnum.ALL,
                 has_custom=False,
                 exclude_filters=[],
                 sector_filter=all_sectors,
-                custom_filters=[],
+                custom_filters=custom_filters,
                 factor_filters={
                     "technical": technical_columns,
                     "fundamental": fundamental_columns,
@@ -390,8 +477,15 @@ def update_parquet(country: str):
 
 @router.post("/download")
 def download_filtered_stocks(
-    filtered_stocks: FilteredStocks, screener_service: ScreenerStockService = Depends(ScreenerStockService)
+    filtered_stocks: FilteredStocks,
+    screener_service: ScreenerStockService = Depends(ScreenerStockService),
+    user: AlphafinderUser = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
 ):
+    if user is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    if user.subscription_level == 1:
+        raise HTTPException(status_code=403, detail="구독 레벨이 낮습니다.")
     custom_filters = []
     if filtered_stocks.custom_filters:
         custom_filters = [
@@ -399,6 +493,7 @@ def download_filtered_stocks(
                 "factor": REVERSE_FACTOR_MAP[condition.factor],
                 "above": condition.above,
                 "below": condition.below,
+                "values": condition.values,
             }
             for condition in filtered_stocks.custom_filters
         ]
@@ -429,12 +524,31 @@ def download_filtered_stocks(
     )
 
     if df is None or df.empty:
-        return JSONResponse(content={"error": "No data found"}, status_code=404)
+        return JSONResponse(content={"error": "데이터가 없습니다"}, status_code=404)
 
-    filename = f"temp_export_{int(time.time())}.csv"
-    df.to_csv(filename, index=False)
+    csv_data = StringIO()
+    df.to_csv(csv_data, index=False, encoding="utf-8-sig")
 
-    return FileResponse(path=filename, filename="stocks_export.csv", media_type="text/csv")
+    data_download_history = DataDownloadHistory(
+        user_id=user.id,
+        data_type="screener",
+        data_detail="stock",
+        download_datetime=datetime.now(),
+    )
+    user_service.save_data_download_history(data_download_history)
+
+    market_str = (
+        filtered_stocks.market_filter.value
+        if hasattr(filtered_stocks.market_filter, "value")
+        else str(filtered_stocks.market_filter)
+    )
+    filename = f"stock_export_{market_str}.csv"
+
+    return Response(
+        content=csv_data.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.post("/init")

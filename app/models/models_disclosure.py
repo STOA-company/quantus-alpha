@@ -1,6 +1,7 @@
 from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, String, Text
-from app.models.models_base import Base
 from sqlalchemy.schema import Index, UniqueConstraint
+
+from app.models.models_base import Base
 
 
 class Disclosure(Base):

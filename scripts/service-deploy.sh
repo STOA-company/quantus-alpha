@@ -103,6 +103,13 @@ update_nginx_upstream() {
 server {
     listen 80;
 
+    location /stub_status {
+        stub_status on;
+        allow 127.0.0.1;
+        allow 172.16.0.0/12;
+        deny all;
+    }
+
     location / {
         proxy_pass http://${service}:8000;
         proxy_set_header Host \$host;

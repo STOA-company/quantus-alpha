@@ -2,20 +2,19 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Union
 
-from app.database.crud import database_service
-from app.modules.screener.stock.schemas import MarketEnum, SortInfo, ExcludeEnum
-from app.modules.screener.etf.enum import ETFMarketEnum
-from app.enum.type import StockType
-from app.models.models_factors import CategoryEnum
-from app.modules.screener.utils import screener_utils
-from app.common.constants import (
-    FACTOR_MAP,
-    REVERSE_FACTOR_MAP,
-)
-from app.core.exception.base import CustomException
-from app.core.logging.config import get_logger
+import numpy as np
 
-logger = get_logger(__name__)
+from app.common.constants import FACTOR_MAP, REVERSE_FACTOR_MAP
+from app.core.exception.base import CustomException
+from app.core.logger import setup_logger
+from app.database.crud import database_service
+from app.enum.type import StockType
+from app.models.models_factors import CategoryEnum, FactorTypeEnum
+from app.modules.screener.etf.enum import ETFMarketEnum
+from app.modules.screener.stock.schemas import ExcludeEnum, MarketEnum, SortInfo
+from app.modules.screener.utils import screener_utils
+
+logger = setup_logger(__name__)
 
 
 class BaseScreenerService(ABC):
@@ -68,8 +67,8 @@ class BaseScreenerService(ABC):
                     grouped_filters[factor] = {
                         "factor": factor,
                         "values": [],
-                        "above": stock_filter.above if stock_filter.above else None,
-                        "below": stock_filter.below if stock_filter.below else None,
+                        "above": stock_filter.above if stock_filter.above is not None else None,
+                        "below": stock_filter.below if stock_filter.below is not None else None,
                         "type": stock_filter.type.lower() if stock_filter.type else None,
                     }
                 if stock_filter.value:
@@ -429,6 +428,32 @@ class BaseScreenerService(ABC):
             self.database._delete(table="screener_factor_filters", group_id=group_id)
             raise e
 
+    async def create_factor_filters(
+        self, group_id: int, category: CategoryEnum = CategoryEnum.CUSTOM, factor_filters: List[str] = []
+    ) -> bool:
+        """
+        팩터 필터 생성
+        """
+        try:
+            insert_tasks = []
+            for idx, factor in enumerate(factor_filters):
+                insert_tasks.append(
+                    self.database.insert_wrapper(
+                        table="screener_factor_filters",
+                        sets={
+                            "group_id": group_id,
+                            "factor": REVERSE_FACTOR_MAP[factor],
+                            "order": idx + 1,
+                            "category": category,
+                        },
+                    )
+                )
+            await asyncio.gather(*insert_tasks)
+            return True
+        except Exception as e:
+            logger.exception(f"Error in create_factor_filters: {e}")
+            raise e
+
     async def create_group(
         self,
         user_id: int,
@@ -437,7 +462,9 @@ class BaseScreenerService(ABC):
         market_filter: Optional[Union[MarketEnum, ETFMarketEnum]] = None,
         sector_filter: Optional[List[str]] = [],
         exclude_filters: Optional[List[ExcludeEnum]] = [],
-        custom_filters: Optional[List[Dict]] = [],
+        custom_filters: Optional[List[Dict]] = None,
+        factor_filters: Optional[Dict[str, List[str]]] = None,
+        sort_info: Optional[Dict[CategoryEnum, SortInfo]] = None,
     ) -> Dict:
         """
         그룹 생성
@@ -463,12 +490,38 @@ class BaseScreenerService(ABC):
 
             group_id = self.database._select(table="screener_groups", user_id=user_id, name=name, type=type)[0].id
 
-            await self.create_default_factor_filters(group_id=group_id, type=type)
+            if factor_filters:
+                # Check if all factor_filters are empty
+                all_empty = all(len(factors) == 0 for factors in factor_filters.values())
+
+                if all_empty:
+                    await self.create_default_factor_filters(group_id=group_id, type=type)
+                else:
+                    # Handle factor filters for each category
+                    for category, factors in factor_filters.items():
+                        await self.create_factor_filters(group_id, category, factors)
+
+                    # Handle sort info for each category
+                    if sort_info:
+                        for category, sort_data in sort_info.items():
+                            insert_tasks.append(
+                                self.database.insert_wrapper(
+                                    table="screener_sort_infos",
+                                    sets={
+                                        "group_id": group_id,
+                                        "category": category,
+                                        "sort_by": REVERSE_FACTOR_MAP[sort_data.sort_by],
+                                        "ascending": sort_data.ascending,
+                                        "type": type,
+                                    },
+                                )
+                            )
+            else:
+                await self.create_default_factor_filters(group_id=group_id, type=type)
 
             if group_id is None:
                 raise CustomException(status_code=500, message="Failed to create group")
 
-            # 종목 필터
             if market_filter:
                 insert_tasks.append(
                     self.database.insert_wrapper(
@@ -499,19 +552,35 @@ class BaseScreenerService(ABC):
                         )
                     )
 
+            # Get default custom filters and merge with provided filters
+            if custom_filters is None:
+                custom_filters = []
+
+            default_filters = self.get_default_custom_filters()
+            # Map default filter factors using FACTOR_MAP
+            for filter in default_filters:
+                filter["factor"] = FACTOR_MAP[filter["factor"]]
+
+            existing_factors = {filter.get("factor") for filter in custom_filters}
+
+            # Add missing default filters
+            for default_filter in default_filters:
+                if default_filter["factor"] not in existing_factors:
+                    custom_filters.append(default_filter)
+
             if custom_filters:
                 for condition in custom_filters:
-                    if condition.values:
-                        for value in condition.values:
+                    if condition.get("values", None):
+                        for value in condition["values"]:
                             insert_tasks.append(
                                 self.database.insert_wrapper(
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
-                                        "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                        "type": condition.type,
-                                        "above": condition.above,
-                                        "below": condition.below,
+                                        "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                        "type": condition["type"],
+                                        "above": condition.get("above"),
+                                        "below": condition.get("below"),
                                         "value": value,
                                     },
                                 )
@@ -522,10 +591,10 @@ class BaseScreenerService(ABC):
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                    "type": condition.type,
-                                    "above": condition.above,
-                                    "below": condition.below,
+                                    "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                    "type": condition["type"],
+                                    "above": condition.get("above"),
+                                    "below": condition.get("below"),
                                     "value": None,
                                 },
                             )
@@ -779,4 +848,35 @@ class BaseScreenerService(ABC):
                 return False
         except Exception as e:
             print(f"에러 발생: {str(e)}")
+            raise e
+
+    def get_default_custom_filters(self):
+        try:
+            # Get data using MarketEnum.ALL
+            market_data = screener_utils.get_df_from_parquet(MarketEnum.ALL)
+
+            default_factors = ["marketCap", "median_trade", "close"]
+            result = []
+
+            for factor in default_factors:
+                if factor in market_data.columns:
+                    min_value = market_data[factor].min()
+                    max_value = market_data[factor].max()
+
+                    min_value = np.floor(min_value)
+                    max_value = np.ceil(max_value)
+
+                    result.append(
+                        {
+                            "factor": factor,
+                            "above": min_value,
+                            "below": max_value,
+                            "type": FactorTypeEnum.SLIDER,
+                        }
+                    )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in get_default_custom_filters: {e}")
             raise e

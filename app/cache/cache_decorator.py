@@ -1,16 +1,17 @@
 import functools
+import inspect
 import json
 import time
-import logging
-import inspect
 from typing import Any, Callable, TypeVar
 
 from fastapi import Request
-from app.core.redis import redis_client
 from fastapi.encoders import jsonable_encoder
 
+from app.core.logger import setup_logger
+from app.core.redis import redis_client
+
 T = TypeVar("T")
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 def one_minute_cache(prefix: str = "") -> Callable:

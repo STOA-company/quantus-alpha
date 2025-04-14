@@ -1,19 +1,21 @@
-import json
-import logging
 import hashlib
-from typing import List, Tuple, Optional
+import json
+from typing import List, Optional, Tuple
+
 from fastapi import HTTPException
-
-from app.database.crud import database_service
-from app.models.models_users import AlphafinderUser
-from app.modules.community.schemas import CommentItemWithPostInfo, PostInfo, ResponsePost, UserInfo
-from app.modules.user.schemas import UserProfileResponse
-from app.modules.screener.stock.service import ScreenerStockService
-from app.enum.type import StockType
-
 from sqlalchemy import text
 
-logger = logging.getLogger(__name__)
+from app.core.logger import setup_logger
+from app.database.crud import database_service
+from app.enum.type import StockType
+from app.models.models_users import AlphafinderUser
+from app.modules.community.schemas import CommentItemWithPostInfo, PostInfo, ResponsePost, UserInfo
+from app.modules.screener.etf.enum import ETFMarketEnum
+from app.modules.screener.stock.schemas import MarketEnum
+from app.modules.screener.stock.service import ScreenerStockService
+from app.modules.user.schemas import DataDownloadHistory, UserProfileResponse
+
+logger = setup_logger(__name__)
 
 
 class UserService:
@@ -415,8 +417,19 @@ class UserService:
     async def screener_init(self, user_id: int):
         screener_service = ScreenerStockService()
         all_sectors = screener_service.get_available_sectors()
-        await screener_service.create_group(user_id=user_id, sector_filter=all_sectors)
-        await screener_service.create_group(user_id=user_id, type=StockType.ETF)
+        default_custom_filters = screener_service.get_default_custom_filters()
+        await screener_service.create_group(
+            user_id=user_id,
+            market_filter=MarketEnum.ALL,
+            sector_filter=all_sectors,
+            custom_filters=default_custom_filters,
+        )
+        await screener_service.create_group(
+            user_id=user_id,
+            market_filter=ETFMarketEnum.ALL,
+            type=StockType.ETF,
+            custom_filters=default_custom_filters,
+        )
 
     async def interest_init(self, user_id: int):
         groups = self.db._select(table="interest_group", user_id=user_id)
@@ -427,6 +440,17 @@ class UserService:
         level_info = self.db._select(table="alphafinder_level", level=level)
         return level_info[0]
 
+    def save_data_download_history(self, data_download_history: DataDownloadHistory):
+        self.db._insert(
+            table="data_download_history",
+            sets={
+                "user_id": data_download_history.user_id,
+                "data_type": data_download_history.data_type,
+                "data_detail": data_download_history.data_detail,
+                "download_datetime": data_download_history.download_datetime,
+            },
+        )
+
 
 def get_user_service() -> UserService:
     """UserService 의존성 주입을 위한 팩토리 함수"""
@@ -434,8 +458,9 @@ def get_user_service() -> UserService:
 
 
 if __name__ == "__main__":
-    from app.utils.oauth_utils import create_jwt_token, create_refresh_token
     from datetime import timedelta
+
+    from app.utils.oauth_utils import create_jwt_token, create_refresh_token
 
     service = UserService()
     access_token = create_jwt_token(206, timedelta(minutes=1000000000))

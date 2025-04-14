@@ -1,29 +1,24 @@
 import datetime
-from io import BytesIO
 import os
-from typing import List, Literal, Optional, Dict, Tuple
+from io import BytesIO
+from typing import Dict, List, Literal, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from Aws.logic.s3 import get_data_from_bucket
-from app.common.constants import (
-    FACTOR_MAP,
-    FACTOR_MAP_EN,
-    BASE_COLUMNS_ETF,
-    SELECT_MAP,
-    PARQUET_DIR,
-    UNIT_MAP,
-)
+
+from app.cache.factors import etf_factors_cache
+from app.common.constants import BASE_COLUMNS_ETF, FACTOR_MAP, FACTOR_MAP_EN, PARQUET_DIR, SELECT_MAP, UNIT_MAP
 from app.core.exception.base import CustomException
-from app.core.logging.config import get_logger
-from app.modules.screener.etf.enum import ETFMarketEnum
+from app.core.logger import setup_logger
 from app.modules.screener.base import BaseScreenerService
+from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.stock.schemas import ExcludeEnum
+from app.modules.screener.utils import screener_utils
 from app.utils.date_utils import get_business_days
 from app.utils.score_utils import etf_score_utils
-from app.modules.screener.utils import screener_utils
-from app.cache.factors import etf_factors_cache
+from Aws.logic.s3 import get_data_from_bucket
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 class ScreenerETFService(BaseScreenerService):
@@ -326,15 +321,22 @@ class ScreenerETFService(BaseScreenerService):
                 elif col in sorted_df.columns:
 
                     def convert_value(x):
-                        if pd.isna(x) or np.isinf(x):
-                            return ""
-                        value, _ = screener_utils.convert_unit_and_value(
-                            market_filter,
-                            float(x),
-                            factors[col].get("unit", "") if col in factors else "",
-                            lang,
-                        )
-                        return value
+                        try:
+                            if pd.isna(x):
+                                return ""
+                            if isinstance(x, (int, float)) and np.isinf(x):
+                                return ""
+                            if not isinstance(x, (int, float)):
+                                return x
+                            value, _ = screener_utils.convert_unit_and_value(
+                                market_filter,
+                                float(x),
+                                factors[col].get("unit", "") if col in factors else "",
+                                lang,
+                            )
+                            return value
+                        except Exception:
+                            return x
 
                     sorted_df[col] = sorted_df[col].apply(convert_value)
 

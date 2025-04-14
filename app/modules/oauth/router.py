@@ -1,18 +1,18 @@
-from fastapi import APIRouter, HTTPException, Depends
-from google.oauth2 import id_token
-from google.auth.transport import requests
-import httpx
 import os
-import logging
-from app.utils.oauth_utils import create_email_token, create_jwt_token, create_refresh_token
-from app.modules.oauth.schemas import (
-    GoogleLoginResponse,
-)
-from app.modules.user.service import get_user_service, UserService
-from fastapi.responses import RedirectResponse
 from urllib.parse import urlencode
 
-logger = logging.getLogger(__name__)
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import RedirectResponse
+from google.auth.transport import requests
+from google.oauth2 import id_token
+
+from app.core.logger import setup_logger
+from app.modules.oauth.schemas import GoogleLoginResponse
+from app.modules.user.service import UserService, get_user_service
+from app.utils.oauth_utils import create_email_token, create_jwt_token, create_refresh_token
+
+logger = setup_logger(__name__)
 
 router = APIRouter()
 

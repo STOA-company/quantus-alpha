@@ -1,23 +1,23 @@
 import asyncio
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-import pandas as pd
 from typing import Any, Dict, List, Optional, Tuple
 
+import pandas as pd
 from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.exception.custom import DataNotFoundException
-from app.core.logging.config import get_logger
-from app.models.models_stock import StockInformation
-from app.modules.common.enum import Country
-from app.modules.common.cache import MemoryCache
-from app.modules.common.utils import check_ticker_country_len_2
-from app.modules.price.schemas import PriceDailyItem, PriceSummaryItem
+from app.core.logger import setup_logger
 from app.database.conn import db
 from app.database.crud import database
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.modules.common.utils import contry_mapping
+from app.models.models_stock import StockInformation
+from app.modules.common.cache import MemoryCache
+from app.modules.common.enum import Country
+from app.modules.common.utils import check_ticker_country_len_2, contry_mapping
+from app.modules.price.schemas import PriceDailyItem, PriceSummaryItem
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 @dataclass

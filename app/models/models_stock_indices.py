@@ -1,4 +1,5 @@
 from sqlalchemy import Boolean, Column, DateTime, Float, PrimaryKeyConstraint, String
+
 from app.models.models_base import Base
 
 
@@ -33,3 +34,16 @@ class StockIndices1m(Base):
     volume = Column(Float, nullable=True, comment="거래량")
     change = Column(Float, nullable=True, comment="변동 금액")
     change_rate = Column(Float, nullable=True, comment="변동률")
+
+
+class StockIndices1d(Base):
+    __tablename__ = "stock_indices_1d"
+    __table_args__ = (PrimaryKeyConstraint("ticker", "date"),)
+
+    ticker = Column(String(10), nullable=False, comment="종목 티커")
+    date = Column(DateTime, nullable=False, comment="날짜")
+    open = Column(Float, nullable=True, comment="시가")
+    high = Column(Float, nullable=True, comment="고가")
+    low = Column(Float, nullable=True, comment="저가")
+    close = Column(Float, nullable=True, comment="종가")
+    volume = Column(Float, nullable=True, comment="거래량")

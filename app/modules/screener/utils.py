@@ -1,26 +1,26 @@
-import pandas as pd
-from app.database.crud import database
-from typing import Dict, List, Optional
-from Aws.logic.s3 import get_data_from_bucket
 import io
-from app.modules.screener.stock.schemas import MarketEnum, ExcludeEnum
-from app.common.constants import NEED_TO_MULTIPLY_100, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+
 import numpy as np
-from app.modules.screener.etf.enum import ETFMarketEnum
+import pandas as pd
+
+from app.common.constants import MARKET_MAP, NEED_TO_MULTIPLY_100, UNIT_MAP, UNIT_MAP_EN
 from app.core.extra.SlackNotifier import SlackNotifier
+from app.core.logger import setup_logger
+from app.database.crud import database
+from app.kispy.manager import KISAPIManager
 from app.models.models_factors import CategoryEnum, FactorTypeEnum
-import logging
+from app.modules.screener.etf.enum import ETFMarketEnum
+from app.modules.screener.etf.utils import ETFDataLoader
+from app.modules.screener.stock.schemas import ExcludeEnum, MarketEnum, StockType
 from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.date_utils import is_holiday
-from datetime import datetime, timedelta
-from Aws.logic.s3 import upload_file_to_bucket
-from app.modules.screener.etf.utils import ETFDataLoader
-from app.modules.screener.stock.schemas import StockType
-from app.utils.test_utils import time_it
-from app.kispy.manager import KISAPIManager
 from app.utils.dividend_utils import DividendUtils
+from app.utils.test_utils import time_it
+from Aws.logic.s3 import get_data_from_bucket, upload_file_to_bucket
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 notifier = SlackNotifier()
 
@@ -32,7 +32,7 @@ class ScreenerUtils:
         self.etf_factor_loader = ETFDataLoader()
 
     def get_factors(self, market: MarketEnum) -> List[dict]:
-        factors = self.db._select(table="factors", is_stock=True)
+        factors = self.db._select(table="factors", is_stock=True, order="order", ascending=True)
         # 시장별 팩터 최소/최대값 계산
         market_data = self.get_df_from_parquet(market)
 
@@ -65,7 +65,7 @@ class ScreenerUtils:
         return result
 
     def get_etf_factors(self, market: ETFMarketEnum) -> List[dict]:
-        factors = self.db._select(table="factors", is_etf=True)
+        factors = self.db._select(table="factors", is_etf=True, order="order", ascending=True)
         market_data = self.etf_factor_loader.load_etf_factors(market.value)
 
         result = []
@@ -117,7 +117,6 @@ class ScreenerUtils:
         if not category:
             return base_columns
 
-        # technical_columns = ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
         technical_columns = ["close", "marketCap", "median_trade", "abs_beta", "Log_RS_100", "sharpe"]
         dividend_columns = [
             "dividend_frequency",
@@ -126,9 +125,6 @@ class ScreenerUtils:
             "div_yield_growth_yoy",
         ]
         if type == StockType.ETF:
-            # technical_columns = ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"]
-            technical_columns = ["close", "marketCap", "median_trade", "momentum_6", "sharpe", "sortino"]
-
             dividend_columns = [
                 "dividend_frequency",
                 "ttm_dividend_yield",

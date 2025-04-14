@@ -1,25 +1,26 @@
 from datetime import datetime, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from app.batches.run_expiration import coupon_expiration, subscription_expiration
+from app.core.config import settings
+from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
-from app.modules.payments.service import PaymentService
 from app.modules.payments.schema import (
     Coupon,
+    CouponId,
     RequestCouponNumber,
     ResponseMembership,
     ResponsePriceTemplate,
     ResponseUserUsingHistory,
     StoreCoupon,
     TradePayments,
-    CouponId,
 )
-from app.models.models_users import AlphafinderUser
+from app.modules.payments.service import PaymentService
 from app.utils.date_utils import now_kr
 from app.utils.oauth_utils import get_current_user
-from app.core.config import settings
 
 router = APIRouter()
 
@@ -108,17 +109,17 @@ def check_toss_membership(
     return BaseResponse(status_code=200, message="멤버십 정보 조회 성공", data=data)
 
 
-# 멤버십 구독 취소
-@router.patch("/membership/cancel", summary="멤버십 구독 취소 / test용 / subscription_status False로 변경")
-def cancel_toss_membership(
-    current_user: AlphafinderUser = Depends(get_current_user),
-    payment_service: PaymentService = Depends(PaymentService),
-):
-    if current_user is None:
-        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+# # 멤버십 구독 취소
+# @router.patch("/membership/cancel", summary="멤버십 구독 취소 / test용 / subscription_status False로 변경")
+# def cancel_toss_membership(
+#     current_user: AlphafinderUser = Depends(get_current_user),
+#     payment_service: PaymentService = Depends(PaymentService),
+# ):
+#     if current_user is None:
+#         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
-    payment_service.cancel_membership(current_user.id)
-    return BaseResponse(status_code=200, message="멤버십 구독 취소 성공", data=True)
+#     payment_service.cancel_membership(current_user.id)
+#     return BaseResponse(status_code=200, message="멤버십 구독 취소 성공", data=True)
 
 
 # 쿠폰함 페이지
@@ -210,18 +211,18 @@ def use_coupon(
     return BaseResponse(status_code=200, message="쿠폰 사용 성공", data=is_used)
 
 
-# 쿠폰 사용 취소
-@router.patch("/coupon/status", summary="쿠폰 사용 취소 / 테스트용 / coupon_status inactive로 변경")
-def cancel_coupon(
-    coupon_id: int = Query(..., description="쿠폰 ID"),
-    coupon_status: str = Query("inactive", description="쿠폰 상태 (active: 사용중, inactive: 미사용, expired: 만료)"),
-    payment_service: PaymentService = Depends(PaymentService),
-):
-    if coupon_status not in ["active", "inactive", "expired"]:
-        raise HTTPException(status_code=400, detail="coupon_status는 active 또는 inactive 또는 expired만 가능합니다.")
+# # 쿠폰 사용 취소
+# @router.patch("/coupon/status", summary="쿠폰 사용 취소 / 테스트용 / coupon_status inactive로 변경")
+# def cancel_coupon(
+#     coupon_id: int = Query(..., description="쿠폰 ID"),
+#     coupon_status: str = Query("inactive", description="쿠폰 상태 (active: 사용중, inactive: 미사용, expired: 만료)"),
+#     payment_service: PaymentService = Depends(PaymentService),
+# ):
+#     if coupon_status not in ["active", "inactive", "expired"]:
+#         raise HTTPException(status_code=400, detail="coupon_status는 active 또는 inactive 또는 expired만 가능합니다.")
 
-    payment_service.update_coupon_status(coupon_id, coupon_status)
-    return BaseResponse(status_code=200, message="쿠폰 사용 취소 성공", data=True)
+#     payment_service.update_coupon_status(coupon_id, coupon_status)
+#     return BaseResponse(status_code=200, message="쿠폰 사용 취소 성공", data=True)
 
 
 # 사용 내역 조회
@@ -247,19 +248,6 @@ def get_usage_history(
             )
         )
     return BaseResponse(status_code=200, message="사용 내역 조회 성공", data=result)
-
-
-@router.post("/refund", response_model=BaseResponse[bool], summary="토스 결제 환불")
-def refund_toss_payments(
-    history_id: int = Query(..., description="사용 내역 ID"),
-    current_user: AlphafinderUser = Depends(get_current_user),
-    payment_service: PaymentService = Depends(PaymentService),
-):
-    if current_user is None:
-        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
-
-    is_refunded = payment_service.refund_payments(current_user, using_history_id=history_id)
-    return BaseResponse(status_code=200, message="결제 환불 성공", data=is_refunded)
 
 
 ###############################

@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from app.api.v1 import api_router
 from app.api.v2 import api_router as api_router_v2
 from app.core.config import settings

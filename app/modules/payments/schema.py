@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -119,6 +120,16 @@ class ResponseUserUsingHistory(BaseModel):
     product_name: str
     product_type: str
     is_refunded: bool
+
+
+class ResponsePayment(BaseModel):
+    payment_id: int
+    product_name: str
+    paid_amount: int
+    payment_method: str
+    # payment_company: str
+    is_refunded: bool
+    created_at: datetime
 
 
 # Server is listening...

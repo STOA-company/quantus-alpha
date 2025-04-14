@@ -1,29 +1,28 @@
-import logging
 import asyncio
+import json
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from functools import lru_cache
-import json
-from typing import List, Optional, Tuple, Dict
-from fastapi import Request
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass, field
-
+from fastapi import Request
 from sse_starlette import EventSourceResponse
-from app.common.constants import KST, MARKET_MAP_EN, MARKET_MAP
+
+from app.common.constants import KST, MARKET_MAP, MARKET_MAP_EN
+from app.core.exception.custom import DataNotFoundException
+from app.core.logger import setup_logger
+from app.database.conn import db
+from app.database.crud import JoinInfo, database
 from app.modules.common.cache import MemoryCache
 from app.modules.common.enum import Country, Frequency, TranslateCountry
 from app.modules.common.schemas import BaseResponse
-from app.modules.common.utils import check_ticker_country_len_2
+from app.modules.common.utils import check_ticker_country_len_2, contry_mapping
 from app.modules.price.schemas import PriceDataItem, PriceSummaryItem, RealTimePriceDataItem, ResponsePriceDataItem
-from app.database.crud import database, JoinInfo
-from app.database.conn import db
-from app.core.exception.custom import DataNotFoundException
-from app.modules.common.utils import contry_mapping
 from app.utils.date_utils import check_market_status
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 @dataclass

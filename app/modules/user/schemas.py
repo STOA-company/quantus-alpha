@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel
 
 
 class UserInfoResponse(BaseModel):
@@ -26,3 +27,10 @@ class UserProfileResponse(BaseModel):
     profile_image: Optional[str] = None
     post_count: int
     comment_count: int
+
+
+class DataDownloadHistory(BaseModel):
+    user_id: int
+    data_type: str
+    data_detail: str
+    download_datetime: datetime

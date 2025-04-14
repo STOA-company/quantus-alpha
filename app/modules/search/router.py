@@ -1,12 +1,14 @@
-from typing import Optional, Union, List, Dict
+from typing import Dict, List, Optional, Union
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+
+from app.cache.leaderboard import StockLeaderboard
 from app.database.conn import db
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import InfiniteScrollResponse
 from app.modules.search.schemas import CommunitySearchItem, SearchResponse
 from app.modules.search.service import SearchService, get_search_service
-from app.cache.leaderboard import StockLeaderboard
 
 router = APIRouter()
 

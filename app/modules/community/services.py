@@ -1,10 +1,14 @@
 from datetime import datetime
+from typing import List, Optional, Tuple
 
 from sqlalchemy import text
-from app.common.constants import KST, UTC
+
+from app.common.constants import KST, UNKNOWN_USER_EN, UNKNOWN_USER_KO, UTC
 from app.core.exception.custom import PostException, TooManyStockTickersException
+from app.database.crud import database, database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
+
 from .schemas import (
     CategoryResponse,
     CommentCreate,
@@ -17,9 +21,6 @@ from .schemas import (
     TrendingPostResponse,
     UserInfo,
 )
-from typing import List, Optional, Tuple
-from app.database.crud import database, database_service
-from app.common.constants import UNKNOWN_USER_KO, UNKNOWN_USER_EN
 
 
 class CommunityService:

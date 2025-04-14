@@ -1,8 +1,11 @@
+from typing import List, Optional
+
 from pydantic import BaseModel
-from app.modules.screener.stock.schemas import FilterCondition
-from .enum import ETFMarketEnum
-from typing import Optional, List
+
 from app.modules.screener.base import SortInfo
+from app.modules.screener.stock.schemas import FilterCondition
+
+from .enum import ETFMarketEnum
 
 
 class FilteredETF(BaseModel):
@@ -11,5 +14,15 @@ class FilteredETF(BaseModel):
     factor_filters: Optional[List[str]] = []
     limit: Optional[int] = 50
     offset: Optional[int] = 0
+    sort_info: Optional[SortInfo] = None
+    lang: Optional[str] = "kr"
+
+
+class PaginatedFilteredETF(BaseModel):
+    market_filter: Optional[ETFMarketEnum] = ETFMarketEnum.US
+    custom_filters: Optional[List[FilterCondition]] = []
+    factor_filters: Optional[List[str]] = []
+    limit: Optional[int] = 20
+    page: Optional[int] = 1
     sort_info: Optional[SortInfo] = None
     lang: Optional[str] = "kr"

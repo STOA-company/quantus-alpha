@@ -1,11 +1,12 @@
 # app/api/chat.py
+import json
+import os
+import time
+from typing import Dict, Optional
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Optional
-import time
-import json
 from redis import Redis
-import os
 
 from app.modules.chat.client import ChatClient
 
