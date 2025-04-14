@@ -11,6 +11,7 @@ from app.common.constants import (
     MARKET_KOREAN_TO_ENGLISH_MAP,
     REVERSE_FACTOR_MAP,
     REVERSE_FACTOR_MAP_EN,
+    FACTOR_MAP,
 )
 from app.core.exception.custom import CustomException
 from app.core.logger import setup_logger
@@ -323,6 +324,9 @@ def get_group_filters(
 
         if group_id == -1:
             all_sectors = screener_service.get_available_sectors()
+            custom_filters = screener_service.get_default_custom_filters()
+            for filter in custom_filters:
+                filter["factor"] = FACTOR_MAP.get(filter["factor"], filter["factor"])
             return GroupFilterResponse(
                 id=-1,
                 name="기본",
@@ -330,7 +334,7 @@ def get_group_filters(
                 has_custom=False,
                 exclude_filters=[],
                 sector_filter=all_sectors,
-                custom_filters=screener_service.get_default_custom_filters(),
+                custom_filters=custom_filters,
                 factor_filters={
                     "technical": technical_columns,
                     "fundamental": fundamental_columns,
