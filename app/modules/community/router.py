@@ -1,7 +1,6 @@
-import json
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, Query
 
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
@@ -18,47 +17,73 @@ from app.modules.community.schemas import (
     PostCreate,
     PostListResponse,
     PostUpdate,
+    PresignedUrlRequest,
+    PresignedUrlResponse,
     ResponsePost,
     TrendingPostResponse,
 )
 from app.modules.community.services import CommunityService, get_community_service
-from app.utils.image_utils import convert_file_to_base64
 from app.utils.oauth_utils import get_current_user
 
 router = APIRouter()
 
 
 ##### 게시글 CRUD #####
-@router.post("/posts-with-image", response_model=BaseResponse[dict], summary="게시글 생성")
-async def create_new_post(
-    title: str = Form(..., min_length=1, max_length=200),
-    content: str = Form(..., min_length=1),
-    category_id: int = Form(...),
-    image_url: Optional[UploadFile] = None,
-    image_format: Optional[str] = Form(None),
-    stock_tickers: str = Form(default="[]"),
+# presign-url 발급
+@router.post(
+    "/presigned-url", response_model=BaseResponse[PresignedUrlResponse], summary="이미지 업로드용 presigned URL 발급"
+)
+async def generate_presigned_url(
+    request: PresignedUrlRequest,
     community_service: CommunityService = Depends(get_community_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
-    stock_ticker_list = json.loads(stock_tickers)
-
-    image_base64 = None
-    if image_url:
-        image_base64 = convert_file_to_base64(image_url)
-
-    post_create = PostCreate(
-        title=title,
-        content=content,
-        category_id=category_id,
-        image_url=image_base64,
-        image_format=image_format,
-        stock_tickers=stock_ticker_list,
+    """이미지 업로드용 presigned URL 발급"""
+    result = community_service.generate_upload_presigned_url(
+        content_type=request.content_type,
+        file_size=request.file_size,
+    )
+    return BaseResponse(
+        status_code=200,
+        message="presigned URL을 발급하였습니다.",
+        data=PresignedUrlResponse(
+            upload_url=result["upload_url"],
+            image_key=result["image_key"],
+            expires_in=result["expires_in"],
+        ),
     )
 
-    result, post_id = await community_service.create_post(current_user=current_user, post_create=post_create)
-    result = {"success": result, "post_id": post_id}
 
-    return BaseResponse(status_code=200, message="게시글을 생성하였습니다.", data=result)
+# @router.post("/posts-with-image", response_model=BaseResponse[dict], summary="게시글 생성")
+# async def create_new_post(
+#     title: str = Form(..., min_length=1, max_length=200),
+#     content: str = Form(..., min_length=1),
+#     category_id: int = Form(...),
+#     image_url: Optional[UploadFile] = None,
+#     image_format: Optional[str] = Form(None),
+#     stock_tickers: str = Form(default="[]"),
+#     community_service: CommunityService = Depends(get_community_service),
+#     current_user: AlphafinderUser = Depends(get_current_user),
+# ):
+#     stock_ticker_list = json.loads(stock_tickers)
+
+#     image_base64 = None
+#     if image_url:
+#         image_base64 = convert_file_to_base64(image_url)
+
+#     post_create = PostCreate(
+#         title=title,
+#         content=content,
+#         category_id=category_id,
+#         image_url=image_base64,
+#         image_format=image_format,
+#         stock_tickers=stock_ticker_list,
+#     )
+
+#     result, post_id = await community_service.create_post(current_user=current_user, post_create=post_create)
+#     result = {"success": result, "post_id": post_id}
+
+#     return BaseResponse(status_code=200, message="게시글을 생성하였습니다.", data=result)
 
 
 @router.post("/posts", response_model=BaseResponse[dict], summary="게시글 생성")
@@ -126,38 +151,38 @@ async def update_post(
     return BaseResponse(status_code=200, message="게시글을 수정하였습니다.", data=data)
 
 
-@router.put("/posts-with-image/{post_id}", response_model=BaseResponse[bool], summary="게시글 수정")
-async def update_post_with_image(
-    post_id: int,
-    title: str = Form(..., min_length=1, max_length=200),
-    content: str = Form(..., min_length=1),
-    category_id: int = Form(...),
-    image_url: Optional[UploadFile] = None,
-    image_format: Optional[str] = Form(None),
-    stock_tickers: str = Form(default="[]"),
-    community_service: CommunityService = Depends(get_community_service),
-    current_user: AlphafinderUser = Depends(get_current_user),
-):
-    stock_ticker_list = json.loads(stock_tickers)
+# @router.put("/posts-with-image/{post_id}", response_model=BaseResponse[bool], summary="게시글 수정")
+# async def update_post_with_image(
+#     post_id: int,
+#     title: str = Form(..., min_length=1, max_length=200),
+#     content: str = Form(..., min_length=1),
+#     category_id: int = Form(...),
+#     image_url: Optional[UploadFile] = None,
+#     image_format: Optional[str] = Form(None),
+#     stock_tickers: str = Form(default="[]"),
+#     community_service: CommunityService = Depends(get_community_service),
+#     current_user: AlphafinderUser = Depends(get_current_user),
+# ):
+#     stock_ticker_list = json.loads(stock_tickers)
 
-    image_base64 = None
-    if image_url:
-        image_base64 = convert_file_to_base64(image_url)
+#     image_base64 = None
+#     if image_url:
+#         image_base64 = convert_file_to_base64(image_url)
 
-    post_update = PostUpdate(
-        title=title,
-        content=content,
-        category_id=category_id,
-        image_url=image_base64,
-        image_format=image_format,
-        stock_tickers=stock_ticker_list,
-    )
+#     post_update = PostUpdate(
+#         title=title,
+#         content=content,
+#         category_id=category_id,
+#         image_url=image_base64,
+#         image_format=image_format,
+#         stock_tickers=stock_ticker_list,
+#     )
 
-    result, post_id = await community_service.update_post(
-        current_user=current_user, post_id=post_id, post_update=post_update
-    )
-    data = {"success": result, "post_id": post_id}
-    return BaseResponse(status_code=200, message="게시글을 수정하였습니다.", data=data)
+#     result, post_id = await community_service.update_post(
+#         current_user=current_user, post_id=post_id, post_update=post_update
+#     )
+#     data = {"success": result, "post_id": post_id}
+#     return BaseResponse(status_code=200, message="게시글을 수정하였습니다.", data=data)
 
 
 @router.delete("/posts/{post_id}", response_model=BaseResponse[bool], summary="게시글 삭제")

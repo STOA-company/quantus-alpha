@@ -1,3 +1,5 @@
+import json
+import uuid
 from datetime import datetime
 from typing import List, Optional, Tuple
 
@@ -5,9 +7,11 @@ from sqlalchemy import text
 
 from app.common.constants import KST, UNKNOWN_USER_EN, UNKNOWN_USER_KO, UTC
 from app.core.exception.custom import PostException, TooManyStockTickersException
+from app.core.redis import redis_client
 from app.database.crud import database, database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
+from Aws.common.configs import s3_client
 
 from .schemas import (
     CategoryResponse,
@@ -27,6 +31,17 @@ class CommunityService:
     def __init__(self):
         self.db = database_service
         self.db_data = database
+        self.s3_bucket = "alpha-finder-images"  # S3 버킷 이름 설정 필요
+        self.redis = redis_client()
+
+        # 허용 가능한 Content-Type과 확장자 매핑
+        self.ALLOWED_CONTENT_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif"}
+        # 최대 파일 크기 (5MB)
+        self.MAX_FILE_SIZE = 5 * 1024 * 1024
+        # presigned URL 만료 시간 (5분)
+        self.PRESIGNED_URL_EXPIRES_IN = 300
+        # Redis 캐시 만료 시간 (4분 30초)
+        self.REDIS_CACHE_EXPIRES_IN = 270
 
     async def create_post(self, current_user: AlphafinderUser, post_create: PostCreate) -> Tuple[bool, int]:
         """게시글 생성"""
@@ -855,6 +870,106 @@ class CommunityService:
     def _get_unknown_user_nickname(self, lang: TranslateCountry) -> str:
         """언어에 따른 알 수 없는 사용자 닉네임 반환"""
         return UNKNOWN_USER_KO if lang == TranslateCountry.KO else UNKNOWN_USER_EN
+
+    def _get_extension_from_content_type(self, content_type: str) -> str:
+        """Content-Type에서 확장자 추출"""
+        extension = self.ALLOWED_CONTENT_TYPES.get(content_type.lower())
+        if not extension:
+            raise PostException(
+                message=f"허용되지 않는 Content-Type입니다. 허용되는 형식: {', '.join(self.ALLOWED_CONTENT_TYPES.keys())}",
+                status_code=400,
+            )
+        return extension
+
+    def _generate_image_key(self, extension: str) -> str:
+        """이미지 키 생성"""
+        now = datetime.now()
+        date_path = now.strftime("%Y/%m/%d")
+        unique_id = str(uuid.uuid4())
+        return f"community/{date_path}/{unique_id}.{extension}"
+
+    def _get_cached_presigned_url(self, image_key: str, url_type: str) -> Optional[dict]:
+        """Redis에서 캐시된 presigned URL 조회"""
+        cached_data = self.redis.get(f"presigned_url:{url_type}:{image_key}")
+        if cached_data:
+            return json.loads(cached_data)
+        return None
+
+    def _cache_presigned_url(self, image_key: str, presigned_data: dict, url_type: str) -> None:
+        """Redis에 presigned URL 캐시"""
+        self.redis.setex(f"presigned_url:{url_type}:{image_key}", self.REDIS_CACHE_EXPIRES_IN, json.dumps(presigned_data))
+
+    def generate_upload_presigned_url(self, content_type: str, file_size: int) -> dict:
+        """S3 업로드용 presigned URL 생성"""
+        if file_size > self.MAX_FILE_SIZE:
+            raise PostException(
+                message=f"파일 크기가 너무 큽니다. 최대 크기: {self.MAX_FILE_SIZE / (1024 * 1024)}MB", status_code=400
+            )
+
+        # Content-Type에서 확장자 추출
+        extension = self._get_extension_from_content_type(content_type)
+        image_key = self._generate_image_key(extension)
+
+        # Redis에서 캐시된 URL 확인
+        cached_data = self._get_cached_presigned_url(image_key, "upload")
+        if cached_data:
+            return cached_data
+
+        # PUT presigned URL 생성 (업로드용)
+        upload_url = s3_client.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": self.s3_bucket,
+                "Key": image_key,
+                "ContentType": content_type,
+            },
+            Conditions=[
+                ["content-length-range", 0, self.MAX_FILE_SIZE],  # 파일 크기 제한
+                ["starts-with", "$key", "community/"],  # 키가 community/로 시작
+                ["ends-with", "$key", f".{extension}"],  # 키가 .jpg, .png 등으로 끝남
+                ["starts-with", "$Content-Type", "image/"],  # Content-Type 제한
+            ],
+            ExpiresIn=self.PRESIGNED_URL_EXPIRES_IN,
+        )
+
+        presigned_data = {
+            "upload_url": upload_url,
+            "image_key": image_key,
+            "expires_in": self.PRESIGNED_URL_EXPIRES_IN,
+        }
+
+        # Redis에 캐시
+        self._cache_presigned_url(image_key, presigned_data, "upload")
+
+        return presigned_data
+
+    def generate_get_presigned_url(self, image_key: str) -> dict:
+        """S3 조회용 presigned URL 생성"""
+        # Redis에서 캐시된 URL 확인
+        cached_data = self._get_cached_presigned_url(image_key, "get")
+        if cached_data:
+            return cached_data
+
+        # GET presigned URL 생성 (조회용)
+        get_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": self.s3_bucket,
+                "Key": image_key,
+            },
+            ExpiresIn=self.PRESIGNED_URL_EXPIRES_IN,
+        )
+
+        presigned_data = {
+            "get_url": get_url,
+            "image_key": image_key,
+            "expires_in": self.PRESIGNED_URL_EXPIRES_IN,
+        }
+
+        # Redis에 캐시
+        self._cache_presigned_url(image_key, presigned_data, "get")
+
+        return presigned_data
 
 
 def get_community_service() -> CommunityService:
