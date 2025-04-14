@@ -1,16 +1,16 @@
-from app.middlewares.slack_error import add_slack_middleware
-from app.middlewares.rate_limiter_admin import router as rate_limiter_admin_router
 from fastapi import FastAPI, HTTPException, Security
-from app.core.config import get_database_config, settings
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
 from app.api import routers
+from app.core.config import get_database_config, settings
 from app.core.exception import handler
+from app.core.logger import configure, get_logger
 from app.database.conn import db
 from app.database.crud import database
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
+from app.middlewares.rate_limiter_admin import router as rate_limiter_admin_router
+from app.middlewares.slack_error import add_slack_middleware
 from app.middlewares.trusted_hosts import get_current_username
-from app.core.logger import configure, get_logger
-
 
 # 여기로 로거 설정 이동
 stage_webhook_url = "https://hooks.slack.com/services/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"
