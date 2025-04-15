@@ -417,18 +417,15 @@ class UserService:
     async def screener_init(self, user_id: int):
         screener_service = ScreenerStockService()
         all_sectors = screener_service.get_available_sectors()
-        default_custom_filters = screener_service.get_default_custom_filters()
         await screener_service.create_group(
             user_id=user_id,
             market_filter=MarketEnum.ALL,
             sector_filter=all_sectors,
-            custom_filters=default_custom_filters,
         )
         await screener_service.create_group(
             user_id=user_id,
             market_filter=ETFMarketEnum.ALL,
             type=StockType.ETF,
-            custom_filters=default_custom_filters,
         )
 
     async def interest_init(self, user_id: int):
