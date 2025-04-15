@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+import pandas as pd
 
 from app.common.constants import FACTOR_MAP, REVERSE_FACTOR_MAP
 from app.core.exception.base import CustomException
@@ -556,29 +557,42 @@ class BaseScreenerService(ABC):
             if custom_filters is None:
                 custom_filters = []
 
-            default_filters = self.get_default_custom_filters()
-            # Map default filter factors using FACTOR_MAP
-            for filter in default_filters:
-                filter["factor"] = FACTOR_MAP[filter["factor"]]
+            default_filters = self.get_default_custom_filters(type)
 
             existing_factors = {filter.get("factor") for filter in custom_filters}
 
             # Add missing default filters
             for default_filter in default_filters:
                 if default_filter["factor"] not in existing_factors:
-                    custom_filters.append(default_filter)
+                    mapped_factor = FACTOR_MAP[default_filter["factor"]]
+                    custom_filters.append(
+                        {
+                            "factor": mapped_factor,
+                            "type": default_filter["type"].value
+                            if default_filter.get("type")
+                            else FactorTypeEnum.SLIDER.value,
+                            "above": default_filter.get("above"),
+                            "below": default_filter.get("below"),
+                            "values": [],
+                        }
+                    )
 
             if custom_filters:
                 for condition in custom_filters:
-                    if condition.get("values", None):
-                        for value in condition["values"]:
+                    values = condition.get("values", [])
+                    filter_type = condition.get("type")
+                    if not filter_type:  # type이 없는 경우 기본값 설정
+                        filter_type = FactorTypeEnum.SLIDER.value
+
+                    if values:
+                        for value in values:
                             insert_tasks.append(
                                 self.database.insert_wrapper(
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
                                         "factor": REVERSE_FACTOR_MAP[condition["factor"]],
-                                        "type": condition["type"],
+                                        "type": filter_type,
                                         "above": condition.get("above"),
                                         "below": condition.get("below"),
                                         "value": value,
@@ -592,7 +606,7 @@ class BaseScreenerService(ABC):
                                 sets={
                                     "group_id": group_id,
                                     "factor": REVERSE_FACTOR_MAP[condition["factor"]],
-                                    "type": condition["type"],
+                                    "type": filter_type,
                                     "above": condition.get("above"),
                                     "below": condition.get("below"),
                                     "value": None,
@@ -692,17 +706,18 @@ class BaseScreenerService(ABC):
 
             if custom_filters:
                 for condition in custom_filters:
-                    if condition.values:
-                        for value in condition.values:
+                    values = condition.get("values", [])
+                    if values:
+                        for value in values:
                             insert_tasks.append(
                                 self.database.insert_wrapper(
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
-                                        "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                        "type": condition.type,
-                                        "above": condition.above,
-                                        "below": condition.below,
+                                        "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                        "type": condition.get("type"),
+                                        "above": condition.get("above"),
+                                        "below": condition.get("below"),
                                         "value": value,
                                     },
                                 )
@@ -713,10 +728,10 @@ class BaseScreenerService(ABC):
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                    "type": condition.type,
-                                    "above": condition.above,
-                                    "below": condition.below,
+                                    "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                    "type": condition.get("type"),
+                                    "above": condition.get("above"),
+                                    "below": condition.get("below"),
                                     "value": None,
                                 },
                             )
@@ -850,30 +865,39 @@ class BaseScreenerService(ABC):
             print(f"에러 발생: {str(e)}")
             raise e
 
-    def get_default_custom_filters(self):
+    def get_default_custom_filters(self, type: Optional[StockType] = StockType.STOCK):
         try:
-            # Get data using MarketEnum.ALL
-            market_data = screener_utils.get_df_from_parquet(MarketEnum.ALL)
-
             default_factors = ["marketCap", "median_trade", "close"]
             result = []
 
+            if type == StockType.STOCK:
+                # Get data using MarketEnum.ALL for stocks
+                market_data = screener_utils.get_df_from_parquet(MarketEnum.ALL)
+            else:
+                # Get data using ETFMarketEnum.ALL for ETFs
+                market_data = screener_utils.etf_factor_loader.load_etf_factors(ETFMarketEnum.ALL.value)
+
             for factor in default_factors:
                 if factor in market_data.columns:
-                    min_value = market_data[factor].min()
-                    max_value = market_data[factor].max()
+                    # Convert to numeric and handle NaN values
+                    market_data[factor] = pd.to_numeric(market_data[factor], errors="coerce")
+                    valid_data = market_data[factor].dropna()
 
-                    min_value = np.floor(min_value)
-                    max_value = np.ceil(max_value)
+                    if not valid_data.empty:
+                        min_value = valid_data.min()
+                        max_value = valid_data.max()
 
-                    result.append(
-                        {
-                            "factor": factor,
-                            "above": min_value,
-                            "below": max_value,
-                            "type": FactorTypeEnum.SLIDER,
-                        }
-                    )
+                        min_value = np.floor(min_value)
+                        max_value = np.ceil(max_value)
+
+                        result.append(
+                            {
+                                "factor": factor,
+                                "above": min_value,
+                                "below": max_value,
+                                "type": FactorTypeEnum.SLIDER,
+                            }
+                        )
 
             return result
 

@@ -327,8 +327,10 @@ def get_group_filters(
         if group_id == -1:
             all_sectors = screener_service.get_available_sectors()
             custom_filters = screener_service.get_default_custom_filters()
+            custom_filters_response = []
             for filter in custom_filters:
-                filter["factor"] = FACTOR_MAP.get(filter["factor"], filter["factor"])
+                filter["factor"] = FACTOR_MAP[filter["factor"]]
+                custom_filters_response.append(filter)
             return GroupFilterResponse(
                 id=-1,
                 name="기본",
