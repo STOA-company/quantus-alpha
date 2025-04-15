@@ -173,4 +173,12 @@ CELERY_APP.conf.beat_schedule = {
         "task": "update_kr_dividend_rds",
         "schedule": crontab(hour="18", minute="45"),
     },
+    "update_us_etf_price": {
+        "task": "update_us_etf_price",
+        "schedule": crontab(hour="11", minute="50"),
+    },
+    "update_kr_etf_price": {
+        "task": "update_kr_etf_price",
+        "schedule": crontab(hour="18", minute="50"),
+    },
 }
