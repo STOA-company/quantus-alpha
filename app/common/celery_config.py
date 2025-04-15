@@ -183,10 +183,10 @@ CELERY_APP.conf.beat_schedule = {
     },
     "kr_update_etf_status": {
         "task": "kr_update_etf_status",
-        "schedule": crontab(hour="18", minute="50"),
+        "schedule": crontab(hour="18", minute="25"),
     },
     "us_update_etf_status": {
         "task": "us_update_etf_status",
-        "schedule": crontab(hour="11", minute="50"),
+        "schedule": crontab(hour="11", minute="25"),
     },
 }
