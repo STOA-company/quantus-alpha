@@ -791,6 +791,32 @@ class ETFDataDownloader:
         tickers = [ticker[0] for ticker in tickers]
         return tickers
 
+    def get_suspended_etf(self, ctry: str) -> pd.DataFrame:
+        if ctry not in ["US", "KR"]:
+            raise ValueError("ctry must be US or KR")
+        # db에 저장된 etf ticker 가져오기
+        etf_tickers = pd.DataFrame(self.db._select(table="stock_information", columns=["ticker"], ctry=ctry, type="etf"))
+
+        # 티커 변환 규칙 적용
+        if ctry == "KR":
+            etf_tickers["ticker"] = etf_tickers["ticker"].apply(lambda x: "K" + x[1:] if x.startswith("A") else x)
+
+        # 레피니티브에서 해당 종목들의 상태 가져오기
+        ticker_list = [f"'{ticker}'" for ticker in etf_tickers["ticker"].tolist()]
+        query = f"""
+        SELECT
+            a.DsLocalCode,
+            a.StatusCode
+        FROM
+            Ds2CtryQtInfo a
+        WHERE
+            a.DsLocalCode IN ({', '.join(ticker_list)})
+            AND a.TypeCode = 'ET'
+        """
+
+        etf_status = self._get_refinitiv_data(query)
+        return etf_status
+
 
 class KRXDownloader:
     """
@@ -973,9 +999,9 @@ class ETFDataLoader:
     def load_etf_info(self, ctry):
         country = "kr" if ctry == "KR" else "us"
         if ctry == "KR":
-            select_colums = ["ticker", "ctry", "market"]
+            select_colums = ["ticker", "ctry", "market", "is_delisted"]
         else:
-            select_colums = ["ticker", "ctry", "market", "en_name"]
+            select_colums = ["ticker", "ctry", "market", "en_name", "is_delisted"]
         etf_info = pd.DataFrame(
             self.db._select(table="stock_information", columns=select_colums, ctry=country, type="etf")
         )
@@ -1772,7 +1798,7 @@ class ETFDataPreprocessor:
         else:
             raise ValueError(f"Invalid country: {ctry}")
 
-        all_columns = ["ticker", "ctry", "market", "en_name"]
+        all_columns = ["ticker", "ctry", "market", "en_name", "is_delisted"]
         select_columns = [col for col in all_columns if col in df.columns]
         df_select = df[select_columns]
 
@@ -2420,6 +2446,9 @@ class ETFDataMerger:
                 if df_merged[col].dtype == "object":
                     # pd.to_numeric 함수를 사용하여 변환 가능한 값만 숫자로 변환
                     df_merged[col] = pd.to_numeric(df_merged[col], errors="ignore")
+
+        # 상폐 종목 제거
+        df_merged = df_merged[not df_merged["is_delisted"]]
 
         return df_merged
 

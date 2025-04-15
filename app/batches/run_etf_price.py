@@ -7,6 +7,7 @@ import pandas as pd
 from app.common.constants import ETF_DATA_DIR
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.database.crud import database
+from app.modules.screener.etf.utils import ETFDataDownloader
 
 slack_noti = SlackNotifier()
 
@@ -111,14 +112,11 @@ def run_etf_price(ctry: str):
         update_etf_information(ctry=ctry, df=df)
         df = df.drop(columns=["DsQtName"])
 
-        print(f"{ctry} 데이터 전처리 완료###1")
         information_tickers = database._select(table="stock_information", columns=["ticker"], type="etf", ctry=country)
-        print(f"{ctry} 데이터 전처리 완료###2")
         list_information_tickers = [ticker[0] for ticker in information_tickers]
         df = df[df["Ticker"].isin(list_information_tickers)]
 
         df = df.replace({np.nan: None})
-        print(f"{ctry} 데이터 전처리 완료###3")
 
         price_data = []
         for ticker in df["Ticker"].unique():
@@ -164,5 +162,28 @@ def run_etf_price(ctry: str):
         raise e
 
 
+def update_etf_status(ctry: str):
+    if ctry not in ["US", "KR"]:
+        raise ValueError("ctry must be US or KR")
+    etf_downloader = ETFDataDownloader()
+    etf_status = etf_downloader.get_suspended_etf(ctry=ctry)
+
+    # 티커 변환
+    if ctry == "KR":
+        etf_status["DsLocalCode"] = etf_status["DsLocalCode"].apply(lambda x: "A" + x[1:] if x.startswith("K") else x)
+
+    # 종목 분류
+    active_tickers = etf_status[etf_status["StatusCode"] == "A"]["DsLocalCode"].tolist()
+    delisted_tickers = etf_status[etf_status["StatusCode"] == "D"]["DsLocalCode"].tolist()
+    suspended_tickers = etf_status[etf_status["StatusCode"] == "S"]["DsLocalCode"].tolist()
+
+    # stock_information테이블 업데이트
+    database._update(
+        table="stock_information", sets={"is_delisted": False, "is_trading_stopped": False}, ticker__in=active_tickers
+    )
+    database._update(table="stock_information", sets={"is_delisted": True}, ticker__in=delisted_tickers)
+    database._update(table="stock_information", sets={"is_trading_stopped": True}, ticker__in=suspended_tickers)
+
+
 if __name__ == "__main__":
-    run_etf_price(ctry="KR")
+    update_etf_status(ctry="KR")
