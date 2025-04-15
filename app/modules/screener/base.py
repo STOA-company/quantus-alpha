@@ -565,52 +565,50 @@ class BaseScreenerService(ABC):
             for default_filter in default_filters:
                 if default_filter["factor"] not in existing_factors:
                     mapped_factor = FACTOR_MAP[default_filter["factor"]]
-                    custom_filters.append(mapped_factor)
+                    custom_filters.append(
+                        {
+                            "factor": mapped_factor,
+                            "type": default_filter["type"].value
+                            if default_filter.get("type")
+                            else FactorTypeEnum.SLIDER.value,
+                            "above": default_filter.get("above"),
+                            "below": default_filter.get("below"),
+                            "values": [],
+                        }
+                    )
 
             if custom_filters:
                 for condition in custom_filters:
-                    if isinstance(condition, dict):
-                        values = condition.get("values", [])
-                        if values:
-                            for value in values:
-                                insert_tasks.append(
-                                    self.database.insert_wrapper(
-                                        table="screener_stock_filters",
-                                        sets={
-                                            "group_id": group_id,
-                                            "factor": REVERSE_FACTOR_MAP[condition["factor"]],
-                                            "type": condition.get("type"),
-                                            "above": condition.get("above"),
-                                            "below": condition.get("below"),
-                                            "value": value,
-                                        },
-                                    )
-                                )
-                        else:
+                    values = condition.get("values", [])
+                    filter_type = condition.get("type")
+                    if not filter_type:  # type이 없는 경우 기본값 설정
+                        filter_type = FactorTypeEnum.SLIDER.value
+
+                    if values:
+                        for value in values:
                             insert_tasks.append(
                                 self.database.insert_wrapper(
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
                                         "factor": REVERSE_FACTOR_MAP[condition["factor"]],
-                                        "type": condition.get("type"),
+                                        "type": filter_type,
                                         "above": condition.get("above"),
                                         "below": condition.get("below"),
-                                        "value": None,
+                                        "value": value,
                                     },
                                 )
                             )
-                    elif isinstance(condition, str):
-                        mapped_factor = condition  # 이미 매핑된 factor라고 가정
+                    else:
                         insert_tasks.append(
                             self.database.insert_wrapper(
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": REVERSE_FACTOR_MAP[mapped_factor],
-                                    "type": None,
-                                    "above": None,
-                                    "below": None,
+                                    "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                    "type": filter_type,
+                                    "above": condition.get("above"),
+                                    "below": condition.get("below"),
                                     "value": None,
                                 },
                             )
@@ -708,24 +706,9 @@ class BaseScreenerService(ABC):
 
             if custom_filters:
                 for condition in custom_filters:
-                    if isinstance(condition, dict):
-                        values = condition.get("values", [])
-                        if values:
-                            for value in values:
-                                insert_tasks.append(
-                                    self.database.insert_wrapper(
-                                        table="screener_stock_filters",
-                                        sets={
-                                            "group_id": group_id,
-                                            "factor": REVERSE_FACTOR_MAP[condition["factor"]],
-                                            "type": condition.get("type"),
-                                            "above": condition.get("above"),
-                                            "below": condition.get("below"),
-                                            "value": value,
-                                        },
-                                    )
-                                )
-                        else:
+                    values = condition.get("values", [])
+                    if values:
+                        for value in values:
                             insert_tasks.append(
                                 self.database.insert_wrapper(
                                     table="screener_stock_filters",
@@ -735,21 +718,20 @@ class BaseScreenerService(ABC):
                                         "type": condition.get("type"),
                                         "above": condition.get("above"),
                                         "below": condition.get("below"),
-                                        "value": None,
+                                        "value": value,
                                     },
                                 )
                             )
-                    elif isinstance(condition, str):
-                        mapped_factor = condition  # 이미 매핑된 factor라고 가정
+                    else:
                         insert_tasks.append(
                             self.database.insert_wrapper(
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": REVERSE_FACTOR_MAP[mapped_factor],
-                                    "type": None,
-                                    "above": None,
-                                    "below": None,
+                                    "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                    "type": condition.get("type"),
+                                    "above": condition.get("above"),
+                                    "below": condition.get("below"),
                                     "value": None,
                                 },
                             )
