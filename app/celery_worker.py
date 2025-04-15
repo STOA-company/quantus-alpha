@@ -5,6 +5,7 @@ from app.batches import run_etf_price
 from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_stat_cls_code_batch
 from app.batches.run_disclosure import run_disclosure_batch
 from app.batches.run_dividend import insert_dividend
+from app.batches.run_etf_price import update_etf_status
 from app.batches.run_etf_screener import run_etf_screener_data
 from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
 from app.batches.run_news import run_news_batch
@@ -574,6 +575,30 @@ def update_kr_etf_price():
         notifier_1d.notify_success("update_kr_etf_price process completed")
     except Exception as e:
         notifier_1d.notify_error(f"update_kr_etf_price process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="kr_update_etf_status", ignore_result=True)
+def kr_update_etf_status():
+    """한국 ETF 상태 업데이트"""
+    notifier_1d.notify_info("kr_update_etf_status process started")
+    try:
+        update_etf_status("KR")
+        notifier_1d.notify_success("kr_update_etf_status process completed")
+    except Exception as e:
+        notifier_1d.notify_error(f"kr_update_etf_status process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="us_update_etf_status", ignore_result=True)
+def us_update_etf_status():
+    """미국 ETF 상태 업데이트"""
+    notifier_1d.notify_info("us_update_etf_status process started")
+    try:
+        update_etf_status("US")
+        notifier_1d.notify_success("us_update_etf_status process completed")
+    except Exception as e:
+        notifier_1d.notify_error(f"us_update_etf_status process failed: {str(e)}")
         raise
 
 
