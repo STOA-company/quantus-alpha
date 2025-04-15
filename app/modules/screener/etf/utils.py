@@ -2448,7 +2448,7 @@ class ETFDataMerger:
                     df_merged[col] = pd.to_numeric(df_merged[col], errors="ignore")
 
         # 상폐 종목 제거
-        df_merged = df_merged[not df_merged["is_delisted"]]
+        df_merged = df_merged[df_merged["is_delisted"] == False]  # noqa: E712
 
         return df_merged
 
