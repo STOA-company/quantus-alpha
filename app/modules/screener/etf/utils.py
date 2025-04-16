@@ -680,12 +680,6 @@ class ETFDataDownloader:
             """
         df = self._get_refinitiv_data(query)
 
-        list_db_tickers = self._get_db_tickers_list(ctry)
-
-        if ctry == "KR":
-            list_db_tickers = [self.kr_pattern.sub("K", ticker) for ticker in list_db_tickers]
-        df = df[df["ticker"].isin(list_db_tickers)]
-
         if download:
             if ctry == "KR":
                 df.to_parquet(os.path.join(self.DATA_DIR, "kr_etf_dividend.parquet"), index=False)
@@ -803,16 +797,37 @@ class ETFDataDownloader:
 
         # 레피니티브에서 해당 종목들의 상태 가져오기
         ticker_list = [f"'{ticker}'" for ticker in etf_tickers["ticker"].tolist()]
-        query = f"""
-        SELECT
-            a.DsLocalCode,
-            a.StatusCode
-        FROM
-            Ds2CtryQtInfo a
-        WHERE
-            a.DsLocalCode IN ({', '.join(ticker_list)})
-            AND a.TypeCode = 'ET'
-        """
+        if ctry == "KR":
+            query = f"""
+            SELECT
+                a.DsLocalCode,
+                a.StatusCode
+            FROM
+                Ds2CtryQtInfo a
+            WHERE
+                a.DsLocalCode IN ({', '.join(ticker_list)})
+                AND a.TypeCode = 'ET'
+            """
+        if ctry == "US":
+            query = f"""
+            SELECT
+                c.Ticker,
+                a.StatusCode
+            FROM
+                Ds2CtryQtInfo a
+            JOIN
+                Ds2MnemChg c
+                ON c.InfoCode = a.InfoCode
+                AND c.EndDate = (
+                    SELECT MAX(EndDate)
+                    FROM Ds2MnemChg
+                    WHERE InfoCode = a.InfoCode
+                )
+            WHERE
+                a.DsQtName IN ({', '.join(ticker_list)})
+                AND a.TypeCode = 'ET'
+                AND c.EndDate >= '2025-01-01'
+            """
 
         etf_status = self._get_refinitiv_data(query)
         return etf_status
@@ -1070,6 +1085,11 @@ class ETFDataLoader:
             df_rating = pd.read_parquet(os.path.join(self.morningstar_dir, "us_etf_morningstar_rating.parquet"))
             df = df_rating if df.empty else pd.merge(df, df_rating, on="ticker", how="left")
         return df
+
+    def get_db_tickers_list(self, ctry: str, type: str = "etf"):
+        tickers = self.db._select(table="stock_information", columns=["ticker"], ctry=ctry, type=type)
+        tickers = [ticker[0] for ticker in tickers]
+        return tickers
 
 
 class ETFDividendFactorExtractor:
@@ -2449,7 +2469,8 @@ class ETFDataMerger:
 
         # 상폐 종목 제거
         df_merged = df_merged[df_merged["is_delisted"] == False]  # noqa: E712
-
+        # exist_tickers = self.loader.get_db_tickers_list(ctry)
+        # df_merged = df_merged[df_merged["Code"].isin(exist_tickers)]
         return df_merged
 
 
