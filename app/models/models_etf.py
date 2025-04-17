@@ -56,9 +56,11 @@ class etf_kr_1d(Base):
 
 class etf_top_holdings(Base):
     __tablename__ = "etf_top_holdings"
-    __table_args__ = (PrimaryKeyConstraint("ticker", "top_holdings"), Index("idx_ticker", "ticker"))
+    __table_args__ = (PrimaryKeyConstraint("ticker", "holding_ticker"), Index("idx_ticker", "ticker"))
 
     ticker: Mapped[String] = mapped_column(String(length=20), nullable=False)
-    top_holdings: Mapped[String] = mapped_column(String(length=20), nullable=False)
-    weight: Mapped[Float] = mapped_column(Float, CheckConstraint("weight >= 0 AND weight <= 100"), nullable=False)
+    holding_ticker: Mapped[String] = mapped_column(String(length=20), nullable=True)
+    isin: Mapped[String] = mapped_column(String(length=30), nullable=True)
+    shares: Mapped[Float] = mapped_column(Float, nullable=True)
+    weight: Mapped[Float] = mapped_column(Float, CheckConstraint("weight >= 0 AND weight <= 100"), nullable=True)
     updated_at: Mapped[DateTime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))

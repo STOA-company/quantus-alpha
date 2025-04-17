@@ -1,8 +1,8 @@
 """v69
 
-Revision ID: c5d8c488672f
+Revision ID: c65854f64677
 Revises: 129d3c24b8b2
-Create Date: 2025-04-16 17:35:25.711612
+Create Date: 2025-04-17 17:12:45.273623
 
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "c5d8c488672f"
+revision: str = "c65854f64677"
 down_revision: Union[str, None] = "129d3c24b8b2"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,11 +24,12 @@ def upgrade() -> None:
     op.create_table(
         "etf_top_holdings",
         sa.Column("ticker", sa.String(length=20), nullable=False),
-        sa.Column("top_holdings", sa.String(length=20), nullable=False),
-        sa.Column("weight", sa.Float(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
-        sa.PrimaryKeyConstraint("ticker", "top_holdings"),
-        sa.CheckConstraint("weight >= 0 AND weight <= 100", name="weight_range_check"),
+        sa.Column("holding_ticker", sa.String(length=20), nullable=True),
+        sa.Column("isin", sa.String(length=30), nullable=True),
+        sa.Column("shares", sa.Float(), nullable=True),
+        sa.Column("weight", sa.Float(), sa.CheckConstraint("weight >= 0 AND weight <= 100"), nullable=True),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
+        sa.PrimaryKeyConstraint("ticker", "holding_ticker"),
     )
     op.create_index("idx_ticker", "etf_top_holdings", ["ticker"], unique=False)
     # ### end Alembic commands ###
