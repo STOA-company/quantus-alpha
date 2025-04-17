@@ -64,3 +64,4 @@ class etf_top_holdings(Base):
     shares: Mapped[Float] = mapped_column(Float, nullable=True)
     weight: Mapped[Float] = mapped_column(Float, CheckConstraint("weight >= 0 AND weight <= 100"), nullable=True)
     updated_at: Mapped[DateTime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    name: Mapped[String] = mapped_column(String(length=100), nullable=True)
