@@ -6,15 +6,18 @@ import pandas as pd
 
 from app.common.constants import ETF_DATA_DIR
 from app.core.extra.SlackNotifier import SlackNotifier
+from app.core.logging.config import get_logger
 from app.database.crud import database
 from app.modules.screener.etf.utils import ETFDataDownloader
 
+logger = get_logger(__name__)
 slack_noti = SlackNotifier()
 
 
 def update_etf_information(ctry: str, df: pd.DataFrame):
     if ctry not in ["US", "KR"]:
         raise ValueError("ctry must be US or KR")
+    logger.info(f"update_etf_information: {ctry}")
 
     # KR 시장의 경우 ticker 변환을 먼저 수행
     if ctry == "KR":
@@ -22,19 +25,21 @@ def update_etf_information(ctry: str, df: pd.DataFrame):
 
     # Ticker 기준으로 중복 제거
     df = df.drop_duplicates(subset=["Ticker"])
+    logger.info(f"drop_duplicates df: {df}")
 
     # Get existing tickers from database
     stock_information_ticker = database._select(table="stock_information", columns=["ticker"], type="etf", ctry=ctry)
     # 튜플 리스트에서 ticker 값만 추출
     existing_tickers = [ticker[0] for ticker in stock_information_ticker]
-    print(f"existing_tickers: {existing_tickers}")
+    logger.info(f"existing_tickers: {existing_tickers}")
 
     # stock_information에 없는 ticker만 필터링
     df = df[~df["Ticker"].isin(existing_tickers)]
-    print(f"df: {df}")
+    logger.info(f"df: {df}")
     if df.empty:
+        logger.info("df is empty")
         return
-
+    logger.info(f"new_tickers: {df['Ticker'].unique()}")
     insert_data = []
     for _, row in df.iterrows():
         insert_data.append(
@@ -54,6 +59,7 @@ def update_etf_information(ctry: str, df: pd.DataFrame):
     # Bulk insert remaining data
     if insert_data:
         database._insert(table="stock_information", sets=insert_data)
+    logger.info(f"update_etf_information: {ctry} end")
 
 
 def run_etf_price(ctry: str):
@@ -118,6 +124,9 @@ def run_etf_price(ctry: str):
 
         df = df.replace({np.nan: None})
 
+        # 최근 1달 데이터만 추출
+        df = df[df["Date"] >= (pd.Timestamp.now() - pd.DateOffset(months=1))]
+
         price_data = []
         for ticker in df["Ticker"].unique():
             df_price_ticker = df[df["Ticker"] == ticker]
@@ -172,10 +181,15 @@ def update_etf_status(ctry: str):
     if ctry == "KR":
         etf_status["DsLocalCode"] = etf_status["DsLocalCode"].apply(lambda x: "A" + x[1:] if x.startswith("K") else x)
 
+    etf_status = etf_status.rename(columns={"DsLocalCode": "Ticker"})
     # 종목 분류
-    active_tickers = etf_status[etf_status["StatusCode"] == "A"]["DsLocalCode"].tolist()
-    delisted_tickers = etf_status[etf_status["StatusCode"] == "D"]["DsLocalCode"].tolist()
-    suspended_tickers = etf_status[etf_status["StatusCode"] == "S"]["DsLocalCode"].tolist()
+    active_tickers = etf_status[etf_status["StatusCode"] == "A"]["Ticker"].tolist()
+    delisted_tickers = etf_status[etf_status["StatusCode"] == "D"]["Ticker"].tolist()
+    suspended_tickers = etf_status[etf_status["StatusCode"] == "S"]["Ticker"].tolist()
+
+    logger.info(f"active_tickers: {active_tickers}")
+    logger.info(f"delisted_tickers: {delisted_tickers}")
+    logger.info(f"suspended_tickers: {suspended_tickers}")
 
     # stock_information테이블 업데이트
     database._update(
@@ -186,4 +200,4 @@ def update_etf_status(ctry: str):
 
 
 if __name__ == "__main__":
-    update_etf_status(ctry="KR")
+    update_etf_status(ctry="US")
