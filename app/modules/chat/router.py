@@ -1,103 +1,68 @@
-# app/api/chat.py
-import json
-import os
-import time
-from typing import Dict, Optional
+import logging
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from redis import Redis
+from fastapi.responses import StreamingResponse
+from prometheus_client import Counter, Histogram
 
-from app.modules.chat.client import ChatClient
+from .schemas import ChatRequest, ErrorResponse
+from .service import chat_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
-REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
+# 프로메테우스 메트릭
+CHAT_REQUEST_COUNT = Counter("chat_requests_total", "Total number of chat requests", ["model", "status"])
 
-redis_client = Redis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD, decode_responses=True)
-
-chat_client = ChatClient()
+CHAT_RESPONSE_TIME = Histogram("chat_response_time_seconds", "Chat response time in seconds", ["model"])
 
 
-class ChatRequest(BaseModel):
-    message: str
-
-
-class ChatResponse(BaseModel):
-    task_id: str
-    status: str
-    timestamp: float
-
-
-class ChatResult(BaseModel):
-    task_id: str
-    status: str
-    request: Optional[str] = None
-    response: Optional[str] = None
-    error: Optional[str] = None
-    timestamp: float
-
-
-def get_task_from_store(task_id: str) -> Optional[Dict]:
-    task_data = redis_client.get(f"task:{task_id}")
-    if task_data:
-        return json.loads(task_data)
-    return None
-
-
-def save_task_to_store(task_id: str, task_data: Dict):
-    redis_client.set(f"task:{task_id}", json.dumps(task_data))
-
-
-@router.post("/send", response_model=ChatResponse)
-async def send_message(chat_request: ChatRequest):
+@router.post("/request")
+async def request_chat(chat_request: ChatRequest):
+    """채팅 요청 처리 (비동기)"""
     try:
-        result = chat_client.send_message(message=chat_request.message)
+        CHAT_REQUEST_COUNT.labels(model=chat_request.model, status="requested").inc()
 
-        task_data = {"status": "PENDING", "timestamp": result["timestamp"]}
-        save_task_to_store(result["task_id"], task_data)
+        # 비동기 처리
+        result = await chat_service.send_message(query=chat_request.query, model=chat_request.model)
+
+        if result.get("status") == "error":
+            CHAT_REQUEST_COUNT.labels(model=chat_request.model, status="error").inc()
+            raise HTTPException(status_code=500, detail=result.get("error", "알 수 없는 오류"))
 
         return result
+
     except Exception as e:
+        logger.error(f"채팅 요청 처리 중 오류: {str(e)}")
+        CHAT_REQUEST_COUNT.labels(model=chat_request.model, status="error").inc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/status/{task_id}", response_model=ChatResult)
-async def check_status(task_id: str):
-    task_data = get_task_from_store(task_id)
-    if not task_data:
-        raise HTTPException(status_code=404, detail="태스크를 찾을 수 없습니다")
+@router.get("/stream")
+async def stream_chat(query: str, model: str = "gpt4mi"):
+    """채팅 스트리밍 응답"""
 
-    if task_data.get("status") in ["SUCCESS", "ERROR", "TIMEOUT"]:
-        return task_data
+    async def response_generator():
+        """응답 생성기"""
+        try:
+            async for chunk in chat_service.process_query(query, model):
+                yield chunk
+        except Exception as e:
+            logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
+            error_response = ErrorResponse(message=f"스트리밍 처리 오류: {str(e)}")
+            yield error_response.model_dump_json()
 
-    try:
-        response = chat_client.get_response(task_id, timeout=0.1)
+    CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
 
-        if response["status"] in ["SUCCESS", "ERROR", "TIMEOUT"]:
-            save_task_to_store(task_id, response)
-
-        return response
-    except Exception as e:
-        error_response = {"task_id": task_id, "status": "ERROR", "error": str(e), "timestamp": time.time()}
-        save_task_to_store(task_id, error_response)
-        return error_response
+    return StreamingResponse(response_generator(), media_type="text/event-stream")
 
 
-@router.get("/result/{task_id}", response_model=ChatResult)
-async def get_result(task_id: str, timeout: Optional[int] = 30):
-    try:
-        task_data = get_task_from_store(task_id)
-        if not task_data:
-            raise HTTPException(status_code=404, detail="태스크를 찾을 수 없습니다")
+@router.get("/conversation/{conversation_id}")
+async def get_conversation(conversation_id: str):
+    """대화 정보 조회"""
+    conversation = await chat_service.get_conversation(conversation_id)
 
-        if task_data.get("status") in ["SUCCESS", "ERROR", "TIMEOUT"]:
-            return task_data
+    if not conversation:
+        raise HTTPException(status_code=404, detail="대화를 찾을 수 없습니다")
 
-        response = chat_client.get_response(task_id, timeout=timeout)
-        save_task_to_store(task_id, response)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return conversation

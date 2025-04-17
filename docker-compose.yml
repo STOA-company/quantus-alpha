@@ -27,6 +27,10 @@ services:
             REDIS_PORT: 6379
             REDIS_PASSWORD: ${REDIS_PASSWORD}
             APP_NAME: blue
+            RABBITMQ_HOST: rabbitmq
+            RABBITMQ_PORT: 5672
+            RABBITMQ_USER: admin
+            RABBITMQ_PASSWORD: admin123
         env_file:
             - .env
         volumes:
@@ -35,6 +39,8 @@ services:
             - poetry-cache:/var/cache/poetry
         depends_on:
             redis:
+                condition: service_healthy
+            rabbitmq:
                 condition: service_healthy
         networks:
             - alpha-network
@@ -59,6 +65,11 @@ services:
             REDIS_PORT: 6379
             REDIS_PASSWORD: ${REDIS_PASSWORD}
             APP_NAME: green
+            RABBITMQ_HOST: rabbitmq
+            RABBITMQ_PORT: 5672
+            RABBITMQ_USER: admin
+            RABBITMQ_PASSWORD: admin123
+            LLM_MOCK_ENABLED: "true"
         env_file:
             - .env
         volumes:
@@ -67,6 +78,8 @@ services:
             - poetry-cache:/var/cache/poetry
         depends_on:
             redis:
+                condition: service_healthy
+            rabbitmq:
                 condition: service_healthy
         networks:
             - alpha-network
@@ -84,13 +97,17 @@ services:
             context: .
             dockerfile: Dockerfile
         container_name: chat_worker
-        command: poetry run celery -A app.modules.chat.worker worker --loglevel=info -Q chat_queue
+        command: poetry run python -m app.modules.chat.run_worker
         environment:
             ENV: ${ENV:-dev}
             REDIS_HOST: redis
             REDIS_PORT: 6379
             REDIS_PASSWORD: ${REDIS_PASSWORD}
             LLM_MOCK_ENABLED: "true"
+            RABBITMQ_HOST: rabbitmq
+            RABBITMQ_PORT: 5672
+            RABBITMQ_USER: admin
+            RABBITMQ_PASSWORD: admin123
         env_file:
             - .env
         volumes:
@@ -100,6 +117,28 @@ services:
         depends_on:
             redis:
                 condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+        networks:
+            - alpha-network
+        restart: unless-stopped
+
+    rabbitmq:
+        image: rabbitmq:3-management
+        container_name: rabbitmq
+        ports:
+            - "5672:5672"   # AMQP 프로토콜 포트
+            - "15672:15672" # 관리 웹 인터페이스 포트
+        environment:
+            - RABBITMQ_DEFAULT_USER=admin
+            - RABBITMQ_DEFAULT_PASS=admin123
+        healthcheck:
+            test: ["CMD", "rabbitmqctl", "status"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        volumes:
+            - rabbitmq_data:/var/lib/rabbitmq
         networks:
             - alpha-network
         restart: unless-stopped
@@ -140,6 +179,7 @@ volumes:
     redis_data:
     pip-cache:    # pip 캐시를 위한 볼륨
     poetry-cache: # poetry 캐시를 위한 볼륨
+    rabbitmq_data: # RabbitMQ 데이터를 위한 볼륨
 
 networks:
     alpha-network:
