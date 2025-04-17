@@ -38,6 +38,22 @@ async def request_chat(chat_request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/result/{job_id}")
+async def get_chat_result(job_id: str):
+    """채팅 결과 조회"""
+    try:
+        result = await chat_service.get_message_result(job_id)
+
+        if result.get("status") == "error":
+            raise HTTPException(status_code=500, detail=result.get("message", "알 수 없는 오류"))
+
+        return result
+
+    except Exception as e:
+        logger.error(f"결과 조회 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/stream")
 async def stream_chat(query: str, model: str = "gpt4mi"):
     """채팅 스트리밍 응답"""

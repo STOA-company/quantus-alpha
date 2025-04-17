@@ -12,8 +12,6 @@ from app.middlewares.rate_limiter import GlobalRateLimitMiddleware
 from app.middlewares.rate_limiter_admin import router as rate_limiter_admin_router
 from app.middlewares.slack_error import add_slack_middleware
 from app.middlewares.trusted_hosts import get_current_username
-from app.modules.chat.service import chat_service
-from app.modules.chat.worker import start_worker, stop_worker
 from app.monitoring.endpoints import router as metrics_router
 from app.monitoring.middleware import PrometheusMiddleware
 
@@ -218,17 +216,9 @@ def request_test(request: TestRequest):
 @app.on_event("startup")
 async def startup_event():
     # 채팅 서비스 초기화
-    await chat_service.initialize()
-    # 채팅 워커 시작 (백그라운드에서 실행)
-    # FastAPI 서버가 내장 워커를 실행하도록 설정
-    # 이 경우 별도의 워커 프로세스를 실행할 필요 없음
-    # 실제 운영 환경에서는 별도 프로세스로 실행하는 것이 좋음
-    await start_worker()
-    logger.info("채팅 워커 시작됨")
+    logger.info("Application started successfully")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    # 채팅 워커 종료
-    await stop_worker()
-    logger.info("채팅 워커 종료됨")
+    logger.info("Application shutting down")
