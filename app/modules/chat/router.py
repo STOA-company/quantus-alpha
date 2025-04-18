@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from prometheus_client import Counter, Histogram
 
+from .constants import LLM_MODEL
 from .metrics import STREAMING_CONNECTIONS, STREAMING_ERRORS, STREAMING_MESSAGES_COUNT
 from .schemas import ChatRequest
 from .service import chat_service
@@ -56,7 +57,7 @@ async def get_chat_result(job_id: str):
 
 
 @router.get("/stream")
-async def stream_chat(query: str, model: str = "gpt4mi"):
+async def stream_chat(query: str, model: str = LLM_MODEL):
     """채팅 스트리밍 응답"""
     logger.info(f"스트리밍 채팅 요청 수신: query={query[:30]}..., model={model}")
     CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()

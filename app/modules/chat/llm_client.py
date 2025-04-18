@@ -7,6 +7,7 @@ from typing import AsyncGenerator, Optional
 import httpx
 
 from .config import llm_config
+from .constants import LLM_MODEL
 from .schemas import ChatRequest, ErrorResponse
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ class LLMClient:
         self.base_url = base_url or llm_config.base_url
         self.timeout = timeout or llm_config.timeout
 
-    async def process_query(self, query: str, model: str = "gpt4mi") -> AsyncGenerator[str, None]:
+    async def process_query(self, query: str, model: str = LLM_MODEL) -> AsyncGenerator[str, None]:
         """LLM API에 요청을 전송하고 응답을 스트리밍으로 반환"""
         request_data = ChatRequest(query=query, model=model)
 
