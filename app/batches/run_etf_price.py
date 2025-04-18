@@ -4,13 +4,14 @@ import time
 import numpy as np
 import pandas as pd
 
+from app.batches.run_update_kr_ticker import update_kr_ticker
 from app.common.constants import ETF_DATA_DIR
 from app.core.extra.SlackNotifier import SlackNotifier
-from app.core.logging.config import get_logger
+from app.core.logger.logger import setup_logger
 from app.database.crud import database
 from app.modules.screener.etf.utils import ETFDataDownloader
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 slack_noti = SlackNotifier()
 
 
@@ -115,7 +116,10 @@ def run_etf_price(ctry: str):
         df["Date"] = pd.to_datetime(df["Date"])
 
         # stock_information에 없는 종목 업데이트
-        update_etf_information(ctry=ctry, df=df)
+        if ctry == "US":
+            update_etf_information(ctry=ctry, df=df)
+        if ctry == "KR":
+            update_kr_ticker()
         df = df.drop(columns=["DsQtName"])
 
         information_tickers = database._select(table="stock_information", columns=["ticker"], type="etf", ctry=country)
@@ -200,4 +204,4 @@ def update_etf_status(ctry: str):
 
 
 if __name__ == "__main__":
-    update_etf_status(ctry="US")
+    run_etf_price(ctry="KR")
