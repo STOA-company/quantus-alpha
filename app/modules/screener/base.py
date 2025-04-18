@@ -579,10 +579,14 @@ class BaseScreenerService(ABC):
 
             if custom_filters:
                 for condition in custom_filters:
-                    values = condition.get("values", [])
-                    filter_type = condition.get("type")
-                    if not filter_type:  # type이 없는 경우 기본값 설정
-                        filter_type = FactorTypeEnum.SLIDER.value
+                    values = condition.values if hasattr(condition, "values") else []
+                    filter_type = (
+                        condition.type
+                        if hasattr(condition, "type") and condition.type is not None
+                        else FactorTypeEnum.SLIDER.value
+                    )
+                    if isinstance(filter_type, FactorTypeEnum):
+                        filter_type = filter_type.value
 
                     if values:
                         for value in values:
@@ -591,10 +595,10 @@ class BaseScreenerService(ABC):
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
-                                        "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                        "factor": REVERSE_FACTOR_MAP[condition.factor],
                                         "type": filter_type,
-                                        "above": condition.get("above"),
-                                        "below": condition.get("below"),
+                                        "above": condition.above,
+                                        "below": condition.below,
                                         "value": value,
                                     },
                                 )
@@ -605,10 +609,10 @@ class BaseScreenerService(ABC):
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                    "factor": REVERSE_FACTOR_MAP[condition.factor],
                                     "type": filter_type,
-                                    "above": condition.get("above"),
-                                    "below": condition.get("below"),
+                                    "above": condition.above,
+                                    "below": condition.below,
                                     "value": None,
                                 },
                             )
@@ -706,7 +710,15 @@ class BaseScreenerService(ABC):
 
             if custom_filters:
                 for condition in custom_filters:
-                    values = condition.get("values", [])
+                    values = condition.values if hasattr(condition, "values") else []
+                    filter_type = (
+                        condition.type
+                        if hasattr(condition, "type") and condition.type is not None
+                        else FactorTypeEnum.SLIDER.value
+                    )
+                    if isinstance(filter_type, FactorTypeEnum):
+                        filter_type = filter_type.value
+
                     if values:
                         for value in values:
                             insert_tasks.append(
@@ -714,10 +726,10 @@ class BaseScreenerService(ABC):
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
-                                        "factor": REVERSE_FACTOR_MAP[condition["factor"]],
-                                        "type": condition.get("type"),
-                                        "above": condition.get("above"),
-                                        "below": condition.get("below"),
+                                        "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                        "type": filter_type,
+                                        "above": condition.above,
+                                        "below": condition.below,
                                         "value": value,
                                     },
                                 )
@@ -728,10 +740,10 @@ class BaseScreenerService(ABC):
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": REVERSE_FACTOR_MAP[condition["factor"]],
-                                    "type": condition.get("type"),
-                                    "above": condition.get("above"),
-                                    "below": condition.get("below"),
+                                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                                    "type": filter_type,
+                                    "above": condition.above,
+                                    "below": condition.below,
                                     "value": None,
                                 },
                             )
