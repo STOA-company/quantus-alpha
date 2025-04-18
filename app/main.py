@@ -210,3 +210,15 @@ def request_test(request: TestRequest):
         return request.num / 0
     else:
         return request.num / 1
+
+
+# 앱 시작/종료 이벤트 핸들러
+@app.on_event("startup")
+async def startup_event():
+    # 채팅 서비스 초기화
+    logger.info("Application started successfully")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("Application shutting down")
