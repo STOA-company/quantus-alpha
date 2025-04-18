@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from typing import AsyncGenerator, Optional
 
 import httpx
@@ -60,20 +61,19 @@ class LLMClient:
                     yield "생각 중..."
 
                     # 2. job_id로 주기적으로 폴링하여 결과 확인
-                    polling_count = 0
-                    max_polling = 60  # 최대 폴링 횟수 증가
-                    polling_interval = 2.0  # 기본 폴링 간격 증가
+                    polling_interval = 3.0  # 기본 폴링 간격
+                    max_timeout = 550  # nginx 설정과 동기화 (600초보다 약간 적게 설정)
 
+                    start_time = time.time()
                     previous_result = ""  # 이전 결과 저장
 
-                    while polling_count < max_polling:
-                        polling_count += 1
-
-                        # 폴링 간격을 약간 늘려 서버 부하 감소
-                        if polling_count > 20:
-                            polling_interval = 3.0
-                        if polling_count > 40:
+                    while (time.time() - start_time) < max_timeout:
+                        # 폴링 간격 조정 - 시간이 지날수록 간격 늘림
+                        elapsed_time = time.time() - start_time
+                        if elapsed_time > 60:  # 1분 이상 지난 경우
                             polling_interval = 4.0
+                        if elapsed_time > 180:  # 3분 이상 지난 경우
+                            polling_interval = 5.0
 
                         await asyncio.sleep(polling_interval)
 
@@ -87,22 +87,15 @@ class LLMClient:
                         status_data = status_response.json()
                         status = status_data.get("status")
 
+                        # 응답 상세 로깅 추가
+                        logger.debug(f"LLM 응답 상태: {status}, 데이터: {json.dumps(status_data)[:200]}...")
+
                         # 오류 체크
                         if status == "ERROR" or status_data.get("error"):
                             error_msg = status_data.get("error", "알 수 없는 오류")
                             logger.error(f"LLM 작업 처리 중 오류: {error_msg}")
                             yield json.dumps(ErrorResponse(message=f"LLM 서비스 오류: {error_msg}").model_dump())
                             return
-
-                        # 완료 체크
-                        if status == "COMPLETED":
-                            result = status_data.get("result", {}).get("result", "")
-                            if result and result != previous_result:
-                                # 마지막 결과가 도착했으므로 전체 응답을 반환
-                                yield result
-                                # 결과를 반환하고 즉시 종료
-                                return
-                            break
 
                         # 진행 중인 경우 부분 결과 확인
                         step_info = status_data.get("step_info", {})
@@ -112,13 +105,39 @@ class LLMClient:
                                 previous_result = step_message
                                 yield step_message
 
-                        logger.debug(f"폴링 {polling_count}/{max_polling}: 상태 = {status}")
+                        # 완료 체크
+                        if status == "SUCCESS" or status == "COMPLETED":
+                            # result 객체 내의 result 필드에서 최종 답변 추출
+                            result_obj = status_data.get("result", {})
+                            if isinstance(result_obj, dict):
+                                final_result = result_obj.get("result", "")
+                                logger.info(
+                                    f"LLM 응답 완료: job_id={job_id}, 결과 길이={len(final_result) if final_result else 0}"
+                                )
 
-                    # 최대 폴링 횟수를 초과한 경우
-                    if polling_count >= max_polling:
-                        logger.warning(f"최대 폴링 횟수 초과: {job_id}")
-                        yield json.dumps(ErrorResponse(message="응답 시간 초과").model_dump())
+                                if not final_result:
+                                    logger.warning("완료 상태이지만 결과가 비어있습니다")
+                                    final_result = "응답을 생성하는 중 문제가 발생했습니다. 다시 시도해주세요."
 
+                                # 최종 결과가 이전 결과와 다른 경우에만 반환
+                                if final_result != previous_result:
+                                    yield final_result
+                                else:
+                                    logger.warning("이전 결과와 동일한 결과를 수신했습니다")
+
+                                # 결과 전송 후 종료
+                                return
+                            else:
+                                logger.warning(f"예상치 못한 result 형식: {type(result_obj)}")
+                                if result_obj:  # 문자열이거나 다른 형식인 경우
+                                    yield str(result_obj)
+                                    return
+
+                        logger.debug(f"폴링 지속 중 (경과 시간: {int(elapsed_time)}초)")
+
+                    # 최대 시간을 초과한 경우
+                    logger.warning(f"최대 대기 시간 초과: {job_id}")
+                    yield "응답 시간이 초과되었습니다. 다시 시도해주세요."
                     return
 
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
