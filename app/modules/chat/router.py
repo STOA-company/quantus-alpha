@@ -1,8 +1,10 @@
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from prometheus_client import Counter, Histogram
+
+from app.utils.oauth_utils import get_current_user
 
 from .constants import LLM_MODEL
 from .metrics import STREAMING_CONNECTIONS, STREAMING_ERRORS, STREAMING_MESSAGES_COUNT
@@ -57,8 +59,11 @@ async def get_chat_result(job_id: str):
 
 
 @router.get("/stream")
-async def stream_chat(query: str, model: str = LLM_MODEL):
+async def stream_chat(query: str, model: str = LLM_MODEL, current_user: str = Depends(get_current_user)):
     """채팅 스트리밍 응답"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
     logger.info(f"스트리밍 채팅 요청 수신: query={query[:30]}..., model={model}")
     CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
     STREAMING_CONNECTIONS.inc()
