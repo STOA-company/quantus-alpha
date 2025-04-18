@@ -7,6 +7,7 @@ from typing import AsyncGenerator, Dict, Optional
 import httpx
 
 from .config import llm_config
+from .constants import LLM_MODEL
 from .llm_client import llm_client
 from .models import Conversation
 from .repository import conversation_repository
@@ -157,7 +158,7 @@ class ChatService:
             logger.error(f"결과 조회 중 오류: {str(e)}")
             return {"status": "error", "message": str(e)}
 
-    async def process_query(self, query: str, model: str = "gpt4mi") -> AsyncGenerator[str, None]:
+    async def process_query(self, query: str, model: str = LLM_MODEL) -> AsyncGenerator[str, None]:
         """LLM 스트리밍 요청 처리"""
         async for chunk in llm_client.process_query(query, model):
             yield chunk
