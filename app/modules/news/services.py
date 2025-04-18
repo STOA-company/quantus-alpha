@@ -147,6 +147,11 @@ class NewsService:
         news_condition = condition.copy()
         news_condition["is_related"] = True
 
+        # 현재 시간에 5분을 더한 시간까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+        news_condition["date__lte"] = allowed_time
+
         change_rate_column = "change_rt"
 
         join_info = lambda table: JoinInfo(  # noqa: E731
@@ -209,6 +214,11 @@ class NewsService:
             disclosure_name = "en_name"
 
         disclosure_condition = condition.copy()
+
+        # 현재 시간에 5분을 더한 시간까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+        disclosure_condition["date__lte"] = allowed_time
 
         change_rate_column = "change_rt"
 
@@ -492,6 +502,7 @@ class NewsService:
 
         current_datetime = now_utc()
         before_24_hours = current_datetime - timedelta(hours=24)
+        allowed_time = current_datetime + timedelta(minutes=5)
 
         if tickers:
             top_stories_tickers = tickers
@@ -513,6 +524,7 @@ class NewsService:
                     SELECT DISTINCT ticker
                     FROM news_analysis
                     WHERE date >= '{before_24_hours}'
+                    AND date <= '{allowed_time}'
                 ) na ON st.ticker = na.ticker
                 WHERE ctry = 'US'
                 ORDER BY st.volume_change_rt DESC
@@ -526,6 +538,7 @@ class NewsService:
                     SELECT DISTINCT ticker
                     FROM news_analysis
                     WHERE date >= '{before_24_hours}'
+                    AND date <= '{allowed_time}'
                 ) na ON st.ticker = na.ticker
                 WHERE ctry = 'KR'
                 ORDER BY st.volume_change_rt DESC
@@ -552,7 +565,12 @@ class NewsService:
         if not top_stories_tickers:
             return []  # 빠른 반환
 
-        condition = {"is_exist": True, "date__gte": before_24_hours, "ticker__in": top_stories_tickers}
+        condition = {
+            "is_exist": True,
+            "date__gte": before_24_hours,
+            "date__lte": allowed_time,
+            "ticker__in": top_stories_tickers,
+        }
 
         news_condition = condition.copy()
         disclosure_condition = condition.copy()
@@ -883,6 +901,10 @@ class NewsService:
         utc_start_datetime = kst_start_datetime.astimezone(utc)
         utc_end_datetime = kst_end_datetime.astimezone(utc)
 
+        # 현재 시간 + 5분까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+
         if end_date:
             end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
 
@@ -902,11 +924,16 @@ class NewsService:
         condition = {
             "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
             "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S"),
             "is_exist": True,
             "is_related": True,
             "lang": lang,
         }
-        recent_news_condition = {"is_related": True, "lang": lang}
+        recent_news_condition = {
+            "is_related": True,
+            "lang": lang,
+            "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
 
         if len(duplicate_stock_info) == 2:
             unique_tickers = [info[0] for info in duplicate_stock_info]
