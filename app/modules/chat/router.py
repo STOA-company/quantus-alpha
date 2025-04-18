@@ -4,7 +4,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from prometheus_client import Counter, Histogram
 
-from .schemas import ChatRequest, ErrorResponse
+from .metrics import STREAMING_CONNECTIONS, STREAMING_ERRORS, STREAMING_MESSAGES_COUNT
+from .schemas import ChatRequest
 from .service import chat_service
 
 logger = logging.getLogger(__name__)
@@ -57,20 +58,40 @@ async def get_chat_result(job_id: str):
 @router.get("/stream")
 async def stream_chat(query: str, model: str = "gpt4mi"):
     """채팅 스트리밍 응답"""
+    logger.info(f"스트리밍 채팅 요청 수신: query={query[:30]}..., model={model}")
+    CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
+    STREAMING_CONNECTIONS.inc()
 
-    async def response_generator():
-        """응답 생성기"""
+    async def event_generator():
+        """표준 SSE 형식의 이벤트 생성기"""
         try:
+            message_count = 0
             async for chunk in chat_service.process_query(query, model):
-                yield chunk
+                message_count += 1
+                # 올바른 SSE 형식으로 응답 생성 (각 행이 data: 로 시작하고 빈 줄로 끝나야 함)
+                if isinstance(chunk, str):
+                    STREAMING_MESSAGES_COUNT.labels(model=model).inc()
+                    yield f"data: {chunk}\n\n"
+
+            logger.info(f"스트리밍 응답 완료: 총 {message_count}개 메시지 전송됨")
+
         except Exception as e:
             logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
-            error_response = ErrorResponse(message=f"스트리밍 처리 오류: {str(e)}")
-            yield error_response.model_dump_json()
+            STREAMING_ERRORS.labels(model=model, error_type="streaming_error").inc()
+            yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
+        finally:
+            STREAMING_CONNECTIONS.dec()
 
-    CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
+    # 올바른 SSE 응답을 위한 헤더 설정
+    headers = {
+        "Content-Type": "text/event-stream",  # 명시적으로 SSE 콘텐츠 타입 지정
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",  # NGINX 버퍼링 비활성화
+        "Transfer-Encoding": "chunked",
+    }
 
-    return StreamingResponse(response_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), headers=headers)
 
 
 @router.get("/conversation/{conversation_id}")
