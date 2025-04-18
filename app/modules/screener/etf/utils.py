@@ -680,12 +680,6 @@ class ETFDataDownloader:
             """
         df = self._get_refinitiv_data(query)
 
-        list_db_tickers = self._get_db_tickers_list(ctry)
-
-        if ctry == "KR":
-            list_db_tickers = [self.kr_pattern.sub("K", ticker) for ticker in list_db_tickers]
-        df = df[df["ticker"].isin(list_db_tickers)]
-
         if download:
             if ctry == "KR":
                 df.to_parquet(os.path.join(self.DATA_DIR, "kr_etf_dividend.parquet"), index=False)
@@ -709,6 +703,7 @@ class ETFDataDownloader:
         if ctry == "US":
             query = """
             SELECT
+                a.DsQtName,
                 c.Ticker,
                 b.MarketDate, b.Open_, b.High, b.Low, b.Close_, b.Volume, b.ExchIntCode, b.Bid, b.Ask,
                 d.MktCap, d.NumShrs,
@@ -749,7 +744,7 @@ class ETFDataDownloader:
         if ctry == "KR":
             query = """
             SELECT
-                a.DsLocalCode as 'Ticker',
+                a.DsLocalCode as 'Ticker', a.DsQtName,
                 b.MarketDate, b.Open_, b.High, b.Low, b.Close_, b.Volume, b.ExchIntCode, b.Bid, b.Ask,
                 d.MktCap, d.NumShrs,
                 e.VWAP
@@ -778,10 +773,6 @@ class ETFDataDownloader:
             """
 
         df = self._get_refinitiv_data(query)
-        list_db_tickers = self._get_db_tickers_list(ctry)
-        if ctry == "KR":
-            list_db_tickers = [self.kr_pattern.sub("K", ticker) for ticker in list_db_tickers]
-        df = df[df["Ticker"].isin(list_db_tickers)]
         if download:
             if ctry == "KR":
                 df.to_parquet(os.path.join(self.DATA_DIR, "kr_etf_price.parquet"), index=False)
@@ -793,6 +784,53 @@ class ETFDataDownloader:
         tickers = self.db._select(table="stock_information", columns=["ticker"], ctry=ctry, type=type)
         tickers = [ticker[0] for ticker in tickers]
         return tickers
+
+    def get_suspended_etf(self, ctry: str) -> pd.DataFrame:
+        if ctry not in ["US", "KR"]:
+            raise ValueError("ctry must be US or KR")
+        # db에 저장된 etf ticker 가져오기
+        etf_tickers = pd.DataFrame(self.db._select(table="stock_information", columns=["ticker"], ctry=ctry, type="etf"))
+
+        # 티커 변환 규칙 적용
+        if ctry == "KR":
+            etf_tickers["ticker"] = etf_tickers["ticker"].apply(lambda x: "K" + x[1:] if x.startswith("A") else x)
+
+        # 레피니티브에서 해당 종목들의 상태 가져오기
+        ticker_list = [f"'{ticker}'" for ticker in etf_tickers["ticker"].tolist()]
+        if ctry == "KR":
+            query = f"""
+            SELECT
+                a.DsLocalCode,
+                a.StatusCode
+            FROM
+                Ds2CtryQtInfo a
+            WHERE
+                a.DsLocalCode IN ({', '.join(ticker_list)})
+                AND a.TypeCode = 'ET'
+            """
+        if ctry == "US":
+            query = f"""
+            SELECT
+                c.Ticker,
+                a.StatusCode
+            FROM
+                Ds2CtryQtInfo a
+            JOIN
+                Ds2MnemChg c
+                ON c.InfoCode = a.InfoCode
+                AND c.EndDate = (
+                    SELECT MAX(EndDate)
+                    FROM Ds2MnemChg
+                    WHERE InfoCode = a.InfoCode
+                )
+            WHERE
+                a.DsQtName IN ({', '.join(ticker_list)})
+                AND a.TypeCode = 'ET'
+                AND c.EndDate >= '2025-01-01'
+            """
+
+        etf_status = self._get_refinitiv_data(query)
+        return etf_status
 
 
 class KRXDownloader:
@@ -905,7 +943,7 @@ class KRXDownloader:
             driver.get(url)
 
             # 현재 날짜 가져오기 (파일명에 사용)
-            today = datetime.now().strftime("%Y%m%d")
+            today = datetime.datetime.now().strftime("%Y%m%d")
 
             # 페이지 로딩 대기
             print("페이지 로딩 중...")
@@ -976,9 +1014,9 @@ class ETFDataLoader:
     def load_etf_info(self, ctry):
         country = "kr" if ctry == "KR" else "us"
         if ctry == "KR":
-            select_colums = ["ticker", "ctry", "market"]
+            select_colums = ["ticker", "ctry", "market", "is_delisted"]
         else:
-            select_colums = ["ticker", "ctry", "market", "en_name"]
+            select_colums = ["ticker", "ctry", "market", "en_name", "is_delisted"]
         etf_info = pd.DataFrame(
             self.db._select(table="stock_information", columns=select_colums, ctry=country, type="etf")
         )
@@ -1047,6 +1085,11 @@ class ETFDataLoader:
             df_rating = pd.read_parquet(os.path.join(self.morningstar_dir, "us_etf_morningstar_rating.parquet"))
             df = df_rating if df.empty else pd.merge(df, df_rating, on="ticker", how="left")
         return df
+
+    def get_db_tickers_list(self, ctry: str, type: str = "etf"):
+        tickers = self.db._select(table="stock_information", columns=["ticker"], ctry=ctry, type=type)
+        tickers = [ticker[0] for ticker in tickers]
+        return tickers
 
 
 class ETFDividendFactorExtractor:
@@ -1775,7 +1818,7 @@ class ETFDataPreprocessor:
         else:
             raise ValueError(f"Invalid country: {ctry}")
 
-        all_columns = ["ticker", "ctry", "market", "en_name"]
+        all_columns = ["ticker", "ctry", "market", "en_name", "is_delisted"]
         select_columns = [col for col in all_columns if col in df.columns]
         df_select = df[select_columns]
 
@@ -2424,6 +2467,10 @@ class ETFDataMerger:
                     # pd.to_numeric 함수를 사용하여 변환 가능한 값만 숫자로 변환
                     df_merged[col] = pd.to_numeric(df_merged[col], errors="ignore")
 
+        # 상폐 종목 제거
+        df_merged = df_merged[df_merged["is_delisted"] == False]  # noqa: E712
+        # exist_tickers = self.loader.get_db_tickers_list(ctry)
+        # df_merged = df_merged[df_merged["Code"].isin(exist_tickers)]
         return df_merged
 
 

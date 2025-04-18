@@ -13,7 +13,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 RUN apt-get update && \
-    apt-get install -y git unixodbc unixodbc-dev curl gnupg && \
+    apt-get install -y git unixodbc unixodbc-dev curl gnupg gcc python3-dev && \
     rm -rf /var/lib/apt/lists/* && \
     pip install "poetry==$POETRY_VERSION" gunicorn uvicorn && \
     mkdir -p $POETRY_CACHE_DIR $PIP_CACHE_DIR && \

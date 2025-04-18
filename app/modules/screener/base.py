@@ -68,8 +68,8 @@ class BaseScreenerService(ABC):
                     grouped_filters[factor] = {
                         "factor": factor,
                         "values": [],
-                        "above": stock_filter.above if stock_filter.above else None,
-                        "below": stock_filter.below if stock_filter.below else None,
+                        "above": stock_filter.above if stock_filter.above is not None else None,
+                        "below": stock_filter.below if stock_filter.below is not None else None,
                         "type": stock_filter.type.lower() if stock_filter.type else None,
                     }
                 if stock_filter.value:
@@ -557,31 +557,66 @@ class BaseScreenerService(ABC):
             if custom_filters is None:
                 custom_filters = []
 
-            default_filters = self.get_default_custom_filters()
-            # Map default filter factors using FACTOR_MAP
-            for filter in default_filters:
-                filter["factor"] = FACTOR_MAP[filter["factor"]]
+            default_filters = self.get_default_custom_filters(type)
 
-            existing_factors = {filter.get("factor") for filter in custom_filters}
+            # 딕셔너리와 객체를 모두 처리할 수 있도록 수정
+            existing_factors = set()
+            for filter_item in custom_filters:
+                if hasattr(filter_item, "factor"):
+                    existing_factors.add(filter_item.factor)
+                elif isinstance(filter_item, dict) and "factor" in filter_item:
+                    existing_factors.add(filter_item["factor"])
 
-            # Add missing default filters
+            # Add missing default filters - 딕셔너리 형태로 추가
             for default_filter in default_filters:
                 if default_filter["factor"] not in existing_factors:
-                    custom_filters.append(default_filter)
+                    mapped_factor = FACTOR_MAP[default_filter["factor"]]
+                    custom_filters.append(
+                        {
+                            "factor": mapped_factor,
+                            "type": default_filter["type"].value
+                            if default_filter.get("type")
+                            else FactorTypeEnum.SLIDER.value,
+                            "above": default_filter.get("above"),
+                            "below": default_filter.get("below"),
+                            "values": [],
+                        }
+                    )
 
             if custom_filters:
                 for condition in custom_filters:
-                    if condition.get("values", None):
-                        for value in condition["values"]:
+                    # condition이 dict인지 객체인지 확인하여 처리
+                    if isinstance(condition, dict):
+                        values = condition.get("values", [])
+                        factor = condition.get("factor")
+                        filter_type = condition.get("type")
+                        above = condition.get("above")
+                        below = condition.get("below")
+                    else:
+                        values = condition.values if hasattr(condition, "values") else []
+                        factor = condition.factor if hasattr(condition, "factor") else None
+                        filter_type = (
+                            condition.type if hasattr(condition, "type") and condition.type is not None else None
+                        )
+                        above = condition.above if hasattr(condition, "above") else None
+                        below = condition.below if hasattr(condition, "below") else None
+
+                    if filter_type is None:
+                        filter_type = FactorTypeEnum.SLIDER.value
+                    elif isinstance(filter_type, FactorTypeEnum):
+                        filter_type = filter_type.value
+
+                    if values:
+                        for value in values:
                             insert_tasks.append(
                                 self.database.insert_wrapper(
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
-                                        "factor": REVERSE_FACTOR_MAP[condition["factor"]],
-                                        "type": condition["type"],
-                                        "above": condition.get("above"),
-                                        "below": condition.get("below"),
+                                        "factor": REVERSE_FACTOR_MAP[factor],
+                                        "type": filter_type,
+                                        "above": above,
+                                        "below": below,
                                         "value": value,
                                     },
                                 )
@@ -592,10 +627,10 @@ class BaseScreenerService(ABC):
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": REVERSE_FACTOR_MAP[condition["factor"]],
-                                    "type": condition["type"],
-                                    "above": condition.get("above"),
-                                    "below": condition.get("below"),
+                                    "factor": REVERSE_FACTOR_MAP[factor],
+                                    "type": filter_type,
+                                    "above": above,
+                                    "below": below,
                                     "value": None,
                                 },
                             )
@@ -693,17 +728,38 @@ class BaseScreenerService(ABC):
 
             if custom_filters:
                 for condition in custom_filters:
-                    if condition.values:
-                        for value in condition.values:
+                    # condition이 dict인지 객체인지 확인하여 처리
+                    if isinstance(condition, dict):
+                        values = condition.get("values", [])
+                        factor = condition.get("factor")
+                        filter_type = condition.get("type")
+                        above = condition.get("above")
+                        below = condition.get("below")
+                    else:
+                        values = condition.values if hasattr(condition, "values") else []
+                        factor = condition.factor if hasattr(condition, "factor") else None
+                        filter_type = (
+                            condition.type if hasattr(condition, "type") and condition.type is not None else None
+                        )
+                        above = condition.above if hasattr(condition, "above") else None
+                        below = condition.below if hasattr(condition, "below") else None
+
+                    if filter_type is None:
+                        filter_type = FactorTypeEnum.SLIDER.value
+                    elif isinstance(filter_type, FactorTypeEnum):
+                        filter_type = filter_type.value
+
+                    if values:
+                        for value in values:
                             insert_tasks.append(
                                 self.database.insert_wrapper(
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
-                                        "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                        "type": condition.type,
-                                        "above": condition.above,
-                                        "below": condition.below,
+                                        "factor": REVERSE_FACTOR_MAP[factor],
+                                        "type": filter_type,
+                                        "above": above,
+                                        "below": below,
                                         "value": value,
                                     },
                                 )
@@ -714,10 +770,10 @@ class BaseScreenerService(ABC):
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": REVERSE_FACTOR_MAP[condition.factor],
-                                    "type": condition.type,
-                                    "above": condition.above,
-                                    "below": condition.below,
+                                    "factor": REVERSE_FACTOR_MAP[factor],
+                                    "type": filter_type,
+                                    "above": above,
+                                    "below": below,
                                     "value": None,
                                 },
                             )
@@ -851,32 +907,39 @@ class BaseScreenerService(ABC):
             print(f"에러 발생: {str(e)}")
             raise e
 
-    def get_default_custom_filters(self):
+    def get_default_custom_filters(self, type: Optional[StockType] = StockType.STOCK):
         try:
-            kr_df = pd.read_parquet("parquet/kr_stock_factors.parquet")
-            us_df = pd.read_parquet("parquet/us_stock_factors.parquet")
-
-            combined_df = pd.concat([kr_df, us_df])
-
             default_factors = ["marketCap", "median_trade", "close"]
             result = []
 
+            if type == StockType.STOCK:
+                # Get data using MarketEnum.ALL for stocks
+                market_data = screener_utils.get_df_from_parquet(MarketEnum.ALL)
+            else:
+                # Get data using ETFMarketEnum.ALL for ETFs
+                market_data = screener_utils.etf_factor_loader.load_etf_factors(ETFMarketEnum.ALL.value)
+
             for factor in default_factors:
-                if factor in combined_df.columns:
-                    min_value = combined_df[factor].min()
-                    max_value = combined_df[factor].max()
+                if factor in market_data.columns:
+                    # Convert to numeric and handle NaN values
+                    market_data[factor] = pd.to_numeric(market_data[factor], errors="coerce")
+                    valid_data = market_data[factor].dropna()
 
-                    min_value = np.floor(min_value)
-                    max_value = np.ceil(max_value)
+                    if not valid_data.empty:
+                        min_value = valid_data.min()
+                        max_value = valid_data.max()
 
-                    result.append(
-                        {
-                            "factor": factor,
-                            "above": min_value,
-                            "below": max_value,
-                            "type": FactorTypeEnum.SLIDER,
-                        }
-                    )
+                        min_value = np.floor(min_value)
+                        max_value = np.ceil(max_value)
+
+                        result.append(
+                            {
+                                "factor": factor,
+                                "above": min_value,
+                                "below": max_value,
+                                "type": FactorTypeEnum.SLIDER,
+                            }
+                        )
 
             return result
 

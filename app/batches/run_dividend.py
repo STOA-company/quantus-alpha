@@ -7,6 +7,8 @@ import pandas as pd
 
 from app.common.constants import ETF_DATA_DIR
 from app.database.crud import database
+from app.kispy.api import KISAPI
+from app.kispy.sdk import auth
 from app.modules.screener.etf.utils import ETFDataDownloader
 
 # 로깅 설정
@@ -540,6 +542,67 @@ def insert_dividend(ctry: str, type: str, max_workers=4):
 
     total_elapsed_time = time.time() - total_start_time
     logger.info(f"Completed all dividend processing in {total_elapsed_time:.2f} seconds")
+
+
+def get_etf_top_constituents(etf_ticker: str) -> list[dict]:  # kis대신 krx를 사용 # 현재 사용안하는 함수
+    """
+    ETF의 상위 100개 구성종목 정보를 가져옵니다.
+
+    Args:
+        etf_ticker (str): ETF 종목코드
+
+    Returns:
+        list[dict]: 상위 100개 구성종목 정보 리스트
+    """
+    api = KISAPI(auth)
+    result = api.get_etf_constituents(etf_ticker)
+
+    if not result.get("constituents"):
+        print(f"Failed to fetch constituents for ETF {etf_ticker}")
+        return []
+
+    # Sort constituents by weight in descending order
+    sorted_constituents = sorted(result["constituents"], key=lambda x: x["weight"], reverse=True)
+
+    db_data = []
+    for stock in sorted_constituents:
+        db_data.append({"etf_ticker": etf_ticker, "constituent_ticker": stock["ticker"], "weight": stock["weight"]})
+
+    return db_data
+
+
+def run_update_etf_constituents(ctry: str):  # kis대신 krx를 사용 # 현재 사용안하는 함수
+    if ctry not in ["US", "KR"]:
+        raise ValueError("ctry must be either 'US' or 'KR'")
+
+    etf_tickers = database._select(table="stock_information", columns=["ticker"], ctry=ctry, type="etf")
+    if ctry == "KR":
+        etf_tickers = [ticker[1:] for ticker in etf_tickers]
+    else:
+        etf_tickers = [ticker for ticker in etf_tickers]
+
+    api = KISAPI(auth)
+    for etf_ticker in etf_tickers:
+        result = api.get_etf_constituents(etf_ticker)
+
+    if not result.get("constituents"):
+        print("Failed to fetch ETF constituents")
+        return
+
+    # Sort constituents by weight in descending order
+    sorted_constituents = sorted(result["constituents"], key=lambda x: x["weight"], reverse=True)
+    etf_constituents = []
+    # Get top 10 holdings
+    top_10 = sorted_constituents[:10]
+    for stock in top_10:
+        etf_constituents.append(
+            {
+                "etf_ticker": etf_ticker,
+                "ticker": stock["ticker"],
+                "name": stock["name"],
+                "weight": stock["weight"],
+            }
+        )
 
 
 class StockDividendDataDownloader(ETFDataDownloader):

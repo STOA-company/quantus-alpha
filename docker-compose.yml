@@ -59,6 +59,7 @@ services:
             REDIS_PORT: 6379
             REDIS_PASSWORD: ${REDIS_PASSWORD}
             APP_NAME: green
+            LLM_MOCK_ENABLED: "true"
         env_file:
             - .env
         volumes:
@@ -77,31 +78,6 @@ services:
             retries: 3
             start_period: 5s
         profiles: ["manual"]
-        restart: unless-stopped
-
-    chat_worker:
-        build:
-            context: .
-            dockerfile: Dockerfile
-        container_name: chat_worker
-        command: poetry run celery -A app.modules.chat.worker worker --loglevel=info -Q chat_queue
-        environment:
-            ENV: ${ENV:-dev}
-            REDIS_HOST: redis
-            REDIS_PORT: 6379
-            REDIS_PASSWORD: ${REDIS_PASSWORD}
-            LLM_MOCK_ENABLED: "true"
-        env_file:
-            - .env
-        volumes:
-            - .:/app
-            - pip-cache:/root/.cache/pip
-            - poetry-cache:/var/cache/poetry
-        depends_on:
-            redis:
-                condition: service_healthy
-        networks:
-            - alpha-network
         restart: unless-stopped
 
     redis:

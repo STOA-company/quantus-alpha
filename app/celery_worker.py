@@ -5,7 +5,9 @@ from app.batches import run_etf_price
 from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_stat_cls_code_batch
 from app.batches.run_disclosure import run_disclosure_batch
 from app.batches.run_dividend import insert_dividend
+from app.batches.run_etf_price import update_etf_status
 from app.batches.run_etf_screener import run_etf_screener_data
+from app.batches.run_kr_etf_holdings import update_kr_etf_holdings
 from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
 from app.batches.run_news import run_news_batch
 from app.batches.run_stock_indices import get_stock_indices_data, kr_run_stock_indices_batch, us_run_stock_indices_batch
@@ -15,6 +17,7 @@ from app.batches.run_stock_trend import (
     run_stock_trend_reset_batch,
     run_stock_trend_tickers_batch,
 )
+from app.batches.run_us_etf_holdings import update_etf_top_holdings
 from app.common.celery_config import CELERY_APP
 from app.core.config import settings
 from app.core.extra.SlackNotifier import SlackNotifier
@@ -575,6 +578,60 @@ def update_kr_etf_price():
     except Exception as e:
         notifier_1d.notify_error(f"update_kr_etf_price process failed: {str(e)}")
         raise
+
+
+@CELERY_APP.task(name="kr_update_etf_status", ignore_result=True)
+def kr_update_etf_status():
+    """한국 ETF 상태 업데이트"""
+    notifier_1d.notify_info("kr_update_etf_status process started")
+    try:
+        update_etf_status("KR")
+        notifier_1d.notify_success("kr_update_etf_status process completed")
+    except Exception as e:
+        notifier_1d.notify_error(f"kr_update_etf_status process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="us_update_etf_status", ignore_result=True)
+def us_update_etf_status():
+    """미국 ETF 상태 업데이트"""
+    notifier_1d.notify_info("us_update_etf_status process started")
+    try:
+        update_etf_status("US")
+        notifier_1d.notify_success("us_update_etf_status process completed")
+    except Exception as e:
+        notifier_1d.notify_error(f"us_update_etf_status process failed: {str(e)}")
+        raise
+
+
+@CELERY_APP.task(name="kr_update_etf_holdings", ignore_result=True)
+def kr_update_etf_holdings():
+    """한국 ETF 구성종목 업데이트"""
+    if is_business_day("KR"):
+        notifier_1d.notify_info("kr_update_etf_holdings process started")
+        try:
+            update_kr_etf_holdings()
+            notifier_1d.notify_success("kr_update_etf_holdings process completed")
+        except Exception as e:
+            notifier_1d.notify_error(f"kr_update_etf_holdings process failed: {str(e)}")
+            raise
+    else:
+        notifier_1d.notify_info("KR market is not open. kr_update_etf_holdings process skipped.")
+
+
+@CELERY_APP.task(name="us_update_etf_holdings", ignore_result=True)
+def us_update_etf_holdings():
+    """미국 ETF 구성종목 업데이트"""
+    if is_business_day("US"):
+        notifier_1d.notify_info("us_update_etf_holdings process started")
+        try:
+            update_etf_top_holdings(ctry="US")
+            notifier_1d.notify_success("us_update_etf_holdings process completed")
+        except Exception as e:
+            notifier_1d.notify_error(f"us_update_etf_holdings process failed: {str(e)}")
+            raise
+    else:
+        notifier_1d.notify_info("US market is not open. us_update_etf_holdings process skipped.")
 
 
 # Worker 시작점

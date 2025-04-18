@@ -36,7 +36,11 @@ class PaymentService:
         is_banner = False
         max_remaining_days = 0
         for price in data:
-            remaining_days = (price.event_end_date.date() - now_kr().date()).days if price.event_end_date else None
+            remaining_days = (
+                (price.event_end_date.date() - now_kr().date()).days
+                if price.event_end_date and price.event_end_date.date() >= now_kr().date()
+                else None
+            )
             price_template.append(
                 PriceTemplateItem(
                     id=price.id,
@@ -46,12 +50,14 @@ class PaymentService:
                     period_days=price.period_days,
                     is_event=price.is_event,
                     event_type=price.event_type or None,
-                    event_end_date=max(0, remaining_days) if remaining_days else None,
+                    event_end_date=max(0, remaining_days) if remaining_days is not None else None,
                 )
             )
             if price.is_banner:
                 is_banner = True
-                max_remaining_days = max(max_remaining_days, remaining_days)
+                max_remaining_days = (
+                    max(max_remaining_days, remaining_days) if remaining_days is not None else max_remaining_days
+                )
         response_price_template = ResponsePriceTemplate(
             is_banner=is_banner,
             banner={
