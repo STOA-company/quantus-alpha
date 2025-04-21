@@ -1,11 +1,10 @@
 import logging
 from functools import wraps
 
-from app.batches import run_etf_price
 from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_stat_cls_code_batch
 from app.batches.run_disclosure import run_disclosure_batch
 from app.batches.run_dividend import insert_dividend
-from app.batches.run_etf_price import update_etf_status
+from app.batches.run_etf_price import run_etf_price, update_etf_status
 from app.batches.run_etf_screener import run_etf_screener_data
 from app.batches.run_kr_etf_holdings import update_kr_etf_holdings
 from app.batches.run_kr_stock_minute import collect_kr_stock_minute_data
