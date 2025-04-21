@@ -213,6 +213,7 @@ class PresignedUrlRequest(BaseModel):
 class PresignedUrlResponse(BaseModel):
     """Presigned URL 응답 스키마"""
 
+    file_name: str = Field(..., description="S3에 저장될 파일 이름")
     upload_url: str = Field(..., description="S3 업로드용 presigned URL")
     image_key: str = Field(..., description="S3에 저장될 이미지 키")
-    expires_in: int = Field(..., description="URL 유효기간 (초)")
+    # expires_in: int = Field(..., description="URL 유효기간 (초)")

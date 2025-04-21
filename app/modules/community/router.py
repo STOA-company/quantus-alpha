@@ -47,9 +47,10 @@ async def generate_presigned_url(
         status_code=200,
         message="presigned URL을 발급하였습니다.",
         data=PresignedUrlResponse(
+            file_name=result["file_name"],
             upload_url=result["upload_url"],
             image_key=result["image_key"],
-            expires_in=result["expires_in"],
+            # expires_in=result["expires_in"],
         ),
     )
 
