@@ -1,6 +1,7 @@
 from sqlalchemy.orm import relationship
 
 from app.models.models_base import Base, ServiceBase
+from app.models.models_chat import ChatConversation, ChatMessage
 from app.models.models_community import (
     Bookmark,
     Category,
@@ -71,6 +72,8 @@ __all__ = [
     "TossReceipt",
     "MembershipFeature",
     "SubscriptionStatusChange",
+    "ChatMessage",
+    "ChatConversation",
 ]
 
 # Category relationships
