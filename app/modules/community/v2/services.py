@@ -200,13 +200,25 @@ class CommunityService:
                 id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None
             )
 
-        # 4. ResponsePost 객체 생성 및 반환
+        # 4. 이미지 URL 처리
+        image_urls = []
+        if post["image_url"]:
+            try:
+                image_urls = json.loads(post["image_url"])
+                # 각 이미지 URL에 대해 presigned URL 생성
+                for i, url in enumerate(image_urls):
+                    presigned_url = self.generate_get_presigned_url(url)
+                    image_urls[i] = presigned_url["get_url"]
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse image_url JSON for post {post_id}")
+
+        # 5. ResponsePost 객체 생성 및 반환
         response = ResponsePost(
             id=post["id"],
             title=post["title"],
             content=post["content"],
             category_name=post["category_name"],
-            image_url=post["image_url"],
+            image_url=image_urls,
             image_format=post["image_format"],
             like_count=post["like_count"],
             comment_count=post["comment_count"],
@@ -219,6 +231,22 @@ class CommunityService:
         )
 
         return response
+
+    def _get_first_image_url(self, image_urls_json: Optional[str]) -> Optional[str]:
+        """이미지 URL JSON에서 첫 번째 이미지 URL을 반환"""
+        if not image_urls_json:
+            return None
+
+        try:
+            image_urls = json.loads(image_urls_json)
+            # _0.확장자 형식으로 끝나는 첫 번째 URL 찾기
+            for url in image_urls:
+                if any(url.endswith(f"_0.{ext}") for ext in self.ALLOWED_CONTENT_TYPES.values()):
+                    return url
+            return None
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse image_url JSON: {image_urls_json}")
+            return None
 
     async def get_posts(
         self,
@@ -341,7 +369,9 @@ class CommunityService:
                 title=post["title"],
                 content=post["content"],
                 category_name=post["category_name"],
-                image_url=post["image_url"],
+                image_url=[self.generate_get_presigned_url(first_image)["get_url"]]
+                if (first_image := self._get_first_image_url(post["image_url"]))
+                else None,
                 image_format=post["image_format"],
                 like_count=post["like_count"],
                 comment_count=post["comment_count"],
@@ -385,7 +415,7 @@ class CommunityService:
             "title": post_update.title,
             "content": post_update.content,
             "category_id": post_update.category_id,
-            "image_url": post_update.image_url,
+            "image_url": json.dumps(post_update.image_url) if post_update.image_url else None,
             "image_format": post_update.image_format,
             "updated_at": current_time,
         }
@@ -410,20 +440,42 @@ class CommunityService:
 
         return True, post_id
 
+    async def _delete_images_from_s3(self, image_urls_json: Optional[str]) -> None:
+        """S3에서 이미지 삭제"""
+        if not image_urls_json:
+            return
+
+        try:
+            image_urls = json.loads(image_urls_json)
+            for image_key in image_urls:
+                try:
+                    # S3에서 이미지 삭제
+                    await s3_client.delete_object(Bucket=self.s3_bucket, Key=image_key)
+                except Exception as e:
+                    logger.error(f"Failed to delete image from S3: {image_key}, error: {e}")
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse image_url JSON: {image_urls_json}")
+        except Exception as e:
+            logger.error(f"Failed to delete images from S3: {e}")
+
     async def delete_post(self, current_user: AlphafinderUser, post_id: int) -> bool:
         """게시글 삭제"""
         user_id = current_user["uid"] if current_user else None
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
-        post_user_id = self.db._select(table="posts", columns=["user_id"], id=post_id)
+        post_user_id = self.db._select(table="posts", columns=["user_id", "image_url"], id=post_id)
         if not post_user_id:
             raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
 
         post_user_id = post_user_id[0][0]
+        image_urls_json = post_user_id[0][1]
 
         if user_id != post_user_id:
             raise PostException(message="게시글 삭제 권한이 없습니다", status_code=403, post_id=post_id)
+
+        # S3에서 이미지 삭제
+        await self._delete_images_from_s3(image_urls_json)
 
         result = self.db._delete(table="posts", id=post_id)
 
@@ -951,11 +1003,6 @@ class CommunityService:
         extension = self._get_extension_from_content_type(content_type)
         image_key = self._generate_image_key(extension, index)
 
-        # Redis에서 캐시된 URL 확인
-        # cached_data = self._get_cached_presigned_url(image_key, "community")
-        # if cached_data:
-        #     return cached_data
-
         # PUT presigned URL 생성 (업로드용)
         presigned_post = s3_client.generate_presigned_url(
             "put_object",
@@ -973,9 +1020,6 @@ class CommunityService:
             "upload_url": presigned_post,
             "image_key": image_key,
         }
-
-        # Redis에 캐시
-        self._cache_presigned_url(image_key, presigned_data, "community")
 
         return presigned_data
 

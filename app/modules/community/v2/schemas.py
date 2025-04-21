@@ -46,7 +46,7 @@ class ResponsePost(BaseModel):
     title: str
     content: str
     category_name: str
-    image_url: Optional[str] = None
+    image_url: Optional[List[str]] = None
     image_format: Optional[str] = None
     like_count: int
     comment_count: int
@@ -69,8 +69,7 @@ class PostUpdate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1)
     category_id: int
-    image_url: Optional[str] = None
-    image_format: Optional[str] = None
+    image_url: Optional[List[str]] = None
     stock_tickers: List[str] = Field(default=[], max_items=3)
 
     class Config:
