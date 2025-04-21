@@ -39,6 +39,8 @@ class ScreenerStockFilter(ServiceBase, BaseMixin):
     below = Column(Integer, nullable=True)
     value = Column(String(50), nullable=True)
 
+    group = relationship("ScreenerGroup", back_populates="stock_filters")
+
     __table_args__ = (Index("idx_group_factor", "group_id", "factor"),)
 
     def __repr__(self):
