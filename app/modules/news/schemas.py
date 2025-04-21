@@ -59,6 +59,19 @@ class NewsDetailItemV2(BaseModel):
     price_impact: float | None
 
 
+class NewsDetailItemV3(BaseModel):
+    id: int
+    ctry: str | None
+    date: datetime
+    title: str
+    summary: str | None
+    impact_reason: str | None
+    key_points: str | None
+    emotion: str | None
+    price_impact: float | None
+    ticker_name: str | None
+
+
 class DisclosureRenewalItem(BaseModel):
     id: int
     date: datetime
