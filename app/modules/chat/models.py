@@ -1,6 +1,5 @@
-import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -8,12 +7,12 @@ from pydantic import BaseModel, Field
 class Message(BaseModel):
     """메시지 도메인 모델"""
 
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    conversation_id: str
+    id: Optional[int] = None
+    conversation_id: int
     content: str
-    role: str  # 'user' 또는 'assistant'
+    role: str  # 'user', 'assistant', 'system'
+    root_message_id: Optional[int] = None
     created_at: datetime = Field(default_factory=datetime.now)
-    metadata: Dict = Field(default_factory=dict)
 
     class Config:
         arbitrary_types_allowed = True
@@ -22,13 +21,13 @@ class Message(BaseModel):
 class Conversation(BaseModel):
     """대화 도메인 모델"""
 
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    id: Optional[int] = None
     title: Optional[str] = None
+    user_id: Optional[int] = None
+    latest_job_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     messages: List[Message] = Field(default_factory=list)
-    model: str = "gpt4mi"
-    metadata: Dict = Field(default_factory=dict)
 
     class Config:
         arbitrary_types_allowed = True

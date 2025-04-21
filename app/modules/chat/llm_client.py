@@ -25,7 +25,6 @@ class LLMClient:
         request_data = ChatRequest(query=query, model=model)
 
         if llm_config.mock_enabled:
-            # 테스트용 모의 응답 생성
             async for chunk in self._mock_streaming_response(query):
                 yield chunk
             return
@@ -42,31 +41,29 @@ class LLMClient:
                         error_text = response.text
                         logger.error(f"LLM API 초기 요청 오류: {response.status_code} - {error_text}")
                         error_message = f"LLM 서비스 오류: {response.status_code}"
-                        msg = {"type": "error", "content": error_message}
+                        msg = {"status": "failed", "content": error_message}
                         yield json.dumps(msg, ensure_ascii=False)
                         return
 
-                    # job_id 추출
                     response_data = response.json()
                     job_id = response_data.get("job_id")
 
                     if not job_id:
                         logger.error(f"LLM API 응답에 job_id가 없음: {response_data}")
                         error_message = "LLM 서비스 응답 형식 오류"
-                        msg = {"type": "error", "content": error_message}
+                        msg = {"status": "failed", "content": error_message}
                         yield json.dumps(msg, ensure_ascii=False)
                         return
 
                     logger.info(f"작업 요청 성공: {job_id}")
 
-                    # 첫 번째 응답으로 초기 메시지 반환
                     initial_msg = {
-                        "type": "initial",
+                        "status": "submitted",
                         "content": "주요 뉴스, 공시, 기업 이슈 등을 종합 분석하여 질문에 대한 답변을 준비하고 있습니다.",
+                        "job_id": job_id,
                     }
                     yield json.dumps(initial_msg, ensure_ascii=False)
 
-                    # 2. job_id로 주기적으로 폴링하여 결과 확인
                     polling_interval = 3.0  # 기본 폴링 간격
                     max_timeout = 550  # nginx 설정과 동기화 (600초보다 약간 적게 설정)
 
@@ -100,7 +97,7 @@ class LLMClient:
                         if status == "ERROR" or status_data.get("error"):
                             error_msg = status_data.get("error", "알 수 없는 오류")
                             logger.error(f"LLM 작업 처리 중 오류: {error_msg}")
-                            msg = {"type": "error", "content": f"LLM 서비스 오류: {error_msg}"}
+                            msg = {"status": "failed", "content": f"LLM 서비스 오류: {error_msg}"}
                             yield json.dumps(msg, ensure_ascii=False)
                             return
 
@@ -110,7 +107,7 @@ class LLMClient:
                             step_message = step_info.get("message", "")
                             if step_message and step_message != previous_result:
                                 previous_result = step_message
-                                progress_msg = {"type": "progress", "content": step_message}
+                                progress_msg = {"status": "progress", "content": step_message}
                                 yield json.dumps(progress_msg, ensure_ascii=False)
 
                         # 완료 체크
@@ -129,7 +126,7 @@ class LLMClient:
 
                                 # 최종 결과가 이전 결과와 다른 경우에만 반환
                                 if final_result != previous_result:
-                                    final_msg = {"type": "final", "content": final_result}
+                                    final_msg = {"status": "success", "content": final_result}
                                     yield json.dumps(final_msg, ensure_ascii=False)
                                 else:
                                     logger.warning("이전 결과와 동일한 결과를 수신했습니다")
@@ -139,7 +136,7 @@ class LLMClient:
                             else:
                                 logger.warning(f"예상치 못한 result 형식: {type(result_obj)}")
                                 if result_obj:  # 문자열이거나 다른 형식인 경우
-                                    final_msg = {"type": "final", "content": str(result_obj)}
+                                    final_msg = {"status": "success", "content": str(result_obj)}
                                     yield json.dumps(final_msg, ensure_ascii=False)
                                     return
 
@@ -147,7 +144,7 @@ class LLMClient:
 
                     # 최대 시간을 초과한 경우
                     logger.warning(f"최대 대기 시간 초과: {job_id}")
-                    timeout_msg = {"type": "error", "content": "응답 시간이 초과되었습니다. 다시 시도해주세요."}
+                    timeout_msg = {"status": "failed", "content": "응답 시간이 초과되었습니다. 다시 시도해주세요."}
                     yield json.dumps(timeout_msg, ensure_ascii=False)
                     return
 
@@ -156,23 +153,24 @@ class LLMClient:
                 logger.warning(f"LLM API 연결 오류 (재시도 {retry_count}/{llm_config.retry_attempts}): {str(e)}")
                 if retry_count >= llm_config.retry_attempts:
                     error_message = "LLM 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해주세요."
-                    msg = {"type": "error", "content": error_message}
+                    msg = {"status": "failed", "content": error_message}
                     yield json.dumps(msg, ensure_ascii=False)
                     return
                 await asyncio.sleep(llm_config.retry_delay * retry_count)
             except Exception as e:
                 logger.error(f"LLM API 요청 중 예외 발생: {str(e)}")
                 error_message = f"LLM 서비스 오류: {str(e)}"
-                msg = {"type": "error", "content": error_message}
+                msg = {"status": "failed", "content": error_message}
                 yield json.dumps(msg, ensure_ascii=False)
                 return
 
     async def _mock_streaming_response(self, query: str) -> AsyncGenerator[str, None]:
         """테스트를 위한 모의 스트리밍 응답 생성"""
-        # 초기 메시지
+        mock_job_id = f"mock_{int(time.time())}"
         initial_msg = {
-            "type": "initial",
+            "status": "submitted",
             "content": "주요 뉴스, 공시, 기업 이슈 등을 종합 분석하여 질문에 대한 답변을 준비하고 있습니다.",
+            "job_id": mock_job_id,
         }
         yield json.dumps(initial_msg, ensure_ascii=False)
         await asyncio.sleep(1.0)
@@ -189,7 +187,7 @@ class LLMClient:
         ]
 
         for msg in progress_messages:
-            progress_msg = {"type": "progress", "content": msg}
+            progress_msg = {"status": "progress", "content": msg}
             await asyncio.sleep(0.8)
             yield json.dumps(progress_msg, ensure_ascii=False)
 
@@ -202,7 +200,7 @@ class LLMClient:
             final_content = f"'{query}'에 관한 질문에 답변드리겠습니다. 이 주제는 매우 흥미로운 분야입니다. 스트리밍은 사용자 경험을 향상시키는 중요한 기술입니다. 특히 대용량 텍스트를 생성하는 LLM 모델에서는 더욱 중요합니다."
 
         await asyncio.sleep(1.5)
-        final_msg = {"type": "final", "content": final_content}
+        final_msg = {"status": "success", "content": final_content}
         yield json.dumps(final_msg, ensure_ascii=False)
 
 
