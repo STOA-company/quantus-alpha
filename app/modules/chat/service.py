@@ -56,6 +56,9 @@ class ChatService:
     def get_status(self, conversation_id: int) -> str:
         latest_job_id = conversation_repository.get_latest_job_id(conversation_id)
 
+        if not latest_job_id:
+            return "success"
+
         response = httpx.get(f"{llm_config.base_url}/{latest_job_id}")
         status = response.json().get("status").lower()
         return status

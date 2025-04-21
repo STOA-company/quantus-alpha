@@ -111,6 +111,12 @@ async def stream_chat(
     if not current_user:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
+    status = chat_service.get_status(conversation_id)
+    if status == "pending":
+        raise HTTPException(status_code=429, detail="대기 중입니다.")
+    elif status == "progress":
+        raise HTTPException(status_code=429, detail="답변이 생성 중입니다.")
+
     conversation = chat_service.get_conversation(conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="존재하지 않는 대화입니다.")
