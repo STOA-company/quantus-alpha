@@ -14,7 +14,10 @@ class ChatMessage(BaseMixin, ServiceBase):
         BigInteger, ForeignKey("chat_conversation.id", ondelete="CASCADE"), nullable=False, index=True
     )
     content: Mapped[String] = mapped_column(Text, nullable=False)
-    role: Mapped[String] = mapped_column(String(length=20), nullable=False)  # 'user' 또는 'assistant'
+    role: Mapped[String] = mapped_column(String(length=20), nullable=False)  # 'user', 'assistant', 'system'
+    root_message_id: Mapped[BigInteger] = mapped_column(
+        BigInteger, ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
+    )
 
     # 관계 설정
     conversation = relationship("ChatConversation", back_populates="messages")

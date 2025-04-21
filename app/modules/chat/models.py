@@ -10,7 +10,8 @@ class Message(BaseModel):
     id: Optional[int] = None
     conversation_id: int
     content: str
-    role: str  # 'user' 또는 'assistant'
+    role: str  # 'user', 'assistant', 'system'
+    root_message_id: Optional[int] = None
     created_at: datetime = Field(default_factory=datetime.now)
 
     class Config:

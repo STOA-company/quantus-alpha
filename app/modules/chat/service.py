@@ -28,14 +28,19 @@ class ChatService:
     def get_messages(self, conversation_id: str) -> List[Message]:
         return message_repository.get_by_conversation_id(conversation_id)
 
-    def add_message(self, conversation_id: str, content: str, role: str) -> Optional[Message]:
-        return conversation_repository.add_message(conversation_id, content, role)
+    def add_message(
+        self, conversation_id: str, content: str, role: str, root_message_id: Optional[int] = None
+    ) -> Optional[Message]:
+        return conversation_repository.add_message(conversation_id, content, role, root_message_id)
 
     def update_conversation(self, conversation_id: str, title: str) -> Conversation:
         return conversation_repository.update(conversation_id, title)
 
     def delete_conversation(self, conversation_id: str) -> bool:
         return conversation_repository.delete(conversation_id)
+
+    def get_tasks(self, message_id: int) -> List[str]:
+        return message_repository.get_tasks(message_id)
 
     async def _poll_result(self, job_id: str, conversation_id: str, model: str) -> None:
         """백그라운드에서 작업 결과 폴링"""

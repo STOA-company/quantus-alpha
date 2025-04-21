@@ -82,7 +82,9 @@ class ConversationRepository:
         result = database_service._delete("chat_conversation", id=conversation_id)
         return result.rowcount > 0
 
-    def add_message(self, conversation_id: int, content: str, role: str) -> Optional[Message]:
+    def add_message(
+        self, conversation_id: int, content: str, role: str, root_message_id: Optional[int] = None
+    ) -> Optional[Message]:
         conversation = self.get_by_id(conversation_id)
         if not conversation:
             return None
@@ -91,9 +93,17 @@ class ConversationRepository:
             conversation_id=conversation_id,
             content=content,
             role=role,
+            root_message_id=root_message_id,
         )
 
         created_message = message_repository.create(message)
+
+        if role == "user":
+            database_service._update(
+                "chat_message",
+                {"root_message_id": created_message.id},
+                id=created_message.id,
+            )
 
         database_service._update(
             "chat_conversation",
@@ -135,6 +145,7 @@ class MessageRepository:
                 "conversation_id": db_message.conversation_id,
                 "content": db_message.content,
                 "role": db_message.role,
+                "root_message_id": db_message.root_message_id,
             },
         )
 
@@ -160,7 +171,11 @@ class MessageRepository:
 
     def get_by_conversation_id(self, conversation_id: int) -> List[Message]:
         results = database_service._select(
-            "chat_message", order="created_at", ascending=True, conversation_id=conversation_id
+            "chat_message",
+            order="created_at",
+            ascending=True,
+            conversation_id=conversation_id,
+            role__in=["user", "assistant"],
         )
 
         messages = []
@@ -172,10 +187,24 @@ class MessageRepository:
                 role=data.role,
                 created_at=data.created_at,
                 updated_at=data.updated_at,
+                root_message_id=data.root_message_id,
             )
             messages.append(self._to_domain(db_message))
 
         return messages
+
+    def get_tasks(self, message_id: int) -> List[str]:
+        results = database_service._select(
+            "chat_message", order="created_at", ascending=True, root_message_id=message_id, role="system"
+        )
+
+        print(results)
+        if not results:
+            return []
+
+        tasks = results[0].content.split("\n")
+
+        return tasks
 
     def update(self, message: Message) -> Message:
         db_message = self._to_db(message)
@@ -201,6 +230,7 @@ class MessageRepository:
             conversation_id=db_message.conversation_id,
             content=db_message.content,
             role=db_message.role,
+            root_message_id=db_message.root_message_id,
             created_at=db_message.created_at,
         )
 
@@ -210,6 +240,7 @@ class MessageRepository:
             conversation_id=message.conversation_id,
             content=message.content,
             role=message.role,
+            root_message_id=message.root_message_id,
             created_at=message.created_at,
         )
 
