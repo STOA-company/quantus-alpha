@@ -21,6 +21,7 @@ class ScreenerGroup(ServiceBase, BaseMixin):
     stock_filters = relationship("ScreenerStockFilter", back_populates="group", cascade="all, delete-orphan")
     factor_filters = relationship("ScreenerFactorFilter", back_populates="group", cascade="all, delete-orphan")
     sort_info = relationship("ScreenerSortInfo", back_populates="group", cascade="all, delete-orphan")
+    user = relationship("AlphafinderUser", back_populates="groups")
 
     __table_args__ = (UniqueConstraint("user_id", "name", "type", name="uix_user_group_name_type"),)
 
