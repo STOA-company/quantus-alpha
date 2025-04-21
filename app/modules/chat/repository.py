@@ -1,104 +1,218 @@
-from abc import ABC, abstractmethod
-from typing import List, Optional, Union
+from typing import List, Optional
 
-from .models import Conversation, Message
-
-
-class ConversationRepository(ABC):
-    """대화 저장소 인터페이스"""
-
-    @abstractmethod
-    async def create(self, conversation: Conversation) -> Conversation:
-        """새 대화 생성"""
-        pass
-
-    @abstractmethod
-    async def get_by_id(self, conversation_id: str) -> Optional[Conversation]:
-        """ID로 대화 조회"""
-        pass
-
-    @abstractmethod
-    async def update(self, conversation: Conversation) -> Conversation:
-        """대화 업데이트"""
-        pass
-
-    @abstractmethod
-    async def delete(self, conversation_id: str) -> bool:
-        """대화 삭제"""
-        pass
+from app.database.crud import database_service
+from app.models.models_chat import ChatConversation, ChatMessage
+from app.modules.chat.models import Conversation, Message
 
 
-class MessageRepository(ABC):
-    """메시지 저장소 인터페이스"""
+class ConversationRepository:
+    def create(self, title: str, user_id: int) -> Conversation:
+        result = database_service._insert(
+            "chat_conversation",
+            {
+                "title": title,
+                "user_id": user_id,
+            },
+        )
 
-    @abstractmethod
-    async def create(self, message: Message) -> Message:
-        """새 메시지 생성"""
-        pass
+        conversation = Conversation(
+            id=result.lastrowid,
+            title=title,
+            user_id=user_id,
+        )
 
-    @abstractmethod
-    async def get_by_id(self, message_id: str) -> Optional[Message]:
-        """ID로 메시지 조회"""
-        pass
+        return conversation
 
-    @abstractmethod
-    async def get_by_conversation_id(self, conversation_id: str) -> List[Message]:
-        """대화 ID로 메시지 목록 조회"""
-        pass
+    def get_by_id(self, conversation_id: int) -> Optional[Conversation]:
+        result = database_service._select("chat_conversation", id=conversation_id)
+        if not result:
+            return None
 
-    @abstractmethod
-    async def update(self, message: Message) -> Message:
-        """메시지 업데이트"""
-        pass
+        conversation_data = result[0]
+        db_conversation = ChatConversation(
+            id=conversation_data.id,
+            title=conversation_data.title,
+            user_id=conversation_data.user_id,
+            latest_job_id=conversation_data.latest_job_id,
+            created_at=conversation_data.created_at,
+            updated_at=conversation_data.updated_at,
+        )
 
-    @abstractmethod
-    async def delete(self, message_id: str) -> bool:
-        """메시지 삭제"""
-        pass
+        messages = message_repository.get_by_conversation_id(conversation_id)
+
+        domain_conversation = self._to_domain(db_conversation, messages)
+        return domain_conversation
+
+    def get_by_user_id(self, user_id: int) -> List[Conversation]:
+        results = database_service._select("chat_conversation", order="created_at", ascending=False, user_id=user_id)
+
+        conversations = []
+        for data in results:
+            db_conversation = ChatConversation(
+                id=data.id,
+                title=data.title,
+                user_id=data.user_id,
+                latest_job_id=data.latest_job_id,
+                created_at=data.created_at,
+                updated_at=data.updated_at,
+            )
+
+            messages = message_repository.get_by_conversation_id(data.id)
+
+            conversations.append(self._to_domain(db_conversation, messages))
+
+        return conversations
+
+    def update(self, conversation_id: int, title: str) -> Conversation:
+        update_sets = {
+            "title": title,
+        }
+
+        database_service._update(
+            "chat_conversation",
+            update_sets,
+            id=conversation_id,
+        )
+
+        conversation = self.get_by_id(conversation_id)
+
+        return conversation
+
+    def delete(self, conversation_id: int) -> bool:
+        result = database_service._delete("chat_conversation", id=conversation_id)
+        return result.rowcount > 0
+
+    def add_message(self, conversation_id: int, content: str, role: str) -> Optional[Message]:
+        conversation = self.get_by_id(conversation_id)
+        if not conversation:
+            return None
+
+        message = Message(
+            conversation_id=conversation_id,
+            content=content,
+            role=role,
+        )
+
+        created_message = message_repository.create(message)
+
+        database_service._update(
+            "chat_conversation",
+            {"updated_at": created_message.created_at},
+            id=conversation_id,
+        )
+
+        return created_message
+
+    def _to_domain(self, db_conversation: ChatConversation, messages: List[ChatMessage] = []) -> Conversation:
+        return Conversation(
+            id=db_conversation.id,
+            title=db_conversation.title,
+            user_id=db_conversation.user_id,
+            latest_job_id=db_conversation.latest_job_id,
+            created_at=db_conversation.created_at,
+            updated_at=db_conversation.updated_at,
+            messages=messages,
+        )
+
+    def _to_db(self, conversation: Conversation) -> ChatConversation:
+        return ChatConversation(
+            id=conversation.id,
+            title=conversation.title,
+            user_id=conversation.user_id,
+            latest_job_id=conversation.latest_job_id,
+            created_at=conversation.created_at,
+            updated_at=conversation.updated_at,
+        )
 
 
-class InMemoryRepository(ConversationRepository, MessageRepository):
-    """메모리 기반 임시 저장소 구현"""
+class MessageRepository:
+    def create(self, message: Message) -> Message:
+        db_message = self._to_db(message)
 
-    def __init__(self):
-        self._conversations = {}
-        self._messages = {}
+        result = database_service._insert(
+            "chat_message",
+            {
+                "conversation_id": db_message.conversation_id,
+                "content": db_message.content,
+                "role": db_message.role,
+            },
+        )
 
-    async def create(self, item: Union[Conversation, Message]) -> Union[Conversation, Message]:
-        """항목 생성"""
-        if isinstance(item, Conversation):
-            self._conversations[item.id] = item
-        else:
-            self._messages[item.id] = item
-        return item
+        message.id = result.lastrowid
+        return message
 
-    async def get_by_id(self, item_id: str) -> Optional[Union[Conversation, Message]]:
-        """ID로 항목 조회"""
-        return self._conversations.get(item_id) or self._messages.get(item_id)
+    def get_by_id(self, message_id: int) -> Optional[Message]:
+        result = database_service._select("chat_message", id=message_id)
+        if not result:
+            return None
 
-    async def get_by_conversation_id(self, conversation_id: str) -> List[Message]:
-        """대화 ID로 메시지 목록 조회"""
-        return [msg for msg in self._messages.values() if msg.conversation_id == conversation_id]
+        message_data = result[0]
+        db_message = ChatMessage(
+            id=message_data.id,
+            conversation_id=message_data.conversation_id,
+            content=message_data.content,
+            role=message_data.role,
+            created_at=message_data.created_at,
+            updated_at=message_data.updated_at,
+        )
 
-    async def update(self, item: Union[Conversation, Message]) -> Union[Conversation, Message]:
-        """항목 업데이트"""
-        if isinstance(item, Conversation):
-            self._conversations[item.id] = item
-        else:
-            self._messages[item.id] = item
-        return item
+        return self._to_domain(db_message)
 
-    async def delete(self, item_id: str) -> bool:
-        """항목 삭제"""
-        if item_id in self._conversations:
-            del self._conversations[item_id]
-            return True
-        elif item_id in self._messages:
-            del self._messages[item_id]
-            return True
-        return False
+    def get_by_conversation_id(self, conversation_id: int) -> List[Message]:
+        results = database_service._select(
+            "chat_message", order="created_at", ascending=True, conversation_id=conversation_id
+        )
+
+        messages = []
+        for data in results:
+            db_message = ChatMessage(
+                id=data.id,
+                conversation_id=data.conversation_id,
+                content=data.content,
+                role=data.role,
+                created_at=data.created_at,
+                updated_at=data.updated_at,
+            )
+            messages.append(self._to_domain(db_message))
+
+        return messages
+
+    def update(self, message: Message) -> Message:
+        db_message = self._to_db(message)
+
+        database_service._update(
+            "chat_message",
+            {
+                "content": db_message.content,
+                "role": db_message.role,
+            },
+            id=db_message.id,
+        )
+
+        return message
+
+    def delete(self, message_id: int) -> bool:
+        result = database_service._delete("chat_message", id=message_id)
+        return result.rowcount > 0
+
+    def _to_domain(self, db_message: ChatMessage) -> Message:
+        return Message(
+            id=db_message.id,
+            conversation_id=db_message.conversation_id,
+            content=db_message.content,
+            role=db_message.role,
+            created_at=db_message.created_at,
+        )
+
+    def _to_db(self, message: Message) -> ChatMessage:
+        return ChatMessage(
+            id=message.id,
+            conversation_id=message.conversation_id,
+            content=message.content,
+            role=message.role,
+            created_at=message.created_at,
+        )
 
 
-# 싱글톤 인스턴스 생성
-conversation_repository = InMemoryRepository()
-message_repository = conversation_repository  # 동일한 인스턴스 공유
+conversation_repository = ConversationRepository()
+message_repository = MessageRepository()

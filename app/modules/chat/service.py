@@ -2,78 +2,40 @@ import asyncio
 import json
 import logging
 import time
-from typing import AsyncGenerator, Dict, Optional
+from typing import AsyncGenerator, List, Optional
 
 import httpx
 
 from .config import llm_config
 from .constants import LLM_MODEL
 from .llm_client import llm_client
-from .models import Conversation
-from .repository import conversation_repository
-from .schemas import ChatRequest
+from .models import Conversation, Message
+from .repository import conversation_repository, message_repository
 
 logger = logging.getLogger(__name__)
 
 
 class ChatService:
-    """채팅 서비스 로직 구현 (RabbitMQ 없는 버전)"""
+    def create_conversation(self, title: str, user_id: int) -> Conversation:
+        return conversation_repository.create(title, user_id)
 
-    async def create_conversation(self, model: str) -> Conversation:
-        """새 대화 생성"""
-        conversation = Conversation(model=model)
-        await conversation_repository.create(conversation)
-        return conversation
+    def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
+        return conversation_repository.get_by_id(conversation_id)
 
-    async def send_message(self, query: str, model: str = "gpt4mi", conversation_id: Optional[str] = None) -> Dict:
-        """메시지 전송 및 처리 (직접 LLM 호출)"""
-        # 대화가 없으면 새로 생성
-        if not conversation_id:
-            conversation = await self.create_conversation(model)
-            conversation_id = conversation.id
-        else:
-            conversation = await conversation_repository.get_by_id(conversation_id)
-            if not conversation:
-                conversation = Conversation(id=conversation_id, model=model)
-                await conversation_repository.create(conversation)
+    def get_conversation_list(self, user_id: int) -> List[Conversation]:
+        return conversation_repository.get_by_user_id(user_id)
 
-        # 사용자 메시지 추가
-        conversation.add_message(query, "user")
-        await conversation_repository.update(conversation)
+    def get_messages(self, conversation_id: str) -> List[Message]:
+        return message_repository.get_by_conversation_id(conversation_id)
 
-        try:
-            # LLM API에 직접 요청 전송
-            request_data = ChatRequest(query=query, model=model)
-            async with httpx.AsyncClient(timeout=llm_config.timeout) as client:
-                response = await client.post(
-                    llm_config.base_url, json=request_data.model_dump(), headers={"Content-Type": "application/json"}
-                )
+    def add_message(self, conversation_id: str, content: str, role: str) -> Optional[Message]:
+        return conversation_repository.add_message(conversation_id, content, role)
 
-                if response.status_code != 200:
-                    return {
-                        "conversation_id": conversation_id,
-                        "status": "error",
-                        "error": f"API 오류: {response.status_code}",
-                    }
+    def update_conversation(self, conversation_id: str, title: str) -> Conversation:
+        return conversation_repository.update(conversation_id, title)
 
-                response_data = response.json()
-                job_id = response_data.get("job_id")
-
-                if not job_id:
-                    return {
-                        "conversation_id": conversation_id,
-                        "status": "error",
-                        "error": "API 응답에 job_id가 없습니다",
-                    }
-
-                # 비동기로 결과 폴링 시작 (백그라운드 작업)
-                asyncio.create_task(self._poll_result(job_id, conversation_id, model))
-
-                return {"conversation_id": conversation_id, "job_id": job_id, "status": "processing"}
-
-        except Exception as e:
-            logger.error(f"LLM API 요청 오류: {str(e)}")
-            return {"conversation_id": conversation_id, "status": "error", "error": str(e)}
+    def delete_conversation(self, conversation_id: str) -> bool:
+        return conversation_repository.delete(conversation_id)
 
     async def _poll_result(self, job_id: str, conversation_id: str, model: str) -> None:
         """백그라운드에서 작업 결과 폴링"""
@@ -143,29 +105,10 @@ class ChatService:
         except Exception as e:
             logger.error(f"결과 폴링 중 예외 발생: {str(e)}")
 
-    async def get_message_result(self, job_id: str) -> Dict:
-        """비동기 작업 결과 조회"""
-        try:
-            async with httpx.AsyncClient(timeout=llm_config.timeout) as client:
-                response = await client.get(f"{llm_config.base_url}/{job_id}")
-
-                if response.status_code != 200:
-                    return {"status": "error", "message": f"API 오류: {response.status_code}"}
-
-                return response.json()
-
-        except Exception as e:
-            logger.error(f"결과 조회 중 오류: {str(e)}")
-            return {"status": "error", "message": str(e)}
-
     async def process_query(self, query: str, model: str = LLM_MODEL) -> AsyncGenerator[str, None]:
         """LLM 스트리밍 요청 처리"""
         async for chunk in llm_client.process_query(query, model):
             yield chunk
-
-    async def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
-        """대화 조회"""
-        return await conversation_repository.get_by_id(conversation_id)
 
 
 # 싱글톤 인스턴스 생성

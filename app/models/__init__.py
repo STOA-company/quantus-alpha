@@ -1,6 +1,7 @@
 from sqlalchemy.orm import relationship
 
 from app.models.models_base import Base, ServiceBase
+from app.models.models_chat import ChatConversation, ChatMessage
 from app.models.models_community import (
     Bookmark,
     Category,
@@ -69,8 +70,8 @@ __all__ = [
     "AlphafinderPrice",
     "AlphafinderPaymentHistory",
     "TossReceipt",
-    "MembershipFeature",
-    "SubscriptionStatusChange",
+    "ChatMessage",
+    "ChatConversation",
 ]
 
 # Category relationships
@@ -82,13 +83,6 @@ Post.user = relationship("AlphafinderUser", back_populates="posts", passive_dele
 Post.comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
 Post.likes = relationship("PostLike", back_populates="post", cascade="all, delete-orphan")
 Post.bookmarks = relationship("Bookmark", back_populates="post", cascade="all, delete-orphan")
-Post.stocks = relationship(
-    "StockInformation",
-    secondary=post_stocks,
-    back_populates="posts",
-    primaryjoin="Post.id == post_stocks.c.post_id",
-    secondaryjoin="StockInformation.ticker == post_stocks.c.stock_ticker",
-)
 Post.statistics = relationship("PostStatistics", back_populates="post", uselist=False, cascade="all, delete-orphan")
 
 # Comment relationships
@@ -123,7 +117,6 @@ AlphafinderUser.bookmarks = relationship("Bookmark", back_populates="user")
 # 멤버십 관련 관계 설정
 # AlphafinderLevel 관계
 AlphafinderLevel.prices = relationship("AlphafinderPrice", back_populates="level_info")
-AlphafinderLevel.features = relationship("MembershipFeature", back_populates="level_info")
 
 # AlphafinderPrice 관계
 AlphafinderPrice.level_info = relationship("AlphafinderLevel", back_populates="prices")
@@ -132,10 +125,6 @@ AlphafinderPrice.level_info = relationship("AlphafinderLevel", back_populates="p
 AlphafinderPaymentHistory.user = relationship("AlphafinderUser", back_populates="payment_history")
 AlphafinderPaymentHistory.level_info = relationship("AlphafinderLevel")
 
-# TossReceipt 관계
-TossReceipt.user = relationship("AlphafinderUser")
-
 # AlphafinderUser 멤버십 관련 관계
 AlphafinderUser.level_info = relationship("AlphafinderLevel", foreign_keys=[AlphafinderUser.subscription_level])
 AlphafinderUser.payment_history = relationship("AlphafinderPaymentHistory", back_populates="user")
-AlphafinderUser.subscription_changes = relationship("SubscriptionStatusChange", back_populates="user")
