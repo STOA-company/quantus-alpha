@@ -66,7 +66,7 @@ def get_tasks(message_id: int, current_user: str = Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
-    tasks = chat_service.get_conversation_tasks(message_id)
+    tasks = chat_service.get_tasks(message_id)
     return {"message_id": message_id, "tasks": tasks}
 
 
@@ -131,7 +131,7 @@ async def stream_chat(
         system_response = ""
         try:
             message_count = 0
-            async for chunk in chat_service.process_query(query, model):
+            async for chunk in chat_service.process_query(query, conversation_id, model):
                 message_count += 1
                 # 올바른 SSE 형식으로 응답 생성 (각 행이 data: 로 시작하고 빈 줄로 끝나야 함)
                 if isinstance(chunk, str):
@@ -178,3 +178,20 @@ async def stream_chat(
     }
 
     return StreamingResponse(event_generator(), headers=headers)
+
+
+@router.get("/status/{conversation_id}")
+def get_status(conversation_id: int, current_user: str = Depends(get_current_user)):
+    """대화 상태 조회"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+    conversation = chat_service.get_conversation(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="존재하지 않는 대화입니다.")
+
+    if conversation.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+
+    status = chat_service.get_status(conversation_id)
+    return {"status": status}

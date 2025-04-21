@@ -63,10 +63,14 @@ class ConversationRepository:
 
         return conversations
 
-    def update(self, conversation_id: int, title: str) -> Conversation:
-        update_sets = {
-            "title": title,
-        }
+    def update(
+        self, conversation_id: int, title: Optional[str] = None, latest_job_id: Optional[str] = None
+    ) -> Conversation:
+        update_sets = {}
+        if title:
+            update_sets["title"] = title
+        if latest_job_id:
+            update_sets["latest_job_id"] = latest_job_id
 
         database_service._update(
             "chat_conversation",
@@ -112,6 +116,13 @@ class ConversationRepository:
         )
 
         return created_message
+
+    def get_latest_job_id(self, conversation_id: int) -> str:
+        result = database_service._select("chat_conversation", id=conversation_id)
+        if not result:
+            return None
+
+        return result[0].latest_job_id
 
     def _to_domain(self, db_conversation: ChatConversation, messages: List[ChatMessage] = []) -> Conversation:
         return Conversation(
