@@ -198,7 +198,6 @@ class MessageRepository:
             "chat_message", order="created_at", ascending=True, root_message_id=message_id, role="system"
         )
 
-        print(results)
         if not results:
             return []
 
