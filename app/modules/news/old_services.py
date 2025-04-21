@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from functools import lru_cache
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -278,6 +278,40 @@ class NewsService:
             type=type,
         )
 
+    def get_latest_etf_news(self, ticker: str, lang: TranslateCountry) -> LatestNewsResponse:
+        """최신 뉴스와 공시 데이터 중 최신 데이터 조회"""
+        # 1. etf 구성 종목 조회
+        etf_info = self.db._select(
+            table="etf_top_holdings",
+            columns=["holding_ticker"],
+            **dict(ticker=ticker),
+        )
+        tickers = [info[0] for info in etf_info]
+
+        print(tickers)
+        # 2. 공시 데이터 조회
+        disclosure_info = self._get_disclosure_data(tickers, lang)
+
+        # 2. 뉴스 데이터 조회
+        news_info = self._get_news_data(ticker, lang)
+
+        # 3. 날짜 비교하여 최신 데이터 선택
+        result = self._select_latest_data(disclosure_info, news_info)
+
+        if result is None:
+            raise DataNotFoundException(ticker=ticker, data_type="latest_news")
+
+        date = result.get("date", "")
+        date = date.replace(tzinfo=UTC).astimezone(KST).strftime("%Y-%m-%d %H:%M:%S")
+        content = result.get("content", "")
+        type = result.get("type", "")
+
+        return LatestNewsResponse(
+            date=date,
+            content=content,
+            type=type,
+        )
+
     def _parse_key_points(self, key_points: list) -> str:
         """
         key_points 리스트를 파싱하여 문자열로 변환
@@ -293,14 +327,17 @@ class NewsService:
             logger.error(f"Error parsing key points: {str(e)}")
             return str(key_points)
 
-    def _get_disclosure_data(self, ticker: str, lang: TranslateCountry) -> Optional[Dict]:
+    def _get_disclosure_data(self, ticker: Union[str, List[str]], lang: TranslateCountry) -> Optional[Dict]:
         """공시 데이터 조회 및 분석 데이터 함께 반환"""
 
         # 현재 시간 + 5분까지 허용
         current_time = datetime.now(UTC)
         allowed_time = current_time + timedelta(minutes=5)
 
-        condition = {"ticker": ticker, "is_exist": True, "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S")}
+        if isinstance(ticker, list):
+            condition = {"ticker__in": ticker, "is_exist": True, "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S")}
+        else:
+            condition = {"ticker": ticker, "is_exist": True, "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S")}
         columns = ["date", "summary", "key_points"]
 
         if lang == TranslateCountry.KO:
@@ -324,19 +361,22 @@ class NewsService:
         else:
             return None
 
-    def _get_news_data(self, ticker: str, lang: TranslateCountry) -> Optional[Dict]:
+    def _get_news_data(self, ticker: Union[str, List[str]], lang: TranslateCountry) -> Optional[Dict]:
         """뉴스 데이터 조회"""
-        ticker_en_name = self.db._select(
-            table="stock_information",
-            columns=["en_name"],
-            **dict(ticker=ticker),
-        )
-        duplicate_ticker = self.db._select(
-            table="stock_information",
-            columns=["ticker"],
-            **dict(en_name=ticker_en_name[0][0]),
-        )
-        tickers = [info[0] for info in duplicate_ticker]
+        if isinstance(ticker, list):
+            tickers = ticker
+        else:
+            ticker_en_name = self.db._select(
+                table="stock_information",
+                columns=["en_name"],
+                **dict(ticker=ticker),
+            )
+            duplicate_ticker = self.db._select(
+                table="stock_information",
+                columns=["ticker"],
+                **dict(en_name=ticker_en_name[0][0]),
+            )
+            tickers = [info[0] for info in duplicate_ticker]
 
         # 현재 시간 + 5분까지 허용
         current_time = datetime.now(UTC)
@@ -349,7 +389,7 @@ class NewsService:
         elif lang == TranslateCountry.EN:
             condition["lang"] = "en-US"
 
-        if len(tickers) == 2:
+        if len(tickers) == 2 or isinstance(ticker, list):
             condition["ticker__in"] = tickers
         else:
             condition["ticker"] = ticker
