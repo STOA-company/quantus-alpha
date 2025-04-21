@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.config import get_database_config
 from app.core.logger import setup_logger
-from app.database.conn import db, db_service
+from app.database.conn import db, db_service, db_user
 
 logger = setup_logger(__name__)
 
@@ -468,5 +468,12 @@ class DatabaseService(BaseDatabase):
         super().__init__(self.db)
 
 
+class DatabaseUser(BaseDatabase):
+    def __init__(self):
+        self.db = db_user
+        super().__init__(self.db)
+
+
 database = Database()
 database_service = DatabaseService()
+database_user = DatabaseUser()

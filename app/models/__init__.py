@@ -79,7 +79,6 @@ Category.posts = relationship("Post", back_populates="category")
 
 # Post relationships
 Post.category = relationship("Category", back_populates="posts")
-Post.user = relationship("AlphafinderUser", back_populates="posts", passive_deletes=True)
 Post.comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
 Post.likes = relationship("PostLike", back_populates="post", cascade="all, delete-orphan")
 Post.bookmarks = relationship("Bookmark", back_populates="post", cascade="all, delete-orphan")
@@ -87,32 +86,21 @@ Post.statistics = relationship("PostStatistics", back_populates="post", uselist=
 
 # Comment relationships
 Comment.post = relationship("Post", back_populates="comments")
-Comment.user = relationship("AlphafinderUser", back_populates="comments", passive_deletes=True)
 Comment.likes = relationship("CommentLike", back_populates="comment", cascade="all, delete-orphan")
 Comment.replies = relationship("Comment", back_populates="parent", cascade="all, delete-orphan")
 Comment.parent = relationship("Comment", back_populates="replies", remote_side=[Comment.id])
 
 # PostLike relationships
 PostLike.post = relationship("Post", back_populates="likes")
-PostLike.user = relationship("AlphafinderUser", back_populates="post_likes", passive_deletes=True)
 
 # CommentLike relationships
 CommentLike.comment = relationship("Comment", back_populates="likes")
-CommentLike.user = relationship("AlphafinderUser", back_populates="comment_likes", passive_deletes=True)
 
 # Bookmark relationships
 Bookmark.post = relationship("Post", back_populates="bookmarks")
-Bookmark.user = relationship("AlphafinderUser", back_populates="bookmarks")
 
 # PostStatistics relationships
 PostStatistics.post = relationship("Post", back_populates="statistics", uselist=False)
-
-# AlphafinderUser relationships
-AlphafinderUser.posts = relationship("Post", back_populates="user", passive_deletes=True)
-AlphafinderUser.comments = relationship("Comment", back_populates="user", passive_deletes=True)
-AlphafinderUser.post_likes = relationship("PostLike", back_populates="user", passive_deletes=True)
-AlphafinderUser.comment_likes = relationship("CommentLike", back_populates="user", passive_deletes=True)
-AlphafinderUser.bookmarks = relationship("Bookmark", back_populates="user")
 
 # 멤버십 관련 관계 설정
 # AlphafinderLevel 관계
