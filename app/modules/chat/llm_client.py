@@ -25,7 +25,6 @@ class LLMClient:
         request_data = ChatRequest(query=query, model=model)
 
         if llm_config.mock_enabled:
-            # 테스트용 모의 응답 생성
             async for chunk in self._mock_streaming_response(query):
                 yield chunk
             return
@@ -46,7 +45,6 @@ class LLMClient:
                         yield json.dumps(msg, ensure_ascii=False)
                         return
 
-                    # job_id 추출
                     response_data = response.json()
                     job_id = response_data.get("job_id")
 
@@ -59,14 +57,13 @@ class LLMClient:
 
                     logger.info(f"작업 요청 성공: {job_id}")
 
-                    # 첫 번째 응답으로 초기 메시지 반환
                     initial_msg = {
                         "status": "submitted",
                         "content": "주요 뉴스, 공시, 기업 이슈 등을 종합 분석하여 질문에 대한 답변을 준비하고 있습니다.",
+                        "job_id": job_id,
                     }
                     yield json.dumps(initial_msg, ensure_ascii=False)
 
-                    # 2. job_id로 주기적으로 폴링하여 결과 확인
                     polling_interval = 3.0  # 기본 폴링 간격
                     max_timeout = 550  # nginx 설정과 동기화 (600초보다 약간 적게 설정)
 
@@ -169,10 +166,11 @@ class LLMClient:
 
     async def _mock_streaming_response(self, query: str) -> AsyncGenerator[str, None]:
         """테스트를 위한 모의 스트리밍 응답 생성"""
-        # 초기 메시지
+        mock_job_id = f"mock_{int(time.time())}"
         initial_msg = {
             "status": "submitted",
             "content": "주요 뉴스, 공시, 기업 이슈 등을 종합 분석하여 질문에 대한 답변을 준비하고 있습니다.",
+            "job_id": mock_job_id,
         }
         yield json.dumps(initial_msg, ensure_ascii=False)
         await asyncio.sleep(1.0)
