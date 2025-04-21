@@ -60,6 +60,16 @@ def get_conversation(conversation_id: int, current_user: str = Depends(get_curre
     return {"conversation_id": conversation.id, "title": conversation.title, "messages": conversation.messages}
 
 
+@router.get("/tasks/{message_id}")
+def get_tasks(message_id: int, current_user: str = Depends(get_current_user)):
+    """대화 작업 목록 조회"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+    tasks = chat_service.get_conversation_tasks(message_id)
+    return {"message_id": message_id, "tasks": tasks}
+
+
 @router.patch("/conversation/{conversation_id}")
 def update_conversation(conversation_id: int, title: str, current_user: str = Depends(get_current_user)):
     """대화 수정"""
@@ -109,7 +119,7 @@ async def stream_chat(
         title = query
         chat_service.update_conversation(conversation_id, title)
 
-    chat_service.add_message(conversation_id, query, "user")
+    root_message = chat_service.add_message(conversation_id, query, "user")
 
     logger.info(f"스트리밍 채팅 요청 수신: query={query[:30]}..., model={model}")
     CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
@@ -117,7 +127,8 @@ async def stream_chat(
 
     async def event_generator():
         """표준 SSE 형식의 이벤트 생성기"""
-        final_response = None
+        assistant_response = None
+        system_response = ""
         try:
             message_count = 0
             async for chunk in chat_service.process_query(query, model):
@@ -126,12 +137,13 @@ async def stream_chat(
                 if isinstance(chunk, str):
                     STREAMING_MESSAGES_COUNT.labels(model=model).inc()
 
-                    # JSON 파싱 시도
                     try:
                         chunk_data = json.loads(chunk)
-                        # status가 success인 경우만 final_response로 저장
                         if chunk_data.get("status") == "success":
-                            final_response = chunk_data.get("content", "")
+                            assistant_response = chunk_data.get("content", "")
+                        else:
+                            system_response += chunk_data.get("content", "")
+                            system_response += "\n"
                     except json.JSONDecodeError:
                         # JSON 파싱 실패시 그대로 전달
                         pass
@@ -140,9 +152,13 @@ async def stream_chat(
 
             logger.info(f"스트리밍 응답 완료: 총 {message_count}개 메시지 전송됨")
 
-            if final_response:
-                chat_service.add_message(conversation_id, final_response, "assistant")
-                logger.info(f"성공 응답 저장 완료: {final_response[:50]}...")
+            if assistant_response:
+                chat_service.add_message(conversation_id, assistant_response, "assistant", root_message.id)
+                logger.info(f"성공 응답 저장 완료: {assistant_response[:50]}...")
+
+            if system_response:
+                chat_service.add_message(conversation_id, system_response, "system", root_message.id)
+                logger.info(f"시스템 응답 저장 완료: {system_response[:50]}...")
 
         except Exception as e:
             logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
