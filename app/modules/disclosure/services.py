@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timedelta
-from typing import Dict
+from typing import Dict, List
 
 import pandas as pd
 
@@ -202,8 +202,24 @@ class DisclosureService:
             "neutral_count": int(emotion_counts.get("neutral", 0)),
         }
 
+    async def get_etf_holding_tickers(self, ticker: str) -> List[str]:
+        """ETF 종목 코드 조회"""
+        tickers = self.db._select(
+            table="etf_top_holdings",
+            columns=["holding_ticker"],
+            **dict(ticker=ticker),
+        )
+        return [ticker[0] for ticker in tickers]
+
     async def renewal_disclosure(
-        self, ticker: str, date: str, page: int, size: int, lang: TranslateCountry, user: AlphafinderUser
+        self,
+        ticker: str,
+        date: str,
+        page: int,
+        size: int,
+        lang: TranslateCountry,
+        user: AlphafinderUser,
+        type: str = "stock",
     ):
         if not date:
             year = datetime.now().strftime("%Y")
@@ -231,6 +247,12 @@ class DisclosureService:
         else:
             raise ValueError("Invalid language")
 
+        if type == "stock":
+            conditions = {"ticker": ticker, "date__like": f"{year}%", "lang": lang, "is_exist": 1}
+        else:
+            tickers = await self.get_etf_holding_tickers(ticker)
+            conditions = {"ticker__in": tickers, "date__like": f"{year}%", "lang": lang, "is_exist": 1}
+
         df_disclosure = pd.DataFrame(
             self.db._select(
                 table="disclosure_information",
@@ -249,7 +271,7 @@ class DisclosureService:
                     "category_type",
                     "that_time_price",
                 ],
-                **{"ticker": ticker, "date__like": f"{year}%", "lang": lang, "is_exist": 1},
+                **conditions,
             )
         )
 
@@ -259,12 +281,7 @@ class DisclosureService:
         df_disclosure = self._process_dataframe_disclosure(df_disclosure)
         df_disclosure["date"] = pd.to_datetime(df_disclosure["date"]).dt.tz_localize("UTC").dt.tz_convert("Asia/Seoul")
 
-        # current_price = self.db._select(table="stock_trend", columns=["ticker", "current_price"], **{"ticker": ticker})
         df_disclosure["price_impact"] = 0.00
-        # if current_price:
-        #     df_disclosure["price_impact"] = round(
-        #         (df_disclosure["that_time_price"] - current_price[0][1]) / current_price[0][1] * 100, 2
-        #     )
 
         total_count = len(df_disclosure)
         total_pages = (total_count + size - 1) // size
