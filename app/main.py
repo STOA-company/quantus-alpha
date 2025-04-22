@@ -8,7 +8,6 @@ from app.core.exception import handler
 from app.core.logger import configure, get_logger
 from app.database.conn import db
 from app.database.crud import database
-from app.middlewares.rate_limiter import GlobalRateLimitMiddleware
 from app.middlewares.rate_limiter_admin import router as rate_limiter_admin_router
 from app.middlewares.slack_error import add_slack_middleware
 from app.middlewares.trusted_hosts import get_current_username
@@ -124,12 +123,12 @@ exclude_paths = [
     "/api/v1/search/community",
 ]
 
-app.add_middleware(
-    GlobalRateLimitMiddleware,
-    max_requests=150,
-    window_seconds=60,
-    exclude_paths=exclude_paths,
-)
+# app.add_middleware(
+#     GlobalRateLimitMiddleware,
+#     max_requests=150,
+#     window_seconds=60,
+#     exclude_paths=exclude_paths,
+# )
 
 # Add Prometheus middleware
 app.add_middleware(PrometheusMiddleware)
