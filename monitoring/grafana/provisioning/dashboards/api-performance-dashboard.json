@@ -232,6 +232,209 @@
         "x": 0,
         "y": 10
       },
+      "id": 18,
+      "panels": [],
+      "title": "IP 주소별 지표",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "상위 10개 IP 주소별 요청량을 보여줍니다.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 11,
+        "x": 1,
+        "y": 11
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "topk(10, sum by(client_ip) (http_ip_requests_total))",
+          "legendFormat": "{{client_ip}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "상위 10개 클라이언트 IP별 요청량",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "특정 엔드포인트에 대한 IP별 요청 분석",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 11,
+        "x": 12,
+        "y": 11
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "topk(5, sum by(client_ip, endpoint) (http_ip_requests_total{endpoint=~\"$endpoint\"}))",
+          "legendFormat": "{{client_ip}} - {{endpoint}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "상위 5개 사용 엔드포인트별 IP 분석",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
       "id": 4,
       "panels": [],
       "title": "오류 모니터링",
@@ -299,7 +502,7 @@
         "h": 8,
         "w": 11,
         "x": 1,
-        "y": 11
+        "y": 20
       },
       "id": 5,
       "options": {
@@ -336,7 +539,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "어떤 엔드포인트가 오류를 많이 발생시키는지 식별할 수 있습니다.",
+      "description": "엔드포인트별 오류율을 보여줍니다.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -348,8 +551,8 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 100,
+            "drawStyle": "points",
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -358,7 +561,7 @@
             },
             "lineInterpolation": "linear",
             "lineWidth": 1,
-            "pointSize": 5,
+            "pointSize": 4,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -373,6 +576,8 @@
             }
           },
           "mappings": [],
+          "max": 100,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -381,11 +586,20 @@
                 "value": null
               },
               {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "orange",
+                "value": 5
+              },
+              {
                 "color": "red",
-                "value": 80
+                "value": 10
               }
             ]
-          }
+          },
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -393,14 +607,14 @@
         "h": 8,
         "w": 11,
         "x": 12,
-        "y": 11
+        "y": 20
       },
-      "id": 6,
+      "id": 22,
       "options": {
         "legend": {
           "calcs": [],
           "displayMode": "table",
-          "placement": "bottom",
+          "placement": "right",
           "showLegend": true
         },
         "tooltip": {
@@ -408,6 +622,7 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "10.0.3",
       "targets": [
         {
           "datasource": {
@@ -415,15 +630,14 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * sum by(endpoint) (rate(http_requests_total{status_code=~\"(4|5)..\"}[5m])) / sum by(endpoint) (rate(http_requests_total[5m]))",
-          "format": "table",
+          "expr": "sum by(endpoint) (rate(http_requests_total{status_code=~\"[45].*\"}[5m])) / sum by(endpoint) (rate(http_requests_total[5m])) * 100",
           "instant": false,
           "legendFormat": "{{endpoint}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "엔드포인트 별 오류율",
+      "title": "엔드포인트별 오류율 (%)",
       "type": "timeseries"
     },
     {
@@ -432,7 +646,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 28
       },
       "id": 9,
       "panels": [],
@@ -504,7 +718,7 @@
         "h": 9,
         "w": 11,
         "x": 1,
-        "y": 20
+        "y": 29
       },
       "id": 8,
       "options": {
@@ -598,7 +812,7 @@
         "h": 9,
         "w": 11,
         "x": 12,
-        "y": 20
+        "y": 29
       },
       "id": 7,
       "options": {
@@ -620,14 +834,14 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "process_cpu_percent{instance=~\"web-blue:8000|web-green:8000\"}",
+          "expr": "process_cpu_percent",
           "instant": false,
           "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "CPU 사용량",
+      "title": "CPU 사용량 (%)",
       "type": "timeseries"
     },
     {
@@ -636,7 +850,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 29
+        "y": 38
       },
       "id": 10,
       "panels": [],
@@ -705,7 +919,7 @@
         "h": 9,
         "w": 11,
         "x": 1,
-        "y": 30
+        "y": 39
       },
       "id": 11,
       "options": {
@@ -730,7 +944,7 @@
           "expr": "sum(rate(http_requests_total[5m]))",
           "format": "time_series",
           "instant": false,
-          "legendFormat": "{{label_name}}",
+          "legendFormat": "초당 요청량",
           "range": true,
           "refId": "A"
         }
@@ -800,7 +1014,7 @@
         "h": 9,
         "w": 11,
         "x": 12,
-        "y": 30
+        "y": 39
       },
       "id": 12,
       "options": {
@@ -823,6 +1037,7 @@
           },
           "editorMode": "code",
           "expr": "sum(rate(http_request_duration_seconds_sum[5m])) / sum(rate(http_request_duration_seconds_count[5m]))",
+          "legendFormat": "평균 응답시간(초)",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -840,7 +1055,35 @@
     "fastapi"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(http_requests_total, endpoint)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "엔드포인트",
+        "multi": false,
+        "name": "endpoint",
+        "options": [],
+        "query": {
+          "query": "label_values(http_requests_total, endpoint)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-1h",
@@ -850,6 +1093,6 @@
   "timezone": "",
   "title": "API Performance Dashboard",
   "uid": "f966b266-489c-481f-914e-095a8d6fc17a",
-  "version": 1,
+  "version": 8,
   "weekStart": ""
 }
