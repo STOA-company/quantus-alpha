@@ -67,6 +67,43 @@ class UserStockInterest(BaseMixin, ServiceBase):
     __table_args__ = (UniqueConstraint("group_id", "ticker", name="uix_group_id_ticker"),)
 
 
+class AlphafinderInterestGroup(BaseMixin, ServiceBase):
+    __tablename__ = "alphafinder_interest_group"
+    __table_args__ = (
+        Index("idx_user_id_order", "user_id", "order"),
+        {"extend_existing": True},
+    )
+
+    id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[String] = mapped_column(String(length=100), nullable=False)
+    user_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=False)
+    order: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_editable: Mapped[Boolean] = mapped_column(Boolean, nullable=False, default=True)
+
+    interest_stocks = relationship("AlphafinderUserStockInterest", back_populates="interest_group")
+
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uix_user_id_name"),)
+
+
+class AlphafinderUserStockInterest(BaseMixin, ServiceBase):
+    __tablename__ = "alphafinder_interest_stock"
+    __table_args__ = (
+        Index("idx_group_id_order", "group_id", "order"),
+        {"extend_existing": True},
+    )
+
+    id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    group_id: Mapped[BigInteger] = mapped_column(
+        BigInteger, ForeignKey("alphafinder_interest_group.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    ticker: Mapped[String] = mapped_column(String(length=20), nullable=False)
+    order: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    interest_group = relationship("AlphafinderInterestGroup", back_populates="interest_stocks")
+
+    __table_args__ = (UniqueConstraint("group_id", "ticker", name="uix_group_id_ticker"),)
+
+
 class AlphaFinderOAuthToken(BaseMixin, ServiceBase):
     __tablename__ = "alphafinder_oauth_token"
     __table_args__ = {"extend_existing": True}
