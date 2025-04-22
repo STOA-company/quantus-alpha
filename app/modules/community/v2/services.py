@@ -233,8 +233,8 @@ class CommunityService:
 
         return response
 
-    def _get_first_image_url(self, image_urls_json: Optional[str]) -> Optional[str]:
-        """이미지 URL JSON에서 첫 번째 이미지 URL을 반환"""
+    def _get_image_url(self, image_urls_json: Optional[str]) -> Optional[List[str]]:
+        """이미지 URL JSON에서 모든 이미지 URL을 정렬하여 반환"""
         if not image_urls_json:
             return None
 
@@ -256,7 +256,7 @@ class CommunityService:
 
             # 숫자로 정렬
             sorted_urls = sorted(image_urls, key=get_index)
-            return sorted_urls[0]
+            return sorted_urls
         except json.JSONDecodeError:
             logger.error(f"Failed to parse image_url JSON: {image_urls_json}")
             return None
@@ -382,8 +382,8 @@ class CommunityService:
                 title=post["title"],
                 content=post["content"],
                 category_name=post["category_name"],
-                image_url=[self.generate_get_presigned_url(first_image)["get_url"]]
-                if (first_image := self._get_first_image_url(post["image_url"]))
+                image_url=[self.generate_get_presigned_url(url)["get_url"] for url in sorted_urls]
+                if (sorted_urls := self._get_image_url(post["image_url"]))
                 else None,
                 image_format=post["image_format"],
                 like_count=post["like_count"],
