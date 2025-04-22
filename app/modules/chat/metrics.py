@@ -26,7 +26,9 @@ RABBITMQ_PROCESSING_ERRORS = Counter(
 STREAMING_CONNECTIONS = Gauge("streaming_connections_current", "Current number of active streaming connections")
 
 STREAMING_MESSAGES_COUNT = Counter(
-    "streaming_messages_total", "Total number of streaming messages sent to clients", ["model"]
+    "streaming_messages_total", "Total number of streaming messages sent to clients", ["model", "conversation_id"]
 )
 
-STREAMING_ERRORS = Counter("streaming_errors_total", "Total number of streaming errors", ["model", "error_type"])
+STREAMING_ERRORS = Counter(
+    "streaming_errors_total", "Total number of streaming errors", ["model", "error_type", "conversation_id"]
+)
