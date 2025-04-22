@@ -28,7 +28,7 @@ def create_conversation(first_message: str, current_user: str = Depends(get_curr
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
     conversation = chat_service.create_conversation(first_message, current_user.id)
-    return {"conversation_id": conversation.id}
+    return {"conversation_id": conversation.id, "title": conversation.title}
 
 
 @router.get("/conversation/list")
@@ -127,7 +127,10 @@ async def stream_chat(
         title = query
         chat_service.update_conversation(conversation_id, title)
 
-    root_message = chat_service.add_message(conversation_id, query, "user")
+    if conversation.messages and conversation.messages[-1].role == "user" and conversation.messages[-1].content == query:
+        root_message = conversation.messages[-1]
+    else:
+        root_message = chat_service.add_message(conversation_id, query, "user")
 
     logger.info(f"스트리밍 채팅 요청 수신: query={query[:30]}..., model={model}")
     CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
