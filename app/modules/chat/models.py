@@ -23,6 +23,7 @@ class Conversation(BaseModel):
 
     id: Optional[int] = None
     title: Optional[str] = None
+    preview: Optional[str] = None
     user_id: Optional[int] = None
     latest_job_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
