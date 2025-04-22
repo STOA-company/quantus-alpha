@@ -1046,6 +1046,26 @@ class ETFDataLoader:
 
         if base:
             df_base = pd.read_parquet(os.path.join(self.krx_dir, "data_base.parquet"))
+            rename_columns = {
+                "ISU_CD": "표준코드",
+                "ISU_SRT_CD": "단축코드",
+                "ISU_NM": "한글종목명",
+                "ISU_ABBRV": "한글종목약명",
+                "ISU_ENG_NM": "영문종목명",
+                "LIST_DD": "상장일",
+                "ETF_OBJ_IDX_NM": "기초지수명",
+                "IDX_CALC_INST_NM1": "지수산출기관",
+                "IDX_CALC_INST_NM2": "추적배수",
+                "ETF_REPLICA_METHD_TP_CD": "복제방법",
+                "IDX_MKT_CLSS_NM": "기초시장분류",
+                "IDX_ASST_CLSS_NM": "기초자산분류",
+                "LIST_SHRS": "상장좌수",
+                "COM_ABBRV": "운용사",
+                "CU_QTY": "CU수량",
+                "ETF_TOT_FEE": "총보수",
+                "TAX_TP_CD": "과세유형",
+            }
+            df_base = df_base.rename(columns=rename_columns)
         if detail:
             df_detail = pd.read_parquet(os.path.join(self.krx_dir, "data_detail.parquet"))
 
@@ -1544,6 +1564,9 @@ class ETFDataPreprocessor:
         pass
 
     def krx_data_preprocess(self, df: pd.DataFrame):
+        """
+        KRX 데이터 전처리
+        """
         select_columns_base = [
             "단축코드",
             "한글종목약명",
