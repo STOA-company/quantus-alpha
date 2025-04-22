@@ -1,12 +1,14 @@
-from app.core.logger import setup_logger
-import requests
-from datetime import datetime, timedelta
-from kispy.base import BaseAPI
-from app.core.config import settings
-import pytz
 import json
 import time
+from datetime import datetime, timedelta
 from typing import Optional
+
+import pytz
+import requests
+from kispy.base import BaseAPI
+
+from app.core.config import settings
+from app.core.logger import setup_logger
 
 logger = setup_logger(__name__)
 
@@ -587,3 +589,100 @@ class KISAPI(BaseAPI):
         except Exception as e:
             logger.error(f"Error fetching exchange rates: {str(e)}")
             return {"yesterday_rate": 0, "today_rate": 0, "date": datetime.now().strftime("%Y%m%d")}
+
+    def get_etf_constituents(self, etf_code: str) -> dict:
+        """
+        ETF 구성종목 시세를 조회합니다.
+
+        Args:
+            etf_code (str): ETF 종목코드 (예: "069500" - KODEX 200)
+
+        Returns:
+            dict: {
+                'etf_info': {
+                    'current_price': float,  # 현재가
+                    'price_change': float,   # 전일대비
+                    'price_change_sign': str,  # 전일대비 부호 (2: 상승, 5: 하락)
+                    'price_change_rate': float,  # 전일대비율
+                    'nav': float,  # NAV
+                    'nav_change': float,  # NAV 전일대비
+                    'nav_change_rate': float,  # NAV 전일대비율
+                },
+                'constituents': list[dict],  # 구성종목 리스트
+                'message': str  # 응답 메시지
+            }
+        """
+        try:
+            url = f"{self.base_url}/uapi/etfetn/v1/quotations/inquire-component-stock-price"
+
+            headers = {
+                "content-type": "application/json; charset=utf-8",
+                "authorization": f"Bearer {self.access_token}",
+                "appkey": self.app_key,
+                "appsecret": self.app_secret,
+                "tr_id": "FHKST121600C0",
+                "custtype": "P",
+            }
+
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "J",  # 시장구분코드 (J: 주식)
+                "FID_INPUT_ISCD": etf_code,
+                "FID_COND_SCR_DIV_CODE": "11216",  # Unique key
+            }
+
+            response = requests.get(url, headers=headers, params=params)
+
+            if response.status_code != 200:
+                raise Exception(f"API request failed with status {response.status_code}")
+
+            data = response.json()
+
+            if data.get("rt_cd") != "0":
+                raise Exception(f"API error: {data.get('msg1')}")
+
+            output1 = data.get("output1", {})
+            output2 = data.get("output2", [])
+
+            # ETF 정보 파싱
+            etf_info = {
+                "current_price": float(output1.get("stck_prpr", "0")),
+                "price_change": float(output1.get("prdy_vrss", "0")),
+                "price_change_sign": output1.get("prdy_vrss_sign", "5"),
+                "price_change_rate": float(output1.get("prdy_ctrt", "0")),
+                "nav": float(output1.get("nav", "0")),
+                "nav_change": float(output1.get("nav_prdy_vrss", "0")),
+                "nav_change_rate": float(output1.get("nav_prdy_ctrt", "0")),
+            }
+
+            # 구성종목 정보 파싱
+            constituents = []
+            for item in output2:
+                constituent = {
+                    "ticker": item.get("stck_shrn_iscd", ""),
+                    "name": item.get("hts_kor_isnm", ""),
+                    "current_price": float(item.get("stck_prpr", "0")),
+                    "price_change": float(item.get("prdy_vrss", "0")),
+                    "price_change_sign": item.get("prdy_vrss_sign", "5"),
+                    "price_change_rate": float(item.get("prdy_ctrt", "0")),
+                    "volume": int(item.get("acml_vol", "0")),
+                    "trading_value": int(item.get("acml_tr_pbmn", "0")),
+                    "weight": float(item.get("etf_cnfg_issu_rlim", "0")),
+                    "market_cap": int(item.get("hts_avls", "0")),
+                    "etf_market_cap": int(item.get("etf_cnfg_issu_avls", "0")),
+                    "etf_valuation": int(item.get("etf_vltn_amt", "0")),
+                }
+                constituents.append(constituent)
+
+            return {
+                "etf_info": etf_info,
+                "constituents": constituents,
+                "message": data.get("msg1", ""),
+            }
+
+        except Exception as e:
+            logger.error(f"Error fetching ETF constituents for {etf_code}: {str(e)}")
+            return {
+                "etf_info": {},
+                "constituents": [],
+                "message": str(e),
+            }

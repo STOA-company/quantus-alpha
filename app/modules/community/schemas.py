@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
 ### 게시글 스키마 ###
@@ -192,3 +193,27 @@ class TrendingStockResponse(BaseModel):
 class CategoryResponse(BaseModel):
     id: int
     name: str
+
+
+class PresignedUrlRequest(BaseModel):
+    """Presigned URL 요청 스키마"""
+
+    content_type: str = Field(..., description="파일의 Content-Type (예: image/jpeg, image/png, image/gif)")
+    file_size: int = Field(..., description="파일 크기 (바이트)", ge=0, le=5 * 1024 * 1024)  # 최대 5MB
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "content_type": "image/jpeg",
+                "file_size": 1024000,  # 1MB
+            }
+        }
+
+
+class PresignedUrlResponse(BaseModel):
+    """Presigned URL 응답 스키마"""
+
+    file_name: str = Field(..., description="S3에 저장될 파일 이름")
+    upload_url: str = Field(..., description="S3 업로드용 presigned URL")
+    image_key: str = Field(..., description="S3에 저장될 이미지 키")
+    # expires_in: int = Field(..., description="URL 유효기간 (초)")

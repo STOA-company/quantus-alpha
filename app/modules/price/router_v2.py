@@ -1,12 +1,12 @@
 from datetime import date
 from typing import Annotated, List, Optional
+
 from fastapi import APIRouter, Depends, Query
 
 from app.modules.common.enum import Country
 from app.modules.common.schemas import BaseResponse
 from app.modules.price.schemas import PriceDailyItem
-from app.modules.price.services_v2 import get_price_service, PriceService
-
+from app.modules.price.services_v2 import PriceService, get_price_service
 
 router = APIRouter()
 

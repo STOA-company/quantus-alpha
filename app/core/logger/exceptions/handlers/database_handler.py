@@ -6,12 +6,22 @@ import json
 import sqlite3
 import traceback
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .base import BaseHandler
 
 try:
-    from sqlalchemy import create_engine, Table, Column, Integer, String, Text, DateTime, MetaData, JSON  # noqa
+    from sqlalchemy import (
+        JSON,  # noqa
+        Column,
+        DateTime,
+        Integer,
+        MetaData,
+        String,
+        Table,
+        Text,
+        create_engine,
+    )
 
     SQLALCHEMY_AVAILABLE = True
 except ImportError:  # noqa: E722

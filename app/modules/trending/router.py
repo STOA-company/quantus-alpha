@@ -1,11 +1,12 @@
 from typing import Annotated, List
-from fastapi import APIRouter, Depends, Query
-from app.modules.common.enum import TranslateCountry
-from app.modules.trending.schemas import TrendingStockRequest, TrendingStock
-from app.modules.trending.service import TrendingService, get_trending_service
-from app.modules.common.schemas import BaseResponse
-from app.cache.cache_decorator import one_minute_cache
 
+from fastapi import APIRouter, Depends, Query
+
+from app.cache.cache_decorator import one_minute_cache
+from app.modules.common.enum import TranslateCountry
+from app.modules.common.schemas import BaseResponse
+from app.modules.trending.schemas import TrendingStock, TrendingStockRequest
+from app.modules.trending.service import TrendingService, get_trending_service
 
 router = APIRouter()
 

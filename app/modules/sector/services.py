@@ -1,6 +1,8 @@
 from typing import Optional
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.models_stock import StockInformation
 
 

@@ -1,6 +1,7 @@
-from app.kispy.manager import KISAPIManager
-from app.database.crud import database
 import logging
+
+from app.database.crud import database
+from app.kispy.manager import KISAPIManager
 
 logger = logging.getLogger(__name__)
 

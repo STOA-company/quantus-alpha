@@ -3,10 +3,10 @@
 """
 
 from .base import BaseHandler
+from .console_handler import ConsoleHandler
+from .database_handler import DatabaseHandler
 from .file_handler import FileHandler
 from .slack_handler import SlackHandler
-from .database_handler import DatabaseHandler
-from .console_handler import ConsoleHandler
 
 __all__ = [
     "BaseHandler",

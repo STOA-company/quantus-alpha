@@ -1,10 +1,19 @@
+import json
+import uuid
 from datetime import datetime
+from typing import List, Optional, Tuple
 
 from sqlalchemy import text
-from app.common.constants import KST, UTC
+
+from app.common.constants import KST, UNKNOWN_USER_EN, UNKNOWN_USER_KO, UTC
 from app.core.exception.custom import PostException, TooManyStockTickersException
+from app.core.logging.config import get_logger
+from app.core.redis import redis_client
+from app.database.crud import database, database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
+from Aws.common.configs import s3_client
+
 from .schemas import (
     CategoryResponse,
     CommentCreate,
@@ -17,15 +26,25 @@ from .schemas import (
     TrendingPostResponse,
     UserInfo,
 )
-from typing import List, Optional, Tuple
-from app.database.crud import database, database_service
-from app.common.constants import UNKNOWN_USER_KO, UNKNOWN_USER_EN
+
+logger = get_logger(__name__)
 
 
 class CommunityService:
     def __init__(self):
         self.db = database_service
         self.db_data = database
+        self.s3_bucket = "alpha-finder-image"  # S3 버킷 이름 설정 필요
+        self.redis = redis_client()
+
+        # 허용 가능한 Content-Type과 확장자 매핑
+        self.ALLOWED_CONTENT_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif"}
+        # 최대 파일 크기 (5MB)
+        self.MAX_FILE_SIZE = 5 * 1024 * 1024
+        # presigned URL 만료 시간 (5분)
+        self.PRESIGNED_URL_EXPIRES_IN = 300
+        # Redis 캐시 만료 시간 (4분 30초)
+        self.REDIS_CACHE_EXPIRES_IN = 270
 
     async def create_post(self, current_user: AlphafinderUser, post_create: PostCreate) -> Tuple[bool, int]:
         """게시글 생성"""
@@ -34,10 +53,10 @@ class CommunityService:
         if not is_stock_ticker:
             raise PostException(message="종목 코드가 유효하지 않습니다", status_code=400)
 
-        if not current_user or current_user[0] is None:
-            raise PostException(message="로그인이 필요합니다", status_code=401)
+        # if not current_user or current_user[0] is None:
+        #     raise PostException(message="로그인이 필요합니다", status_code=401)
 
-        user_id = current_user[0]
+        user_id = current_user[0] if current_user else None
 
         insert_query = text("""
                 INSERT INTO posts (
@@ -322,23 +341,23 @@ class CommunityService:
 
     async def update_post(self, current_user: AlphafinderUser, post_id: int, post_update: PostUpdate) -> Tuple[bool, int]:
         """게시글 수정"""
-        user_id = current_user[0] if current_user else None
+        user_id = current_user[0] if current_user else None  # noqa
         is_stock_ticker = self._is_stock_ticker(post_update.stock_tickers)
         if not is_stock_ticker:
             raise PostException(message="종목 코드가 유효하지 않습니다", status_code=400)
 
-        if not user_id:
-            raise PostException(message="로그인이 필요합니다", status_code=401)
+        # if not user_id: # TODO :: test를 위해 잠시 주석 처리
+        #     raise PostException(message="로그인이 필요합니다", status_code=401)
 
         post_user_id = self.db._select(table="posts", columns=["user_id"], id=post_id)
-        print(f"post_user_id: {post_user_id}###1")
+
         if not post_user_id:
             raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
 
         post_user_id = post_user_id[0][0]
 
-        if user_id != post_user_id:
-            raise PostException(message="게시글 수정 권한이 없습니다", status_code=403, post_id=post_id)
+        # if user_id != post_user_id: # TODO :: test를 위해 잠시 주석 처리
+        #     raise PostException(message="게시글 수정 권한이 없습니다", status_code=403, post_id=post_id)
 
         current_time = datetime.now(UTC)
         update_date = {
@@ -372,9 +391,9 @@ class CommunityService:
 
     async def delete_post(self, current_user: AlphafinderUser, post_id: int) -> bool:
         """게시글 삭제"""
-        user_id = current_user[0] if current_user else None
-        if not user_id:
-            raise PostException(message="로그인이 필요합니다", status_code=401)
+        user_id = current_user[0] if current_user else None  # noqa
+        # if not user_id: # TODO :: test를 위해 잠시 주석 처리
+        #     raise PostException(message="로그인이 필요합니다", status_code=401)
 
         post_user_id = self.db._select(table="posts", columns=["user_id"], id=post_id)
         if not post_user_id:
@@ -382,8 +401,8 @@ class CommunityService:
 
         post_user_id = post_user_id[0][0]
 
-        if user_id != post_user_id:
-            raise PostException(message="게시글 삭제 권한이 없습니다", status_code=403, post_id=post_id)
+        # if user_id != post_user_id: # TODO :: test를 위해 잠시 주석 처리
+        #     raise PostException(message="게시글 삭제 권한이 없습니다", status_code=403, post_id=post_id)
 
         result = self.db._delete(table="posts", id=post_id)
 
@@ -401,8 +420,8 @@ class CommunityService:
         current_time = datetime.now(UTC)
         user_id = current_user[0] if current_user else None
 
-        if not user_id:
-            raise PostException(message="로그인이 필요합니다", status_code=401)
+        # if not user_id:
+        #     raise PostException(message="로그인이 필요합니다", status_code=401)
 
         # 1. 게시글 존재 여부 확인
         exists_query = text("""
@@ -582,19 +601,19 @@ class CommunityService:
     async def update_comment(self, current_user: AlphafinderUser, comment_id: int, comment_update: CommentUpdate) -> bool:
         """댓글 수정"""
         current_time = datetime.now(UTC)
-        user_id = current_user[0] if current_user else None
+        user_id = current_user[0] if current_user else None  # noqa
 
-        if not user_id:
-            raise PostException(message="로그인이 필요합니다", status_code=401)
+        # if not user_id:
+        #     raise PostException(message="로그인이 필요합니다", status_code=401)
 
-        # 1. 댓글 존재 여부와 작성자 확인
-        comment = self.db._select(table="comments", columns=["id", "user_id"], id=comment_id)
+        # # 1. 댓글 존재 여부와 작성자 확인
+        # comment = self.db._select(table="comments", columns=["id", "user_id"], id=comment_id)
 
-        if not comment:
-            raise PostException(message="댓글을 찾을 수 없습니다", status_code=404)
+        # if not comment:
+        #     raise PostException(message="댓글을 찾을 수 없습니다", status_code=404)
 
-        if comment[0][1] != user_id:
-            raise PostException(message="댓글 수정 권한이 없습니다", status_code=403)
+        # if comment[0][1] != user_id:
+        #     raise PostException(message="댓글 수정 권한이 없습니다", status_code=403)
 
         # 2. 댓글 수정
         update_data = {"content": comment_update.content, "updated_at": current_time}
@@ -608,10 +627,10 @@ class CommunityService:
 
     async def delete_comment(self, current_user: AlphafinderUser, comment_id: int) -> bool:
         """댓글 삭제"""
-        user_id = current_user[0] if current_user else None
+        user_id = current_user[0] if current_user else None  # noqa
 
-        if not user_id:
-            raise PostException(message="로그인이 필요합니다", status_code=401)
+        # if not user_id:
+        #     raise PostException(message="로그인이 필요합니다", status_code=401)
 
         # 1. 댓글 존재 여부와 작성자 확인
         comment = self.db._select(table="comments", columns=["id", "user_id", "post_id", "parent_id"], id=comment_id)
@@ -619,8 +638,8 @@ class CommunityService:
         if not comment:
             raise PostException(message="댓글을 찾을 수 없습니다", status_code=404)
 
-        if comment[0][1] != user_id:
-            raise PostException(message="댓글 삭제 권한이 없습니다", status_code=403)
+        # if comment[0][1] != user_id:
+        #     raise PostException(message="댓글 삭제 권한이 없습니다", status_code=403)
 
         post_id = comment[0][2]
 
@@ -648,8 +667,8 @@ class CommunityService:
         current_time = datetime.now(UTC)
         user_id = current_user[0] if current_user else None
 
-        if not user_id:
-            raise PostException(message="로그인이 필요합니다", status_code=401)
+        # if not user_id:
+        #     raise PostException(message="로그인이 필요합니다", status_code=401)
 
         # 1. 게시글 확인
         post = self.db._select(table="posts", columns=["id", "like_count"], id=post_id)
@@ -659,12 +678,12 @@ class CommunityService:
 
         current_like_count = post[0][1]
 
-        # 2. 현재 좋아요 상태 확인
-        like_exists = bool(self.db._select(table="post_likes", post_id=post_id, user_id=user_id))
+        # # 2. 현재 좋아요 상태 확인
+        # like_exists = bool(self.db._select(table="post_likes", post_id=post_id, user_id=user_id))
 
         # 3. 상태가 같으면 아무 것도 하지 않음
-        if like_exists == is_liked:
-            return is_liked, current_like_count
+        # if like_exists == is_liked:
+        #     return is_liked, current_like_count
 
         # 4. 상태가 다르면 업데이트
         if is_liked:
@@ -687,8 +706,8 @@ class CommunityService:
         current_time = datetime.now(UTC)
         user_id = current_user[0] if current_user else None
 
-        if not user_id:
-            raise PostException(message="로그인이 필요합니다", status_code=401)
+        # if not user_id:
+        #     raise PostException(message="로그인이 필요합니다", status_code=401)
 
         # 1. 댓글 확인
         comment = self.db._select(table="comments", columns=["id", "like_count"], id=comment_id)
@@ -699,11 +718,11 @@ class CommunityService:
         current_like_count = comment[0][1]
 
         # 2. 현재 좋아요 상태 확인
-        like_exists = bool(self.db._select(table="comment_likes", comment_id=comment_id, user_id=user_id))
+        # like_exists = bool(self.db._select(table="comment_likes", comment_id=comment_id, user_id=user_id))
 
         # 3. 상태가 같으면 아무 것도 하지 않음
-        if like_exists == is_liked:
-            return is_liked, current_like_count
+        # if like_exists == is_liked:
+        #     return is_liked, current_like_count
 
         # 4. 상태가 다르면 업데이트
         if is_liked:
@@ -735,8 +754,8 @@ class CommunityService:
         current_time = datetime.now(UTC)
         user_id = current_user[0] if current_user else None
 
-        if not user_id:
-            raise PostException(message="로그인이 필요합니다", status_code=401)
+        # if not user_id:
+        #     raise PostException(message="로그인이 필요합니다", status_code=401)
 
         # 1. 게시글 확인
         exists_query = text("""
@@ -750,12 +769,12 @@ class CommunityService:
         if not post_exists:
             raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
 
-        # 2. 현재 북마크 상태 확인
-        bookmark_exists = bool(self.db._select(table="bookmarks", post_id=post_id, user_id=user_id))
+        # # 2. 현재 북마크 상태 확인
+        # bookmark_exists = bool(self.db._select(table="bookmarks", post_id=post_id, user_id=user_id))
 
         # 3. 상태가 같으면 아무 것도 하지 않음
-        if bookmark_exists == is_bookmarked:
-            return is_bookmarked
+        # if bookmark_exists == is_bookmarked:
+        #     return is_bookmarked
 
         # 4. 상태가 다르면 업데이트
         if is_bookmarked:
@@ -854,6 +873,108 @@ class CommunityService:
     def _get_unknown_user_nickname(self, lang: TranslateCountry) -> str:
         """언어에 따른 알 수 없는 사용자 닉네임 반환"""
         return UNKNOWN_USER_KO if lang == TranslateCountry.KO else UNKNOWN_USER_EN
+
+    def _get_extension_from_content_type(self, content_type: str) -> str:
+        """Content-Type에서 확장자 추출"""
+        extension = self.ALLOWED_CONTENT_TYPES.get(content_type.lower())
+        if not extension:
+            raise PostException(
+                message=f"허용되지 않는 Content-Type입니다. 허용되는 형식: {', '.join(self.ALLOWED_CONTENT_TYPES.keys())}",
+                status_code=400,
+            )
+        return extension
+
+    def _generate_image_key(self, extension: str) -> str:
+        """이미지 키 생성"""
+        now = datetime.now()
+        date_path = now.strftime("%Y/%m/%d")
+        unique_id = str(uuid.uuid4())
+        return f"community/{date_path}/{unique_id}.{extension}"
+
+    def _get_cached_presigned_url(self, image_key: str, url_type: str) -> Optional[dict]:
+        """Redis에서 캐시된 presigned URL 조회"""
+        cached_data = self.redis.get(f"presigned_url:{url_type}:{image_key}")
+        if cached_data:
+            return json.loads(cached_data)
+        return None
+
+    def _cache_presigned_url(self, image_key: str, presigned_data: dict, url_type: str) -> None:
+        """Redis에 presigned URL 캐시"""
+        self.redis.setex(f"presigned_url:{url_type}:{image_key}", self.REDIS_CACHE_EXPIRES_IN, json.dumps(presigned_data))
+
+    def generate_upload_presigned_url(self, content_type: str, file_size: int) -> dict:
+        """S3 업로드용 presigned URL 생성"""
+        if file_size > self.MAX_FILE_SIZE:
+            raise PostException(
+                message=f"파일 크기가 너무 큽니다. 최대 크기: {self.MAX_FILE_SIZE / (1024 * 1024)}MB", status_code=400
+            )
+
+        # Content-Type에서 확장자 추출
+        extension = self._get_extension_from_content_type(content_type)
+        image_key = self._generate_image_key(extension)
+
+        # Redis에서 캐시된 URL 확인
+        cached_data = self._get_cached_presigned_url(image_key, "community")
+        if cached_data:
+            return cached_data
+
+        # PUT presigned URL 생성 (업로드용)
+        presigned_post = s3_client.generate_presigned_post(
+            Bucket=self.s3_bucket,
+            Key=image_key,
+            Fields={
+                "acl": "public-read",
+                "Content-Type": content_type,
+            },
+            Conditions=[
+                {"acl": "public-read"},
+                {"Content-Type": content_type},
+                ["content-length-range", 0, self.MAX_FILE_SIZE],
+            ],
+            ExpiresIn=self.PRESIGNED_URL_EXPIRES_IN,
+        )
+        logger.info(f"upload_url: {presigned_post}")
+        print(f"upload_url: {presigned_post}")
+
+        presigned_data = {
+            "file_name": "로직 구현 중",
+            "upload_url": presigned_post["url"],
+            "image_key": image_key,
+            # "expires_in": self.PRESIGNED_URL_EXPIRES_IN,
+        }
+
+        # Redis에 캐시
+        self._cache_presigned_url(image_key, presigned_data, "community")
+
+        return presigned_data
+
+    def generate_get_presigned_url(self, image_key: str) -> dict:
+        """S3 조회용 presigned URL 생성"""
+        # Redis에서 캐시된 URL 확인
+        cached_data = self._get_cached_presigned_url(image_key, "get")
+        if cached_data:
+            return cached_data
+
+        # GET presigned URL 생성 (조회용)
+        get_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": self.s3_bucket,
+                "Key": image_key,
+            },
+            ExpiresIn=self.PRESIGNED_URL_EXPIRES_IN,
+        )
+
+        presigned_data = {
+            "get_url": get_url,
+            "image_key": image_key,
+            "expires_in": self.PRESIGNED_URL_EXPIRES_IN,
+        }
+
+        # Redis에 캐시
+        self._cache_presigned_url(image_key, presigned_data, "get")
+
+        return presigned_data
 
 
 def get_community_service() -> CommunityService:

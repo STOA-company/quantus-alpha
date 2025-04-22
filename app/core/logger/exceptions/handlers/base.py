@@ -3,8 +3,8 @@
 """
 
 import logging
-from typing import Dict, Any, Tuple
 import socket
+from typing import Any, Dict, Tuple
 
 from ...config import get_config
 from ..formatter import ExceptionFormatter

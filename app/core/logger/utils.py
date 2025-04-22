@@ -5,7 +5,7 @@
 import json
 import traceback
 from datetime import datetime
-from typing import Any, Dict, Optional, Union, List, Type
+from typing import Any, Dict, List, Optional, Type, Union
 
 
 def jsonable_encoder(obj: Any) -> Any:

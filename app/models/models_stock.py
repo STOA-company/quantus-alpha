@@ -1,6 +1,6 @@
 from pydantic import model_validator
+from sqlalchemy import Boolean, Column, Date, DateTime, Enum, Float, Integer, String
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy import Column, Date, DateTime, Enum, Float, Integer, String, Boolean
 
 from app.enum.type import StockType
 from app.models.models_base import Base
@@ -48,6 +48,7 @@ class StockInformation(Base):
     is_warned = Column(Boolean, default=False, comment="경고종목 여부")
     is_activate = Column(Boolean, default=True, comment="사용 가능 여부")
     is_pub = Column(Boolean, default=True, comment="is_publishable, 수집 가능 여부")
+    is_target_etf = Column(Boolean, default=False, comment="타겟 ETF 여부")
 
     type = Column(Enum(*[e.value for e in StockType], name="stock_type"), nullable=True, comment="종목 유형")
 

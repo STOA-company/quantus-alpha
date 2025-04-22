@@ -11,29 +11,22 @@ case $ENVIRONMENT in
         ENV_FILE=.env
         ENV=prod
         BRANCH=main
-        ROOT_URL="https://alpha-live.quantus.kr"
         ;;
     stage|staging)
         ENV_FILE=.env
         ENV=stage
         BRANCH=staging
-        ROOT_URL="https://alpha-live.quantus.kr"
         ;;
     dev|development)
         ENV_FILE=.env
         ENV=dev
         BRANCH=dev
-        ROOT_URL="https://alpha-dev.quantus.kr"
         ;;
     *)
         echo "Unknown environment: $ENVIRONMENT"
         exit 1
         ;;
 esac
-
-# Export variables for docker-compose
-export ROOT_URL
-export DOMAIN=${ROOT_URL#https://}
 
 echo "Deploying for environment: $ENV using $ENV_FILE (Branch: $BRANCH)"
 
@@ -110,6 +103,14 @@ update_nginx_upstream() {
 server {
     listen 80;
 
+    # 타임아웃 설정 증가
+    proxy_connect_timeout 300s;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+
+    # 버퍼링 설정 비활성화 (스트리밍용)
+    proxy_buffering off;
+
     location /stub_status {
         stub_status on;
         allow 127.0.0.1;
@@ -123,6 +124,20 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    # 채팅 스트리밍 엔드포인트 설정
+    location /api/v1/chat/stream {
+        proxy_pass http://${service}:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header Connection '';
+        proxy_http_version 1.1;
+        chunked_transfer_encoding off;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 600s;  # 스트리밍용 더 긴 타임아웃
     }
 
     location /health-check {

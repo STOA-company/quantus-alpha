@@ -1,9 +1,11 @@
 from typing import Literal
+
 import pandas as pd
+from sqlalchemy import text
+
+from app.core.logging.config import get_logger
 from app.database.crud import database
 from app.utils.date_utils import now_utc
-from sqlalchemy import text
-from app.core.logging.config import get_logger
 
 logger = get_logger(__name__)
 

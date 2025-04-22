@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends
-from app.modules.stock_indices.schemas import IndicesData, IndexSummary
+
+from app.modules.stock_indices.schemas import IndexSummary, IndicesData
+
 from .services import StockIndicesService
 
 router = APIRouter()

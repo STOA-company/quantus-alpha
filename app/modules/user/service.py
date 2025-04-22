@@ -1,18 +1,19 @@
-import json
-
 import hashlib
-from typing import List, Tuple, Optional
+import json
+from typing import List, Optional, Tuple
+
 from fastapi import HTTPException
+from sqlalchemy import text
 
 from app.core.logger import setup_logger
 from app.database.crud import database_service
+from app.enum.type import StockType
 from app.models.models_users import AlphafinderUser
 from app.modules.community.schemas import CommentItemWithPostInfo, PostInfo, ResponsePost, UserInfo
-from app.modules.user.schemas import UserProfileResponse, DataDownloadHistory
+from app.modules.screener.etf.enum import ETFMarketEnum
+from app.modules.screener.stock.schemas import MarketEnum
 from app.modules.screener.stock.service import ScreenerStockService
-from app.enum.type import StockType
-
-from sqlalchemy import text
+from app.modules.user.schemas import DataDownloadHistory, UserProfileResponse
 
 logger = setup_logger(__name__)
 
@@ -416,8 +417,16 @@ class UserService:
     async def screener_init(self, user_id: int):
         screener_service = ScreenerStockService()
         all_sectors = screener_service.get_available_sectors()
-        await screener_service.create_group(user_id=user_id, sector_filter=all_sectors)
-        await screener_service.create_group(user_id=user_id, type=StockType.ETF)
+        await screener_service.create_group(
+            user_id=user_id,
+            market_filter=MarketEnum.ALL,
+            sector_filter=all_sectors,
+        )
+        await screener_service.create_group(
+            user_id=user_id,
+            market_filter=ETFMarketEnum.ALL,
+            type=StockType.ETF,
+        )
 
     async def interest_init(self, user_id: int):
         groups = self.db._select(table="interest_group", user_id=user_id)
@@ -446,8 +455,9 @@ def get_user_service() -> UserService:
 
 
 if __name__ == "__main__":
-    from app.utils.oauth_utils import create_jwt_token, create_refresh_token
     from datetime import timedelta
+
+    from app.utils.oauth_utils import create_jwt_token, create_refresh_token
 
     service = UserService()
     access_token = create_jwt_token(206, timedelta(minutes=1000000000))

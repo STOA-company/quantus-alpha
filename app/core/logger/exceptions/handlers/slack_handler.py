@@ -3,12 +3,12 @@ Slack 웹훅을 통한 로깅 및 예외 알림 핸들러
 """
 
 import json
-import traceback
 import logging
+import traceback
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, Union
-from urllib.request import Request, urlopen
+from typing import Any, Dict, Optional, Tuple, Union
 from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 from .base import BaseHandler
 

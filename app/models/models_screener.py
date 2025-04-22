@@ -1,8 +1,9 @@
-from app.models.models_base import ServiceBase, BaseMixin
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Enum, Boolean
-from sqlalchemy.schema import Index
+from sqlalchemy import Boolean, Column, Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
+from sqlalchemy.schema import Index
+
 from app.enum.type import StockType
+from app.models.models_base import BaseMixin, ServiceBase
 from app.models.models_factors import CategoryEnum, FactorTypeEnum
 
 
@@ -20,6 +21,7 @@ class ScreenerGroup(ServiceBase, BaseMixin):
     stock_filters = relationship("ScreenerStockFilter", back_populates="group", cascade="all, delete-orphan")
     factor_filters = relationship("ScreenerFactorFilter", back_populates="group", cascade="all, delete-orphan")
     sort_info = relationship("ScreenerSortInfo", back_populates="group", cascade="all, delete-orphan")
+    user = relationship("AlphafinderUser", back_populates="groups")
 
     __table_args__ = (UniqueConstraint("user_id", "name", "type", name="uix_user_group_name_type"),)
 
@@ -37,6 +39,8 @@ class ScreenerStockFilter(ServiceBase, BaseMixin):
     above = Column(Integer, nullable=True)
     below = Column(Integer, nullable=True)
     value = Column(String(50), nullable=True)
+
+    group = relationship("ScreenerGroup", back_populates="stock_filters")
 
     __table_args__ = (Index("idx_group_factor", "group_id", "factor"),)
 

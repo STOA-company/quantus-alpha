@@ -1,13 +1,14 @@
 import json
-from fastapi import HTTPException
-import requests
-
-from app.core.config import settings
 from datetime import timedelta
-from app.database.crud import JoinInfo, database_service
-from app.core.logger import setup_logger
 from http.client import HTTPSConnection as https_conn
 
+import requests
+from fastapi import HTTPException
+
+from app.common.constants import SLACK_WEBHOOK_URL_ERROR
+from app.core.config import settings
+from app.core.logger import setup_logger
+from app.database.crud import JoinInfo, database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.payments.schema import (
     PriceTemplateItem,
@@ -18,7 +19,6 @@ from app.modules.payments.schema import (
     UpdateUserSubscription,
 )
 from app.utils.date_utils import now_kr
-from app.common.constants import SLACK_WEBHOOK_URL_ERROR
 
 # 로그 레벨을 DEBUG로 명시적으로 설정
 logger = setup_logger(__name__, send_error_to_slack=True, slack_webhook_url=SLACK_WEBHOOK_URL_ERROR)
@@ -36,7 +36,11 @@ class PaymentService:
         is_banner = False
         max_remaining_days = 0
         for price in data:
-            remaining_days = (price.event_end_date.date() - now_kr().date()).days if price.event_end_date else None
+            remaining_days = (
+                (price.event_end_date.date() - now_kr().date()).days
+                if price.event_end_date and price.event_end_date.date() >= now_kr().date()
+                else None
+            )
             price_template.append(
                 PriceTemplateItem(
                     id=price.id,
@@ -46,12 +50,14 @@ class PaymentService:
                     period_days=price.period_days,
                     is_event=price.is_event,
                     event_type=price.event_type or None,
-                    event_end_date=max(0, remaining_days) if remaining_days else None,
+                    event_end_date=max(0, remaining_days) if remaining_days is not None else None,
                 )
             )
             if price.is_banner:
                 is_banner = True
-                max_remaining_days = max(max_remaining_days, remaining_days)
+                max_remaining_days = (
+                    max(max_remaining_days, remaining_days) if remaining_days is not None else max_remaining_days
+                )
         response_price_template = ResponsePriceTemplate(
             is_banner=is_banner,
             banner={

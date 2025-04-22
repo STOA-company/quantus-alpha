@@ -1,6 +1,7 @@
-from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, ForeignKey, BigInteger
-from app.models.models_base import BaseMixin, ServiceBase
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.models.models_base import BaseMixin, ServiceBase
 
 
 class AlphafinderLevel(ServiceBase):
@@ -111,7 +112,7 @@ class AlphafinderCouponBox(ServiceBase, BaseMixin):
 
     # 관계
     user = relationship("AlphafinderUser")
-    coupon = relationship("AlphafinderCoupon")
+    coupon = relationship("AlphafinderCoupon", back_populates="coupon_box")
 
     def __repr__(self) -> str:
         return f"AlphafinderCouponBox(id={self.id!r}, user_id={self.user_id!r}, coupon_id={self.coupon_id!r}, issued_at={self.issued_at!r}, expired_at={self.expired_at!r})"
@@ -132,7 +133,7 @@ class AlphafinderCoupon(ServiceBase, BaseMixin):
     expired_at: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
 
     # 관계
-    coupon_box = relationship("AlphafinderCouponBox")
+    coupon_box = relationship("AlphafinderCouponBox", back_populates="coupon")
 
     def __repr__(self) -> str:
         return f"AlphafinderCoupon(id={self.id!r}, coupon_num={self.coupon_num!r}, coupon_name={self.coupon_name!r}, coupon_period_days={self.coupon_period_days!r})"

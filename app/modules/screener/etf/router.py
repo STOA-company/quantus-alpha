@@ -1,24 +1,25 @@
+from datetime import datetime
 from io import StringIO
 from typing import Dict, List, Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
 
 from app.batches.run_etf_screener import run_etf_screener_data
+from app.common.constants import ETF_MARKET_MAP, FACTOR_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN
+from app.core.exception.base import CustomException
+from app.core.logger import setup_logger
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
-from app.modules.screener.stock.schemas import FactorResponse, GroupMetaData, ETFGroupFilter, ETFGroupFilterResponse
+from app.models.models_users import AlphafinderUser
 from app.modules.screener.etf.enum import ETFMarketEnum
 from app.modules.screener.etf.schemas import FilteredETF, PaginatedFilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
-from app.utils.oauth_utils import get_current_user
-from app.core.logger import setup_logger
-from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN, ETF_MARKET_MAP
-from app.core.exception.base import CustomException
+from app.modules.screener.stock.schemas import ETFGroupFilter, ETFGroupFilterResponse, FactorResponse, GroupMetaData
 from app.modules.screener.utils import screener_utils
-from app.models.models_users import AlphafinderUser
-from app.modules.user.service import UserService, get_user_service
 from app.modules.user.schemas import DataDownloadHistory
-from datetime import datetime
+from app.modules.user.service import UserService, get_user_service
+from app.utils.oauth_utils import get_current_user
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -252,8 +253,9 @@ async def create_or_update_group(
                 user_id=current_user.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
-                sector_filter=group_filter.sector_filter,
                 custom_filters=group_filter.custom_filters,
+                factor_filters=group_filter.factor_filters,
+                sort_info=group_filter.sort_info,
                 type=group_filter.type,
             )
         return {"group_id": group_id}

@@ -1,12 +1,14 @@
+from typing import Any, Callable, Dict, List, Optional
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from app.core.logger import setup_logger
-from typing import Callable, Dict, Any, Optional, List
+
 from app.core.exception.base import CustomException
 
 # 아래와 같이 수정: 직접 SlackNotifier 클래스를 가져오도록 함
 from app.core.extra.SlackNotifier import SlackNotifier
+from app.core.logger import setup_logger
 
 logger = setup_logger(__name__)
 
@@ -35,9 +37,13 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> JSONResponse:
         try:
+            # 스트리밍 엔드포인트 처리를 위한 검사
+            path = request.url.path
+            is_streaming_endpoint = path.endswith("/stream") or "stream" in path
+
             # Create a copy of the request body before processing
             body = None
-            if self.include_request_body:
+            if self.include_request_body and not is_streaming_endpoint:
                 body = await request.body()
 
                 # Create a new request with the same body

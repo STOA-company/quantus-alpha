@@ -1,6 +1,7 @@
-import pandas as pd
 import numpy as np
-from app.cache.factors import factors_cache, etf_factors_cache
+import pandas as pd
+
+from app.cache.factors import etf_factors_cache, factors_cache
 from app.utils.test_utils import time_it
 
 

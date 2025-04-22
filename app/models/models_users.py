@@ -1,7 +1,8 @@
-from sqlalchemy import ForeignKey, Integer, String, BigInteger, Boolean, Date, UniqueConstraint, DateTime, Index
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.models.models_base import ServiceBase, BaseMixin
+
+from app.models.models_base import BaseMixin, ServiceBase
 
 
 class AlphafinderUser(BaseMixin, ServiceBase):
@@ -25,6 +26,8 @@ class AlphafinderUser(BaseMixin, ServiceBase):
 
     groups = relationship("ScreenerGroup", back_populates="user", cascade="all, delete-orphan")
     toss_payment_history = relationship("TossPaymentHistory", back_populates="user")
+    conversations = relationship("ChatConversation", back_populates="user")
+    interest_groups = relationship("InterestGroup", back_populates="user")
 
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, nickname={self.nickname!r}, email={self.email!r})"
@@ -59,7 +62,6 @@ class UserStockInterest(BaseMixin, ServiceBase):
     )
     ticker: Mapped[String] = mapped_column(String(length=20), nullable=False)
 
-    user = relationship("AlphafinderUser", back_populates="user_stock_interests")
     group = relationship("InterestGroup", back_populates="user_stock_interests")
 
     __table_args__ = (UniqueConstraint("group_id", "ticker", name="uix_group_id_ticker"),)
