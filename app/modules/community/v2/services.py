@@ -475,12 +475,13 @@ class CommunityService:
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
-        post_user_id = self.db._select(table="posts", columns=["user_id", "image_url"], id=post_id)
-        if not post_user_id:
+        # Get post user_id and image_url
+        post_result = self.db._select(table="posts", columns=["user_id", "image_url"], id=post_id)
+        if not post_result:
             raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
 
-        post_user_id = post_user_id[0][0]
-        image_urls_json = post_user_id[0][1]
+        post_user_id = post_result[0][0]
+        image_urls_json = post_result[0][1]
 
         if user_id != post_user_id:
             raise PostException(message="게시글 삭제 권한이 없습니다", status_code=403, post_id=post_id)
