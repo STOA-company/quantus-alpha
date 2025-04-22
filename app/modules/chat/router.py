@@ -38,6 +38,8 @@ def get_conversation_list(current_user: str = Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
     conversation_list = chat_service.get_conversation_list(current_user.id)
+    if len(conversation_list) == 0:
+        return []
     return [
         {"conversation_id": conversation.id, "title": conversation.title, "preview": conversation.messages[-1].content}
         for conversation in conversation_list
