@@ -1385,9 +1385,9 @@ class FinancialService:
         # 최근 10분기 데이터만 사용
         quarterly_results = quarterly_results[:10]
 
-        # 사용자 구독 레벨에 따른 접근 제어 적용
-        if user:
-            quarterly_results = self._apply_subscription_based_access(quarterly_results, user, is_yearly=False)
+        # # 사용자 구독 레벨에 따른 접근 제어 적용
+        # if user:
+        #     quarterly_results = self._apply_subscription_based_access(quarterly_results, user, is_yearly=False)
 
         return quarterly_results
 
@@ -1505,8 +1505,8 @@ class FinancialService:
         yearly_results = yearly_results[:10]
 
         # 사용자 구독 레벨에 따른 접근 제어 적용
-        if user:
-            yearly_results = self._apply_subscription_based_access(yearly_results, user, is_yearly=True)
+        # if user:
+        #     yearly_results = self._apply_subscription_based_access(yearly_results, user, is_yearly=True)
 
         return yearly_results
 
