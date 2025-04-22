@@ -51,6 +51,7 @@ class ConversationRepository:
             db_conversation = ChatConversation(
                 id=data.id,
                 title=data.title,
+                preview=data.preview,
                 user_id=data.user_id,
                 latest_job_id=data.latest_job_id,
                 created_at=data.created_at,
@@ -64,13 +65,19 @@ class ConversationRepository:
         return conversations
 
     def update(
-        self, conversation_id: int, title: Optional[str] = None, latest_job_id: Optional[str] = None
+        self,
+        conversation_id: int,
+        title: Optional[str] = None,
+        latest_job_id: Optional[str] = None,
+        preview: Optional[str] = None,
     ) -> Conversation:
         update_sets = {}
         if title:
             update_sets["title"] = title
         if latest_job_id:
             update_sets["latest_job_id"] = latest_job_id
+        if preview:
+            update_sets["preview"] = preview
 
         database_service._update(
             "chat_conversation",
@@ -129,6 +136,7 @@ class ConversationRepository:
             id=db_conversation.id,
             title=db_conversation.title,
             user_id=db_conversation.user_id,
+            preview=db_conversation.preview,
             latest_job_id=db_conversation.latest_job_id,
             created_at=db_conversation.created_at,
             updated_at=db_conversation.updated_at,
@@ -140,6 +148,7 @@ class ConversationRepository:
             id=conversation.id,
             title=conversation.title,
             user_id=conversation.user_id,
+            preview=conversation.preview,
             latest_job_id=conversation.latest_job_id,
             created_at=conversation.created_at,
             updated_at=conversation.updated_at,

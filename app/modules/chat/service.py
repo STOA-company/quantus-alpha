@@ -35,8 +35,10 @@ class ChatService:
     ) -> Optional[Message]:
         return conversation_repository.add_message(conversation_id, content, role, root_message_id)
 
-    def update_conversation(self, conversation_id: str, title: str) -> Conversation:
-        return conversation_repository.update(conversation_id=conversation_id, title=title)
+    def update_conversation(
+        self, conversation_id: str, title: Optional[str] = None, preview: Optional[str] = None
+    ) -> Conversation:
+        return conversation_repository.update(conversation_id=conversation_id, title=title, preview=preview)
 
     def delete_conversation(self, conversation_id: str) -> bool:
         return conversation_repository.delete(conversation_id)

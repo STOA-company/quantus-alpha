@@ -41,7 +41,7 @@ def get_conversation_list(current_user: str = Depends(get_current_user)):
     if len(conversation_list) == 0:
         return []
     return [
-        {"conversation_id": conversation.id, "title": conversation.title, "preview": conversation.messages[-1].content}
+        {"conversation_id": conversation.id, "title": conversation.title, "preview": conversation.preview}
         for conversation in conversation_list
     ]
 
@@ -85,7 +85,7 @@ def update_conversation(conversation_id: int, title: str, current_user: str = De
     if conversation.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
 
-    chat_service.update_conversation(conversation_id, title)
+    chat_service.update_conversation(conversation_id=conversation_id, title=title)
     return {"conversation_id": conversation_id, "title": title}
 
 
@@ -164,11 +164,27 @@ async def stream_chat(
             logger.info(f"스트리밍 응답 완료: 총 {message_count}개 메시지 전송됨")
 
             if assistant_response:
-                chat_service.add_message(conversation_id, assistant_response, "assistant", root_message.id)
+                chat_service.add_message(
+                    conversation_id=conversation_id,
+                    content=assistant_response,
+                    role="assistant",
+                    root_message_id=root_message.id,
+                )
+                if conversation.preview is None:
+                    conversation.preview = assistant_response[:100]
+                    chat_service.update_conversation(
+                        conversation_id=conversation_id,
+                        preview=conversation.preview,
+                    )
                 logger.info(f"성공 응답 저장 완료: {assistant_response[:50]}...")
 
             if system_response:
-                chat_service.add_message(conversation_id, system_response, "system", root_message.id)
+                chat_service.add_message(
+                    conversation_id=conversation_id,
+                    content=system_response,
+                    role="system",
+                    root_message_id=root_message.id,
+                )
                 logger.info(f"시스템 응답 저장 완료: {system_response[:50]}...")
 
         except Exception as e:

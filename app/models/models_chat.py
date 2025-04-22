@@ -33,6 +33,7 @@ class ChatConversation(BaseMixin, ServiceBase):
 
     id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     title: Mapped[String] = mapped_column(String(length=255), nullable=True)
+    preview: Mapped[String] = mapped_column(String(length=255), nullable=True)
     user_id: Mapped[BigInteger] = mapped_column(
         BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=False, index=True
     )
