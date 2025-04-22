@@ -53,6 +53,7 @@ class ResponsePost(BaseModel):
     is_changed: bool
     is_bookmarked: bool
     is_liked: bool
+    is_mine: bool
     created_at: datetime
     stock_tickers: List[StockInfo]
     user_info: UserInfo
