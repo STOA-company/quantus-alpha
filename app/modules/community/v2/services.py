@@ -225,6 +225,7 @@ class CommunityService:
             is_changed=post["created_at"] != post["updated_at"],
             is_bookmarked=post["is_bookmarked"],
             is_liked=post["is_liked"],
+            is_mine=post["user_id"] == current_user_id,
             created_at=post["created_at"].astimezone(KST),
             stock_tickers=stock_information,
             user_info=user_info,
@@ -390,6 +391,7 @@ class CommunityService:
                 is_changed=post["created_at"] != post["updated_at"],
                 is_bookmarked=post["is_bookmarked"],
                 is_liked=post["is_liked"],
+                is_mine=post["user_id"] == current_user_id,
                 created_at=post["created_at"].astimezone(KST),
                 stock_tickers=[
                     stock_info_map[ticker] for ticker in post_stocks.get(post["id"], []) if ticker in stock_info_map
