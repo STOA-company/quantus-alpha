@@ -19,6 +19,7 @@ class LLMClient:
     def __init__(self):
         self.base_url = llm_config.base_url
         self.timeout = llm_config.timeout
+        self.api_key = llm_config.api_key
 
     async def process_query(self, query: str, model: str = LLM_MODEL) -> AsyncGenerator[str, None]:
         """LLM API에 요청을 전송하고 응답을 스트리밍으로 반환"""
@@ -33,9 +34,8 @@ class LLMClient:
         while retry_count < llm_config.retry_attempts:
             try:
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    response = await client.post(
-                        self.base_url, json=request_data.model_dump(), headers={"Content-Type": "application/json"}
-                    )
+                    headers = {"Content-Type": "application/json", "Access-Key": self.api_key}
+                    response = await client.post(self.base_url, json=request_data.model_dump(), headers=headers)
 
                     if response.status_code != 200:
                         error_text = response.text
@@ -81,7 +81,9 @@ class LLMClient:
                         await asyncio.sleep(polling_interval)
 
                         # 상태 확인 요청
-                        status_response = await client.get(f"{self.base_url}/{job_id}")
+                        status_response = await client.get(
+                            f"{self.base_url}/{job_id}", headers={"Access-Key": self.api_key}
+                        )
 
                         if status_response.status_code != 200:
                             logger.warning(f"폴링 중 오류 발생: {status_response.status_code}")

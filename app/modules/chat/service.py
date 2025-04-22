@@ -14,8 +14,12 @@ logger = logging.getLogger(__name__)
 
 
 class ChatService:
-    def create_conversation(self, title: str, user_id: int) -> Conversation:
-        return conversation_repository.create(title, user_id)
+    def create_conversation(self, first_message: str, user_id: int) -> Conversation:
+        conversation = conversation_repository.create(first_message, user_id)
+
+        conversation_repository.add_message(conversation_id=conversation.id, content=first_message, role="user")
+
+        return conversation
 
     def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
         return conversation_repository.get_by_id(conversation_id)
@@ -59,7 +63,7 @@ class ChatService:
         if not latest_job_id:
             return "success"
 
-        response = httpx.get(f"{llm_config.base_url}/{latest_job_id}")
+        response = httpx.get(f"{llm_config.base_url}/{latest_job_id}", headers={"Access-Key": llm_config.api_key})
         status = response.json().get("status").lower()
         return status
 
