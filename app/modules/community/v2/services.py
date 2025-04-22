@@ -239,11 +239,23 @@ class CommunityService:
 
         try:
             image_urls = json.loads(image_urls_json)
-            # _0.확장자 형식으로 끝나는 첫 번째 URL 찾기
-            for url in image_urls:
-                if any(url.endswith(f"_0.{ext}") for ext in self.ALLOWED_CONTENT_TYPES.values()):
-                    return url
-            return None
+            if not image_urls:
+                return None
+
+            # 이미지 URL을 숫자로 정렬
+            def get_index(url):
+                try:
+                    # URL에서 마지막 부분을 가져옴
+                    filename = url.split("/")[-1]
+                    # _숫자.확장자 형식에서 숫자 추출
+                    index = int(filename.split("_")[-1].split(".")[0])
+                    return index
+                except (IndexError, ValueError):
+                    return float("inf")
+
+            # 숫자로 정렬
+            sorted_urls = sorted(image_urls, key=get_index)
+            return sorted_urls[0]
         except json.JSONDecodeError:
             logger.error(f"Failed to parse image_url JSON: {image_urls_json}")
             return None
@@ -416,7 +428,6 @@ class CommunityService:
             "content": post_update.content,
             "category_id": post_update.category_id,
             "image_url": json.dumps(post_update.image_url) if post_update.image_url else None,
-            "image_format": post_update.image_format,
             "updated_at": current_time,
         }
         result = self.db._update(table="posts", sets=update_date, id=post_id)
