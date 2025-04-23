@@ -1,14 +1,17 @@
-from typing import List
+from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.core.exception.base import DuplicateException, NotFoundException
 from app.core.logger import setup_logger
 from app.models.models_users import AlphafinderUser
+from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.interest.v2.request import AddInterestRequest, DeleteInterestRequest, UpdateInterestOrderRequest
-from app.modules.interest.v2.response import InterestGroupResponse
+from app.modules.interest.v2.response import InterestGroupResponse, InterestPriceResponse
 from app.modules.interest.v2.service import InterestService, get_interest_service
+from app.modules.news.v2.schemas import InterestDisclosureResponse, InterestNewsResponse, TopStoriesResponse
+from app.modules.news.v2.services import NewsService, get_news_service
 from app.utils.quantus_auth_utils import get_current_user
 
 logger = setup_logger(__name__)
@@ -22,7 +25,6 @@ def get_groups(
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
 ):
-    print(current_user)
     if not current_user:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return service.get_interest_group(current_user["uid"])
@@ -173,6 +175,133 @@ def update_order(
 
 
 ########################################################
+# 관심 종목 주요소기 모아보기 / 스토리
+@router.get("/stories/{group_id}", response_model=BaseResponse[List[TopStoriesResponse]])
+def top_stories(
+    group_id: int,
+    request: Request,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
+    news_service: NewsService = Depends(get_news_service),
+    service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),  # noqa
+):
+    tickers = service.get_interest_tickers(group_id)
+    if len(tickers) == 0:
+        return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
+    # subscription_level = user.subscription_level if user else 1 # TODO :: 유저 테이블 통합 후 주석 해제
+    # stories_count = 30 if subscription_level >= 3 else 10
+    data = news_service.top_stories(
+        request=request, tickers=tickers, lang=lang, stories_count=30
+    )  # TODO :: stories_count 변경 필요
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
+
+
+# 관심 종목 가격 조회
+@router.get("/{group_id}/price", response_model=BaseResponse[List[InterestPriceResponse]])
+def get_interest_price(
+    group_id: int,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
+    service: InterestService = Depends(get_interest_service),
+):
+    tickers = service.get_interest_tickers(group_id)
+    ticker_price_data = service.get_interest_price(tickers, lang)
+    return BaseResponse(status_code=200, message="Successfully retrieved interest price data", data=ticker_price_data)
+
+
+# 관심 종목 뉴스
+## v1과 response가 다름!!!
+@router.get("/news/{group_id}", response_model=BaseResponse[InterestNewsResponse])
+def interest_news(
+    group_id: int,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
+    offset: Annotated[int, Query(description="페이지 번호, 기본값: 0")] = 0,
+    limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
+    news_service: NewsService = Depends(get_news_service),
+    service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),  # noqa
+):
+    tickers = service.get_interest_tickers(group_id)
+    if len(tickers) == 0:
+        return BaseResponse(
+            status_code=200,
+            message="Successfully retrieved news data",
+            data=InterestNewsResponse(news=[], has_next=False),
+        )
+    total_news_data = news_service.get_news(lang=lang, tickers=tickers)
+
+    # if user.subscription_level < 3:
+    #     total_news_data = news_service.mask_news_items(total_news_data)
+
+    news_data = total_news_data[offset * limit : offset * limit + limit]
+
+    # if user.subscription_level >= 3: # TODO :: 유저 테이블 통합 후 주석 해제
+    has_next = len(total_news_data) > offset * limit + limit
+    # else:
+    #     current_position = offset * limit + len(news_data)
+    #     has_next = current_position < len(total_news_data)
+
+    response_data = InterestNewsResponse(news=news_data, has_next=has_next)
+    return BaseResponse(
+        status_code=200,
+        message="Successfully retrieved news data",
+        data=response_data,
+    )
+
+
+# 관심 종목 공시
+## v1과 response가 다름!!!
+@router.get("/disclosure/{group_id}", response_model=BaseResponse[InterestDisclosureResponse])
+def interest_disclosure(
+    group_id: int,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
+    offset: Annotated[int, Query(description="페이지 번호, 기본값: 0")] = 0,
+    limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
+    news_service: NewsService = Depends(get_news_service),
+    service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),  # noqa
+):
+    tickers = service.get_interest_tickers(group_id)
+    if len(tickers) == 0:
+        return BaseResponse(
+            status_code=200,
+            message="Successfully retrieved disclosure data",
+            data=InterestDisclosureResponse(disclosure=[], has_next=False),
+        )
+    total_disclosure_data = news_service.get_disclosure(lang=lang, tickers=tickers)
+
+    # 레벨 3 미만 사용자의 경우 데이터 마스킹 적용
+    # if user.subscription_level < 3:
+    #     total_disclosure_data = news_service.mask_disclosure_items(total_disclosure_data)
+
+    disclosure_data = total_disclosure_data[offset * limit : offset * limit + limit]
+
+    # if user.subscription_level >= 3:
+    has_next = len(total_disclosure_data) > offset * limit + limit
+    # else:
+    #     current_position = offset * limit + len(disclosure_data)
+    #     has_next = current_position < len(total_disclosure_data)
+
+    response_data = InterestDisclosureResponse(disclosure=disclosure_data, has_next=has_next)
+
+    return BaseResponse(
+        status_code=200,
+        message="Successfully retrieved disclosure data",
+        data=response_data,
+    )
+
+
+# @router.get("/{group_id}/tickers")
+# def get_interest_tickers(
+#     group_id: int,
+#     service: InterestService = Depends(get_interest_service),
+# ):
+#     ticker_infos = service.get_interest_tickers(group_id)
+#     return [
+#         {"ticker": ticker_info["ticker"], "name": ticker_info["name"], "country": ticker_info["country"]}
+#         for ticker_info in ticker_infos
+#     ]
+
+
 # @router.get("/news-leaderboard/{group_id}")
 # def get_news_leaderboard(
 #     group_id: int,
@@ -215,117 +344,6 @@ def update_order(
 #     if lang == "en":
 #         columns = ["Ticker", "Name", "Price", "Change", "Amount", "Volume"]
 #     return columns
-
-
-# @router.get("/news/{group_id}", response_model=BaseResponse[InterestNewsResponse])
-# def interest_news(
-#     group_id: int,
-#     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
-#     offset: Annotated[int, Query(description="페이지 번호, 기본값: 0")] = 0,
-#     limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
-#     news_service: NewsService = Depends(get_news_service),
-#     service: InterestService = Depends(get_interest_service),
-#     user: AlphafinderUser = Depends(get_current_user),
-# ):
-#     ticker_infos = service.get_interest_tickers(group_id)
-#     if len(ticker_infos) == 0:
-#         return BaseResponse(
-#             status_code=200,
-#             message="Successfully retrieved news data",
-#             data=InterestNewsResponse(news=[], has_next=False),
-#         )
-#     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
-#     total_news_data = news_service.get_news(lang=lang, tickers=tickers)
-
-#     if user.subscription_level < 3:
-#         total_news_data = news_service.mask_news_items(total_news_data)
-
-#     news_data = total_news_data[offset * limit : offset * limit + limit]
-
-#     if user.subscription_level >= 3:
-#         has_next = len(total_news_data) > offset * limit + limit
-#     else:
-#         current_position = offset * limit + len(news_data)
-#         has_next = current_position < len(total_news_data)
-
-#     response_data = InterestNewsResponse(news=news_data, has_next=has_next)
-#     return BaseResponse(
-#         status_code=200,
-#         message="Successfully retrieved news data",
-#         data=response_data,
-#     )
-
-
-# @router.get("/disclosure/{group_id}", response_model=BaseResponse[InterestDisclosureResponse])
-# def interest_disclosure(
-#     group_id: int,
-#     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
-#     offset: Annotated[int, Query(description="페이지 번호, 기본값: 0")] = 0,
-#     limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
-#     news_service: NewsService = Depends(get_news_service),
-#     service: InterestService = Depends(get_interest_service),
-#     user: AlphafinderUser = Depends(get_current_user),
-# ):
-#     ticker_infos = service.get_interest_tickers(group_id)
-#     if len(ticker_infos) == 0:
-#         return BaseResponse(
-#             status_code=200,
-#             message="Successfully retrieved news data",
-#             data=InterestDisclosureResponse(disclosure=[], has_next=False),
-#         )
-#     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
-#     total_disclosure_data = news_service.get_disclosure(lang=lang, tickers=tickers)
-
-#     # 레벨 3 미만 사용자의 경우 데이터 마스킹 적용
-#     if user.subscription_level < 3:
-#         total_disclosure_data = news_service.mask_disclosure_items(total_disclosure_data)
-
-#     disclosure_data = total_disclosure_data[offset * limit : offset * limit + limit]
-
-#     if user.subscription_level >= 3:
-#         has_next = len(total_disclosure_data) > offset * limit + limit
-#     else:
-#         current_position = offset * limit + len(disclosure_data)
-#         has_next = current_position < len(total_disclosure_data)
-
-#     response_data = InterestDisclosureResponse(disclosure=disclosure_data, has_next=has_next)
-
-#     return BaseResponse(
-#         status_code=200,
-#         message="Successfully retrieved disclosure data",
-#         data=response_data,
-#     )
-
-
-# @router.get("/stories/{group_id}", response_model=BaseResponse[List[TopStoriesResponse]])
-# def top_stories(
-#     group_id: int,
-#     request: Request,
-#     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
-#     news_service: NewsService = Depends(get_news_service),
-#     service: InterestService = Depends(get_interest_service),
-#     user: AlphafinderUser = Depends(get_current_user),
-# ):
-#     ticker_infos = service.get_interest_tickers(group_id)
-#     if len(ticker_infos) == 0:
-#         return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
-#     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
-#     subscription_level = user.subscription_level if user else 1
-#     stories_count = 30 if subscription_level >= 3 else 10
-#     data = news_service.top_stories(request=request, tickers=tickers, lang=lang, stories_count=stories_count)
-#     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
-
-
-# @router.get("/{group_id}/tickers")
-# def get_interest_tickers(
-#     group_id: int,
-#     service: InterestService = Depends(get_interest_service),
-# ):
-#     ticker_infos = service.get_interest_tickers(group_id)
-#     return [
-#         {"ticker": ticker_info["ticker"], "name": ticker_info["name"], "country": ticker_info["country"]}
-#         for ticker_info in ticker_infos
-#     ]
 
 
 # @router.get("/{group_id}/count")

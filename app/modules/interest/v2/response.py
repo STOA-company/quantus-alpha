@@ -37,3 +37,11 @@ class InterestGroupResponse(BaseModel):
     tickers: List[str]
     order: int
     is_editable: bool
+
+
+class InterestPriceResponse(BaseModel):
+    ctry: str
+    name: str
+    ticker: str
+    current_price: float
+    change_rt: float

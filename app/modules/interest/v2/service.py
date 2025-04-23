@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import List, Literal
 
 from fastapi import HTTPException
@@ -8,6 +9,7 @@ from app.cache.leaderboard import DisclosureLeaderboard, NewsLeaderboard
 from app.core.exception.base import DuplicateException, NotFoundException
 from app.core.logger.logger.base import setup_logger
 from app.database.crud import database, database_service
+from app.modules.common.enum import TranslateCountry
 from app.modules.news.schemas import DisclosureRenewalItem, NewsRenewalItem
 from app.modules.news.services import get_news_service
 from app.utils.date_utils import now_utc
@@ -20,78 +22,80 @@ class InterestService:
         self.db = database_service
         self.data_db = database
 
-    def get_interest(self, group_id: int, lang: Literal["ko", "en"] = "ko", offset: int = 0, limit: int = 50):
-        interests = self.db._select(table="user_stock_interest", group_id=group_id, order="created_at", ascending=True)
-        if not interests:
-            return {"has_next": False, "data": []}
-        tickers = [interest.ticker for interest in interests]
-        name_column = "kr_name" if lang == "ko" else "en_name"
-        table = self.data_db._select(
-            table="stock_trend",
-            columns=["ctry", "ticker", name_column, "current_price", "change_rt", "volume_change_rt", "volume_rt"],
-            ticker__in=tickers,
-        )
+    def get_name(self, row, lang: TranslateCountry) -> str:
+        """
+        언어에 따라 적절한 이름을 반환합니다.
 
-        sorted_table = []
-        for interest in interests:
-            for row in table:
-                if row.ticker == interest.ticker:
-                    sorted_table.append(row)
-                    break
+        Args:
+            row: 이름 정보가 포함된 행 객체
+            lang: 언어 설정
 
-        has_next = len(sorted_table) > offset * limit + limit
-        table = {
-            "has_next": has_next,
-            "data": [
-                {
-                    "country": row.ctry,
-                    "ticker": row.ticker,
-                    "name": row.kr_name if lang == "ko" else row.en_name,
-                    "price": {
-                        "value": self.get_won_unit(row.current_price, lang)[0]
-                        if row.ctry == "kr"
-                        else round(self.get_dollar_unit(row.current_price)[0], 2),
-                        "unit": self.get_won_unit(row.current_price, lang)[1]
-                        if row.ctry == "kr"
-                        else self.get_dollar_unit(row.current_price)[1],
-                    },
-                    "change": {
-                        "value": round(row.change_rt, 2),
-                        "unit": "%",
-                        "sign": "plus" if row.change_rt > 0 else "minus",
-                    },
-                    "amount": {
-                        "value": self.get_won_unit(row.volume_change_rt, lang)[0]
-                        if row.ctry == "kr"
-                        else round(self.get_dollar_unit(row.volume_change_rt)[0], 2),
-                        "unit": self.get_won_unit(row.volume_change_rt, lang)[1]
-                        if row.ctry == "kr"
-                        else self.get_dollar_unit(row.volume_change_rt)[1],
-                    },
-                    "volume": {
-                        "value": row.volume_rt,
-                        "unit": "주" if lang == "ko" else "shs",
-                    },
-                }
-                for row in sorted_table
-            ],
-        }
-        table["data"] = table["data"][offset * limit : offset * limit + limit]
-        return table
+        Returns:
+            str: 선택된 언어의 이름
+        """
+        return row.kr_name if lang == TranslateCountry.KO else row.en_name
 
-    def get_interest_tickers(self, group_id: int, lang: Literal["ko", "en"] = "ko"):
-        interests = self.db._select(table="user_stock_interest", columns=["ticker"], group_id=group_id)
-        stocks = self.data_db._select(
-            table="stock_trend",
-            columns=["ticker", "kr_name", "en_name", "ctry"],
-            ticker__in=[interest[0] for interest in interests],
-        )
-        if not stocks:
-            return []
-        return [
-            {"ticker": stock.ticker, "name": stock.kr_name if lang == "ko" else stock.en_name, "country": stock.ctry}
-            for stock in stocks
-        ]
+    def get_interest_tickers(self, group_id: int):
+        group = self.db._select(table="alphafinder_stock_interest", columns=["name"], id=group_id)
+        if not group:
+            raise NotFoundException(message="관심 종목 그룹이 존재하지 않습니다.")
+
+        if group[0].name == "실시간 인기":
+            current_datetime = now_utc()
+            before_24_hours = current_datetime - timedelta(hours=24)
+            allowed_time = current_datetime + timedelta(minutes=5)
+            query_us = f"""
+                SELECT st.ticker
+                FROM stock_trend st
+                JOIN (
+                    SELECT DISTINCT ticker
+                    FROM news_analysis
+                    WHERE date >= '{before_24_hours}'
+                    AND date <= '{allowed_time}'
+                    AND is_related = TRUE
+                    AND is_exist = TRUE
+                ) na ON st.ticker = na.ticker
+                WHERE ctry = 'US'
+                ORDER BY st.volume_change_rt DESC
+                LIMIT 6
+            """
+            top_stories_data_us = self.db._execute(text(query_us))
+            query_kr = f"""
+                SELECT st.ticker
+                FROM stock_trend st
+                JOIN (
+                    SELECT DISTINCT ticker
+                    FROM news_analysis
+                    WHERE date >= '{before_24_hours}'
+                    AND date <= '{allowed_time}'
+                    AND is_related = TRUE
+                    AND is_exist = TRUE
+                ) na ON st.ticker = na.ticker
+                WHERE ctry = 'KR'
+                ORDER BY st.volume_change_rt DESC
+                LIMIT 5
+            """
+            top_stories_data_kr = self.db._execute(text(query_kr))
+
+            top_stories_tickers = set()
+
+            for row in top_stories_data_us:
+                ticker = row[0]
+                top_stories_tickers.add(ticker)
+
+            for row in top_stories_data_kr:
+                ticker = row[0]
+                top_stories_tickers.add(ticker)
+
+            interests = list(top_stories_tickers)
+
+        else:
+            interests = self.db._select(table="alphafinder_stock_interest", columns=["ticker"], group_id=group_id)
+            if not interests:
+                return []
+            interests = [interest.ticker for interest in interests]
+
+        return interests
 
     def add_interest(self, group_id: int, ticker: str, user_id: int):
         try:
@@ -248,18 +252,15 @@ class InterestService:
 
     def create_interest_group(self, user_id: int, name: str):
         try:
-            # Check if group name already exists
             group = self.db._select(table="alphafinder_interest_group", user_id=user_id, name=name, limit=1)
             if group:
                 raise DuplicateException(message="이미 존재하는 관심 그룹입니다.")
 
-            # Get the maximum order value for the user's groups
             max_order = self.db._select(
                 table="alphafinder_interest_group", user_id=user_id, select="MAX(`order`) as max_order", limit=1
             )
             next_order = (max_order[0].max_order if max_order and max_order[0].max_order is not None else 0) + 1
 
-            # Insert new group with order
             result = self.db._insert(
                 table="alphafinder_interest_group", sets={"user_id": user_id, "name": name, "order": next_order}
             )
@@ -465,6 +466,30 @@ class InterestService:
         except Exception as e:
             logger.exception(e)
             raise HTTPException(status_code=500, detail=str(e))
+
+    def get_interest_price(self, tickers: List[str], lang: TranslateCountry = TranslateCountry.KO):
+        if lang == TranslateCountry.KO:
+            name_column = "kr_name"
+        else:
+            name_column = "en_name"
+
+        ticker_price_data = self.db._select(
+            table="stock_trend",
+            columns=["ctry", "ticker", name_column, "current_price", "change_rt"],
+            ticker__in=tickers,
+        )
+        ticker_price_data = [
+            {
+                "ctry": row.ctry,
+                "ticker": row.ticker,
+                "name": self.get_name(row, lang),
+                "current_price": row.current_price,
+                "change_rt": row.change_rt,
+            }
+            for row in ticker_price_data
+        ]
+
+        return ticker_price_data
 
 
 def get_interest_service() -> InterestService:

@@ -32,8 +32,6 @@ class NewsRenewalItem(BaseModel):
     key_points: str | None
     emotion: str | None
     name: str | None
-    change_rate: float | None
-    price_impact: float | None
 
 
 class NewsDetailItem(BaseModel):
@@ -102,8 +100,6 @@ class TopStoriesItem(BaseModel):
     date: datetime
     title: str
     summary: str | None
-    impact_reason: str | None
-    key_points: str | None
     emotion: str | None
     type: str
     is_viewed: bool
@@ -112,7 +108,6 @@ class TopStoriesItem(BaseModel):
 class TopStoriesResponse(BaseModel):
     name: str
     ticker: str
-    logo_image: str
     ctry: str
     current_price: float
     change_rate: float
