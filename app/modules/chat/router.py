@@ -41,7 +41,12 @@ def get_conversation_list(current_user: str = Depends(get_current_user)):
     if len(conversation_list) == 0:
         return []
     return [
-        {"conversation_id": conversation.id, "title": conversation.title, "preview": conversation.preview}
+        {
+            "conversation_id": conversation.id,
+            "title": conversation.title,
+            "preview": conversation.preview,
+            "updated_at": conversation.updated_at,
+        }
         for conversation in conversation_list
     ]
 

@@ -331,11 +331,14 @@ class NewsService:
             columns=["en_name"],
             **dict(ticker=ticker),
         )
+        if not ticker_en_name:
+            return None
         duplicate_ticker = self.db._select(
             table="stock_information",
             columns=["ticker"],
             **dict(en_name=ticker_en_name[0][0]),
         )
+
         tickers = [info[0] for info in duplicate_ticker]
 
         # 현재 시간 + 5분까지 허용
@@ -429,6 +432,91 @@ class NewsService:
         result = self.db._execute(query).fetchall()
 
         return {row[0]: row[1].strftime("%Y-%m-%d") for row in result}
+
+    def get_etf_latest_news(self, ticker: str, lang: TranslateCountry) -> LatestNewsResponse:
+        """
+        ETF 구성 종목들의 뉴스와 공시 중 가장 최신 데이터를 조회
+
+        Args:
+            ticker (str): ETF 종목 코드
+            lang (TranslateCountry): 언어 설정
+
+        Returns:
+            LatestNewsResponse: 최신 뉴스/공시 데이터
+        """
+        # ETF 구성 종목 조회
+        holdings = self.db._select(table="etf_top_holdings", columns=["holding_ticker"], ticker=ticker)
+        holding_tickers = [holding[0] for holding in holdings if holding[0]]
+
+        if not holding_tickers:
+            raise DataNotFoundException(ticker=ticker, data_type="etf_components")
+
+        # ETF 자체 정보 조회
+        etf_info = self.db._select(
+            table="stock_information",
+            columns=["ticker", "en_name", "kr_name"],
+            ticker=ticker,
+        )
+        if not etf_info:
+            raise DataNotFoundException(ticker=ticker, data_type="etf_info")
+
+        etf_name = etf_info[0][1]
+        # 구성 종목별 정보 조회
+        stock_info_map = {}
+        stock_infos = self.db._select(
+            table="stock_information",
+            columns=["ticker", "en_name", "kr_name"],
+            ticker__in=holding_tickers,
+        )
+
+        for stock_info in stock_infos:
+            stock_info_map[stock_info[0]] = {
+                "en_name": stock_info[1],
+                "kr_name": stock_info[2] if len(stock_info) > 2 else None,
+            }
+
+        latest_data = None
+        latest_date = None
+        latest_ticker = None
+
+        # 각 구성 종목별로 최신 뉴스/공시 확인
+        for component_ticker in holding_tickers:
+            try:
+                # 1. 공시 데이터 조회
+                disclosure_info = self._get_disclosure_data(component_ticker, lang)
+                # 2. 뉴스 데이터 조회
+                news_info = self._get_news_data(component_ticker, lang)
+
+                # 3. 날짜 비교하여 최신 데이터 선택
+                if not disclosure_info and not news_info:
+                    continue
+                component_latest = self._select_latest_data(disclosure_info, news_info)
+                if component_latest and (latest_date is None or component_latest.get("date") > latest_date):
+                    latest_data = component_latest
+                    latest_date = component_latest.get("date")
+                    latest_ticker = component_ticker
+            except DataNotFoundException:
+                continue
+
+        if latest_data is None:
+            raise DataNotFoundException(ticker=ticker, data_type="etf_latest_news")
+
+        # 최신 데이터 형식 변환
+        date = latest_date.replace(tzinfo=UTC).astimezone(KST).strftime("%Y-%m-%d %H:%M:%S")
+        content = latest_data.get("content", "")
+        type = latest_data.get("type", "")
+
+        # 종목명 추가
+        ticker_name = stock_info_map.get(latest_ticker, {}).get("kr_name" if lang == TranslateCountry.KO else "en_name")
+
+        # ETF 이름 [종목명] - 내용 형식으로 반환
+        formatted_content = f"{etf_name} [{ticker_name}] - {content}"
+
+        return LatestNewsResponse(
+            date=date,
+            content=formatted_content,
+            type=type,
+        )
 
 
 def get_news_service() -> NewsService:

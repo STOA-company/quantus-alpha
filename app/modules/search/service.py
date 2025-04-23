@@ -1,11 +1,9 @@
 from typing import List
 
-from fastapi import Depends
-
 from app.core.logger import setup_logger
 from app.database.crud import database
 from app.modules.common.enum import TranslateCountry
-from app.modules.community.services import CommunityService, get_community_service
+from app.modules.community.services import get_community_service
 from app.modules.search.schemas import CommunitySearchItem, SearchItem
 
 logger = setup_logger(__name__)
@@ -226,25 +224,40 @@ class SearchService:
     async def search_community(
         self,
         query: str,
-        lang: TranslateCountry,
-        offset: int,
-        limit: int,
-        community_service: CommunityService = Depends(get_community_service),
+        lang: TranslateCountry = TranslateCountry.KO,
+        offset: int = 0,
+        limit: int = 10,
     ) -> List[CommunitySearchItem]:
         """커뮤니티 종목 검색 기능"""
-        # if not query:
-        #     service = get_community_service()
-        #     trending_stocks = await service.get_trending_stocks(limit=limit, lang=lang)
-        #     print(f"Trending stocks: {trending_stocks}###")
-        #     return [
-        #         CommunitySearchItem(
-        #             ticker=stock.ticker,
-        #             name=stock.name,
-        #             ctry=stock.ctry,
-        #         )
-        #         for stock in trending_stocks
-        #     ]
-        # else:
+        if not query:
+            community_service = get_community_service()
+            trending_stocks = community_service.get_trending_stocks()
+
+            # 페이지네이션 적용
+            paginated_stocks = trending_stocks[offset : offset + limit]
+
+            if lang == TranslateCountry.KO:
+                name_column = "kr_name"
+            else:
+                name_column = "en_name"
+
+            stock_info = self.db._select(
+                table="stock_information",
+                columns=["ticker", name_column, "ctry"],
+                ticker__in=[ticker for ticker, _ in paginated_stocks],
+            )
+            # trending_stocks에 맞춰서 정렬
+            stock_info = [
+                item for item in stock_info if item._mapping["ticker"] in [ticker for ticker, _ in paginated_stocks]
+            ]
+            return [
+                CommunitySearchItem(
+                    ticker=ticker,
+                    name=name,
+                    ctry=ctry,
+                )
+                for ticker, name, ctry in stock_info
+            ]
         return await self._search_result(query, lang, offset, limit)
 
     async def _search_result(

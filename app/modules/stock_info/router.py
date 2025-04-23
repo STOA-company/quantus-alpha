@@ -45,6 +45,7 @@ async def get_indicators(
 async def get_combined(
     ticker: str,
     lang: TranslateCountry = TranslateCountry.KO,
+    type: str = "stock",
     stock_service: StockInfoService = Depends(get_stock_info_service),
     summary_service: PriceService = Depends(get_price_service),
     news_service: NewsService = Depends(get_news_service),
@@ -68,14 +69,17 @@ async def get_combined(
         indicators = None
 
     try:
-        summary = await summary_service.get_price_data_summary(ctry, ticker, lang)
+        summary = await summary_service.get_price_data_summary(ctry, type, ticker, lang)
         logger.info("Successfully fetched summary")
     except Exception as e:
         logger.error(f"Error fetching summary: {e}")
         summary = None
 
     try:
-        latest = news_service.get_latest_news(ticker=ticker, lang=lang)
+        if type == "stock":
+            latest = news_service.get_latest_news(ticker=ticker, lang=lang)
+        elif type == "etf":
+            latest = news_service.get_etf_latest_news(ticker=ticker, lang=lang)
         logger.info("Successfully fetched latest news")
     except Exception as e:
         logger.error(f"Error fetching latest news: {e}")
@@ -108,9 +112,16 @@ async def get_combined(
 def get_similar_stocks(
     ticker: str,
     lang: TranslateCountry = TranslateCountry.KO,
+    type: str = "stock",
     service: StockInfoService = Depends(get_stock_info_service),
 ):
-    data = service.get_similar_stocks(ticker, lang)
+    if type == "stock":
+        data = service.get_similar_stocks(ticker, lang)
+    elif type == "etf":
+        data = service.get_etf_holdings(ticker, lang)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid type")
+
     return BaseResponse(status_code=200, message="연관 종목을 성공적으로 조회했습니다.", data=data)
 
 

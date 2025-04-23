@@ -232,6 +232,57 @@ class StockInfoService:
 
         return similar_stocks
 
+    def get_etf_holdings(self, ticker: str, lang: TranslateCountry) -> List[SimilarStock]:
+        """
+        ETF 구성 종목 조회
+
+        Args:
+            ticker (str): ETF 종목 코드
+            lang (TranslateCountry): 언어 설정
+
+        Returns:
+            List[SimilarStock]: ETF 구성 종목 리스트
+        """
+        holdings = self.db._select(table="etf_top_holdings", columns=["holding_ticker"], ticker=ticker)
+        holding_tickers = [holding.holding_ticker for holding in holdings if holding.holding_ticker]
+
+        if not holding_tickers:
+            return []
+
+        if lang == TranslateCountry.KO:
+            columns = ["ticker", "kr_name", "ctry", "current_price", "change_rt"]
+        elif lang == TranslateCountry.EN:
+            columns = ["ticker", "en_name", "ctry", "current_price", "change_rt"]
+
+        holdings_data = self.db._select(
+            table="stock_trend",
+            columns=columns,
+            join_info=JoinInfo(
+                primary_table="stock_trend",
+                secondary_table="stock_information",
+                primary_column="ticker",
+                secondary_column="ticker",
+                columns=["is_delisted", "is_trading_stopped"],
+                secondary_condition={"is_delisted": 0, "is_trading_stopped": 0},
+            ),
+            ticker__in=holding_tickers,
+        )
+
+        holding_stocks = []
+        for stock in holdings_data:
+            name = stock.kr_name if lang == TranslateCountry.KO else stock.en_name
+            holding_stocks.append(
+                SimilarStock(
+                    ticker=stock.ticker,
+                    name=name,
+                    ctry=stock.ctry,
+                    current_price=stock.current_price,
+                    current_price_rate=stock.change_rt,
+                )
+            )
+
+        return holding_stocks
+
     async def get_current_price(self, ticker: str, table_name: str) -> Tuple[float, float]:
         """
         현재가와 변동률 조회
