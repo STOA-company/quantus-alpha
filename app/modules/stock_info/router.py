@@ -69,7 +69,7 @@ async def get_combined(
         indicators = None
 
     try:
-        summary = await summary_service.get_price_data_summary(ctry, ticker, lang)
+        summary = await summary_service.get_price_data_summary(ctry, type, ticker, lang)
         logger.info("Successfully fetched summary")
     except Exception as e:
         logger.error(f"Error fetching summary: {e}")
