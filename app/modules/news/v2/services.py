@@ -250,7 +250,7 @@ class NewsService:
         news_condition["date__lte"] = allowed_time
 
         df_news = pd.DataFrame(
-            self.db._select(
+            self.data_db._select(
                 table="news_analysis",
                 columns=[
                     "id",
@@ -263,10 +263,6 @@ class NewsService:
                     "impact_reason",
                     "key_points",
                     "emotion",
-                    "that_time_price",
-                    "current_price",
-                    "is_related",
-                    "change_rt",
                 ],
                 order="date",
                 ascending=False,
@@ -555,7 +551,9 @@ class NewsService:
             )
         )
         if not df_news.empty:
-            df_news = self._process_dataframe_news(df_news)
+            df_news = df_news.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+            df_news = df_news[df_news["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
+            df_news = NewsService._convert_to_kst(df_news)
             df_news["type"] = "news"
             if lang == TranslateCountry.KO:
                 df_news = df_news.rename(columns={"kr_name": "ko_name"})

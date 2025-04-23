@@ -5,12 +5,15 @@ from typing import Dict, Optional
 from urllib.parse import urljoin
 
 import requests
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 PRIVATE_PASSWORD = os.getenv("PRIVATE_PASSWORD")
 
 ######################################### LOGIC ###########################################
 BASE_URL = "https://devbackfast.quantus.kr"
+
+security = HTTPBearer()
 
 
 # @retry(
@@ -30,7 +33,6 @@ def validate_token(
         "Sns-Type": sns_type,
         "Client-Type": client_type,
     }
-    print(f"headers : {headers}")
     ## httpx
     # async with httpx.AsyncClient() as client:
     #     response_data = await client.post(
@@ -137,12 +139,17 @@ def decoder_base64(encoded_str):
 
 def get_current_user(
     request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
 ) -> Optional[Dict]:
     """Get current user from token validation"""
-    authorization = request.headers.get("Authorization")
-    sns_type = request.headers.get("Sns-Type")
-    client_type = request.headers.get("Client-Type")
+    if not credentials:
+        return None
+
     try:
+        token = credentials.credentials
+        sns_type = request.headers.get("Sns-Type")
+        client_type = request.headers.get("Client-Type")
+
         # exception for validation
         exempt_paths = [
             "/open",
@@ -158,14 +165,6 @@ def get_current_user(
         if request.url.path in exempt_paths:
             return None
 
-        # header chk
-        if authorization is None:
-            return None
-
-        scheme, _, token = authorization.partition(" ")
-        # if scheme.lower() != "bearer":
-        #     raise HTTPException(status_code=400, detail="Invalid authorization scheme")
-        print(f"token : {token}")
         # token chk
         res = validate_token(token=token, sns_type=sns_type, client_type=client_type)
         status_code = res.status_code
