@@ -57,6 +57,8 @@ class NewsDetailItemV2(BaseModel):
     key_points: str | None
     emotion: str | None
     price_impact: float | None
+    kr_name: str | None
+    en_name: str | None
 
 
 class DisclosureRenewalItem(BaseModel):
