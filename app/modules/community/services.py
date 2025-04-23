@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
 from sqlalchemy import text
@@ -12,6 +12,7 @@ from app.core.redis import redis_client
 from app.database.crud import database, database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
+from app.utils.date_utils import now_utc
 from Aws.common.configs import s3_client
 
 from .schemas import (
@@ -45,6 +46,10 @@ class CommunityService:
         self.PRESIGNED_URL_EXPIRES_IN = 300
         # Redis 캐시 만료 시간 (4분 30초)
         self.REDIS_CACHE_EXPIRES_IN = 270
+        # Trending stocks 캐시 만료 시간 (10분)
+        self.TRENDING_STOCKS_CACHE_EXPIRES_IN = 600
+        # Trending stocks Redis 키
+        self.TRENDING_STOCKS_REDIS_KEY = "trending_stocks"
 
     async def create_post(self, current_user: AlphafinderUser, post_create: PostCreate) -> Tuple[bool, int]:
         """게시글 생성"""
@@ -975,6 +980,40 @@ class CommunityService:
         self._cache_presigned_url(image_key, presigned_data, "get")
 
         return presigned_data
+
+    def get_trending_stocks(self):
+        # Redis에서 캐시된 데이터 확인
+        cached_data = self.redis.get(self.TRENDING_STOCKS_REDIS_KEY)
+        if cached_data:
+            return json.loads(cached_data)
+
+        now_datetime = now_utc()
+        post_ids = self.db._select(
+            table="posts",
+            columns=["id"],
+            created_at__gte=now_datetime - timedelta(days=30),
+        )
+        post_ids = [post.id for post in post_ids]
+        stock_tickers = self.db._select(
+            table="post_stocks",
+            columns=["stock_ticker"],
+            post_id__in=post_ids,
+        )
+
+        # Count frequency of each ticker
+        ticker_counts = {}
+        for ticker in stock_tickers:
+            ticker_counts[ticker.stock_ticker] = ticker_counts.get(ticker.stock_ticker, 0) + 1
+
+        # Sort tickers by frequency in descending order
+        sorted_tickers = sorted(ticker_counts.items(), key=lambda x: x[1], reverse=True)
+
+        # Redis에 캐시
+        self.redis.setex(
+            self.TRENDING_STOCKS_REDIS_KEY, self.TRENDING_STOCKS_CACHE_EXPIRES_IN, json.dumps(sorted_tickers)
+        )
+
+        return sorted_tickers
 
 
 def get_community_service() -> CommunityService:
