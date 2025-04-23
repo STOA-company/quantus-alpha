@@ -13,6 +13,7 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         # 메트릭 수집에서 제외할 경로 목록
         self.exclude_paths: List[str] = [
+            "/",  # 루트 경로
             "/metrics",  # 메트릭 엔드포인트 자체
             "/health-check",  # 헬스체크 API
             "/docs",  # Swagger 문서

@@ -254,7 +254,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "bars",
+            "drawStyle": "points",
             "fillOpacity": 70,
             "gradientMode": "none",
             "hideFrom": {
@@ -296,7 +296,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 11,
         "x": 1,
         "y": 11
@@ -307,8 +307,8 @@
           "calcs": [
             "sum"
           ],
-          "displayMode": "table",
-          "placement": "right",
+          "displayMode": "list",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -349,7 +349,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "bars",
+            "drawStyle": "points",
             "fillOpacity": 70,
             "gradientMode": "none",
             "hideFrom": {
@@ -391,7 +391,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 11,
         "x": 12,
         "y": 11
@@ -403,7 +403,7 @@
             "sum"
           ],
           "displayMode": "table",
-          "placement": "right",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -433,7 +433,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 20
       },
       "id": 4,
       "panels": [],
@@ -457,7 +457,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "bars",
+            "drawStyle": "points",
             "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
@@ -499,10 +499,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 11,
         "x": 1,
-        "y": 20
+        "y": 21
       },
       "id": 5,
       "options": {
@@ -604,17 +604,17 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 11,
         "x": 12,
-        "y": 20
+        "y": 21
       },
       "id": 22,
       "options": {
         "legend": {
           "calcs": [],
           "displayMode": "table",
-          "placement": "right",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -646,7 +646,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 30
       },
       "id": 9,
       "panels": [],
@@ -658,7 +658,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "각 인스턴스의 CPU 사용률을 시간에 따라 모니터링합니다.",
+      "description": "각 인스턴스의 메모리 사용률을 %로 표시합니다.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -698,6 +698,8 @@
             }
           },
           "mappings": [],
+          "max": 100,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -706,11 +708,20 @@
                 "value": null
               },
               {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "orange",
+                "value": 85
+              },
+              {
                 "color": "red",
-                "value": 80
+                "value": 95
               }
             ]
-          }
+          },
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -718,9 +729,9 @@
         "h": 9,
         "w": 11,
         "x": 1,
-        "y": 29
+        "y": 31
       },
-      "id": 8,
+      "id": 23,
       "options": {
         "legend": {
           "calcs": [],
@@ -740,14 +751,14 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "process_memory_rss{instance=~\"web-blue:8000|web-green:8000\"} / (1024 * 1024)",
+          "expr": "system_memory_usage_percent",
           "instant": false,
           "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "메모리 사용량 패널",
+      "title": "메모리 사용률 (%)",
       "type": "timeseries"
     },
     {
@@ -755,7 +766,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "각 인스턴스의 메모리 사용량을 MB 단위로 모니터링합니다.",
+      "description": "각 인스턴스의 CPU 사용률을 시간에 따라 모니터링합니다.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -812,7 +823,7 @@
         "h": 9,
         "w": 11,
         "x": 12,
-        "y": 29
+        "y": 31
       },
       "id": 7,
       "options": {
@@ -850,7 +861,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 40
       },
       "id": 10,
       "panels": [],
@@ -919,7 +930,7 @@
         "h": 9,
         "w": 11,
         "x": 1,
-        "y": 39
+        "y": 41
       },
       "id": 11,
       "options": {
@@ -1014,7 +1025,7 @@
         "h": 9,
         "w": 11,
         "x": 12,
-        "y": 39
+        "y": 41
       },
       "id": 12,
       "options": {
@@ -1037,8 +1048,8 @@
           },
           "editorMode": "code",
           "expr": "sum(rate(http_request_duration_seconds_sum[5m])) / sum(rate(http_request_duration_seconds_count[5m]))",
-          "legendFormat": "평균 응답시간(초)",
           "instant": false,
+          "legendFormat": "평균 응답시간(초)",
           "range": true,
           "refId": "A"
         }
@@ -1093,6 +1104,6 @@
   "timezone": "",
   "title": "API Performance Dashboard",
   "uid": "f966b266-489c-481f-914e-095a8d6fc17a",
-  "version": 8,
+  "version": 17,
   "weekStart": ""
 }
