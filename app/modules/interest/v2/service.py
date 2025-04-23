@@ -157,13 +157,13 @@ class InterestService:
             # Check if all tickers exist in the group
             for ticker in tickers:
                 existing_interest = self.db._select(
-                    table="user_stock_interest", group_id=group_id, ticker=ticker, limit=1
+                    table="alphafinder_interest_stock", group_id=group_id, ticker=ticker, limit=1
                 )
                 if not existing_interest:
                     raise NotFoundException(message=f"관심 종목 {ticker}이(가) 그룹에 존재하지 않습니다.")
 
             # Delete all tickers in a single query
-            self.db._delete(table="user_stock_interest", group_id=group_id, ticker__in=tickers)
+            self.db._delete(table="alphafinder_interest_stock", group_id=group_id, ticker__in=tickers)
 
             return True
 
@@ -463,7 +463,7 @@ class InterestService:
             return (float(number / 1000000000000), "T$")
 
     def get_interest_count(self, group_id: int):
-        count = self.db._count(table="user_stock_interest", group_id=group_id)
+        count = self.db._count(table="alphafinder_interest_stock", group_id=group_id)
         return count
 
     def get_interest_news_leaderboard(
