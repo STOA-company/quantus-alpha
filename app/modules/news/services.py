@@ -1,4 +1,3 @@
-import json
 import math
 import re
 from datetime import datetime, time, timedelta
@@ -11,6 +10,7 @@ from fastapi import Request, Response
 from sqlalchemy import text
 
 from app.cache.leaderboard import DisclosureLeaderboard, NewsLeaderboard
+from app.cache.story_view import get_story_view_cache
 from app.common.constants import KST, UTC
 from app.core.exception.custom import DataNotFoundException
 from app.database.crud import JoinInfo, database
@@ -488,15 +488,8 @@ class NewsService:
         tickers: Optional[List[str]] = None,
         lang: TranslateCountry | None = None,
         stories_count: int = 30,
+        user: Optional[AlphafinderUser] = None,
     ):
-        viewed_stories = set()
-        if request.cookies.get("viewed_stories"):
-            cookie_data = request.cookies.get("viewed_stories", "[]")
-            try:
-                viewed_stories = set(json.loads(cookie_data))
-            except json.JSONDecodeError:
-                viewed_stories = set()
-
         if lang is None:
             lang = TranslateCountry.KO
 
@@ -525,6 +518,8 @@ class NewsService:
                     FROM news_analysis
                     WHERE date >= '{before_24_hours}'
                     AND date <= '{allowed_time}'
+                    AND is_related = TRUE
+                    AND is_exist = TRUE
                 ) na ON st.ticker = na.ticker
                 WHERE ctry = 'US'
                 ORDER BY st.volume_change_rt DESC
@@ -539,6 +534,8 @@ class NewsService:
                     FROM news_analysis
                     WHERE date >= '{before_24_hours}'
                     AND date <= '{allowed_time}'
+                    AND is_related = TRUE
+                    AND is_exist = TRUE
                 ) na ON st.ticker = na.ticker
                 WHERE ctry = 'KR'
                 ORDER BY st.volume_change_rt DESC
@@ -703,33 +700,29 @@ class NewsService:
             total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
             total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
 
-            mask = (total_df["current_price"] != 0) & (total_df["that_time_price"] != 0)
+            # mask = (total_df["current_price"] != 0) & (total_df["that_time_price"] != 0)
             total_df["price_impact"] = 0.0
-            total_df.loc[mask, "price_impact"] = (
-                (total_df.loc[mask, "current_price"] - total_df.loc[mask, "that_time_price"])
-                / total_df.loc[mask, "that_time_price"]
-                * 100
-            ).round(2)
+            # total_df.loc[mask, "price_impact"] = (
+            #     (total_df.loc[mask, "current_price"] - total_df.loc[mask, "that_time_price"])
+            #     / total_df.loc[mask, "that_time_price"]
+            #     * 100
+            # ).round(2)
             total_df = NewsService._convert_to_kst(total_df)
 
         # 결과 생성
         result = []
         for ticker in unique_tickers:
+            print(f"ticker: {ticker}")
             ticker_news = total_df[total_df["ticker"] == ticker]
             if ticker_news.empty:
                 continue
 
             news_items = []
-            ticker_has_unviewed = False
             for _, row in ticker_news.iterrows():
                 if len(news_items) >= stories_count:
                     break
-                news_key = f'{ticker}_{row["type"]}_{row["id"]}'
-                is_viewed = news_key in viewed_stories
 
-                if not is_viewed:
-                    ticker_has_unviewed = True
-
+                # Remove the cookie-based view checking
                 price_impact = float(row["price_impact"]) if pd.notnull(row["price_impact"]) else 0.0
                 news_items.append(
                     TopStoriesItem(
@@ -742,7 +735,7 @@ class NewsService:
                         key_points=row["key_points"],
                         emotion=row["emotion"],
                         type=row["type"],
-                        is_viewed=is_viewed,
+                        is_viewed=False,  # Default to false, will be updated later
                     )
                 )
             if lang == TranslateCountry.KO:
@@ -761,37 +754,141 @@ class NewsService:
                     change_rate=ticker_news.iloc[0]["change_rt"],
                     items_count=len(news_items),
                     news=news_items,
-                    is_viewed=not ticker_has_unviewed,
+                    is_viewed=False,  # Default to false, will be updated later
                 )
             )
-        result.sort(key=lambda x: x.is_viewed, reverse=False)
+            print(f"news_items: {len(news_items)}")
+        # Update the viewed status using Redis
+        result = self.check_stories_viewed_status(result, request, user)
 
         return result
 
-    def mark_story_as_viewed(self, ticker: str, type: str, id: int, request: Request, response: Response) -> bool:
-        # 기존 쿠키 확인
-        current_viewed = request.cookies.get("viewed_stories", "[]")
-        viewed_list = json.loads(current_viewed)
+    def mark_story_as_viewed(
+        self,
+        ticker: str,
+        type: str,
+        id: int,
+        request: Request,
+        response: Response,
+        user: Optional[AlphafinderUser] = None,
+    ) -> bool:
+        """
+        Mark a story as viewed by a user using Redis.
+        For authenticated users, use their user ID.
+        For anonymous users, use a cookie-based ID.
 
-        # 새로운 조회 기록 추가
-        story_key = f"{ticker}_{type}_{id}"
-        if story_key not in viewed_list:
-            viewed_list.append(story_key)
+        Args:
+            ticker: Stock ticker symbol
+            type: Type of story ('news' or 'disclosure')
+            id: ID of the story
+            request: FastAPI request object
+            response: FastAPI response object
+            user: Optional authenticated user
 
-            if len(viewed_list) > 100:  # 최대 100개 기록 유지
-                viewed_list.pop(0)
+        Returns:
+            bool: True if the operation was successful
+        """
+        story_cache = get_story_view_cache()
 
-        # 쿠키 업데이트
-        response.set_cookie(
-            key="viewed_stories",
-            value=json.dumps(viewed_list),
-            max_age=86400,  # 24시간
-            httponly=True,
-            # secure=True,
-            samesite="lax",
-        )
+        # For authenticated users, use their user ID
+        if user:
+            user_id = f"auth_{user.id}"
+        else:
+            # For anonymous users, use a cookie-based ID
+            user_id = f"anon_{story_cache.get_or_create_anonymous_id(request, response)}"
+
+        # Mark the story as viewed in Redis
+        story_cache.mark_story_as_viewed(user_id=user_id, ticker=ticker, story_type=type, story_id=id)
 
         return True
+
+    def is_story_viewed(
+        self, ticker: str, type: str, id: int, request: Request, user: Optional[AlphafinderUser] = None
+    ) -> bool:
+        """
+        Check if a story has been viewed by the current user.
+
+        Args:
+            ticker: Stock ticker symbol
+            type: Type of story ('news' or 'disclosure')
+            id: ID of the story
+            request: FastAPI request object
+            user: Optional authenticated user
+
+        Returns:
+            bool: True if the story has been viewed
+        """
+        story_cache = get_story_view_cache()
+
+        # For authenticated users, use their user ID
+        if user:
+            user_id = f"auth_{user.id}"
+        else:
+            # For anonymous users, get ID from cookie (don't create if doesn't exist)
+            anonymous_id = request.cookies.get(story_cache.anonymous_cookie_name)
+            if not anonymous_id:
+                return False
+            user_id = f"anon_{anonymous_id}"
+
+        return story_cache.is_story_viewed(user_id=user_id, ticker=ticker, story_type=type, story_id=id)
+
+    def check_stories_viewed_status(
+        self, stories_data: List[TopStoriesResponse], request: Request, user: Optional[AlphafinderUser] = None
+    ) -> List[TopStoriesResponse]:
+        """
+        Check if stories have been viewed by the current user and update their status.
+        This is used to update the viewed status of stories in the top_stories response.
+
+        Args:
+            stories_data: List of TopStoriesResponse objects
+            request: FastAPI request object
+            user: Optional authenticated user
+
+        Returns:
+            List[TopStoriesResponse]: Updated stories data with viewed status
+        """
+        story_cache = get_story_view_cache()
+
+        # For authenticated users, use their user ID
+        if user:
+            user_id = f"auth_{user.id}"
+        else:
+            # For anonymous users, get ID from cookie (don't create if doesn't exist)
+            anonymous_id = request.cookies.get(story_cache.anonymous_cookie_name)
+            if not anonymous_id:
+                return stories_data  # Return as is, all will be marked as unviewed
+            user_id = f"anon_{anonymous_id}"
+
+        # Get all viewed stories for this user
+        viewed_stories = story_cache.get_viewed_stories(user_id)
+
+        # Update viewed status for each story and sort items within each ticker group
+        for story_group in stories_data:
+            ticker = story_group.ticker
+            has_unviewed = False
+
+            # First update the viewed status for all items
+            for item in story_group.news:
+                story_key = f"{ticker}_{item.type}_{item.id}"
+                item.is_viewed = story_key in viewed_stories
+                if not item.is_viewed:
+                    has_unviewed = True
+
+            # Then sort items: viewed first, then by date (newest first)
+            story_group.news.sort(key=lambda x: (-x.is_viewed, -x.date.timestamp()))
+
+            # Update group level viewed status
+            story_group.is_viewed = not has_unviewed
+
+        # Sort groups: unviewed first, then by date of most recent story
+        stories_data.sort(
+            key=lambda x: (
+                x.is_viewed,  # Unviewed groups first
+                -max([item.date.timestamp() for item in x.news] if x.news else [0]),  # Then by most recent story date
+            )
+        )
+
+        return stories_data
 
     def news_detail(self, ticker: str, date: str = None, page: int = 1, size: int = 6):
         if not date:
