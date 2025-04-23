@@ -41,7 +41,12 @@ def get_conversation_list(current_user: str = Depends(get_current_user)):
     if len(conversation_list) == 0:
         return []
     return [
-        {"conversation_id": conversation.id, "title": conversation.title, "preview": conversation.preview}
+        {
+            "conversation_id": conversation.id,
+            "title": conversation.title,
+            "preview": conversation.preview,
+            "updated_at": conversation.updated_at,
+        }
         for conversation in conversation_list
     ]
 
@@ -146,7 +151,7 @@ async def stream_chat(
                 message_count += 1
                 # 올바른 SSE 형식으로 응답 생성 (각 행이 data: 로 시작하고 빈 줄로 끝나야 함)
                 if isinstance(chunk, str):
-                    STREAMING_MESSAGES_COUNT.labels(model=model).inc()
+                    STREAMING_MESSAGES_COUNT.labels(model=model, conversation_id=str(conversation_id)).inc()
 
                     try:
                         chunk_data = json.loads(chunk)
@@ -190,7 +195,7 @@ async def stream_chat(
         except Exception as e:
             logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
             # TODO: ROLLBACK
-            STREAMING_ERRORS.labels(model=model, error_type="streaming_error").inc()
+            STREAMING_ERRORS.labels(model=model, error_type="streaming_error", conversation_id=str(conversation_id)).inc()
             yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
         finally:
             STREAMING_CONNECTIONS.dec()

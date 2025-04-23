@@ -608,7 +608,7 @@ class PriceService:
             },
         )
 
-    async def get_price_data_summary(self, ctry: str, ticker: str, lang: TranslateCountry) -> PriceSummaryItem:
+    async def get_price_data_summary(self, ctry: str, type: str, ticker: str, lang: TranslateCountry) -> PriceSummaryItem:
         """
         종목 요약 데이터 조회
         """
@@ -619,7 +619,11 @@ class PriceService:
             logger.info(f"Cache hit for {cache_key}")
             return PriceSummaryItem(**cached_data)
 
-        df = self._fetch_52week_data(ctry, ticker)
+        if type == "stock":
+            df = self._fetch_52week_data(ctry, ticker)
+        elif type == "etf":
+            df = self._fetch_etf_52week_data(ctry, ticker)
+
         if not df.empty:
             week_52_high = df["week_52_high"].iloc[0] or 0.0
             week_52_low = df["week_52_low"].iloc[0] or 0.0
@@ -634,8 +638,8 @@ class PriceService:
         sector, name, market = self._get_sector_name_market(ticker, lang)
         sector = sector or ""
         name = name or ""
-        market = market or ""
-        market = MARKET_MAP[market] if lang == TranslateCountry.KO else MARKET_MAP_EN[market]
+        if market:
+            market = MARKET_MAP[market] if lang == TranslateCountry.KO else MARKET_MAP_EN[market]
         is_market_close = check_market_status(ctry.upper())
 
         response_data = {
@@ -644,7 +648,7 @@ class PriceService:
             "ctry": ctry,
             "logo_url": "https://kr.pinterest.com/eunju011014/%EA%B7%80%EC%97%AC%EC%9A%B4-%EC%A7%A4/",
             "market": market,
-            "sector": sector,
+            "sector": sector if sector else None,
             "market_cap": market_cap,
             "last_day_close": last_day_close,
             "week_52_low": week_52_low,
@@ -730,9 +734,9 @@ class PriceService:
             columns = ["sector_ko", "kr_name", "market"]
         elif lang == TranslateCountry.EN:
             columns = ["sector_2", "en_name", "market"]
-        data = self.database._select(table="stock_information", columns=columns, ticker=ticker, is_activate=True)
-        sector, name, market = data[0][0], data[0][1], data[0][2]
-        return sector, name, market
+        data = self.database._select(table="stock_information", columns=columns, ticker=ticker)
+
+        return data[0]
 
     async def _get_market_cap(self, ctry: str, ticker: str) -> float:
         """
@@ -747,6 +751,54 @@ class PriceService:
 
         # 단일 값만 반환
         return float(result[0].market_cap) if result else 0.0
+
+    def _fetch_etf_52week_data(self, ctry: str, ticker: str) -> pd.DataFrame:
+        """
+        ETF 52주 데이터 조회
+
+        Args:
+            ctry (str): 국가 코드 (kr, us)
+            ticker (str): ETF 티커
+
+        Returns:
+            pd.DataFrame: 52주 고가, 저가, 종가, 시가총액 정보
+        """
+        # 현재 시간 기준 1년 전 날짜 계산
+        kst_now = datetime.now(KST)
+        one_year_ago = kst_now - timedelta(days=365)
+
+        # etf_{ctry}_1d 테이블에서 1년 치 데이터 조회
+        etf_data = pd.DataFrame(
+            self.database._select(
+                table=f"etf_{ctry}_1d",
+                columns=["Date", "High", "Low", "Close", "MarketCap"],
+                Ticker=ticker,
+                Date__gte=one_year_ago,
+            )
+        )
+
+        if etf_data.empty:
+            # 데이터가 없는 경우 기본값 반환
+            return pd.DataFrame([{"week_52_high": 0.0, "week_52_low": 0.0, "last_close": 0.0, "market_cap": None}])
+
+        # 52주 고가, 저가 계산
+        week_52_high = etf_data["High"].max() if not etf_data["High"].empty else 0.0
+        week_52_low = etf_data["Low"].min() if not etf_data["Low"].empty else 0.0
+
+        # 가장 최근 종가와 시가총액 가져오기
+        etf_data = etf_data.sort_values("Date", ascending=False)
+        last_close = etf_data["Close"].iloc[0] if not etf_data.empty else 0.0
+        market_cap = etf_data["MarketCap"].iloc[0] if not etf_data.empty and "MarketCap" in etf_data.columns else None
+
+        # 결과 데이터 프레임 생성
+        result_data = {
+            "week_52_high": week_52_high,
+            "week_52_low": week_52_low,
+            "last_close": last_close,
+            "market_cap": market_cap,
+        }
+
+        return pd.DataFrame([result_data])
 
 
 def get_price_service() -> PriceService:

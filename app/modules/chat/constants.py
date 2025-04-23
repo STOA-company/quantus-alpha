@@ -1,1 +1,1 @@
-LLM_MODEL = "gpt41na"
+LLM_MODEL = "gpt41mi"
