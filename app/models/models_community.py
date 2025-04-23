@@ -41,11 +41,14 @@ class Post(ServiceBase, BaseMixin):
     # Foreign Key
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
 
+    # Relationships
     __table_args__ = (
         Index("idx_posts_created_at", "created_at"),
+        Index("idx_posts_updated_at", "updated_at"),
         Index("idx_posts_like_count", "like_count"),
         Index("idx_posts_category_id", "category_id"),
         Index("idx_posts_user_id", "user_id"),
+        Index("idx_posts_title", "title"),
     )
 
     @validates("stocks")

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from app.api import routers
 from app.core.config import get_database_config, settings
+from app.core.elasticsearch import es
 from app.core.exception import handler
 from app.core.logger import configure, get_logger
 from app.database.conn import db
@@ -218,6 +219,9 @@ def request_test(request: TestRequest):
 async def startup_event():
     # 채팅 서비스 초기화
     logger.info("Application started successfully")
+
+    # ElasticSearch 초기화
+    es.init_app(app, ES_HOST=settings.ES_HOST, ES_PORT=settings.ES_PORT)
 
 
 @app.on_event("shutdown")
