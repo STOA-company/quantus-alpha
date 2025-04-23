@@ -45,6 +45,7 @@ async def get_indicators(
 async def get_combined(
     ticker: str,
     lang: TranslateCountry = TranslateCountry.KO,
+    type: str = "stock",
     stock_service: StockInfoService = Depends(get_stock_info_service),
     summary_service: PriceService = Depends(get_price_service),
     news_service: NewsService = Depends(get_news_service),
@@ -75,7 +76,10 @@ async def get_combined(
         summary = None
 
     try:
-        latest = news_service.get_latest_news(ticker=ticker, lang=lang)
+        if type == "stock":
+            latest = news_service.get_latest_news(ticker=ticker, lang=lang)
+        elif type == "etf":
+            latest = news_service.get_etf_latest_news(ticker=ticker, lang=lang)
         logger.info("Successfully fetched latest news")
     except Exception as e:
         logger.error(f"Error fetching latest news: {e}")
