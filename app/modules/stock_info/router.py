@@ -108,9 +108,16 @@ async def get_combined(
 def get_similar_stocks(
     ticker: str,
     lang: TranslateCountry = TranslateCountry.KO,
+    type: str = "stock",
     service: StockInfoService = Depends(get_stock_info_service),
 ):
-    data = service.get_similar_stocks(ticker, lang)
+    if type == "stock":
+        data = service.get_similar_stocks(ticker, lang)
+    elif type == "etf":
+        data = service.get_etf_holdings(ticker, lang)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid type")
+
     return BaseResponse(status_code=200, message="연관 종목을 성공적으로 조회했습니다.", data=data)
 
 
