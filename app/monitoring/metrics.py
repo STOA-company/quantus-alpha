@@ -25,6 +25,11 @@ CPU_USAGE = Gauge("process_cpu_percent", "Current CPU usage percentage")
 
 MEMORY_USAGE = Gauge("process_memory_rss", "Current memory usage in bytes")
 
+# 시스템 전체 메모리 관련 메트릭 추가
+TOTAL_SYSTEM_MEMORY = Gauge("system_memory_total_bytes", "Total system memory in bytes")
+AVAILABLE_SYSTEM_MEMORY = Gauge("system_memory_available_bytes", "Available system memory in bytes")
+MEMORY_USAGE_PERCENT = Gauge("system_memory_usage_percent", "System memory usage percentage")
+
 # Error rate gauge - 직접 계산된 오류율 메트릭 (0-100%)
 ERROR_RATE = Gauge("endpoint_error_rate_percent", "Error rate percentage by endpoint", ["endpoint"])
 
@@ -49,6 +54,12 @@ def update_system_metrics():
 
     # 메모리 사용량 측정
     MEMORY_USAGE.set(process.memory_info().rss)
+
+    # 시스템 전체 메모리 정보 수집
+    mem = psutil.virtual_memory()
+    TOTAL_SYSTEM_MEMORY.set(mem.total)
+    AVAILABLE_SYSTEM_MEMORY.set(mem.available)
+    MEMORY_USAGE_PERCENT.set(mem.percent)
 
 
 # 엔드포인트별 오류율 업데이트 함수
