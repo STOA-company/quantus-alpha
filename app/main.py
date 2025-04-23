@@ -50,6 +50,7 @@ app = FastAPI(
         "persistAuthorization": True,  # 인증 정보 유지
         "defaultModelsExpandDepth": -1,  # 모델 확장 깊이 설정 / -1은 축소
         "docExpansion": "none",
+        "filter": True,  # 태그 검색 기능 활성화
     },
     docs_url=None,
     redoc_url=None,
@@ -110,7 +111,7 @@ app.add_middleware(
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*", "Authorization", "Authorization_Swagger"],
+    allow_headers=["*", "Authorization", "Authorization_Swagger", "Sns-Type", "Client-Type"],
 )
 
 

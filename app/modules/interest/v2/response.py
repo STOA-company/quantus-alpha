@@ -31,10 +31,16 @@ class InterestResponse(BaseModel):
     data: List[InterestTable]
 
 
+class InterestStock(BaseModel):
+    ticker: str
+    name: str | None = None
+    ctry: str | None = None
+
+
 class InterestGroupResponse(BaseModel):
     id: int
     name: str
-    tickers: List[str]
+    stocks: List[InterestStock]
     order: int
     is_editable: bool
 
