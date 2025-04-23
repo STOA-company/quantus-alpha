@@ -48,8 +48,8 @@ class StockLeaderboard(BaseLeaderboard):
             stock_info_key,
             mapping={
                 "ticker": ticker,
-                "kr_name": kr_name,
-                "en_name": en_name,
+                "kr_name": kr_name if kr_name else "",
+                "en_name": en_name if en_name else "",
                 "last_updated": datetime.now().isoformat(),
             },
         )
