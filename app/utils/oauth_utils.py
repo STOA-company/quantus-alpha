@@ -126,6 +126,8 @@ def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
 ) -> Optional[AlphafinderUser]:
     """현재 인증된 사용자 정보 조회"""
+    print(f"credentials : {credentials}")
+    print(f"credentials.credentials : {credentials.credentials}")
     if not credentials:
         return None
 

@@ -21,7 +21,7 @@ class NewsItem(BaseModel):
     change_rate: float | None
 
 
-class NewsRenewalItem(BaseModel):
+class NewsRenewalItem(BaseModel):  # v2 interest news에서 사용 중
     id: int
     date: datetime
     ctry: str | None
@@ -68,8 +68,6 @@ class DisclosureRenewalItem(BaseModel):
     key_points: str | None
     emotion: str | None
     name: str | None
-    change_rate: float | None
-    price_impact: float | None
     document_url: str | None
 
 
