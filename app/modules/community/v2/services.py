@@ -973,27 +973,54 @@ class CommunityService:
     async def update_comment(self, current_user: AlphafinderUser, comment_id: int, comment_update: CommentUpdate) -> bool:
         """댓글 수정"""
         current_time = datetime.now(UTC)
-        user_id = current_user["uid"] if current_user else None  # noqa
+        user_id = current_user["uid"] if current_user else None
 
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
         # 1. 댓글 존재 여부와 작성자 확인
-        comment = self.db._select(table="comments", columns=["id", "user_id"], id=comment_id)
-
+        comment = self.db._select(table="af_posts", columns=["id", "user_id", "parent_id"], id=comment_id, limit=1)
         if not comment:
             raise PostException(message="댓글을 찾을 수 없습니다", status_code=404)
 
-        if comment[0][1] != user_id:
+        if comment[0].user_id != user_id:
             raise PostException(message="댓글 수정 권한이 없습니다", status_code=403)
 
-        # 2. 댓글 수정
-        update_data = {"content": comment_update.content, "updated_at": current_time}
+        # 2. 종목 코드 유효성 검사
+        if comment_update.stock_tickers:
+            is_stock_ticker = self._is_stock_ticker(comment_update.stock_tickers)
+            if not is_stock_ticker:
+                raise PostException(message="종목 코드가 유효하지 않습니다", status_code=400)
 
-        result = self.db._update(table="comments", sets=update_data, id=comment_id)
+        # 3. 댓글 수정
+        update_data = {
+            "content": comment_update.content,
+            "image_url": json.dumps(comment_update.image_url) if comment_update.image_url else None,
+            "updated_at": current_time,
+        }
 
+        result = self.db._update(table="af_posts", sets=update_data, id=comment_id)
         if not result.rowcount:
             raise PostException(message="댓글 수정에 실패했습니다", status_code=500)
+
+        # 4. 종목 정보 업데이트
+        if comment_update.stock_tickers:
+            if len(comment_update.stock_tickers) > 3:
+                raise TooManyStockTickersException()
+
+            # 기존 종목 정보 삭제
+            self.db._delete("af_post_stock_tags", post_id=comment_id)
+
+            # 새로운 종목 정보 추가
+            stock_data = [
+                {
+                    "post_id": comment_id,
+                    "stock_ticker": ticker,
+                }
+                for ticker in comment_update.stock_tickers
+            ]
+            if stock_data:
+                self.db._insert("af_post_stock_tags", stock_data)
 
         return True
 
@@ -1005,28 +1032,30 @@ class CommunityService:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
         # 1. 댓글 존재 여부와 작성자 확인
-        comment = self.db._select(table="comments", columns=["id", "user_id", "post_id", "parent_id"], id=comment_id)
-
+        comment = self.db._select(
+            table="af_posts", columns=["id", "user_id", "parent_id", "image_url"], id=comment_id, limit=1
+        )
         if not comment:
             raise PostException(message="댓글을 찾을 수 없습니다", status_code=404)
 
-        if comment[0][1] != user_id:
+        if comment[0].user_id != user_id:
             raise PostException(message="댓글 삭제 권한이 없습니다", status_code=403)
 
-        post_id = comment[0][2]
+        # 2. S3에서 이미지 삭제
+        if comment[0].image_url:
+            await self._delete_images_from_s3(comment[0].image_url)
 
-        # 2. 댓글 삭제 (cascade로 하위 댓글과 좋아요도 함께 삭제)
-        result = self.db._delete(table="comments", id=comment_id)
-
+        # 3. 댓글 삭제 (cascade로 종목 정보도 함께 삭제됨)
+        result = self.db._delete(table="af_posts", id=comment_id)
         if not result.rowcount:
             raise PostException(message="댓글 삭제에 실패했습니다", status_code=500)
 
-        # 3. 게시글의 댓글 수 감소
-        if not comment[0][3]:  # 원댓글인 경우만 카운트 감소
+        # 4. 게시글의 댓글 수 감소
+        if comment[0].parent_id:  # 원댓글인 경우만 카운트 감소
             update_data = {
                 "comment_count__inc": -1,
             }
-            self.db._update(table="posts", sets=update_data, id=post_id)
+            self.db._update(table="af_posts", sets=update_data, id=comment[0].parent_id)
 
         return True
 
@@ -1035,62 +1064,22 @@ class CommunityService:
     ###################
 
     async def update_post_like(self, current_user: AlphafinderUser, post_id: int, is_liked: bool) -> Tuple[bool, int]:
-        """게시글 좋아요 상태 업데이트"""
+        """게시글/댓글 좋아요 상태 업데이트"""
         current_time = datetime.now(UTC)
         user_id = current_user["uid"] if current_user else None
 
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
-        # 1. 게시글 확인
-        post = self.db._select(table="posts", columns=["id", "like_count"], id=post_id)
-
+        # 1. 게시글/댓글 확인
+        post = self.db._select(table="af_posts", columns=["id", "like_count"], id=post_id, limit=1)
         if not post:
-            raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
+            raise PostException(message="게시글/댓글을 찾을 수 없습니다", status_code=404)
 
-        current_like_count = post[0][1]
-
-        # 2. 현재 좋아요 상태 확인
-        like_exists = bool(self.db._select(table="post_likes", post_id=post_id, user_id=user_id))
-
-        # 3. 상태가 같으면 아무 것도 하지 않음
-        if like_exists == is_liked:
-            return is_liked, current_like_count
-
-        # 4. 상태가 다르면 업데이트
-        if is_liked:
-            like_data = {"post_id": post_id, "user_id": user_id, "created_at": current_time, "updated_at": current_time}
-            self.db._insert("post_likes", like_data)
-            new_like_count = current_like_count + 1
-        else:
-            self.db._delete(table="post_likes", post_id=post_id, user_id=user_id)
-            new_like_count = current_like_count - 1
-
-        # 5. 게시글 좋아요 수 업데이트
-        self.db._update(table="posts", sets={"like_count": new_like_count}, id=post_id)
-
-        return is_liked, new_like_count
-
-    async def update_comment_like(
-        self, current_user: AlphafinderUser, comment_id: int, is_liked: bool
-    ) -> Tuple[bool, int]:
-        """댓글 좋아요 상태 업데이트"""
-        current_time = datetime.now(UTC)
-        user_id = current_user["uid"] if current_user else None
-
-        if not user_id:
-            raise PostException(message="로그인이 필요합니다", status_code=401)
-
-        # 1. 댓글 확인
-        comment = self.db._select(table="comments", columns=["id", "like_count"], id=comment_id)
-
-        if not comment:
-            raise PostException(message="댓글을 찾을 수 없습니다", status_code=404, comment_id=comment_id)
-
-        current_like_count = comment[0][1]
+        current_like_count = post[0].like_count
 
         # 2. 현재 좋아요 상태 확인
-        like_exists = bool(self.db._select(table="comment_likes", comment_id=comment_id, user_id=user_id))
+        like_exists = bool(self.db._select(table="af_post_likes", post_id=post_id, user_id=user_id))
 
         # 3. 상태가 같으면 아무 것도 하지 않음
         if like_exists == is_liked:
@@ -1099,19 +1088,20 @@ class CommunityService:
         # 4. 상태가 다르면 업데이트
         if is_liked:
             like_data = {
-                "comment_id": comment_id,
+                "post_id": post_id,
                 "user_id": user_id,
+                "is_liked": is_liked,
                 "created_at": current_time,
                 "updated_at": current_time,
             }
-            self.db._insert("comment_likes", like_data)
+            self.db._insert("af_post_likes", like_data)
             new_like_count = current_like_count + 1
         else:
-            self.db._delete(table="comment_likes", comment_id=comment_id, user_id=user_id)
+            self.db._delete(table="af_post_likes", post_id=post_id, user_id=user_id)
             new_like_count = current_like_count - 1
 
-        # 5. 게시글 좋아요 수 업데이트
-        self.db._update(table="comments", sets={"like_count": new_like_count}, id=comment_id)
+        # 5. 게시글/댓글 좋아요 수 업데이트
+        self.db._update(table="af_posts", sets={"like_count": new_like_count}, id=post_id)
 
         return is_liked, new_like_count
 

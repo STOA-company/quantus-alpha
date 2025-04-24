@@ -171,10 +171,20 @@ class CommentListResponse(BaseModel):
 
 
 class CommentUpdate(BaseModel):
-    content: str = Field(..., min_length=1)
+    content: str | None = None
+    image_url: Optional[List[str]] = None
+    stock_tickers: List[str] = Field(default=[], max_items=3)
+    tagging_post_id: int | None = None
 
     class Config:
-        json_schema_extra = {"example": {"content": "댓글 내용 수정입니다."}}
+        json_schema_extra = {
+            "example": {
+                "content": "댓글 내용 수정입니다.",
+                "image_url": ["community/2025/04/21/47475302-d933-4a9d-a4e2-096f5b14054c_0.jpg"],
+                "stock_tickers": ["A005930", "A035720"],
+                "tagging_post_id": 36,
+            }
+        }
 
 
 ##### 좋아요 스키마 #####

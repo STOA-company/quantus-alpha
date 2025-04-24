@@ -8,7 +8,6 @@ from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.community.v2.enum import PostOrderBy
 from app.modules.community.v2.schemas import (
-    BookmarkItem,
     CategoryResponse,
     CommentCreate,
     CommentListResponse,
@@ -252,14 +251,16 @@ async def delete_comment(
 
 
 ##### 좋아요 on/off #####
-@router.put("/posts/{post_id}/like", response_model=BaseResponse[LikeResponse], summary="게시글 좋아요 상태 업데이트")
-async def update_post_like(
+@router.put(
+    "/posts/{post_id}/like", response_model=BaseResponse[LikeResponse], summary="게시글/댓글 좋아요 상태 업데이트"
+)
+async def update_like(
     post_id: int,
     like_request: LikeRequest,
     community_service: CommunityService = Depends(get_community_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
-    """게시글 좋아요 상태 업데이트"""
+    """게시글/댓글 좋아요 상태 업데이트"""
     is_liked, like_count = await community_service.update_post_like(
         current_user=current_user, post_id=post_id, is_liked=like_request.is_liked
     )
@@ -271,41 +272,22 @@ async def update_post_like(
     )
 
 
-@router.put("/comments/{comment_id}/like", response_model=BaseResponse[LikeResponse], summary="댓글 좋아요 상태 업데이트")
-async def update_comment_like(
-    comment_id: int,
-    like_request: LikeRequest,
-    community_service: CommunityService = Depends(get_community_service),
-    current_user: AlphafinderUser = Depends(get_current_user),
-):
-    """게시글 좋아요 상태 업데이트"""
-    is_liked, like_count = await community_service.update_comment_like(
-        current_user=current_user, comment_id=comment_id, is_liked=like_request.is_liked
-    )
+### 북마크 on/off #### # 필요시 주석 해제
+# @router.put("/posts/{post_id}/bookmark", response_model=BaseResponse[BookmarkItem], summary="게시글 북마크 추가")
+# async def update_post_bookmark(
+#     post_id: int,
+#     bookmark_item: BookmarkItem,
+#     community_service: CommunityService = Depends(get_community_service),
+#     current_user: AlphafinderUser = Depends(get_current_user),
+# ):
+#     """게시글 북마크 추가"""
+#     is_bookmarked = await community_service.update_post_bookmark(
+#         current_user=current_user, post_id=post_id, is_bookmarked=bookmark_item.is_bookmarked
+#     )
 
-    return BaseResponse(
-        status_code=200,
-        message="좋아요 상태를 업데이트하였습니다.",
-        data=LikeResponse(is_liked=is_liked, like_count=like_count),
-    )
-
-
-### 북마크 on/off ####
-@router.put("/posts/{post_id}/bookmark", response_model=BaseResponse[BookmarkItem], summary="게시글 북마크 추가")
-async def update_post_bookmark(
-    post_id: int,
-    bookmark_item: BookmarkItem,
-    community_service: CommunityService = Depends(get_community_service),
-    current_user: AlphafinderUser = Depends(get_current_user),
-):
-    """게시글 북마크 추가"""
-    is_bookmarked = await community_service.update_post_bookmark(
-        current_user=current_user, post_id=post_id, is_bookmarked=bookmark_item.is_bookmarked
-    )
-
-    return BaseResponse(
-        status_code=200, message="북마크 상태를 업데이트하였습니다.", data=BookmarkItem(is_bookmarked=is_bookmarked)
-    )
+#     return BaseResponse(
+#         status_code=200, message="북마크 상태를 업데이트하였습니다.", data=BookmarkItem(is_bookmarked=is_bookmarked)
+#     )
 
 
 ### 실시간 인기 게시글 조회 ###
