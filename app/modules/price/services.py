@@ -10,7 +10,7 @@ import pandas as pd
 from fastapi import Request
 from sse_starlette import EventSourceResponse
 
-from app.common.constants import KST, MARKET_MAP, MARKET_MAP_EN
+from app.common.constants import ETF_MARKET_MAP, ETF_MARKET_MAP_EN, KST, MARKET_MAP, MARKET_MAP_EN
 from app.core.exception.custom import DataNotFoundException
 from app.core.logger import setup_logger
 from app.database.conn import db
@@ -635,11 +635,14 @@ class PriceService:
             last_day_close = None
             market_cap = None
 
-        sector, name, market = self._get_sector_name_market(ticker, lang)
+        sector, name, market = self._get_sector_name_market(ticker, ctry, type, lang)
         sector = sector or ""
         name = name or ""
         if market:
-            market = MARKET_MAP[market] if lang == TranslateCountry.KO else MARKET_MAP_EN[market]
+            if type == "stock":
+                market = MARKET_MAP[market] if lang == TranslateCountry.KO else MARKET_MAP_EN[market]
+            elif type == "etf":
+                market = ETF_MARKET_MAP[market] if lang == TranslateCountry.KO else ETF_MARKET_MAP_EN[market]
         is_market_close = check_market_status(ctry.upper())
 
         response_data = {
@@ -726,7 +729,7 @@ class PriceService:
         # 가장 최근 날짜를 제외한 첫 번째 데이터의 종가를 반환
         return float(sorted_df.iloc[1]["Close"])
 
-    def _get_sector_name_market(self, ticker: str, lang: TranslateCountry) -> Tuple[str, str, str]:
+    def _get_sector_name_market(self, ticker: str, ctry: str, type: str, lang: TranslateCountry) -> Tuple[str, str, str]:
         """
         종목 섹터, 이름, 시장 조회
         """
@@ -734,6 +737,10 @@ class PriceService:
             columns = ["sector_ko", "kr_name", "market"]
         elif lang == TranslateCountry.EN:
             columns = ["sector_2", "en_name", "market"]
+
+        if type == "etf" and ctry == "us":
+            columns = ["sector_2", "en_name", "market"]
+
         data = self.database._select(table="stock_information", columns=columns, ticker=ticker)
 
         return data[0]
