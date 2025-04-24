@@ -41,9 +41,15 @@ class StockInfo(BaseModel):
     ctry: Optional[str] = None
 
 
+class TaggingPostInfo(BaseModel):
+    post_id: int
+    content: str
+    created_at: datetime
+    user_info: UserInfo
+
+
 class ResponsePost(BaseModel):
     id: int
-    title: str
     content: str
     category_name: str
     image_url: Optional[List[str]] = None
@@ -55,8 +61,10 @@ class ResponsePost(BaseModel):
     is_liked: bool
     is_mine: bool
     created_at: datetime
+    depth: int
     stock_tickers: List[StockInfo]
     user_info: UserInfo
+    tagging_post_info: Optional[TaggingPostInfo] = None
 
 
 class PostListResponse(BaseModel):

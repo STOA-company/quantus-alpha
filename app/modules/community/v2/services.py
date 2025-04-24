@@ -23,6 +23,7 @@ from .schemas import (
     PostUpdate,
     ResponsePost,
     StockInfo,
+    TaggingPostInfo,
     TrendingPostResponse,
     UserInfo,
 )
@@ -137,7 +138,7 @@ class CommunityService:
         # 1. 게시글, 작성자, 카테고리 정보 조회
         query = """
             SELECT
-                p.id, p.title, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at,
+                p.id, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at, p.depth, p.tagging_post_id,
                 c.name as category_name,
                 p.user_id,
                 CASE WHEN :current_user_id IS NOT NULL THEN
@@ -152,7 +153,7 @@ class CommunityService:
                         WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
                     )
                 ELSE false END as is_liked
-            FROM posts p
+            FROM af_posts p
             JOIN categories c ON p.category_id = c.id
             WHERE p.id = :post_id
         """
@@ -184,7 +185,56 @@ class CommunityService:
             for stock_info in stock_info
         ]
 
-        # 3. UserInfo 조회 (user DB에서)
+        # 3. 태깅된 게시글 정보 조회
+        tagging_post_info = None
+        if post["tagging_post_id"]:
+            tagging_post = self.db._select(
+                table="af_posts", columns=["id", "content", "created_at", "user_id"], id=post["tagging_post_id"]
+            )
+            if tagging_post:
+                tagging_user = database_user._select(
+                    table="quantus_user", columns=["id", "nickname"], id=tagging_post[0][3]
+                )
+                if tagging_user:
+                    tagging_post_info = TaggingPostInfo(
+                        post_id=tagging_post[0][0],
+                        content=tagging_post[0][1],
+                        created_at=tagging_post[0][2],
+                        user_info=UserInfo(
+                            id=tagging_user[0][0],
+                            nickname=tagging_user[0][1],
+                            profile_image=None,
+                            image_format=None,
+                        ),
+                    )
+                else:
+                    # 태깅된 게시글의 작성자가 삭제된 경우
+                    tagging_post_info = TaggingPostInfo(
+                        post_id=tagging_post[0][0],
+                        content=tagging_post[0][1],
+                        created_at=tagging_post[0][2],
+                        user_info=UserInfo(
+                            id=0,
+                            nickname=self._get_unknown_user_nickname(lang),
+                            profile_image=None,
+                            image_format=None,
+                        ),
+                    )
+            else:
+                # 태깅된 게시글이 삭제된 경우
+                tagging_post_info = TaggingPostInfo(
+                    post_id=post["tagging_post_id"],
+                    content="해당 게시글은 작성자에 의해 삭제되어, 현재 내용을 볼 수 없습니다.",
+                    created_at=post["created_at"],  # 원본 게시글의 생성 시간 사용
+                    user_info=UserInfo(
+                        id=0,
+                        nickname=self._get_unknown_user_nickname(lang),
+                        profile_image=None,
+                        image_format=None,
+                    ),
+                )
+
+        # 4. UserInfo 조회 (user DB에서)
         user_info = None
         if post["user_id"]:
             user_result = database_user._select(table="quantus_user", columns=["id", "nickname"], id=post["user_id"])
@@ -193,8 +243,8 @@ class CommunityService:
                 user_info = UserInfo(
                     id=user.id,
                     nickname=user.nickname,
-                    profile_image=None,  # TODO :: 추후 추가해야 함
-                    image_format=None,  # TODO :: 추후 추가해야 함
+                    profile_image=None,
+                    image_format=None,
                 )
 
         if not user_info:
@@ -202,7 +252,7 @@ class CommunityService:
                 id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None
             )
 
-        # 4. 이미지 URL 처리
+        # 5. 이미지 URL 처리
         image_urls = []
         if post["image_url"]:
             try:
@@ -214,10 +264,9 @@ class CommunityService:
             except json.JSONDecodeError:
                 logger.error(f"Failed to parse image_url JSON for post {post_id}")
 
-        # 5. ResponsePost 객체 생성 및 반환
+        # 6. ResponsePost 객체 생성 및 반환
         response = ResponsePost(
             id=post["id"],
-            title=post["title"],
             content=post["content"],
             category_name=post["category_name"],
             image_url=image_urls,
@@ -229,8 +278,10 @@ class CommunityService:
             is_liked=post["is_liked"],
             is_mine=post["user_id"] == current_user_id,
             created_at=post["created_at"].astimezone(KST),
+            depth=post["depth"],
             stock_tickers=stock_information,
             user_info=user_info,
+            tagging_post_info=tagging_post_info,
         )
 
         return response
