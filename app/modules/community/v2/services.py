@@ -652,12 +652,18 @@ class CommunityService:
 
         current_time = datetime.now(UTC)
         update_data = {
-            "content": post_update.content,
-            "category_id": post_update.category_id,
-            "image_url": json.dumps(post_update.image_url) if post_update.image_url else None,
-            "tagging_post_id": post_update.tagging_post_id,
             "updated_at": current_time,
         }
+
+        # 실제로 전달된 필드만 업데이트
+        if post_update.content is not None:
+            update_data["content"] = post_update.content
+        if post_update.category_id is not None:
+            update_data["category_id"] = post_update.category_id
+        if post_update.image_url is not None:
+            update_data["image_url"] = json.dumps(post_update.image_url) if post_update.image_url else None
+        if post_update.tagging_post_id is not None:
+            update_data["tagging_post_id"] = post_update.tagging_post_id
 
         try:
             # 게시글 수정
@@ -666,7 +672,7 @@ class CommunityService:
                 raise PostException(message="게시글 수정에 실패했습니다", status_code=500, post_id=post_id)
 
             # 종목 정보 업데이트
-            if post_update.stock_tickers:
+            if post_update.stock_tickers is not None:
                 if len(post_update.stock_tickers) > 3:
                     raise TooManyStockTickersException()
 
@@ -708,30 +714,35 @@ class CommunityService:
         except Exception as e:
             logger.error(f"Failed to delete images from S3: {e}")
 
-    async def delete_post(self, current_user: AlphafinderUser, post_id: int) -> bool:
-        """게시글 삭제"""
+    async def delete_content(self, current_user: AlphafinderUser, content_id: int) -> bool:
+        """게시글/댓글 삭제"""
         user_id = current_user["uid"] if current_user else None
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
-        # Get post user_id and image_url
-        post_result = self.db._select(table="af_posts", columns=["user_id", "image_url"], id=post_id)
-        if not post_result:
-            raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
+        # 컨텐츠 존재 여부와 작성자 확인
+        content = self.db._select(table="af_posts", columns=["user_id", "image_url", "parent_id"], id=content_id, limit=1)
+        if not content:
+            raise PostException(message="컨텐츠를 찾을 수 없습니다", status_code=404, post_id=content_id)
 
-        post_user_id = post_result[0][0]
-        image_urls_json = post_result[0][1]
-
-        if user_id != post_user_id:
-            raise PostException(message="게시글 삭제 권한이 없습니다", status_code=403, post_id=post_id)
+        if content[0].user_id != user_id:
+            raise PostException(message="삭제 권한이 없습니다", status_code=403, post_id=content_id)
 
         # S3에서 이미지 삭제
-        await self._delete_images_from_s3(image_urls_json)
+        if content[0].image_url:
+            await self._delete_images_from_s3(content[0].image_url)
 
-        result = self.db._delete(table="af_posts", id=post_id)
-
+        # 컨텐츠 삭제 (cascade로 종목 정보도 함께 삭제됨)
+        result = self.db._delete(table="af_posts", id=content_id)
         if not result.rowcount:
-            raise PostException(message="게시글 삭제에 실패했습니다", status_code=500, post_id=post_id)
+            raise PostException(message="삭제에 실패했습니다", status_code=500, post_id=content_id)
+
+        # parent_id가 있는 경우 (댓글이거나 대댓글인 경우) 부모 게시글의 댓글 수 감소
+        if content[0].parent_id:
+            update_data = {
+                "comment_count__inc": -1,
+            }
+            self.db._update(table="af_posts", sets=update_data, id=content[0].parent_id)
 
         return True
 
@@ -1021,41 +1032,6 @@ class CommunityService:
             ]
             if stock_data:
                 self.db._insert("af_post_stock_tags", stock_data)
-
-        return True
-
-    async def delete_comment(self, current_user: AlphafinderUser, comment_id: int) -> bool:
-        """댓글 삭제"""
-        user_id = current_user["uid"] if current_user else None
-
-        if not user_id:
-            raise PostException(message="로그인이 필요합니다", status_code=401)
-
-        # 1. 댓글 존재 여부와 작성자 확인
-        comment = self.db._select(
-            table="af_posts", columns=["id", "user_id", "parent_id", "image_url"], id=comment_id, limit=1
-        )
-        if not comment:
-            raise PostException(message="댓글을 찾을 수 없습니다", status_code=404)
-
-        if comment[0].user_id != user_id:
-            raise PostException(message="댓글 삭제 권한이 없습니다", status_code=403)
-
-        # 2. S3에서 이미지 삭제
-        if comment[0].image_url:
-            await self._delete_images_from_s3(comment[0].image_url)
-
-        # 3. 댓글 삭제 (cascade로 종목 정보도 함께 삭제됨)
-        result = self.db._delete(table="af_posts", id=comment_id)
-        if not result.rowcount:
-            raise PostException(message="댓글 삭제에 실패했습니다", status_code=500)
-
-        # 4. 게시글의 댓글 수 감소
-        if comment[0].parent_id:  # 원댓글인 경우만 카운트 감소
-            update_data = {
-                "comment_count__inc": -1,
-            }
-            self.db._update(table="af_posts", sets=update_data, id=comment[0].parent_id)
 
         return True
 
