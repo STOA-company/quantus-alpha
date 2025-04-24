@@ -25,6 +25,7 @@ class AlphafinderPost(ServiceBase, BaseMixin):
     image_url: Mapped[String] = mapped_column(LONGTEXT, nullable=True)
     image_format: Mapped[String] = mapped_column(String(20), nullable=True)
     like_count: Mapped[int] = mapped_column(Integer, default=0)
+    comment_count: Mapped[int] = mapped_column(Integer, default=0)
     user_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=True)
     depth: Mapped[int] = mapped_column(Integer, default=0, comment="게시글 깊이")
     tagging_post_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=True, comment="인용된 게시글 ID")
