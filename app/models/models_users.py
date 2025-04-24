@@ -69,10 +69,6 @@ class UserStockInterest(BaseMixin, ServiceBase):
 
 class AlphafinderInterestGroup(BaseMixin, ServiceBase):
     __tablename__ = "alphafinder_interest_group"
-    __table_args__ = (
-        Index("idx_user_id_order", "user_id", "order"),
-        {"extend_existing": True},
-    )
 
     id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[String] = mapped_column(String(length=100), nullable=False)
@@ -82,15 +78,15 @@ class AlphafinderInterestGroup(BaseMixin, ServiceBase):
 
     interest_stocks = relationship("AlphafinderUserStockInterest", back_populates="interest_group")
 
-    __table_args__ = (UniqueConstraint("user_id", "name", name="uix_user_id_name"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uix_user_id_name"),
+        Index("idx_user_id_order", "user_id", "order"),
+        {"extend_existing": True},
+    )
 
 
 class AlphafinderUserStockInterest(BaseMixin, ServiceBase):
     __tablename__ = "alphafinder_interest_stock"
-    __table_args__ = (
-        Index("idx_group_id_order", "group_id", "order"),
-        {"extend_existing": True},
-    )
 
     id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     group_id: Mapped[BigInteger] = mapped_column(
@@ -101,7 +97,11 @@ class AlphafinderUserStockInterest(BaseMixin, ServiceBase):
 
     interest_group = relationship("AlphafinderInterestGroup", back_populates="interest_stocks")
 
-    __table_args__ = (UniqueConstraint("group_id", "ticker", name="uix_group_id_ticker"),)
+    __table_args__ = (
+        UniqueConstraint("group_id", "ticker", name="uix_group_id_ticker"),
+        Index("idx_group_id_order", "group_id", "order"),
+        {"extend_existing": True},
+    )
 
 
 class AlphaFinderOAuthToken(BaseMixin, ServiceBase):
