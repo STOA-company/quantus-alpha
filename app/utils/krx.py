@@ -196,25 +196,25 @@ def create_etf_integrated_info():
 
         # 기본 정보에서 필요한 컬럼 추가 (종목코드, 종목명, 상장일, 운용사)
         if not base_df.empty:
-            integrated_df = base_df[["ISU_CD", "ISU_NM", "LIST_DD", "COM_ABBRV"]]
-            integrated_df.columns = ["표준코드", "한글종목명", "상장일", "운용사"]
+            integrated_df = base_df[["ISU_SRT_CD", "ISU_NM", "LIST_DD", "COM_ABBRV"]]
+            integrated_df.columns = ["단축코드", "한글종목명", "상장일", "운용사"]
 
         # 가격 정보에서 필요한 컬럼 추가 (NAV, 시가총액, 상장좌수)
         if not price_df.empty:
             price_cols = {
-                "ISU_CD": "표준코드",
+                "ISU_SRT_CD": "단축코드",
                 "NAV": "순자산가치(NAV)",
                 "MKTCAP": "시가총액",
                 "LIST_SHRS": "상장좌수",
             }
             price_selected = price_df[list(price_cols.keys())].rename(columns=price_cols)
-            integrated_df = pd.merge(integrated_df, price_selected, on="표준코드", how="left")
+            integrated_df = pd.merge(integrated_df, price_selected, on="단축코드", how="left")
 
         # 상세 정보에서 순자산총액 추가
         if not detail_df.empty:
-            detail_cols = {"ISU_CD": "표준코드", "NETASST_TOTAMT": "순자산총액"}
+            detail_cols = {"ISU_SRT_CD": "단축코드", "NETASST_TOTAMT": "순자산총액"}
             detail_selected = detail_df[list(detail_cols.keys())].rename(columns=detail_cols)
-            integrated_df = pd.merge(integrated_df, detail_selected, on="표준코드", how="left")
+            integrated_df = pd.merge(integrated_df, detail_selected, on="단축코드", how="left")
 
         # 데이터 타입 변환
         numeric_columns = ["순자산가치(NAV)", "시가총액", "상장좌수", "순자산총액"]

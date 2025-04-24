@@ -232,57 +232,6 @@ class StockInfoService:
 
         return similar_stocks
 
-    def get_etf_holdings(self, ticker: str, lang: TranslateCountry) -> List[SimilarStock]:
-        """
-        ETF 구성 종목 조회
-
-        Args:
-            ticker (str): ETF 종목 코드
-            lang (TranslateCountry): 언어 설정
-
-        Returns:
-            List[SimilarStock]: ETF 구성 종목 리스트
-        """
-        holdings = self.db._select(table="etf_top_holdings", columns=["holding_ticker"], ticker=ticker)
-        holding_tickers = [holding.holding_ticker for holding in holdings if holding.holding_ticker]
-
-        if not holding_tickers:
-            return []
-
-        if lang == TranslateCountry.KO:
-            columns = ["ticker", "kr_name", "ctry", "current_price", "change_rt"]
-        elif lang == TranslateCountry.EN:
-            columns = ["ticker", "en_name", "ctry", "current_price", "change_rt"]
-
-        holdings_data = self.db._select(
-            table="stock_trend",
-            columns=columns,
-            join_info=JoinInfo(
-                primary_table="stock_trend",
-                secondary_table="stock_information",
-                primary_column="ticker",
-                secondary_column="ticker",
-                columns=["is_delisted", "is_trading_stopped"],
-                secondary_condition={"is_delisted": 0, "is_trading_stopped": 0},
-            ),
-            ticker__in=holding_tickers,
-        )
-
-        holding_stocks = []
-        for stock in holdings_data:
-            name = stock.kr_name if lang == TranslateCountry.KO else stock.en_name
-            holding_stocks.append(
-                SimilarStock(
-                    ticker=stock.ticker,
-                    name=name,
-                    ctry=stock.ctry,
-                    current_price=stock.current_price,
-                    current_price_rate=stock.change_rt,
-                )
-            )
-
-        return holding_stocks
-
     async def get_current_price(self, ticker: str, table_name: str) -> Tuple[float, float]:
         """
         현재가와 변동률 조회
@@ -352,6 +301,54 @@ class StockInfoService:
         en_name = stock_info[0].en_name
         redis.increment_score(ticker, kr_name, en_name)
 
+    def get_type(self, ticker: str) -> str:
+        """
+        종목 타입 조회
+        """
+        return self.db._select(table="stock_information", columns=["type"], **{"ticker": ticker})[0].type
+
+    async def get_etf_info(self, ticker: str) -> dict:
+        """
+        ETF 정보 조회
+        """
+        ticker = ticker.replace("A", "")
+        print("TICKER", ticker)
+        df = pd.read_parquet("check_data/etf_krx/etf_integrated.parquet")
+        df = df[df["단축코드"] == ticker]
+        etf_info = df.to_dict(orient="records")
+        return etf_info
+
+    async def get_etf_holdings(self, ticker: str) -> List[dict]:
+        """
+        ETF 구성 종목 조회
+        """
+        join_info = JoinInfo(
+            primary_table="etf_top_holdings",
+            secondary_table="stock_information",
+            primary_column="holding_ticker",
+            secondary_column="ticker",
+            columns=["kr_name", "en_name"],
+        )
+
+        data = self.db._select(
+            table="etf_top_holdings",
+            columns=["holding_ticker", "weight", "kr_name", "en_name"],
+            join_info=join_info,
+            ticker=ticker,
+        )
+
+        result = []
+        for row in data:
+            result.append(
+                {"ticker": row.holding_ticker, "weight": row.weight, "kr_name": row.kr_name, "en_name": row.en_name}
+            )
+
+        result.sort(key=lambda x: x["weight"], reverse=True)
+        sum_weight = sum(holding["weight"] for holding in result)
+        if sum_weight != 100:
+            result.append({"ticker": None, "weight": 100 - sum_weight, "kr_name": "기타", "en_name": "Others"})
+        return result
+
 
 def get_stock_info_service() -> StockInfoService:
     return StockInfoService()
@@ -359,4 +356,5 @@ def get_stock_info_service() -> StockInfoService:
 
 if __name__ == "__main__":
     stock_info_service = get_stock_info_service()
-    print(stock_info_service.get_similar_stocks("AAPL", "en"))
+    print(stock_info_service.get_etf_holdings("A0001P0"))
+    print(stock_info_service.get_etf_info("A0001P0"))
