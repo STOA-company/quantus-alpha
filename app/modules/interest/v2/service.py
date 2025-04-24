@@ -275,7 +275,15 @@ class InterestService:
         groups = self.db._select(table="alphafinder_interest_group", user_id=user_id, order="order", ascending=True)
         if not groups or not any(group.name in ["실시간 인기"] for group in groups):
             return self.init_interest_group(user_id)
-        return [{"id": group.id, "name": group.name, "count": self.get_interest_count(group.id)} for group in groups]
+        result = [
+            {
+                "id": group.id,
+                "name": group.name,
+                "count": 11 if group.name == "실시간 인기" else self.get_interest_count(group.id),
+            }
+            for group in groups
+        ]
+        return result
 
     def init_interest_group(self, user_id: int):
         """
