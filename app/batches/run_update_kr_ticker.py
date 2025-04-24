@@ -62,7 +62,10 @@ def update_kr_ticker():
     new_ticker_df["is_pub"] = False
     new_ticker_df["type"] = "etf"
 
-    database._insert(table="stock_information", sets=new_ticker_df.to_dict("records"))
+    new_ticker_df.drop(columns=["isin"], inplace=True)
+    # Convert to records and ensure all required columns are present
+    records = new_ticker_df.to_dict("records")
+    database._insert(table="stock_information", sets=records)
 
 
 if __name__ == "__main__":

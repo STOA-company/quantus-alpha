@@ -7,16 +7,15 @@ from pydantic import BaseModel, Field
 
 
 class PostCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
-    content: str = Field(..., min_length=1)
-    category_id: int
+    content: str | None = None
+    category_id: int | None = None
     image_url: Optional[List[str]] = None
     stock_tickers: List[str] = Field(default=[], max_items=3)
+    tagging_post_id: int | None = None
 
     class Config:
         json_schema_extra = {
             "example": {
-                "title": "삼성전자 실적 분석",
                 "content": "2024년 1분기 실적 분석입니다...",
                 "category_id": 1,
                 "image_url": [
@@ -24,6 +23,7 @@ class PostCreate(BaseModel):
                     "community/2025/04/21/68b0e353-c894-405c-9bc3-89711cf541b7_2.jpg",
                 ],
                 "stock_tickers": ["A005930", "A035720"],
+                "tagging_post_id": 36,
             }
         }
 
@@ -41,9 +41,17 @@ class StockInfo(BaseModel):
     ctry: Optional[str] = None
 
 
+class TaggingPostInfo(BaseModel):
+    post_id: int
+    content: str | None = None
+    created_at: datetime | None = None
+    user_info: UserInfo
+    image_url: Optional[List[str]] = None
+    image_format: Optional[str] = None
+
+
 class ResponsePost(BaseModel):
     id: int
-    title: str
     content: str
     category_name: str
     image_url: Optional[List[str]] = None
@@ -55,8 +63,10 @@ class ResponsePost(BaseModel):
     is_liked: bool
     is_mine: bool
     created_at: datetime
+    depth: int
     stock_tickers: List[StockInfo]
     user_info: UserInfo
+    tagging_post_info: Optional[TaggingPostInfo] = None
 
 
 class PostListResponse(BaseModel):
@@ -67,20 +77,23 @@ class PostListResponse(BaseModel):
 
 
 class PostUpdate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
-    content: str = Field(..., min_length=1)
+    content: str
     category_id: int
     image_url: Optional[List[str]] = None
     stock_tickers: List[str] = Field(default=[], max_items=3)
+    tagging_post_id: int | None = None
 
     class Config:
         json_schema_extra = {
             "example": {
-                "title": "삼성전자 실적 분석 수정",
                 "content": "2024년 1분기 실적 분석 수정입니다...",
                 "category_id": 1,
-                "image_url": "https://example.com/image.jpg",
+                "image_url": [
+                    "community/2025/04/21/68b0e353-c894-405c-9bc3-89711cf541b7_1.jpg",
+                    "community/2025/04/21/68b0e353-c894-405c-9bc3-89711cf541b7_2.jpg",
+                ],
                 "stock_tickers": ["A005930", "A035720"],
+                "tagging_post_id": 36,
             }
         }
 
@@ -94,14 +107,21 @@ class PostInfo(BaseModel):
 
 
 class CommentCreate(BaseModel):
-    content: str = Field(..., min_length=1)
-    parent_id: Optional[int] = None
+    content: str
+    image_url: Optional[List[str]] = None
+    stock_tickers: List[str] = Field(default=[], max_items=3)
+    tagging_post_id: int | None = None
 
     class Config:
         json_schema_extra = {
             "example": {
                 "content": "댓글 내용입니다.",
-                "parent_id": None,  # 대댓글인 경우 부모 댓글 ID
+                "image_url": [
+                    "community/2025/04/21/47475302-d933-4a9d-a4e2-096f5b14054c_0.jpg",
+                    "community/2025/04/21/6115ef0e-1176-4825-a199-4252034d49a0.jpg",
+                ],
+                "stock_tickers": ["A005930", "A035720"],
+                "tagging_post_id": 36,
             }
         }
 
@@ -110,14 +130,16 @@ class CommentItem(BaseModel):
     id: int
     content: str
     like_count: int
+    comment_count: int
     depth: int
     parent_id: Optional[int] = None
     created_at: datetime
     is_changed: bool
     is_liked: bool
     is_mine: bool
+    stock_tickers: List[StockInfo]
     user_info: UserInfo
-    sub_comments: List["CommentItem"] = Field(default=list)
+    tagging_post_info: Optional[TaggingPostInfo] = None
 
     class Config:
         from_attributes = True
@@ -149,10 +171,20 @@ class CommentListResponse(BaseModel):
 
 
 class CommentUpdate(BaseModel):
-    content: str = Field(..., min_length=1)
+    content: str | None = None
+    image_url: Optional[List[str]] = None
+    stock_tickers: List[str] = Field(default=[], max_items=3)
+    tagging_post_id: int | None = None
 
     class Config:
-        json_schema_extra = {"example": {"content": "댓글 내용 수정입니다."}}
+        json_schema_extra = {
+            "example": {
+                "content": "댓글 내용 수정입니다.",
+                "image_url": ["community/2025/04/21/47475302-d933-4a9d-a4e2-096f5b14054c_0.jpg"],
+                "stock_tickers": ["A005930", "A035720"],
+                "tagging_post_id": 36,
+            }
+        }
 
 
 ##### 좋아요 스키마 #####

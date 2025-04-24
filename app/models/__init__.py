@@ -1,5 +1,11 @@
 from sqlalchemy.orm import relationship
 
+from app.models.models_alphafinder_community import (
+    AlphafinderBookmark,
+    AlphafinderPost,
+    AlphafinderPostLike,
+    AlphafinderPostStockTag,
+)
 from app.models.models_base import Base, ServiceBase
 from app.models.models_chat import ChatConversation, ChatMessage
 from app.models.models_community import (
@@ -72,6 +78,10 @@ __all__ = [
     "TossReceipt",
     "ChatMessage",
     "ChatConversation",
+    "AlphafinderPost",
+    "AlphafinderPostLike",
+    "AlphafinderBookmark",
+    "AlphafinderPostStockTag",
 ]
 
 # Category relationships

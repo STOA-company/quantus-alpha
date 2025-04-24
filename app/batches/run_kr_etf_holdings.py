@@ -252,7 +252,8 @@ def update_kr_etf_holdings(
     if target_etf_list is None:
         etf_set = get_kr_etf_set()
     else:
-        etf_set = set(target_etf_list)
+        # Convert list of dictionaries to set of tuples
+        etf_set = {(item["ticker"], item["isin"]) for item in target_etf_list}
     target_isin_list = [item[1] for item in etf_set]
     target_ticker_list = ["A" + item[0] for item in etf_set]
 
