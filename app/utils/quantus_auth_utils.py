@@ -13,7 +13,7 @@ PRIVATE_PASSWORD = os.getenv("PRIVATE_PASSWORD")
 ######################################### LOGIC ###########################################
 BASE_URL = "https://devbackfast.quantus.kr"
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 # @retry(
@@ -149,6 +149,8 @@ def get_current_user(
         token = credentials.credentials
         sns_type = request.headers.get("Sns-Type")
         client_type = request.headers.get("Client-Type")
+        if token is None:
+            return None
 
         # exception for validation
         exempt_paths = [
