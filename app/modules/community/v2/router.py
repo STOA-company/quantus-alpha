@@ -189,8 +189,8 @@ async def delete_post(
     community_service: CommunityService = Depends(get_community_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
-    post = await community_service.delete_post(current_user=current_user, post_id=post_id)
-    return BaseResponse(status_code=200, message="게시글을 삭제하였습니다.", data=post)
+    result = await community_service.delete_post(current_user=current_user, post_id=post_id)
+    return BaseResponse(status_code=200, message="게시글을 삭제하였습니다.", data=result)
 
 
 ##### 댓글 CRUD #####

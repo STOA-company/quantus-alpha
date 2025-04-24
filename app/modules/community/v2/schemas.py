@@ -107,14 +107,21 @@ class PostInfo(BaseModel):
 
 
 class CommentCreate(BaseModel):
-    content: str = Field(..., min_length=1)
-    parent_id: Optional[int] = None
+    content: str
+    image_url: Optional[List[str]] = None
+    stock_tickers: List[str] = Field(default=[], max_items=3)
+    tagging_post_id: int | None = None
 
     class Config:
         json_schema_extra = {
             "example": {
                 "content": "댓글 내용입니다.",
-                "parent_id": None,  # 대댓글인 경우 부모 댓글 ID
+                "image_url": [
+                    "community/2025/04/21/47475302-d933-4a9d-a4e2-096f5b14054c_0.jpg",
+                    "community/2025/04/21/6115ef0e-1176-4825-a199-4252034d49a0.jpg",
+                ],
+                "stock_tickers": ["A005930", "A035720"],
+                "tagging_post_id": 36,
             }
         }
 

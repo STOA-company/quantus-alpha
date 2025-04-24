@@ -47,6 +47,24 @@ class CommunityService:
         # Redis 캐시 만료 시간 (4분 30초)
         self.REDIS_CACHE_EXPIRES_IN = 270
 
+    def _handle_stock_tickers(self, post_id: int, stock_tickers: Optional[List[str]]) -> None:
+        """종목 정보 처리"""
+        if not stock_tickers:
+            return
+
+        if len(stock_tickers) > 3:
+            raise TooManyStockTickersException()
+
+        stock_data = [
+            {
+                "post_id": post_id,
+                "stock_ticker": ticker,
+            }
+            for ticker in stock_tickers
+        ]
+        if stock_data:
+            self.db._insert("af_post_stock_tags", stock_data)
+
     async def create_post(self, current_user: Optional[AlphafinderUser], post_create: PostCreate) -> Tuple[bool, int]:
         """게시글 생성"""
         if post_create.content is None and post_create.image_url is None:
@@ -106,18 +124,8 @@ class CommunityService:
         if not post_id:
             raise PostException(message="게시글 생성에 실패했습니다", status_code=500, post_id=post_id)
 
-        if post_create.stock_tickers:
-            if len(post_create.stock_tickers) > 3:
-                raise TooManyStockTickersException()
-
-            stock_data = [
-                {
-                    "post_id": post_id,
-                    "stock_ticker": ticker,
-                }
-                for ticker in post_create.stock_tickers
-            ]
-            self.db._insert("af_post_stock_tags", stock_data)
+        # 종목 정보 처리
+        self._handle_stock_tickers(post_id, post_create.stock_tickers)
 
         return True, post_id
 
@@ -738,56 +746,44 @@ class CommunityService:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
         # 1. 게시글 존재 여부 확인
-        exists_query = text("""
-            SELECT EXISTS (
-                SELECT 1 FROM posts WHERE id = :post_id
-            ) as exists_flag
-        """)
-        result = self.db._execute(exists_query, {"post_id": post_id})
-        post_exists = bool(result.scalar())
-
-        if not post_exists:
+        post = self.db._select(table="af_posts", columns=["id", "depth"], id=post_id, limit=1)
+        if not post:
             raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
 
-        # 2. 부모 댓글 확인 (대댓글인 경우)
-        if comment_create.parent_id:
-            parent_comment = self.db._select(
-                table="comments",
-                columns=["id", "depth"],
-                id=comment_create.parent_id,
-                post_id=post_id,  # 같은 게시글의 댓글인지 확인
-            )
-            if not parent_comment:
-                raise PostException(
-                    message="원댓글을 찾을 수 없습니다", status_code=404, comment_id=comment_create.parent_id
-                )
-
-            # 대댓글의 depth는 1
-            if parent_comment[0][1] > 0:
-                raise PostException(message="대댓글에는 답글을 달 수 없습니다", status_code=400)
+        # 2. 종목 코드 유효성 검사
+        if comment_create.stock_tickers:
+            is_stock_ticker = self._is_stock_ticker(comment_create.stock_tickers)
+            if not is_stock_ticker:
+                raise PostException(message="종목 코드가 유효하지 않습니다", status_code=400)
 
         # 3. 댓글 생성
         comment_data = {
             "content": comment_create.content,
             "like_count": 0,
-            "depth": 1 if comment_create.parent_id else 0,
-            "parent_id": comment_create.parent_id if comment_create.parent_id else None,
-            "post_id": post_id,
+            "comment_count": 0,
+            "depth": post[0].depth + 1,  # 게시글 depth + 1
+            "parent_id": post_id,  # 게시글 ID를 parent_id로 사용
+            "image_url": json.dumps(comment_create.image_url) if comment_create.image_url else None,
+            "tagging_post_id": comment_create.tagging_post_id,
             "user_id": user_id,
             "created_at": current_time,
             "updated_at": current_time,
         }
 
-        result = self.db._insert(table="comments", sets=comment_data)
+        result = self.db._insert(table="af_posts", sets=comment_data)
+        comment_id = result.lastrowid
 
-        if not result.rowcount:
+        if not comment_id:
             raise PostException(message="댓글 생성에 실패했습니다", status_code=500)
+
+        # 종목 정보 처리
+        self._handle_stock_tickers(comment_id, comment_create.stock_tickers)
 
         # 4. 게시글의 댓글 수 증가
         update_data = {
             "comment_count__inc": 1,  # increment operator 사용
         }
-        self.db._update(table="posts", sets=update_data, id=post_id)
+        self.db._update(table="af_posts", sets=update_data, id=post_id)
 
         return True
 
