@@ -7,16 +7,15 @@ from pydantic import BaseModel, Field
 
 
 class PostCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1)
-    category_id: int
+    category_id: int | None = None
     image_url: Optional[List[str]] = None
     stock_tickers: List[str] = Field(default=[], max_items=3)
+    tagging_post_id: int | None = None
 
     class Config:
         json_schema_extra = {
             "example": {
-                "title": "삼성전자 실적 분석",
                 "content": "2024년 1분기 실적 분석입니다...",
                 "category_id": 1,
                 "image_url": [
@@ -24,6 +23,7 @@ class PostCreate(BaseModel):
                     "community/2025/04/21/68b0e353-c894-405c-9bc3-89711cf541b7_2.jpg",
                 ],
                 "stock_tickers": ["A005930", "A035720"],
+                "tagging_post_id": 36,
             }
         }
 

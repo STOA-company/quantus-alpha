@@ -72,23 +72,25 @@ class CommunityService:
                     raise PostException(message=f"허용되지 않는 이미지 형식입니다: {extension}", status_code=400)
 
         insert_query = text("""
-                INSERT INTO posts (
-                    title, content, category_id, image_url,
-                    like_count, comment_count, user_id,
+                INSERT INTO af_posts (
+                    content, category_id, image_url,
+                    like_count, comment_count, user_id, depth,
+                    tagging_post_id,
                     created_at, updated_at
                 ) VALUES (
-                    :title, :content, :category_id, :image_url,
-                    0, 0, :user_id,
+                    :content, :category_id, :image_url,
+                    0, 0, :user_id, 0,
+                    :tagging_post_id,
                     :created_at, :updated_at
                 )
             """)
 
         params = {
-            "title": post_create.title,
             "content": post_create.content,
             "category_id": post_create.category_id,
             "image_url": json.dumps(post_create.image_url) if post_create.image_url else None,
             "user_id": user_id,
+            "tagging_post_id": post_create.tagging_post_id,
             "created_at": current_time,
             "updated_at": current_time,
         }
@@ -110,7 +112,7 @@ class CommunityService:
                 }
                 for ticker in post_create.stock_tickers
             ]
-            self.db._insert("post_stocks", stock_data)
+            self.db._insert("af_post_stock_tags", stock_data)
 
         return True, post_id
 
