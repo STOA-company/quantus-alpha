@@ -1136,14 +1136,14 @@ class CommunityService:
         query = """
             WITH post_likes_count AS (
                 SELECT post_id, COUNT(*) as daily_likes
-                FROM post_likes
+                FROM af_post_likes
                 WHERE created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY
                 GROUP BY post_id
             )
             SELECT
                 p.id, p.title, p.created_at, p.user_id,
                 ROW_NUMBER() OVER (ORDER BY COALESCE(plc.daily_likes, 0) DESC, p.created_at DESC) as rank_num
-            FROM posts p
+            FROM af_posts p
             LEFT JOIN post_likes_count plc ON p.id = plc.post_id
             ORDER BY COALESCE(plc.daily_likes, 0) DESC, p.created_at DESC
             LIMIT :limit
