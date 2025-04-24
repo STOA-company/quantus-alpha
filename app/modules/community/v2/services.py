@@ -49,6 +49,10 @@ class CommunityService:
 
     async def create_post(self, current_user: Optional[AlphafinderUser], post_create: PostCreate) -> Tuple[bool, int]:
         """게시글 생성"""
+        if post_create.content is None and post_create.image_url is None:
+            raise PostException(message="게시글 내용이 없습니다", status_code=400)
+        if post_create.category_id is None:
+            raise PostException(message="카테고리가 없습니다", status_code=400)
         current_time = datetime.now(UTC)
         is_stock_ticker = self._is_stock_ticker(post_create.stock_tickers)
         if not is_stock_ticker:
@@ -395,7 +399,7 @@ class CommunityService:
             FROM af_posts p
             JOIN categories c ON p.category_id = c.id
             {stock_join}  /* stock_ticker 조건 시 JOIN */
-            WHERE 1=1
+            WHERE p.depth = 0
             {category_condition}  /* category_id 조건 */
             {stock_condition}  /* stock_ticker 조건 */
             ORDER BY p.{order_by} DESC
@@ -629,44 +633,52 @@ class CommunityService:
         if not user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
-        post_user_id = self.db._select(table="posts", columns=["user_id"], id=post_id)
-
-        if not post_user_id:
+        post = self.db._select(table="af_posts", columns=["user_id", "tagging_post_id"], id=post_id, limit=1)
+        if not post:
             raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
 
-        post_user_id = post_user_id[0][0]
-
-        if user_id != post_user_id:
+        if user_id != post[0].user_id:
             raise PostException(message="게시글 수정 권한이 없습니다", status_code=403, post_id=post_id)
 
         current_time = datetime.now(UTC)
-        update_date = {
-            "title": post_update.title,
+        update_data = {
             "content": post_update.content,
             "category_id": post_update.category_id,
             "image_url": json.dumps(post_update.image_url) if post_update.image_url else None,
+            "tagging_post_id": post_update.tagging_post_id,
             "updated_at": current_time,
         }
-        result = self.db._update(table="posts", sets=update_date, id=post_id)
 
-        if not result.rowcount:
-            raise PostException(message="게시글 수정에 실패했습니다", status_code=500, post_id=post_id)
+        try:
+            # 게시글 수정
+            result = self.db._update(table="af_posts", sets=update_data, id=post_id)
+            if not result.rowcount:
+                raise PostException(message="게시글 수정에 실패했습니다", status_code=500, post_id=post_id)
 
-        if post_update.stock_tickers:
-            if len(post_update.stock_tickers) > 3:
-                raise TooManyStockTickersException()
+            # 종목 정보 업데이트
+            if post_update.stock_tickers:
+                if len(post_update.stock_tickers) > 3:
+                    raise TooManyStockTickersException()
 
-            stock_data = [
-                {
-                    "post_id": post_id,
-                    "stock_ticker": ticker,
-                }
-                for ticker in post_update.stock_tickers
-            ]
-            self.db._delete("post_stocks", post_id=post_id)
-            self.db._insert("post_stocks", stock_data)
+                # 기존 종목 정보 삭제
+                self.db._delete("af_post_stock_tags", post_id=post_id)
 
-        return True, post_id
+                # 새로운 종목 정보 추가
+                stock_data = [
+                    {
+                        "post_id": post_id,
+                        "stock_ticker": ticker,
+                    }
+                    for ticker in post_update.stock_tickers
+                ]
+                if stock_data:
+                    self.db._insert("af_post_stock_tags", stock_data)
+
+            return True, post_id
+
+        except Exception as e:
+            logger.exception(f"Failed to update post {post_id}: {str(e)}")
+            raise PostException(message="게시글 수정 중 오류가 발생했습니다", status_code=500, post_id=post_id)
 
     async def _delete_images_from_s3(self, image_urls_json: Optional[str]) -> None:
         """S3에서 이미지 삭제"""
@@ -693,7 +705,7 @@ class CommunityService:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
         # Get post user_id and image_url
-        post_result = self.db._select(table="posts", columns=["user_id", "image_url"], id=post_id)
+        post_result = self.db._select(table="af_posts", columns=["user_id", "image_url"], id=post_id)
         if not post_result:
             raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
 
@@ -706,7 +718,7 @@ class CommunityService:
         # S3에서 이미지 삭제
         await self._delete_images_from_s3(image_urls_json)
 
-        result = self.db._delete(table="posts", id=post_id)
+        result = self.db._delete(table="af_posts", id=post_id)
 
         if not result.rowcount:
             raise PostException(message="게시글 삭제에 실패했습니다", status_code=500, post_id=post_id)
