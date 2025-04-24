@@ -72,12 +72,6 @@ def root():
 
 
 origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3001",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
     "https://alpha-dev.quantus.kr",
     "https://develop.alphafinder.dev",
     "https://develop.alphafinder.dev/ko",
@@ -88,6 +82,23 @@ origins = [
     "https://www.alphafinder.dev",
     "https://alphafinder-l2xhjep9g-quantus-68c7517d.vercel.app",
 ]
+
+if settings.ENV == "dev":
+    # 개발 환경에서는 모든 로컬 IP와 포트 허용
+    origins.extend(
+        [
+            "http://localhost:*",
+            "http://127.0.0.1:*",
+            "http://192.168.*.*",
+        ]
+    )
+elif settings.ENV == "stage":
+    origins.extend(
+        [
+            "http://localhost:*",  # 모든 포트 허용
+            "http://127.0.0.1:*",  # 모든 포트 허용
+        ]
+    )
 
 if settings.ENV == "stage":
     webhook_url = stage_webhook_url
