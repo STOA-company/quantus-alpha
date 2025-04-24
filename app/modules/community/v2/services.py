@@ -131,6 +131,19 @@ class CommunityService:
         count = result.scalar()
         return count == len(stock_tickers)
 
+    def _get_image_format(self, image_url: Optional[str]) -> Optional[str]:
+        """이미지 URL에서 확장자 추출"""
+        if not image_url:
+            return None
+        try:
+            # URL에서 마지막 부분을 가져옴
+            filename = image_url.split("/")[-1]
+            # 파일명에서 확장자 추출
+            extension = filename.split(".")[-1].lower()
+            return extension
+        except (IndexError, AttributeError):
+            return None
+
     async def get_post_detail(self, current_user: AlphafinderUser, post_id: int, lang: TranslateCountry) -> ResponsePost:
         """게시글 상세 조회"""
         current_user_id = current_user["uid"] if current_user else None
@@ -189,13 +202,29 @@ class CommunityService:
         tagging_post_info = None
         if post["tagging_post_id"]:
             tagging_post = self.db._select(
-                table="af_posts", columns=["id", "content", "created_at", "user_id"], id=post["tagging_post_id"]
+                table="af_posts",
+                columns=["id", "content", "created_at", "user_id", "image_url"],
+                id=post["tagging_post_id"],
             )
             if tagging_post:
                 tagging_user = database_user._select(
                     table="quantus_user", columns=["id", "nickname"], id=tagging_post[0][3]
                 )
                 if tagging_user:
+                    # 태깅된 게시글의 이미지 URL 처리
+                    tagging_image_urls = []
+                    tagging_image_format = None
+                    if tagging_post[0][4]:
+                        try:
+                            tagging_image_urls = json.loads(tagging_post[0][4])
+                            if tagging_image_urls:
+                                tagging_image_format = self._get_image_format(tagging_image_urls[0])
+                            for i, url in enumerate(tagging_image_urls):
+                                presigned_url = self.generate_get_presigned_url(url)
+                                tagging_image_urls[i] = presigned_url["get_url"]
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
+
                     tagging_post_info = TaggingPostInfo(
                         post_id=tagging_post[0][0],
                         content=tagging_post[0][1],
@@ -206,9 +235,24 @@ class CommunityService:
                             profile_image=None,
                             image_format=None,
                         ),
+                        image_url=tagging_image_urls,
+                        image_format=tagging_image_format,
                     )
                 else:
                     # 태깅된 게시글의 작성자가 삭제된 경우
+                    tagging_image_urls = []
+                    tagging_image_format = None
+                    if tagging_post[0][4]:
+                        try:
+                            tagging_image_urls = json.loads(tagging_post[0][4])
+                            if tagging_image_urls:
+                                tagging_image_format = self._get_image_format(tagging_image_urls[0])
+                            for i, url in enumerate(tagging_image_urls):
+                                presigned_url = self.generate_get_presigned_url(url)
+                                tagging_image_urls[i] = presigned_url["get_url"]
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
+
                     tagging_post_info = TaggingPostInfo(
                         post_id=tagging_post[0][0],
                         content=tagging_post[0][1],
@@ -219,19 +263,23 @@ class CommunityService:
                             profile_image=None,
                             image_format=None,
                         ),
+                        image_url=tagging_image_urls,
+                        image_format=tagging_image_format,
                     )
             else:
                 # 태깅된 게시글이 삭제된 경우
                 tagging_post_info = TaggingPostInfo(
                     post_id=post["tagging_post_id"],
                     content="해당 게시글은 작성자에 의해 삭제되어, 현재 내용을 볼 수 없습니다.",
-                    created_at=post["created_at"],  # 원본 게시글의 생성 시간 사용
+                    created_at=post["created_at"],
                     user_info=UserInfo(
                         id=0,
                         nickname=self._get_unknown_user_nickname(lang),
                         profile_image=None,
                         image_format=None,
                     ),
+                    image_url=None,
+                    image_format=None,
                 )
 
         # 4. UserInfo 조회 (user DB에서)
@@ -420,13 +468,19 @@ class CommunityService:
         tagging_posts = {}
         if tagging_post_ids:
             tagging_post_query = """
-                SELECT id, content, created_at, user_id
+                SELECT id, content, created_at, user_id, image_url
                 FROM af_posts
                 WHERE id IN :post_ids
             """
             tagging_result = self.db._execute(text(tagging_post_query), {"post_ids": tagging_post_ids})
             for row in tagging_result:
-                tagging_posts[row[0]] = {"id": row[0], "content": row[1], "created_at": row[2], "user_id": row[3]}
+                tagging_posts[row[0]] = {
+                    "id": row[0],
+                    "content": row[1],
+                    "created_at": row[2],
+                    "user_id": row[3],
+                    "image_url": row[4],
+                }
 
         # 태깅된 게시글의 작성자 정보 조회
         tagging_user_ids = [post["user_id"] for post in tagging_posts.values()]
@@ -463,6 +517,21 @@ class CommunityService:
                 if post["tagging_post_id"] in tagging_posts:
                     tagging_post = tagging_posts[post["tagging_post_id"]]
                     user_id = tagging_post["user_id"]
+
+                    # 태깅된 게시글의 이미지 URL 처리
+                    tagging_image_urls = []
+                    tagging_image_format = None
+                    if tagging_post["image_url"]:
+                        try:
+                            tagging_image_urls = json.loads(tagging_post["image_url"])
+                            if tagging_image_urls:
+                                tagging_image_format = self._get_image_format(tagging_image_urls[0])
+                            for i, url in enumerate(tagging_image_urls):
+                                presigned_url = self.generate_get_presigned_url(url)
+                                tagging_image_urls[i] = presigned_url["get_url"]
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
+
                     if user_id in tagging_users:
                         user = tagging_users[user_id]
                         tagging_post_info = TaggingPostInfo(
@@ -475,6 +544,8 @@ class CommunityService:
                                 profile_image=None,
                                 image_format=None,
                             ),
+                            image_url=tagging_image_urls,
+                            image_format=tagging_image_format,
                         )
                     else:
                         # 태깅된 게시글의 작성자가 삭제된 경우
@@ -488,6 +559,8 @@ class CommunityService:
                                 profile_image=None,
                                 image_format=None,
                             ),
+                            image_url=tagging_image_urls,
+                            image_format=tagging_image_format,
                         )
                 else:
                     # 태깅된 게시글이 삭제된 경우
@@ -501,6 +574,8 @@ class CommunityService:
                             profile_image=None,
                             image_format=None,
                         ),
+                        image_url=None,
+                        image_format=None,
                     )
 
             # 이미지 URL 처리

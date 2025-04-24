@@ -43,9 +43,11 @@ class StockInfo(BaseModel):
 
 class TaggingPostInfo(BaseModel):
     post_id: int
-    content: str
-    created_at: datetime
+    content: str | None = None
+    created_at: datetime | None = None
     user_info: UserInfo
+    image_url: Optional[List[str]] = None
+    image_format: Optional[str] = None
 
 
 class ResponsePost(BaseModel):
