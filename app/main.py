@@ -84,19 +84,25 @@ origins = [
 ]
 
 if settings.ENV == "dev":
-    # 개발 환경에서는 모든 로컬 IP와 포트 허용
+    # 개발 환경에서는 로컬 개발을 위한 접근 허용
     origins.extend(
         [
-            "http://localhost:*",
-            "http://127.0.0.1:*",
-            "http://192.168.*.*",
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:8000",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://127.0.0.1:8000",
         ]
     )
 elif settings.ENV == "stage":
+    # 스테이징 환경에서는 제한된 접근만 허용
     origins.extend(
         [
-            "http://localhost:*",  # 모든 포트 허용
-            "http://127.0.0.1:*",  # 모든 포트 허용
+            "http://localhost:3000",  # 프론트엔드 개발 서버
+            "http://127.0.0.1:3000",  # 프론트엔드 개발 서버
+            "http://localhost:8000",  # 백엔드 개발 서버
+            "http://127.0.0.1:8000",  # 백엔드 개발 서버
         ]
     )
 
@@ -119,7 +125,7 @@ add_slack_middleware(
 # CORS 미들웨어 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=origins if settings.ENV == "stage" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*", "Authorization", "Authorization_Swagger", "Sns-Type", "Client-Type"],
