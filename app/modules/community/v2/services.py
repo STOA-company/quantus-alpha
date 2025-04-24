@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import text
 
@@ -471,7 +471,7 @@ class CommunityService:
 
         # 티커를 키로 하는 딕셔너리 생성
         stock_info_map = {
-            row[0]: StockInfo(ticker=row[0], name=row[2] if lang == TranslateCountry.KO else row[2], ctry=row[1])
+            row[0]: StockInfo(ticker=row[0], name=row[2] if lang == TranslateCountry.KO else row[3], ctry=row[1])
             for row in stock_info
         }
 
@@ -484,7 +484,7 @@ class CommunityService:
                 FROM af_posts
                 WHERE id IN :post_ids
             """
-            tagging_result = self.db._execute(text(tagging_post_query), {"post_ids": tagging_post_ids})
+            tagging_result = self.db._execute(text(tagging_post_query), {"post_ids": tuple(tagging_post_ids)})
             for row in tagging_result:
                 tagging_posts[row[0]] = {
                     "id": row[0],
@@ -495,17 +495,19 @@ class CommunityService:
                 }
 
         # 태깅된 게시글의 작성자 정보 조회
-        tagging_user_ids = [post["user_id"] for post in tagging_posts.values()]
+        tagging_user_ids = [post["user_id"] for post in tagging_posts.values() if post["user_id"]]
         tagging_users = {}
         if tagging_user_ids:
             user_results = database_user._select(
-                table="quantus_user", columns=["id", "nickname"], id__in=tagging_user_ids
+                table="quantus_user", columns=["id", "nickname"], id__in=list(tagging_user_ids)
             )
             for user in user_results:
-                tagging_users[user[0]] = {
-                    "id": user.id,
-                    "nickname": user.nickname,
-                }
+                tagging_users[user.id] = UserInfo(
+                    id=user.id,
+                    nickname=user.nickname,
+                    profile_image=None,
+                    image_format=None,
+                )
 
         # 사용자 정보 조회 (user DB에서)
         user_ids = [post["user_id"] for post in posts if post["user_id"]]
@@ -513,7 +515,7 @@ class CommunityService:
         if user_ids:
             user_results = database_user._select(table="quantus_user", columns=["id", "nickname"], id__in=user_ids)
             for user in user_results:
-                user_info_map[user[0]] = UserInfo(
+                user_info_map[user.id] = UserInfo(
                     id=user.id,
                     nickname=user.nickname,
                     profile_image=None,  # TODO :: 추후 추가해야 함
@@ -787,6 +789,89 @@ class CommunityService:
 
         return True
 
+    def _get_stock_info_map(self, stock_tickers: Set[str], lang: TranslateCountry) -> Dict[str, StockInfo]:
+        """종목 상세 정보 조회"""
+        if not stock_tickers:
+            return {}
+
+        stock_info_query = """
+            SELECT ticker, ctry, kr_name, en_name
+            FROM stock_information
+            WHERE ticker IN :tickers
+        """
+        stock_info_result = self.db_data._execute(text(stock_info_query), {"tickers": tuple(stock_tickers)})
+        return {
+            row[0]: StockInfo(
+                ticker=row[0],
+                name=row[2] if lang == TranslateCountry.KO else row[3],
+                ctry=row[1],
+            )
+            for row in stock_info_result
+        }
+
+    def _get_user_info_map(self, user_ids: Set[int]) -> Dict[int, UserInfo]:
+        """사용자 정보 조회"""
+        if not user_ids:
+            return {}
+
+        user_results = database_user._select(table="quantus_user", columns=["id", "nickname"], id__in=list(user_ids))
+        return {
+            user.id: UserInfo(
+                id=user.id,
+                nickname=user.nickname,
+                profile_image=None,
+                image_format=None,
+            )
+            for user in user_results
+        }
+
+    def _get_tagging_posts(self, tagging_post_ids: Set[int]) -> Dict[int, Dict]:
+        """태깅된 게시글 정보 조회"""
+        if not tagging_post_ids:
+            return {}
+
+        tagging_query = """
+            SELECT p.id, p.content, p.created_at, p.user_id, p.image_url
+            FROM af_posts p
+            WHERE p.id IN :post_ids
+        """
+        tagging_result = self.db._execute(text(tagging_query), {"post_ids": tuple(tagging_post_ids)})
+        return {
+            row[0]: {
+                "id": row[0],
+                "content": row[1],
+                "created_at": row[2],
+                "user_id": row[3],
+                "image_url": row[4],
+            }
+            for row in tagging_result
+        }
+
+    def _create_tagging_post_info(
+        self, comment: Dict, tagging_posts: Dict[int, Dict], tagging_users: Dict[int, UserInfo], lang: TranslateCountry
+    ) -> Optional[TaggingPostInfo]:
+        """태깅된 게시글 정보 생성"""
+        if not comment["tagging_post_id"]:
+            return None
+
+        tagging_post = tagging_posts.get(comment["tagging_post_id"])
+        if not tagging_post:
+            return None
+
+        user_info = tagging_users.get(
+            tagging_post["user_id"],
+            UserInfo(id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None),
+        )
+
+        return TaggingPostInfo(
+            post_id=tagging_post["id"],
+            content=tagging_post["content"],
+            created_at=tagging_post["created_at"].astimezone(KST),
+            user_info=user_info,
+            image_url=json.loads(tagging_post["image_url"]) if tagging_post["image_url"] else None,
+            image_format=None,
+        )
+
     async def get_comments(
         self,
         current_user: Optional[AlphafinderUser],
@@ -798,103 +883,63 @@ class CommunityService:
         """댓글 목록 조회"""
         current_user_id = current_user["uid"] if current_user else None
 
-        # 1. 원댓글 조회 (limit + 1개)
-        parent_query = """
+        # 1. 댓글 조회 (limit + 1개)
+        query = """
             SELECT
-                c.id, c.content, c.like_count, c.depth, c.parent_id, c.created_at, c.updated_at,
-                c.user_id,
+                p.id, p.content, p.like_count, p.comment_count, p.depth, p.parent_id, p.created_at, p.updated_at,
+                p.user_id, p.image_url, p.tagging_post_id,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
-                        SELECT 1 FROM comment_likes cl
-                        WHERE cl.comment_id = c.id AND cl.user_id = :current_user_id
+                        SELECT 1 FROM post_likes pl
+                        WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
                     )
                 ELSE false END as is_liked
-            FROM comments c
-            WHERE c.post_id = :post_id
-            AND c.depth = 0
-            ORDER BY c.created_at ASC
+            FROM af_posts p
+            WHERE p.parent_id = :post_id
+            ORDER BY p.created_at ASC
             LIMIT :limit OFFSET :offset
         """
 
-        parent_params = {"post_id": post_id, "limit": limit + 1, "offset": offset, "current_user_id": current_user_id}
+        params = {"post_id": post_id, "limit": limit + 1, "offset": offset, "current_user_id": current_user_id}
 
-        parent_result = self.db._execute(text(parent_query), parent_params)
-        parent_comments = parent_result.mappings().all()
+        result = self.db._execute(text(query), params)
+        comments = result.mappings().all()
 
-        has_more = len(parent_comments) > limit
+        has_more = len(comments) > limit
         if has_more:
-            parent_comments = parent_comments[:-1]
+            comments = comments[:-1]
 
-        if not parent_comments:
+        if not comments:
             return [], has_more
 
-        # 2. 대댓글 조회 (원댓글 ID 기준)
-        parent_ids = [comment["id"] for comment in parent_comments]
-        child_query = """
-            SELECT
-                c.id, c.content, c.like_count, c.depth, c.parent_id, c.created_at, c.updated_at,
-                c.user_id,
-                CASE WHEN :current_user_id IS NOT NULL THEN
-                    EXISTS(
-                        SELECT 1 FROM comment_likes cl
-                        WHERE cl.comment_id = c.id AND cl.user_id = :current_user_id
-                    )
-                ELSE false END as is_liked
-            FROM comments c
-            WHERE c.parent_id IN :parent_ids
-            ORDER BY c.created_at ASC
+        # 2. 종목 정보 조회
+        comment_ids = [comment["id"] for comment in comments]
+        stock_query = """
+            SELECT post_id, GROUP_CONCAT(stock_ticker) as stock_tickers
+            FROM af_post_stock_tags
+            WHERE post_id IN :comment_ids
+            GROUP BY post_id
         """
+        stock_result = self.db._execute(text(stock_query), {"comment_ids": tuple(comment_ids)})
+        stock_map = {row[0]: row[1].split(",") if row[1] else [] for row in stock_result}
 
-        child_result = self.db._execute(text(child_query), {"parent_ids": parent_ids, "current_user_id": current_user_id})
-        child_comments = child_result.mappings().all()
+        # 종목 상세 정보 조회
+        all_tickers = set()
+        for tickers in stock_map.values():
+            all_tickers.update(tickers)
+        stock_info_map = self._get_stock_info_map(all_tickers, lang)
 
-        # 3. 사용자 정보 조회 (user DB에서)
-        user_ids = set()
-        for comment in parent_comments + child_comments:
-            if comment["user_id"]:
-                user_ids.add(comment["user_id"])
+        # 3. 사용자 정보 조회
+        user_ids = {comment["user_id"] for comment in comments if comment["user_id"]}
+        user_info_map = self._get_user_info_map(user_ids)
 
-        user_info_map = {}
-        if user_ids:
-            user_results = database_user._select(table="quantus_user", columns=["id", "nickname"], id__in=list(user_ids))
-            for user in user_results:
-                user_info_map[user.id] = UserInfo(
-                    id=user.id,
-                    nickname=user.nickname,
-                    profile_image=None,  # TODO :: 추후 추가해야 함
-                    image_format=None,  # TODO :: 추후 추가해야 함
-                )
+        # 4. 태깅된 게시글 정보 조회
+        tagging_post_ids = {comment["tagging_post_id"] for comment in comments if comment["tagging_post_id"]}
+        tagging_posts = self._get_tagging_posts(tagging_post_ids)
 
-        def create_user_info(comment, lang: TranslateCountry):
-            """사용자 정보 생성 (탈퇴한 사용자 처리)"""
-            if comment["user_id"]:
-                return user_info_map.get(
-                    comment["user_id"],
-                    UserInfo(id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None),
-                )
-            return UserInfo(id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None)
-
-        # 4. 대댓글을 원댓글의 sub_comments에 매핑
-        child_map = {}
-        for child in child_comments:
-            parent_id = child["parent_id"]
-            if parent_id not in child_map:
-                child_map[parent_id] = []
-            child_map[parent_id].append(
-                CommentItem(
-                    id=child["id"],
-                    content=child["content"],
-                    like_count=child["like_count"],
-                    depth=child["depth"],
-                    parent_id=child["parent_id"],
-                    created_at=child["created_at"].astimezone(KST),
-                    is_changed=child["created_at"] != child["updated_at"],
-                    is_liked=child["is_liked"],
-                    is_mine=child["user_id"] == current_user_id if current_user_id else False,
-                    user_info=create_user_info(child, lang=lang),
-                    sub_comments=[],
-                )
-            )
+        # 태깅된 게시글의 작성자 정보 조회
+        tagging_user_ids = {post["user_id"] for post in tagging_posts.values() if post["user_id"]}
+        tagging_users = self._get_user_info_map(tagging_user_ids)
 
         # 5. 최종 응답 구성
         comment_list = [
@@ -902,16 +947,25 @@ class CommunityService:
                 id=comment["id"],
                 content=comment["content"],
                 like_count=comment["like_count"],
+                comment_count=comment["comment_count"],
                 depth=comment["depth"],
                 parent_id=comment["parent_id"],
                 created_at=comment["created_at"].astimezone(KST),
                 is_changed=comment["created_at"] != comment["updated_at"],
                 is_liked=comment["is_liked"],
                 is_mine=comment["user_id"] == current_user_id if current_user_id else False,
-                user_info=create_user_info(comment, lang=lang),
-                sub_comments=child_map.get(comment["id"], []),
+                user_info=user_info_map.get(
+                    comment["user_id"],
+                    UserInfo(id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None),
+                ),
+                sub_comments=[],
+                image_url=json.loads(comment["image_url"]) if comment["image_url"] else None,
+                stock_tickers=[
+                    stock_info_map[ticker] for ticker in stock_map.get(comment["id"], []) if ticker in stock_info_map
+                ],
+                tagging_post_info=self._create_tagging_post_info(comment, tagging_posts, tagging_users, lang),
             )
-            for comment in parent_comments
+            for comment in comments
         ]
 
         return comment_list, has_more

@@ -130,14 +130,16 @@ class CommentItem(BaseModel):
     id: int
     content: str
     like_count: int
+    comment_count: int
     depth: int
     parent_id: Optional[int] = None
     created_at: datetime
     is_changed: bool
     is_liked: bool
     is_mine: bool
+    stock_tickers: List[StockInfo]
     user_info: UserInfo
-    sub_comments: List["CommentItem"] = Field(default=list)
+    tagging_post_info: Optional[TaggingPostInfo] = None
 
     class Config:
         from_attributes = True
