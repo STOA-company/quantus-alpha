@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -45,7 +46,7 @@ def get_conversation_list(current_user: str = Depends(get_current_user)):
             "conversation_id": conversation.id,
             "title": conversation.title,
             "preview": conversation.preview,
-            "updated_at": conversation.updated_at,
+            "updated_at": conversation.updated_at + timedelta(hours=9) if conversation.updated_at else None,
         }
         for conversation in conversation_list
     ]
@@ -64,7 +65,12 @@ def get_conversation(conversation_id: int, current_user: str = Depends(get_curre
     if conversation.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
 
-    return {"conversation_id": conversation.id, "title": conversation.title, "messages": conversation.messages}
+    messages = [
+        {**message.dict(), "created_at": message.created_at + timedelta(hours=9) if message.created_at else None}
+        for message in conversation.messages
+    ]
+
+    return {"conversation_id": conversation.id, "title": conversation.title, "messages": messages}
 
 
 @router.get("/tasks/{message_id}")
