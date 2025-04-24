@@ -329,7 +329,7 @@ class CommunityService:
         order_by = order_by.value
 
         base_query = """
-            SELECT p.id, p.title, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at,
+            SELECT p.id, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at, p.depth, p.tagging_post_id,
                 c.name as category_name,
                 p.user_id,
                 CASE WHEN :current_user_id IS NOT NULL THEN
@@ -344,7 +344,7 @@ class CommunityService:
                         WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
                     )
                 ELSE false END as is_liked
-            FROM posts p
+            FROM af_posts p
             JOIN categories c ON p.category_id = c.id
             {stock_join}  /* stock_ticker 조건 시 JOIN */
             WHERE 1=1
@@ -415,13 +415,39 @@ class CommunityService:
             for row in stock_info
         }
 
+        # 3. 태깅된 게시글 정보 조회
+        tagging_post_ids = [post["tagging_post_id"] for post in posts if post["tagging_post_id"]]
+        tagging_posts = {}
+        if tagging_post_ids:
+            tagging_post_query = """
+                SELECT id, content, created_at, user_id
+                FROM af_posts
+                WHERE id IN :post_ids
+            """
+            tagging_result = self.db._execute(text(tagging_post_query), {"post_ids": tagging_post_ids})
+            for row in tagging_result:
+                tagging_posts[row[0]] = {"id": row[0], "content": row[1], "created_at": row[2], "user_id": row[3]}
+
+        # 태깅된 게시글의 작성자 정보 조회
+        tagging_user_ids = [post["user_id"] for post in tagging_posts.values()]
+        tagging_users = {}
+        if tagging_user_ids:
+            user_results = database_user._select(
+                table="quantus_user", columns=["id", "nickname"], id__in=tagging_user_ids
+            )
+            for user in user_results:
+                tagging_users[user[0]] = {
+                    "id": user.id,
+                    "nickname": user.nickname,
+                }
+
         # 사용자 정보 조회 (user DB에서)
         user_ids = [post["user_id"] for post in posts if post["user_id"]]
         user_info_map = {}
         if user_ids:
             user_results = database_user._select(table="quantus_user", columns=["id", "nickname"], id__in=user_ids)
             for user in user_results:
-                user_info_map[user.id] = UserInfo(
+                user_info_map[user[0]] = UserInfo(
                     id=user.id,
                     nickname=user.nickname,
                     profile_image=None,  # TODO :: 추후 추가해야 함
@@ -429,33 +455,94 @@ class CommunityService:
                 )
 
         # 게시글 응답 생성
-        return [
-            ResponsePost(
-                id=post["id"],
-                title=post["title"],
-                content=post["content"],
-                category_name=post["category_name"],
-                image_url=[self.generate_get_presigned_url(url)["get_url"] for url in sorted_urls]
-                if (sorted_urls := self._get_image_url(post["image_url"]))
-                else None,
-                image_format=post["image_format"],
-                like_count=post["like_count"],
-                comment_count=post["comment_count"],
-                is_changed=post["created_at"] != post["updated_at"],
-                is_bookmarked=post["is_bookmarked"],
-                is_liked=post["is_liked"],
-                is_mine=post["user_id"] == current_user_id,
-                created_at=post["created_at"].astimezone(KST),
-                stock_tickers=[
-                    stock_info_map[ticker] for ticker in post_stocks.get(post["id"], []) if ticker in stock_info_map
-                ],
-                user_info=user_info_map.get(
-                    post["user_id"],
-                    UserInfo(id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None),
-                ),
+        response_posts = []
+        for post in posts:
+            # 태깅된 게시글 정보 처리
+            tagging_post_info = None
+            if post["tagging_post_id"]:
+                if post["tagging_post_id"] in tagging_posts:
+                    tagging_post = tagging_posts[post["tagging_post_id"]]
+                    user_id = tagging_post["user_id"]
+                    if user_id in tagging_users:
+                        user = tagging_users[user_id]
+                        tagging_post_info = TaggingPostInfo(
+                            post_id=tagging_post["id"],
+                            content=tagging_post["content"],
+                            created_at=tagging_post["created_at"],
+                            user_info=UserInfo(
+                                id=user["id"],
+                                nickname=user["nickname"],
+                                profile_image=None,
+                                image_format=None,
+                            ),
+                        )
+                    else:
+                        # 태깅된 게시글의 작성자가 삭제된 경우
+                        tagging_post_info = TaggingPostInfo(
+                            post_id=tagging_post["id"],
+                            content=tagging_post["content"],
+                            created_at=tagging_post["created_at"],
+                            user_info=UserInfo(
+                                id=0,
+                                nickname=self._get_unknown_user_nickname(lang),
+                                profile_image=None,
+                                image_format=None,
+                            ),
+                        )
+                else:
+                    # 태깅된 게시글이 삭제된 경우
+                    tagging_post_info = TaggingPostInfo(
+                        post_id=post["tagging_post_id"],
+                        content="해당 게시글은 작성자에 의해 삭제되어, 현재 내용을 볼 수 없습니다.",
+                        created_at=post["created_at"],
+                        user_info=UserInfo(
+                            id=0,
+                            nickname=self._get_unknown_user_nickname(lang),
+                            profile_image=None,
+                            image_format=None,
+                        ),
+                    )
+
+            # 이미지 URL 처리
+            image_urls = []
+            if post["image_url"]:
+                try:
+                    image_urls = json.loads(post["image_url"])
+                    for i, url in enumerate(image_urls):
+                        presigned_url = self.generate_get_presigned_url(url)
+                        image_urls[i] = presigned_url["get_url"]
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse image_url JSON for post {post['id']}")
+
+            response_posts.append(
+                ResponsePost(
+                    id=post["id"],
+                    content=post["content"],
+                    category_name=post["category_name"],
+                    image_url=image_urls,
+                    image_format=post["image_format"],
+                    like_count=post["like_count"],
+                    comment_count=post["comment_count"],
+                    is_changed=post["created_at"] != post["updated_at"],
+                    is_bookmarked=post["is_bookmarked"],
+                    is_liked=post["is_liked"],
+                    is_mine=post["user_id"] == current_user_id,
+                    created_at=post["created_at"].astimezone(KST),
+                    depth=post["depth"],
+                    stock_tickers=[
+                        stock_info_map[ticker] for ticker in post_stocks.get(post["id"], []) if ticker in stock_info_map
+                    ],
+                    user_info=user_info_map.get(
+                        post["user_id"],
+                        UserInfo(
+                            id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None
+                        ),
+                    ),
+                    tagging_post_info=tagging_post_info,
+                )
             )
-            for post in posts
-        ]
+
+        return response_posts
 
     async def update_post(self, current_user: AlphafinderUser, post_id: int, post_update: PostUpdate) -> Tuple[bool, int]:
         """게시글 수정"""
