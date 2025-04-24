@@ -12,6 +12,7 @@ from app.modules.news.old_services import NewsService, get_news_service
 from app.modules.news.schemas import LatestNewsResponse
 from app.modules.price.services import PriceService, get_price_service
 from app.modules.stock_info.schemas import FearGreedIndexItem, FearGreedIndexResponse, Indicators
+from app.utils.krx import create_etf_integrated_info
 
 from .services import StockInfoService, get_stock_info_service
 
@@ -181,3 +182,9 @@ async def get_fear_greed_index(
     )
 
     return BaseResponse(status_code=200, message="공포와 탐욕 지수를 성공적으로 조회했습니다.", data=data)
+
+
+@router.get("/update_etf_parquet", summary="ETF 파일 업데이트")
+async def update_etf_parquet():
+    create_etf_integrated_info()
+    return BaseResponse(status_code=200, message="ETF 파일을 성공적으로 업데이트했습니다.")
