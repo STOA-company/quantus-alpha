@@ -29,6 +29,7 @@ from app.utils.date_utils import (
     is_us_market_open_or_recently_closed,
     now_kr,
 )
+from app.utils.krx import create_etf_integrated_info
 from app.utils.stock_utils import kr_stock_utils, us_stock_utils
 
 notifier = SlackNotifier()
@@ -631,6 +632,24 @@ def us_update_etf_holdings():
             raise
     else:
         notifier_1d.notify_info("US market is not open. us_update_etf_holdings process skipped.")
+
+
+@CELERY_APP.task(name="update_krx_etf_data")
+def update_krx_etf_data():
+    """KRX의 ETF 통합 정보를 업데이트하는 태스크"""
+    notifier_1d.notify_info("update_krx_etf_data process started")
+    try:
+        logger.info("KRX ETF 통합 정보 업데이트 시작")
+        create_etf_integrated_info()
+        logger.info("KRX ETF 통합 정보 업데이트 완료")
+
+        notifier_1d.notify_success("update_krx_etf_data process completed")
+        return {"status": "success", "message": "ETF 통합 데이터 업데이트가 완료되었습니다."}
+    except Exception as e:
+        error_msg = f"ETF 통합 데이터 업데이트 실패: {str(e)}"
+        logger.error(error_msg)
+        notifier_1d.notify_error(error_msg)
+        return {"status": "error", "message": error_msg}
 
 
 # Worker 시작점
