@@ -338,7 +338,7 @@ class StockInfoService:
             "상장일": "listing_date",
             "운용사": "company",
             "순자산가치(NAV)": "nav",
-            "시가총액": "marketCap",
+            "시가총액": "market_cap",
             "상장좌수": "listed_shares",
             "순자산총액": "total_net_assets",
         }
@@ -401,7 +401,7 @@ class StockInfoService:
                 "kr_name": None,
                 "listing_date": None,
                 "company": None,
-                "marketCap": None,
+                "market_cap": None,
                 "listed_shares": None,
                 "nav": None,
                 "total_net_assets": None,
@@ -438,7 +438,7 @@ class StockInfoService:
 
                 if not price_df.empty:
                     latest_data = price_df.iloc[0]
-                    etf_info["marketCap"] = float(latest_data["MktCap"]) if pd.notna(latest_data["MktCap"]) else None
+                    etf_info["market_cap"] = float(latest_data["MktCap"]) if pd.notna(latest_data["MktCap"]) else None
                     etf_info["listed_shares"] = (
                         float(latest_data["NumShrs"]) if pd.notna(latest_data["NumShrs"]) else None
                     )
