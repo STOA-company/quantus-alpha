@@ -41,7 +41,6 @@ class InterestGroupResponse(BaseModel):
     id: int
     name: str
     stocks: List[InterestStock]
-    order: int
     is_editable: bool
 
 

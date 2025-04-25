@@ -193,10 +193,10 @@ class InterestService:
             SELECT
                 g.id,
                 g.name,
-                g.order,
+                g.order as group_order,
                 g.is_editable,
                 i.ticker,
-                i.order
+                i.order as stock_order
             FROM
                 alphafinder_interest_group g
             LEFT JOIN
@@ -242,19 +242,33 @@ class InterestService:
                 groups[group_id] = {
                     "id": group_id,
                     "name": row.name,
-                    "order": row.order or 0,
                     "is_editable": row.is_editable,
                     "stocks": [],
+                    "order": row.group_order,
                 }
             if row.ticker and row.ticker in stock_info:  # Only add if we have stock info
                 ticker_data = {
                     "ticker": row.ticker,
                     "name": stock_info[row.ticker]["name"],
                     "ctry": stock_info[row.ticker]["ctry"],
+                    "order": row.stock_order,
                 }
                 groups[group_id]["stocks"].append(ticker_data)
 
-        return list(groups.values())
+        # 5. Convert to list and sort by group order
+        groups_list = list(groups.values())
+        groups_list.sort(key=lambda x: x["order"])
+
+        # 6. Sort stocks within each group by their order and remove order field
+        for group in groups_list:
+            group["stocks"].sort(key=lambda x: x["order"])
+            # Remove order field from stocks
+            for stock in group["stocks"]:
+                del stock["order"]
+            # Remove order field from group
+            del group["order"]
+
+        return groups_list
 
     def get_interest_group(self, user_id: int):
         """
@@ -552,7 +566,7 @@ class InterestService:
                 # 그룹 순서 변경
                 # 모든 그룹이 사용자의 것인지 확인
                 groups = self.db._select(table="alphafinder_interest_group", user_id=user_id, id__in=order_list)
-                if len(groups[0]) != len(order_list):
+                if len(groups) != len(order_list):
                     raise HTTPException(status_code=400, detail="잘못된 그룹 ID가 포함되어 있습니다.")
 
                 # 그룹 순서 업데이트

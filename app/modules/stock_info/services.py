@@ -1,3 +1,4 @@
+import asyncio
 from typing import Dict, List, Tuple
 
 import pandas as pd
@@ -21,6 +22,21 @@ class StockInfoService:
         self.db = database
         self.file_path = "static"
         self.file_name = "stock_{}_info.csv"
+
+    def get_ctry_by_ticker(self, ticker: str) -> str:
+        """
+        종목 코드에 따른 국가 코드 조회
+        """
+        return self.db._select(table="stock_information", columns=["ctry"], **{"ticker": ticker})[0].ctry
+
+    def get_name_by_ticker(self, ticker: str) -> Tuple[str, str]:
+        """
+        종목 코드에 따른 종목명 조회
+        """
+        kr_name, en_name = self.db._select(
+            table="stock_information", columns=["kr_name", "en_name"], **{"ticker": ticker}
+        )[0]
+        return kr_name, en_name
 
     async def get_stock_info(self, ctry: str, ticker: str, lang: TranslateCountry) -> StockInfo:
         """
@@ -311,11 +327,29 @@ class StockInfoService:
         """
         ETF 정보 조회
         """
+        original_ticker = ticker
         ticker = ticker.replace("A", "")
-        print("TICKER", ticker)
         df = pd.read_parquet("check_data/etf_krx/etf_integrated.parquet")
         df = df[df["단축코드"] == ticker]
-        etf_info = df.to_dict(orient="records")
+
+        column_mapping = {
+            "단축코드": "ticker",
+            "한글종목명": "kr_name",
+            "상장일": "listing_date",
+            "운용사": "company",
+            "순자산가치(NAV)": "nav",
+            "시가총액": "marketCap",
+            "상장좌수": "listed_shares",
+            "순자산총액": "total_net_assets",
+        }
+
+        df = df.rename(columns=column_mapping)
+        _, en_name = self.get_name_by_ticker(original_ticker)
+
+        df["en_name"] = en_name
+
+        etf_info = df.to_dict(orient="records")[0] if not df.empty else {}
+
         return etf_info
 
     async def get_etf_holdings(self, ticker: str) -> List[dict]:
@@ -356,5 +390,4 @@ def get_stock_info_service() -> StockInfoService:
 
 if __name__ == "__main__":
     stock_info_service = get_stock_info_service()
-    print(stock_info_service.get_etf_holdings("A0001P0"))
-    print(stock_info_service.get_etf_info("A0001P0"))
+    data = asyncio.run(stock_info_service.get_etf_info("A0001P0"))

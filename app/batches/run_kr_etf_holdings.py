@@ -225,9 +225,7 @@ def update_holdings_weights(holdings_to_update: List[dict]) -> None:
         raise
 
 
-def update_kr_etf_holdings(
-    chunk_size: int = 10, weight_threshold: float = 0.01, target_etf_list: List[Tuple[str, str]] = None
-):
+def update_kr_etf_holdings(chunk_size: int = 10, weight_threshold: float = 0.01, target_etf_list: List[dict] = None):
     """
     Update the holdings for all Korean ETFs in the database.
     Workflow:
@@ -311,7 +309,7 @@ def update_kr_etf_holdings(
 
 if __name__ == "__main__":
     try:
-        update_kr_etf_holdings()
+        update_kr_etf_holdings(target_etf_list=[{"ticker": "069500", "isin": "KR7069500007"}])
     except Exception as e:
         logger.error(f"Error in Korean ETF holdings update: {str(e)}", exc_info=True)
         raise
