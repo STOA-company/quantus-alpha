@@ -1,18 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from typing import Literal, List, Optional, Annotated
-from app.utils.oauth_utils import get_current_user
-from app.models.models_users import AlphafinderUser
-from app.modules.interest.service import InterestService, get_interest_service
-from app.modules.interest.response import InterestResponse, InterestTable
-from app.modules.interest.request import AddInterestRequest, DeleteInterestRequest, UpdateInterestRequest
-from app.modules.news.services import get_news_service, NewsService
-from app.modules.news.schemas import TopStoriesResponse, InterestNewsResponse, InterestDisclosureResponse
-from app.modules.common.schemas import BaseResponse
-from app.modules.common.enum import TranslateCountry
-from app.core.exception.base import DuplicateException, NotFoundException
-import logging
+from typing import Annotated, List, Literal, Optional
 
-logger = logging.getLogger(__name__)
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+from app.core.exception.base import DuplicateException, NotFoundException
+from app.core.logger import setup_logger
+from app.models.models_users import AlphafinderUser
+from app.modules.common.enum import TranslateCountry
+from app.modules.common.schemas import BaseResponse
+from app.modules.interest.request import AddInterestRequest, DeleteInterestRequest, UpdateInterestRequest
+from app.modules.interest.response import InterestResponse, InterestTable
+from app.modules.interest.service import InterestService, get_interest_service
+from app.modules.news.schemas import InterestDisclosureResponse, InterestNewsResponse, TopStoriesResponse
+from app.modules.news.services import NewsService, get_news_service
+from app.utils.oauth_utils import get_current_user
+
+logger = setup_logger(__name__)
 
 router = APIRouter()
 
@@ -32,8 +34,10 @@ def get_news_leaderboard(
     group_id: int,
     lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
     service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ):
-    data = service.get_interest_news_leaderboard(group_id, lang)
+    level = user.subscription_level if user else 1
+    data = service.get_interest_news_leaderboard(group_id, lang, level)
     return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
 
 
@@ -42,8 +46,10 @@ def get_disclosure_leaderboard(
     group_id: int,
     lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
     service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ):
-    data = service.get_interest_disclosure_leaderboard(group_id, lang)
+    level = user.subscription_level if user else 1
+    data = service.get_interest_disclosure_leaderboard(group_id, lang, level)
     return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
 
 
@@ -167,6 +173,7 @@ def interest_news(
     limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ):
     ticker_infos = service.get_interest_tickers(group_id)
     if len(ticker_infos) == 0:
@@ -177,12 +184,24 @@ def interest_news(
         )
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     total_news_data = news_service.get_news(lang=lang, tickers=tickers)
+
+    if user.subscription_level < 3:
+        total_news_data = news_service.mask_news_items(total_news_data)
+
     news_data = total_news_data[offset * limit : offset * limit + limit]
-    has_next = len(total_news_data) > offset * limit + limit
+
+    if user.subscription_level >= 3:
+        has_next = len(total_news_data) > offset * limit + limit
+    else:
+        current_position = offset * limit + len(news_data)
+        has_next = current_position < len(total_news_data)
 
     response_data = InterestNewsResponse(news=news_data, has_next=has_next)
-
-    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data)
+    return BaseResponse(
+        status_code=200,
+        message="Successfully retrieved news data",
+        data=response_data,
+    )
 
 
 @router.get("/disclosure/{group_id}", response_model=BaseResponse[InterestDisclosureResponse])
@@ -193,6 +212,7 @@ def interest_disclosure(
     limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ):
     ticker_infos = service.get_interest_tickers(group_id)
     if len(ticker_infos) == 0:
@@ -203,12 +223,26 @@ def interest_disclosure(
         )
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     total_disclosure_data = news_service.get_disclosure(lang=lang, tickers=tickers)
+
+    # 레벨 3 미만 사용자의 경우 데이터 마스킹 적용
+    if user.subscription_level < 3:
+        total_disclosure_data = news_service.mask_disclosure_items(total_disclosure_data)
+
     disclosure_data = total_disclosure_data[offset * limit : offset * limit + limit]
-    has_next = len(total_disclosure_data) > offset * limit + limit
+
+    if user.subscription_level >= 3:
+        has_next = len(total_disclosure_data) > offset * limit + limit
+    else:
+        current_position = offset * limit + len(disclosure_data)
+        has_next = current_position < len(total_disclosure_data)
 
     response_data = InterestDisclosureResponse(disclosure=disclosure_data, has_next=has_next)
 
-    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data)
+    return BaseResponse(
+        status_code=200,
+        message="Successfully retrieved disclosure data",
+        data=response_data,
+    )
 
 
 @router.get("/stories/{group_id}", response_model=BaseResponse[List[TopStoriesResponse]])
@@ -218,12 +252,15 @@ def top_stories(
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ):
     ticker_infos = service.get_interest_tickers(group_id)
     if len(ticker_infos) == 0:
         return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
-    data = news_service.top_stories(request=request, tickers=tickers, lang=lang)
+    subscription_level = user.subscription_level if user else 1
+    stories_count = 30 if subscription_level >= 3 else 10
+    data = news_service.top_stories(request=request, tickers=tickers, lang=lang, stories_count=stories_count)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
 

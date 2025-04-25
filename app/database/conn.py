@@ -1,10 +1,14 @@
 from contextlib import asynccontextmanager
 from typing import Optional
+
 from fastapi import FastAPI
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-import logging
+
+from app.core.logger import setup_logger
+
+logger = setup_logger(__name__)
 import pymysql
 
 pymysql.install_as_MySQLdb()
@@ -69,13 +73,13 @@ class BaseSQLAlchemy:
             self._engine.connect()
             async with self._async_engine.connect() as conn:
                 await conn.close()
-            logging.info("DB connected (both sync and async).")
+            logger.info("DB connected (both sync and async).")
             yield
             # Shutdown
             self._session.close_all()
             self._engine.dispose()
             await self._async_engine.dispose()
-            logging.info("DB disconnected (both sync and async).")
+            logger.info("DB disconnected (both sync and async).")
 
         app.router.lifespan_context = lifespan
 
@@ -181,5 +185,12 @@ class SQLAlchemyService(BaseSQLAlchemy):
         super().__init__(app, url_key, **kwargs)
 
 
+class SQLAlchemyUser(BaseSQLAlchemy):
+    def __init__(self, app: FastAPI = None, **kwargs):
+        url_key = "DB_USER_URL"
+        super().__init__(app, url_key, **kwargs)
+
+
 db = SQLAlchemy()
 db_service = SQLAlchemyService()
+db_user = SQLAlchemyUser()

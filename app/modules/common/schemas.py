@@ -1,5 +1,6 @@
+from typing import Generic, List, Optional, TypeVar
+
 from pydantic import BaseModel
-from typing import List, Generic, Optional, TypeVar
 
 T = TypeVar("T")
 
@@ -14,6 +15,7 @@ class ListResponseSchema(ResponseSchema, Generic[T]):
 
 
 class BaseResponse(BaseModel, Generic[T]):
+    type: Optional[str] = None
     status_code: int
     message: str
     data: Optional[T] = None

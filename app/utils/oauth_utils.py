@@ -1,16 +1,17 @@
-import os
 import hashlib
+import os
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from jose import jwt, JWTError, ExpiredSignatureError
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from app.models.models_users import AlphafinderUser
-from app.database.crud import database_service
-from typing import Optional
-import logging
+from jose import ExpiredSignatureError, JWTError, jwt
 
-logger = logging.getLogger(__name__)
+from app.core.logger import setup_logger
+from app.database.crud import database_service
+from app.models.models_users import AlphafinderUser
+
+logger = setup_logger(__name__)
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -141,7 +142,6 @@ def get_current_user(
             )
 
         if not token_record:
-            print("token_record is None")
             raise HTTPException(
                 status_code=401,
                 detail="Invalid token",
@@ -149,7 +149,6 @@ def get_current_user(
             )
 
         token_data = token_record[0]
-        print("token_data is not None : ", token_data)
         try:
             payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
             user_id = int(payload.get("sub"))

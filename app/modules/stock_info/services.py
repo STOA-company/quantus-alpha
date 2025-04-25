@@ -1,18 +1,19 @@
-from typing import List, Tuple
-from fastapi import HTTPException
+from typing import Dict, List, Tuple
+
 import pandas as pd
+from fastapi import HTTPException
 from sqlalchemy import select
-from app.database.crud import database, JoinInfo
+
+from app.cache.leaderboard import StockLeaderboard
+from app.core.logger import setup_logger
+from app.database.crud import JoinInfo, database
 from app.models.models_stock import StockInformation
 from app.modules.common.enum import StabilityStatus, StabilityType, TranslateCountry
+from app.modules.common.utils import contry_mapping
 from app.modules.stock_info.mapping import STABILITY_INFO
 from app.modules.stock_info.schemas import Indicators, SimilarStock, StockInfo
-from app.core.logging.config import get_logger
-from app.modules.common.utils import contry_mapping
-from typing import Dict
-from app.cache.leaderboard import StockLeaderboard
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 class StockInfoService:
@@ -300,6 +301,54 @@ class StockInfoService:
         en_name = stock_info[0].en_name
         redis.increment_score(ticker, kr_name, en_name)
 
+    def get_type(self, ticker: str) -> str:
+        """
+        종목 타입 조회
+        """
+        return self.db._select(table="stock_information", columns=["type"], **{"ticker": ticker})[0].type
+
+    async def get_etf_info(self, ticker: str) -> dict:
+        """
+        ETF 정보 조회
+        """
+        ticker = ticker.replace("A", "")
+        print("TICKER", ticker)
+        df = pd.read_parquet("check_data/etf_krx/etf_integrated.parquet")
+        df = df[df["단축코드"] == ticker]
+        etf_info = df.to_dict(orient="records")
+        return etf_info
+
+    async def get_etf_holdings(self, ticker: str) -> List[dict]:
+        """
+        ETF 구성 종목 조회
+        """
+        join_info = JoinInfo(
+            primary_table="etf_top_holdings",
+            secondary_table="stock_information",
+            primary_column="holding_ticker",
+            secondary_column="ticker",
+            columns=["kr_name", "en_name"],
+        )
+
+        data = self.db._select(
+            table="etf_top_holdings",
+            columns=["holding_ticker", "weight", "kr_name", "en_name"],
+            join_info=join_info,
+            ticker=ticker,
+        )
+
+        result = []
+        for row in data:
+            result.append(
+                {"ticker": row.holding_ticker, "weight": row.weight, "kr_name": row.kr_name, "en_name": row.en_name}
+            )
+
+        result.sort(key=lambda x: x["weight"], reverse=True)
+        sum_weight = sum(holding["weight"] for holding in result)
+        if sum_weight != 100:
+            result.append({"ticker": None, "weight": 100 - sum_weight, "kr_name": "기타", "en_name": "Others"})
+        return result
+
 
 def get_stock_info_service() -> StockInfoService:
     return StockInfoService()
@@ -307,4 +356,5 @@ def get_stock_info_service() -> StockInfoService:
 
 if __name__ == "__main__":
     stock_info_service = get_stock_info_service()
-    print(stock_info_service.get_similar_stocks("AAPL", "en"))
+    print(stock_info_service.get_etf_holdings("A0001P0"))
+    print(stock_info_service.get_etf_info("A0001P0"))

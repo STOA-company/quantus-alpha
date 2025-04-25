@@ -1,6 +1,7 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, List
+
 from app.database.crud import database
 
 
@@ -116,7 +117,7 @@ class DividendUtils:
         if not tickers:
             return {}
 
-        two_years_ago = datetime.now() - timedelta(days=2 * 365)
+        five_years_ago = datetime.now() - timedelta(days=5 * 365)
 
         batch_size = 500
         dividend_data_all = []
@@ -127,7 +128,7 @@ class DividendUtils:
             batch_dividend_data = self.db._select(
                 table="dividend_information",
                 columns=["ticker", "ex_date", "per_share"],
-                ex_date__gte=two_years_ago.strftime("%Y-%m-%d"),
+                ex_date__gte=five_years_ago.strftime("%Y-%m-%d"),
                 ticker__in=batch_tickers,
             )
 
@@ -155,7 +156,7 @@ class DividendUtils:
             total_years = len(year_counts)
 
             if total_years > 0:
-                avg_frequency = round(total_payments / total_years)
+                avg_frequency = round(total_payments / total_years, 2)
                 frequency_dict[ticker] = avg_frequency
             else:
                 frequency_dict[ticker] = 0
@@ -220,3 +221,139 @@ class DividendUtils:
                 yearly_dividends[ticker][year] += amount
 
         return yearly_dividends
+
+    def get_dividend_payment_dates(self, tickers: List[str]) -> Dict[str, List[str]]:
+        """
+        티커별 배당 지급일 리스트를 가져옵니다.
+
+        Args:
+            tickers (List[str]): 티커 리스트
+
+        Returns:
+            Dict[str, List[str]]: 티커별 배당 지급일 리스트 (YYYY-MM-DD 형식)
+        """
+        if not tickers:
+            return {}
+
+        one_year_ago = datetime.now() - timedelta(days=1 * 365)
+        payment_dates_dict = defaultdict(list)
+
+        batch_size = 500
+        dividend_data_all = []
+
+        for i in range(0, len(tickers), batch_size):
+            batch_tickers = tickers[i : i + batch_size]
+
+            batch_dividend_data = self.db._select(
+                table="dividend_information",
+                columns=["ticker", "payment_date"],
+                payment_date__gte=one_year_ago.strftime("%Y-%m-%d"),
+                ticker__in=batch_tickers,
+                order="payment_date",
+            )
+
+            dividend_data_all.extend(batch_dividend_data)
+
+        for record in dividend_data_all:
+            ticker = record[0]
+            payment_date = record[1]
+            if payment_date:
+                payment_dates_dict[ticker].append(payment_date.strftime("%Y-%m-%d"))
+
+        return dict(payment_dates_dict)
+
+    def get_dividend_frequency(self, tickers: List[str]) -> Dict[str, str]:
+        """
+        티커별 배당 주기를 계산합니다.
+
+        Args:
+            tickers (List[str]): 티커 리스트
+
+        Returns:
+            Dict[str, str]: 티커별 배당 주기
+            - 'week': 주간 배당
+            - 'month': 월간 배당
+            - 'quarter': 분기 배당
+            - 'semi-annual': 반기 배당
+            - 'annual': 연간 배당
+            - 'no_dividend': 배당금 없음
+            - 'insufficient_data': 데이터 부족 (1개의 배당 데이터만 있는 경우)
+        """
+        if not tickers:
+            return {}
+
+        # 배당 횟수 정보 가져오기
+        dividend_count_dict = self.get_dividend_count(tickers)
+        payment_dates_dict = self.get_dividend_payment_dates(tickers)
+        frequency_dict = {}
+
+        for ticker, dates in payment_dates_dict.items():
+            # 배당 횟수가 0이면 no_dividend로 설정
+            if dividend_count_dict.get(ticker, 0) == 0:
+                frequency_dict[ticker] = "no_dividend"
+                continue
+
+            if not dates:
+                frequency_dict[ticker] = "no_dividend"
+                continue
+
+            if len(dates) == 1:
+                frequency_dict[ticker] = "insufficient_data"
+                continue
+
+            # 날짜 정렬
+            dates.sort()
+
+            # 날짜 간 간격 계산 (일 단위)
+            intervals = []
+            for i in range(len(dates) - 1):
+                date1 = datetime.strptime(dates[i], "%Y-%m-%d")
+                date2 = datetime.strptime(dates[i + 1], "%Y-%m-%d")
+                intervals.append((date2 - date1).days)
+
+            if not intervals:
+                frequency_dict[ticker] = "insufficient_data"
+                continue
+
+            # 평균 간격 계산
+            avg_interval = sum(intervals) / len(intervals)
+
+            # 간격의 모드(최빈값) 계산
+            interval_counter = Counter(intervals)
+            mode_interval = interval_counter.most_common(1)[0][0]
+
+            # 주기 결정 기준 (평균 간격에 기반)
+            if avg_interval < 45:  # ~1.5개월
+                if avg_interval < 15:  # ~2주
+                    cycle = "week"
+                else:
+                    cycle = "month"
+            elif avg_interval < 135:  # ~4.5개월
+                cycle = "quarter"
+            elif avg_interval < 270:  # ~9개월
+                cycle = "semi-annual"
+            else:
+                cycle = "annual"
+
+            # 최빈값이 평균과 매우 다른 경우, 최빈값 기준으로 재판단
+            if abs(mode_interval - avg_interval) > avg_interval * 0.5:
+                if mode_interval < 45:
+                    if mode_interval < 15:
+                        cycle = "week"
+                    else:
+                        cycle = "month"
+                elif mode_interval < 135:
+                    cycle = "quarter"
+                elif mode_interval < 270:
+                    cycle = "semi-annual"
+                else:
+                    cycle = "annual"
+
+            frequency_dict[ticker] = cycle
+
+        # 배당금이 없는 종목들에 대해 'no_dividend' 설정
+        for ticker in tickers:
+            if ticker not in frequency_dict or dividend_count_dict.get(ticker, 0) == 0:
+                frequency_dict[ticker] = "no_dividend"
+
+        return frequency_dict

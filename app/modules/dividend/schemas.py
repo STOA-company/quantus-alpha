@@ -1,4 +1,5 @@
 from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -6,7 +7,7 @@ class DividendDetail(BaseModel):
     ex_dividend_date: str = Field(description="배당락일")
     dividend_payment_date: str = Field(description="배당지급일")
     dividend_per_share: float = Field(description="1주당 배당금")
-    dividend_yield: float = Field(description="수익률")
+    dividend_yield: float | None = Field(description="수익률")
 
 
 class DividendYearResponse(BaseModel):

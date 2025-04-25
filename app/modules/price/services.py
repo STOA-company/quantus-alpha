@@ -1,29 +1,28 @@
-import logging
 import asyncio
+import json
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from functools import lru_cache
-import json
-from typing import List, Optional, Tuple, Dict
-from fastapi import Request
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass, field
-
+from fastapi import Request
 from sse_starlette import EventSourceResponse
-from app.common.constants import KST, MARKET_MAP_EN, MARKET_MAP
+
+from app.common.constants import ETF_MARKET_MAP, ETF_MARKET_MAP_EN, KST, MARKET_MAP, MARKET_MAP_EN
+from app.core.exception.custom import DataNotFoundException
+from app.core.logger import setup_logger
+from app.database.conn import db
+from app.database.crud import JoinInfo, database
 from app.modules.common.cache import MemoryCache
 from app.modules.common.enum import Country, Frequency, TranslateCountry
 from app.modules.common.schemas import BaseResponse
-from app.modules.common.utils import check_ticker_country_len_2
+from app.modules.common.utils import check_ticker_country_len_2, contry_mapping
 from app.modules.price.schemas import PriceDataItem, PriceSummaryItem, RealTimePriceDataItem, ResponsePriceDataItem
-from app.database.crud import database, JoinInfo
-from app.database.conn import db
-from app.core.exception.custom import DataNotFoundException
-from app.modules.common.utils import contry_mapping
 from app.utils.date_utils import check_market_status
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 @dataclass
@@ -609,7 +608,7 @@ class PriceService:
             },
         )
 
-    async def get_price_data_summary(self, ctry: str, ticker: str, lang: TranslateCountry) -> PriceSummaryItem:
+    async def get_price_data_summary(self, ctry: str, type: str, ticker: str, lang: TranslateCountry) -> PriceSummaryItem:
         """
         종목 요약 데이터 조회
         """
@@ -620,7 +619,11 @@ class PriceService:
             logger.info(f"Cache hit for {cache_key}")
             return PriceSummaryItem(**cached_data)
 
-        df = self._fetch_52week_data(ctry, ticker)
+        if type == "stock":
+            df = self._fetch_52week_data(ctry, ticker)
+        elif type == "etf":
+            df = self._fetch_etf_52week_data(ctry, ticker)
+
         if not df.empty:
             week_52_high = df["week_52_high"].iloc[0] or 0.0
             week_52_low = df["week_52_low"].iloc[0] or 0.0
@@ -632,11 +635,14 @@ class PriceService:
             last_day_close = None
             market_cap = None
 
-        sector, name, market = self._get_sector_name_market(ticker, lang)
+        sector, name, market = self._get_sector_name_market(ticker, ctry, type, lang)
         sector = sector or ""
         name = name or ""
-        market = market or ""
-        market = MARKET_MAP[market] if lang == TranslateCountry.KO else MARKET_MAP_EN[market]
+        if market:
+            if type == "stock":
+                market = MARKET_MAP[market] if lang == TranslateCountry.KO else MARKET_MAP_EN[market]
+            elif type == "etf":
+                market = ETF_MARKET_MAP[market] if lang == TranslateCountry.KO else ETF_MARKET_MAP_EN[market]
         is_market_close = check_market_status(ctry.upper())
 
         response_data = {
@@ -645,7 +651,7 @@ class PriceService:
             "ctry": ctry,
             "logo_url": "https://kr.pinterest.com/eunju011014/%EA%B7%80%EC%97%AC%EC%9A%B4-%EC%A7%A4/",
             "market": market,
-            "sector": sector,
+            "sector": sector if sector else None,
             "market_cap": market_cap,
             "last_day_close": last_day_close,
             "week_52_low": week_52_low,
@@ -723,7 +729,7 @@ class PriceService:
         # 가장 최근 날짜를 제외한 첫 번째 데이터의 종가를 반환
         return float(sorted_df.iloc[1]["Close"])
 
-    def _get_sector_name_market(self, ticker: str, lang: TranslateCountry) -> Tuple[str, str, str]:
+    def _get_sector_name_market(self, ticker: str, ctry: str, type: str, lang: TranslateCountry) -> Tuple[str, str, str]:
         """
         종목 섹터, 이름, 시장 조회
         """
@@ -731,9 +737,13 @@ class PriceService:
             columns = ["sector_ko", "kr_name", "market"]
         elif lang == TranslateCountry.EN:
             columns = ["sector_2", "en_name", "market"]
-        data = self.database._select(table="stock_information", columns=columns, ticker=ticker, is_activate=True)
-        sector, name, market = data[0][0], data[0][1], data[0][2]
-        return sector, name, market
+
+        if type == "etf" and ctry == "us":
+            columns = ["sector_2", "en_name", "market"]
+
+        data = self.database._select(table="stock_information", columns=columns, ticker=ticker)
+
+        return data[0]
 
     async def _get_market_cap(self, ctry: str, ticker: str) -> float:
         """
@@ -748,6 +758,56 @@ class PriceService:
 
         # 단일 값만 반환
         return float(result[0].market_cap) if result else 0.0
+
+    def _fetch_etf_52week_data(self, ctry: str, ticker: str) -> pd.DataFrame:
+        """
+        ETF 52주 데이터 조회
+
+        Args:
+            ctry (str): 국가 코드 (kr, us)
+            ticker (str): ETF 티커
+
+        Returns:
+            pd.DataFrame: 52주 고가, 저가, 종가, 시가총액 정보
+        """
+        # 현재 시간 기준 1년 전 날짜 계산
+        kst_now = datetime.now(KST)
+        one_year_ago = kst_now - timedelta(days=365)
+
+        # etf_{ctry}_1d 테이블에서 1년 치 데이터 조회
+        etf_data = pd.DataFrame(
+            self.database._select(
+                table=f"etf_{ctry}_1d",
+                columns=["Date", "High", "Low", "Close", "MarketCap"],
+                Ticker=ticker,
+                Date__gte=one_year_ago,
+            )
+        )
+        print("ETF DATA", etf_data)
+        if etf_data.empty:
+            # 데이터가 없는 경우 기본값 반환
+            return pd.DataFrame([{"week_52_high": 0.0, "week_52_low": 0.0, "last_close": 0.0, "market_cap": None}])
+
+        # 52주 고가, 저가 계산
+        week_52_high = etf_data["High"].max() if not etf_data["High"].empty else 0.0
+        week_52_low = etf_data["Low"].min() if not etf_data["Low"].empty else 0.0
+        print("WEEK 52 HIGH", week_52_high)
+        print("WEEK 52 LOW", week_52_low)
+        # 가장 최근 종가와 시가총액 가져오기
+        etf_data = etf_data.sort_values("Date", ascending=False)
+        last_close = etf_data["Close"].iloc[0] if not etf_data.empty else 0.0
+        market_cap = etf_data["MarketCap"].iloc[0] if not etf_data.empty and "MarketCap" in etf_data.columns else None
+        print("LAST CLOSE", last_close)
+        print("MARKET CAP", market_cap)
+        # 결과 데이터 프레임 생성
+        result_data = {
+            "week_52_high": week_52_high,
+            "week_52_low": week_52_low,
+            "last_close": last_close,
+            "market_cap": market_cap,
+        }
+        print("RESULT DATA", result_data)
+        return pd.DataFrame([result_data])
 
 
 def get_price_service() -> PriceService:

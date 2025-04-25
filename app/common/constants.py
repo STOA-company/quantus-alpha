@@ -1,5 +1,6 @@
 import pytz
 
+from app.core.config import settings
 
 KR_EXCLUDE_DATES = ["2024-12-30", "2025-01-27"]
 US_EXCLUDE_DATES = ["2025-01-09"]
@@ -10,32 +11,18 @@ USE = pytz.timezone("America/New_York")
 
 NEED_TO_MULTIPLY_100 = ["vol", "vol_60", "momentum_1", "momentum_3", "momentum_6", "momentum_12", "current_ratio"]
 
-NON_NUMERIC_COLUMNS = ["Code", "Name", "market", "sector", "country", "score", "Name_en", "sector_en"]
+BASE_COLUMNS = ["Code", "Name", "Name_en", "market", "sector", "sector_en", "country", "score"]
 
-NON_NUMERIC_COLUMNS_ETF = [
+BASE_COLUMNS_ETF = [
     "Code",
+    "Name",
+    "Name_en",
+    "market",
+    "sector",
+    "sector_en",
     "country",
     "score",
-    "ticker",
-    "ctry",
-    "kr_name",
-    "en_name",
-    "Name",
-    "market",
-    "listing_date",
-    "base_index_name",
-    "replication_method",
-    "base_asset_classification",
-    "manager",
-    "tax_type",
-    "is_hedge",
-    "last_dividend_date",
-    "manager",
-    "tax_type",
-    "is_hedge",
 ]
-
-ETF_DEFAULT_SCREENER_COLUMNS = ["ticker", "market", "kr_name", "en_name"]
 
 UNIT_MAP = {"percentage": "%", "times": "회", "score": "점", "multiple": "배", "ratio": ""}
 UNIT_MAP_EN = {"percentage": "%", "times": "", "score": "", "multiple": "", "ratio": ""}
@@ -58,14 +45,27 @@ MARKET_MAP_EN = {
 }
 
 
-ETF_MARKET_MAP = {"BATS": "바츠", "NYSE": "뉴욕 증권 거래소", "NAS": "나스닥", "KRX": "한국 거래소"}
+ETF_MARKET_MAP = {
+    "BATS": "바츠",
+    "NYSE": "뉴욕 증권 거래소",
+    "NYS": "뉴욕 증권 거래소",
+    "NAS": "나스닥",
+    "KRX": "한국 거래소",
+    "135": "나스닥",
+    "278": "바츠",
+    "147": "OTC",
+}
 
 
 ETF_MARKET_MAP_EN = {
+    "NYS": "NYSE",
     "BATS": "BATS",
     "NYSE": "NYSE",
     "NASDAQ": "NASDAQ",
     "KRX": "KRX",
+    "135": "NASDAQ",
+    "278": "BATS",
+    "147": "OTC",
 }
 
 MARKET_KOREAN_TO_ENGLISH_MAP = {
@@ -171,10 +171,11 @@ FACTOR_MAP = {
     # 배당
     "div_yield_growth_qoq": "배당수익률 성장 (QoQ)",
     "div_yield_growth_yoy": "배당수익률 성장 (YoY)",
-    "ttm_dividend_yield": "직전 12개월 배당 수익률",
-    "consecutive_dividend_growth_count": "연속 배당 성장 횟수",
-    "consecutive_dividend_payment_count": "연속 배당 지급 횟수",
-    "dividend_count": "배당 주기",
+    "ttm_dividend_yield": "배당 수익률 (TTM)",
+    "consecutive_dividend_growth_count": "연속 배당 성장 횟수 (연간)",
+    "consecutive_dividend_payment_count": "연속 배당 지급 횟수 (연간)",
+    "dividend_count": "연평균 배당 횟수",
+    "dividend_frequency": "배당 주기",
     # 가치
     "pbr": "PBR",
     "pcr": "PCR",
@@ -196,6 +197,12 @@ FACTOR_MAP = {
     "evrnd": "EV/R&D",
     "evcf": "EV/CF",
     "evac": "EV/AC",
+    # RS
+    "Log_RS_5": "RS (5일)",
+    "Log_RS_20": "RS (20일)",
+    "Log_RS_50": "RS (50일)",
+    "Log_RS_100": "RS (100일)",
+    "Log_RS_200": "RS (200일)",
     ########################################################
     # ETF
     ########################################################
@@ -288,7 +295,14 @@ FACTOR_MAP_EN = {
     "ttm_dividend_yield": "TTM Dividend Yield",
     "consecutive_dividend_growth_count": "Consecutive Dividend Growth Count",
     "consecutive_dividend_payment_count": "Consecutive Dividend Payment Count",
-    "dividend_count": "Dividend Frequency",
+    "dividend_count": "Dividend Count",
+    "dividend_frequency": "Dividend Frequency",
+    # RS
+    "Log_RS_5": "RS (5-day)",
+    "Log_RS_20": "RS (20-day)",
+    "Log_RS_50": "RS (50-day)",
+    "Log_RS_100": "RS (100-day)",
+    "Log_RS_200": "RS (200-day)",
     ########################################################
     # ETF
     ########################################################
@@ -395,6 +409,12 @@ FACTOR_KOREAN_TO_ENGLISH_MAP = {
     "POR (TTM)": "POR (TTM)",
     "PSR": "PSR",
     "PSR (TTM)": "PSR (TTM)",
+    # RS
+    "RS (5일)": "RS (5-day)",
+    "RS (20일)": "RS (20-day)",
+    "RS (50일)": "RS (50-day)",
+    "RS (100일)": "RS (100-day)",
+    "RS (200일)": "RS (200-day)",
 }
 
 REVERSE_FACTOR_MAP = {v: k for k, v in FACTOR_MAP.items()}
@@ -481,3 +501,20 @@ FACTOR_MAP_ETF = {v: k for k, v in FACTOR_MAP.items() if k in ETF_FACTOR_LIST}
 
 UNKNOWN_USER_KO = "(알 수 없는 유저)"
 UNKNOWN_USER_EN = "(Unknown User)"
+
+SELECT_MAP = {
+    "dividend_frequency": [
+        {"value": "annual", "display": "연간"},
+        {"value": "semi-annual", "display": "반기"},
+        {"value": "quarter", "display": "분기"},
+        {"value": "month", "display": "월간"},
+        {"value": "week", "display": "주간"},
+        {"value": "no_dividend", "display": None},
+        {"value": "insufficient_data", "display": None},
+    ],
+}
+
+
+stage_webhook_url = "https://hooks.slack.com/services/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"
+dev_webhook_url = "https://hooks.slack.com/services/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"
+SLACK_WEBHOOK_URL_ERROR = stage_webhook_url if settings.ENV == "stage" else dev_webhook_url

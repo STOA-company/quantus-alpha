@@ -1,6 +1,8 @@
 import os
+
 from celery import Celery
 from celery.schedules import crontab
+
 from app.core.config import settings
 
 IN_DOCKER = os.getenv("IN_DOCKER", "false").lower() == "true"
@@ -170,5 +172,33 @@ CELERY_APP.conf.beat_schedule = {
     "update_kr_dividend_rds": {  # 한국 배당 데이터베이스 업데이트
         "task": "update_kr_dividend_rds",
         "schedule": crontab(hour="18", minute="45"),
+    },
+    "update_us_etf_price": {
+        "task": "update_us_etf_price",
+        "schedule": crontab(hour="11", minute="50"),
+    },
+    "update_kr_etf_price": {
+        "task": "update_kr_etf_price",
+        "schedule": crontab(hour="18", minute="50"),
+    },
+    "kr_update_etf_status": {
+        "task": "kr_update_etf_status",
+        "schedule": crontab(hour="18", minute="25"),
+    },
+    "us_update_etf_status": {
+        "task": "us_update_etf_status",
+        "schedule": crontab(hour="11", minute="25"),
+    },
+    "kr_update_etf_holdings": {
+        "task": "kr_update_etf_holdings",
+        "schedule": crontab(hour="16", minute="30", day_of_week="5"),
+    },
+    "us_update_etf_holdings": {
+        "task": "us_update_etf_holdings",
+        "schedule": crontab(hour="11", minute="30", day_of_week="6"),
+    },
+    "update_krx_etf_data": {
+        "task": "update_krx_etf_data",
+        "schedule": crontab(hour="17", minute="00"),
     },
 }

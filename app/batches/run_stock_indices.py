@@ -1,15 +1,17 @@
 import datetime
-from functools import wraps
 import logging
 import time
+from functools import wraps
 from typing import Callable
+
 import pandas as pd
+import yfinance as yf
 from sqlalchemy.sql import text
+
 from app.common.constants import KST, USE, UTC
 from app.database.crud import database
-from app.utils.date_utils import now_utc, check_market_status
 from app.kispy.manager import KISAPIManager
-import yfinance as yf
+from app.utils.date_utils import check_market_status, now_utc
 
 
 def kr_run_stock_indices_batch():

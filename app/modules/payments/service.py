@@ -1,18 +1,18 @@
-import base64
 import json
-from typing import List
-from fastapi import HTTPException
-import requests
-
-from app.core.config import settings
 from datetime import timedelta
-from app.database.crud import JoinInfo, database_service
-from app.core.extra.LoggerBox import LoggerBox
 from http.client import HTTPSConnection as https_conn
 
+import requests
+from fastapi import HTTPException
+
+from app.common.constants import SLACK_WEBHOOK_URL_ERROR
+from app.core.config import settings
+from app.core.logger import setup_logger
+from app.database.crud import JoinInfo, database_service
 from app.models.models_users import AlphafinderUser
 from app.modules.payments.schema import (
-    PriceTemplate,
+    PriceTemplateItem,
+    ResponsePriceTemplate,
     StoreCoupon,
     StorePaymentsHistory,
     StoreUserUsingHistory,
@@ -20,7 +20,8 @@ from app.modules.payments.schema import (
 )
 from app.utils.date_utils import now_kr
 
-logger = LoggerBox().get_logger(__name__)
+# 로그 레벨을 DEBUG로 명시적으로 설정
+logger = setup_logger(__name__, send_error_to_slack=True, slack_webhook_url=SLACK_WEBHOOK_URL_ERROR)
 
 
 class PaymentService:
@@ -29,25 +30,61 @@ class PaymentService:
         self.toss_api_url = "https://api.tosspayments.com/v1"
         self.db = database_service
 
-    def get_price_template(self) -> List[PriceTemplate]:
+    def get_price_template(self) -> ResponsePriceTemplate:
         data = self.get_price()
         price_template = []
+        is_banner = False
+        max_remaining_days = 0
         for price in data:
+            remaining_days = (
+                (price.event_end_date.date() - now_kr().date()).days
+                if price.event_end_date and price.event_end_date.date() >= now_kr().date()
+                else None
+            )
             price_template.append(
-                PriceTemplate(
+                PriceTemplateItem(
                     id=price.id,
                     name=price.name,
                     original_price=price.price,
                     event_price=price.event_price,
                     period_days=price.period_days,
+                    is_event=price.is_event,
+                    event_type=price.event_type or None,
+                    event_end_date=max(0, remaining_days) if remaining_days is not None else None,
                 )
             )
-        return price_template
+            if price.is_banner:
+                is_banner = True
+                max_remaining_days = (
+                    max(max_remaining_days, remaining_days) if remaining_days is not None else max_remaining_days
+                )
+        response_price_template = ResponsePriceTemplate(
+            is_banner=is_banner,
+            banner={
+                "event_type": "얼리버드",
+                "event_end_date": max_remaining_days,
+                "title": "얼리버드 기간 내 구매 시 할인 혜택 제공 (2025년 4월 15일까지)",
+                "description": "2025년 4월 15일부터 PRO 이용 가능 (쿠폰함에서 사용)",
+            },
+            price_template=price_template,
+        )
+        return response_price_template
 
     def get_price(self):
         data = self.db._select(
             table="alphafinder_price",
-            columns=["id", "name", "price", "event_price", "period_days"],
+            columns=[
+                "id",
+                "name",
+                "price",
+                "event_price",
+                "period_days",
+                "event_type",
+                "event_end_date",
+                "is_banner",
+                "is_event",
+            ],
+            is_active=True,
         )
         return data
 
@@ -160,7 +197,7 @@ class PaymentService:
                     "amount": amount,
                 }
             )
-            auth_string = base64.b64encode(f"{self.toss_secret_key}:".encode()).decode()
+            auth_string = self.toss_secret_key
             conn = https_conn("api.tosspayments.com")
             headers = {"Authorization": f"Basic {auth_string}", "Content-Type": "application/json"}
             conn.request("POST", "/v1/payments/confirm", payload, headers)
@@ -298,9 +335,8 @@ class PaymentService:
     def verify_toss_payment(self, payment_key: str, order_id: str, amount: int):
         """Toss API를 통해 결제 정보를 가져옵니다."""
         # Basic 인증을 위한 헤더 (Secret Key와 빈 문자열을 Base64로 인코딩)
-        import base64
 
-        auth_string = base64.b64encode(f"{self.toss_secret_key}:".encode()).decode()
+        auth_string = self.toss_secret_key
 
         headers = {"Authorization": f"Basic {auth_string}"}
         # Toss API에 결제 정보 요청
@@ -330,7 +366,7 @@ class PaymentService:
         return payment_data
 
     def cancel_toss_payments(self, payment_key: str, cancel_reason: str):
-        auth_string = base64.b64encode(f"{self.toss_secret_key}:".encode()).decode()
+        auth_string = self.toss_secret_key
         headers = {"Authorization": f"Basic {auth_string}", "Content-Type": "application/json"}
         payload = json.dumps({"cancelReason": cancel_reason})
         response = requests.post(f"{self.toss_api_url}/payments/{payment_key}/cancel", headers=headers, data=payload)
@@ -435,7 +471,7 @@ class PaymentService:
         # 쿠폰이 사용한 상태인지 확인
         coupon_data = self.get_coupon_by_coupon_id(coupon_id)
         if coupon_data.coupon_status == "active":
-            raise HTTPException(status_code=409, detail="이미 사용중인 쿠폰입니다.")
+            raise HTTPException(status_code=422, detail="이미 사용중인 쿠폰입니다.")
         elif coupon_data.coupon_status == "expired":
             raise HTTPException(status_code=410, detail="쿠폰의 유효기간이 지났습니다.")
 
@@ -490,7 +526,6 @@ class PaymentService:
         )
         return data[0]
 
-    #####################################
     def cancel_membership(self, user_id: int):
         self.db._update(
             table="alphafinder_user",
@@ -514,16 +549,46 @@ class PaymentService:
         )
         return data
 
+    def get_payment_list_by_user_id(self, user_id: int):
+        data = self.db._select(
+            table="alphafinder_payment_history",
+            columns=["id", "level", "period_days", "paid_amount", "payment_method", "refund_at", "created_at"],
+            user_id=user_id,
+        )
+        return data
+
     def count_used_days(self, user_using_history):
-        used_days = 1
+        """
+        사용자의 서비스 사용 일수를 계산합니다.
+
+        Args:
+            user_using_history: 사용자의 서비스 사용 이력 목록
+
+        Returns:
+            int: 총 사용 일수
+        """
+        used_days = 0
         for history in user_using_history:
+            # 시작일
+            start_date = history.start_date.date()
+
+            # 종료일 계산 (환불된 경우와 아닌 경우 구분)
             if history.refund_at is None:
+                # 환불되지 않은 경우
+                # 구독 종료일이 현재보다 미래라면 현재까지만 계산
                 if history.end_date.date() > now_kr().date():
-                    used_days += (now_kr().date() - history.start_date.date()).days
+                    end_date = now_kr().date()
                 else:
-                    used_days += (history.end_date.date() - history.start_date.date()).days
+                    end_date = history.end_date.date()
             else:
-                used_days += (history.refund_at.date() - history.start_date.date()).days
+                # 환불된 경우 환불 날짜까지만 계산
+                end_date = history.refund_at.date()
+
+            # 사용 일수 계산 (종료일 포함하여 계산하므로 +1)
+            days = (end_date - start_date).days + 1
+
+            # 음수가 나오지 않도록 보정
+            used_days += max(0, days)
 
         return used_days
 
@@ -532,6 +597,14 @@ class PaymentService:
             if history.id == user_subscription_history_id:
                 return history
         return None
+
+    def get_product_type_by_user_using_history_id(self, user_using_history_id: int):
+        data = self.db._select(
+            table="user_using_history",
+            columns=["product_type"],
+            id=user_using_history_id,
+        )
+        return data[0].product_type
 
     def check_is_extended(self, product_relation_id: int):
         data = self.db._select(
@@ -552,55 +625,122 @@ class PaymentService:
         )
         return data[0]
 
-    def refund_payments(self, current_user: AlphafinderUser, using_history_id: int):
+    def refund_payments(self, current_user: AlphafinderUser, payment_id: int):
         ####
         # 사용 내역 확인하는 로직 추가하기
         ###
 
-        #
-        payment_history = self.db._select(
+        # payment_history에서 영수증 id 찾기
+        payment_history_data = self.db._select(
             table="alphafinder_payment_history",
-            columns=["receipt_id"],
-            id=using_history_id,
+            columns=["product_relation_id", "refund_at", "payment_company"],
+            id=payment_id,
         )
-        if payment_history[0].refund_at is not None:
-            raise HTTPException(status_code=409, detail="이미 환불된 결제입니다.")
-        elif payment_history is None:
-            raise HTTPException(status_code=404, detail="결제 내역이 없습니다.")
+        if payment_history_data is None:
+            raise HTTPException(status_code=404, detail="사용 내역을 찾을 수 없습니다.")
 
-        receipt_id = payment_history[0].receipt_id
+        if payment_history_data.refund_at is not None:
+            raise HTTPException(status_code=400, detail="이미 환불된 결제입니다.")
 
-        if payment_history[0].payment_company == "toss":
-            # 토스 결제 환불
+        # 결제 영수증에서 결제 키 찾기
+        if payment_history_data.payment_company == "toss":
             payment_key = self.db._select(
-                table="toss_receipt",
+                table="alphafinder_payment_history",
                 columns=["payment_key"],
-                id=receipt_id,
+                id=payment_history_data.product_relation_id,
             )
-            self.cancel_toss_payments(payment_key=payment_key[0].payment_key, cancel_reason="환불 요청")
-
-        elif payment_history[0].payment_company == "kakao":
-            # 카카오 결제 환불
+            if payment_key is None:
+                raise HTTPException(status_code=404, detail="결제 키를 찾을 수 없습니다.")
+            self.cancel_toss_payments(payment_key[0].payment_key, "환불 요청")
+        elif payment_history_data.payment_company == "kakao":
             pass
+        elif payment_history_data.payment_company == "google":
+            pass
+        elif payment_history_data.payment_company == "apple":
+            pass
+        else:
+            raise HTTPException(status_code=400, detail="지원하지 않는 결제 회사입니다.")
 
+        # 결제 내역 환불 처리
+        self.db._update(
+            table="alphafinder_payment_history",
+            sets={"refund_at": now_kr(), "updated_at": now_kr()},
+            id=payment_id,
+        )
+
+        # 사용 내역 환불 처리
         self.db._update(
             table="user_using_history",
-            sets={"refund_at": now_kr()},
-            id=using_history_id,
+            sets={"refund_at": now_kr(), "updated_at": now_kr()},
+            product_relation_id=payment_id,
         )
-
-        if current_user.subscription_end > now_kr().date():
+        # 유저 정보 업데이트
+        user_using_history_data = self.db._select(
+            table="user_using_history",
+            columns=[
+                "id",
+                "user_id",
+                "start_date",
+                "end_date",
+                "product_name",
+                "product_type",
+                "product_relation_id",
+                "refund_at",
+            ],
+            product_relation_id=payment_id,
+        )
+        end_date = user_using_history_data[0].end_date
+        start_date = user_using_history_data[0].start_date
+        if end_date > now_kr().date() and start_date < now_kr().date():
             self.db._update(
                 table="alphafinder_user",
-                sets={
-                    "is_subscribed": False,
-                    "subscription_end": now_kr().date(),
-                    "subscription_level": 1,
-                },
-                id=current_user.id,
+                sets={"is_subscribed": False, "end_date": now_kr(), "updated_at": now_kr(), "subscription_level": 1},
+                id=user_using_history_data[0].user_id,
             )
+        else:
+            un_refunded_using_history_data = self.db._select(
+                table="user_using_history",
+                columns=[
+                    "id",
+                    "user_id",
+                    "start_date",
+                    "end_date",
+                    "product_name",
+                    "product_type",
+                    "product_relation_id",
+                    "refund_at",
+                ],
+                user_id=user_using_history_data[0].user_id,
+                start_date__lte=now_kr().date(),
+                end_date__gt=now_kr().date(),
+            )
+            is_subscribed = (
+                un_refunded_using_history_data[0].refund_at is None if un_refunded_using_history_data else False
+            )
+            if is_subscribed:
+                end_date = un_refunded_using_history_data[0].end_date
+                level = self.get_product_level_by_product_name(un_refunded_using_history_data[0].product_name)
+                self.db._update(
+                    table="alphafinder_user",
+                    sets={
+                        "end_date": end_date,
+                        "updated_at": now_kr(),
+                        "subscription_level": level,
+                        "using_history_id": un_refunded_using_history_data[0].id,
+                    },
+                    id=user_using_history_data[0].user_id,
+                )
 
         return True
+
+    def get_product_name_by_level_period_days(self, level: int, period_days: int):
+        data = self.db._select(
+            table="alphafinder_price",
+            columns=["name"],
+            level=level,
+            period_days=period_days,
+        )
+        return data[0].name
 
     def update_is_extended(self, user_using_history_id: int):
         payment_history_id = self.db._select(
@@ -613,3 +753,35 @@ class PaymentService:
             sets={"is_extended": True},
             id=payment_history_id[0].product_relation_id,
         )
+
+    def issue_coupon(self, coupon_id: int, user_id: int):
+        coupon_data = self.db._select(
+            table="alphafinder_coupon",
+            columns=["coupon_name"],
+            id=coupon_id,
+        )
+        self.db._insert(
+            table="alphafinder_coupon_box",
+            sets={
+                "user_id": user_id,
+                "coupon_id": coupon_id,
+                "issued_at": now_kr().date(),
+                "expired_at": now_kr().date() + timedelta(days=365),
+                "coupon_status": "inactive",
+                "coupon_name": coupon_data[0].coupon_name,
+            },
+        )
+
+    def delete_coupon(self, coupon_id: int):
+        self.db._delete(
+            table="alphafinder_coupon_box",
+            id=coupon_id,
+        )
+
+    def get_product_level_by_product_name(self, product_name: str):
+        data = self.db._select(
+            table="alphafinder_price",
+            columns=["level"],
+            name=product_name,
+        )
+        return data[0].level

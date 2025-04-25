@@ -1,6 +1,7 @@
 from decimal import Decimal
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
 
 # class FinancialDataResponse(BaseModel):
 #     data: List[Dict[str, Any]] = Field(
@@ -139,15 +140,17 @@ class FinPosResponse(BaseModel):
 
 
 class IncomeMetric(BaseModel):
-    company: Decimal = Field(
+    company: Optional[Decimal] = Field(
         description="해당 기업의 지표 값",
         example=1234.56,
         json_schema_extra={"type": "number", "format": "float", "multipleOf": 0.01},
+        default=None,
     )
-    industry_avg: Decimal = Field(
+    industry_avg: Optional[Decimal] = Field(
         description="해당 업종의 평균 값",
         example=789.12,
         json_schema_extra={"type": "number", "format": "float", "multipleOf": 0.01},
+        default=None,
     )
 
     class Config:

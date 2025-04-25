@@ -1,7 +1,8 @@
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Table, Text, Index, func
-from app.models.models_base import BaseMixin, ServiceBase
-from sqlalchemy.orm import validates
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, Text, func
 from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy.orm import validates
+
+from app.models.models_base import BaseMixin, ServiceBase
 
 post_stocks = Table(
     "post_stocks",
@@ -35,10 +36,10 @@ class Post(ServiceBase, BaseMixin):
     image_format = Column(String(20), nullable=True)
     like_count = Column(Integer, default=0)
     comment_count = Column(Integer, default=0)
+    user_id = Column(BigInteger, nullable=True)
 
     # Foreign Key
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
-    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="SET NULL"), nullable=True)
 
     __table_args__ = (
         Index("idx_posts_created_at", "created_at"),
@@ -68,10 +69,10 @@ class Comment(ServiceBase, BaseMixin):
     like_count = Column(Integer, default=0)
     depth = Column(Integer, default=0, comment="댓글 깊이")
     parent_id = Column(Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True, comment="부모 댓글 ID")
+    user_id = Column(BigInteger, nullable=True)
 
     # Foreign Key
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="SET NULL"), nullable=True)
 
     __table_args__ = (
         Index("idx_comments_post_id", post_id),
@@ -90,9 +91,9 @@ class Comment(ServiceBase, BaseMixin):
 class PostLike(ServiceBase, BaseMixin):
     __tablename__ = "post_likes"
 
+    user_id = Column(BigInteger, nullable=False, primary_key=True)
     # Foreign keys
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=False, primary_key=True)
     is_liked = Column(Boolean, default=True, comment="좋아요/싫어요 여부")
 
     __table_args__ = (Index("idx_post_likes_user", user_id),)
@@ -109,7 +110,7 @@ class CommentLike(ServiceBase, BaseMixin):
 
     # Foreign keys
     comment_id = Column(Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=False, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=False, primary_key=True)
+    user_id = Column(BigInteger, nullable=False, primary_key=True)
     is_liked = Column(Boolean, default=True, comment="좋아요/싫어요 여부")
     __table_args__ = (Index("idx_comment_likes_user", user_id),)
 
@@ -123,9 +124,9 @@ class CommentLike(ServiceBase, BaseMixin):
 class Bookmark(ServiceBase, BaseMixin):
     __tablename__ = "bookmarks"
 
+    user_id = Column(BigInteger, nullable=False, primary_key=True)
     # Foreign keys
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey("alphafinder_user.id", ondelete="CASCADE"), nullable=False, primary_key=True)
 
     __table_args__ = (Index("idx_bookmarks_user", user_id),)
 

@@ -1,16 +1,17 @@
-from logging.config import fileConfig
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-from alembic import context, op
 import os
-import sys
 import re
+import sys
+from logging.config import fileConfig
+
+from sqlalchemy import engine_from_config, pool
+
+from alembic import context, op
 
 # 프로젝트 루트 경로 추가 (중요!)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.models import Base
 from app.core.config import settings
+from app.models import Base
 
 # Alembic Config object
 config = context.config

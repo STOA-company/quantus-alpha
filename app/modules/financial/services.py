@@ -1,39 +1,43 @@
-from collections import defaultdict
+import math
 import statistics
+from collections import defaultdict
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import Dict, List, Optional, Union
+
+from fastapi import Depends, HTTPException
 from requests import Session
 from sqlalchemy import select
-from app.core.logging.config import get_logger
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Optional, Dict, List, Union
-from fastapi import HTTPException, Depends
-import math
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database.crud import database
+
+from app.core.exception.custom import AnalysisException, DataNotFoundException, InvalidCountryException
+from app.core.logger import setup_logger
 from app.database.conn import db
+from app.database.crud import database
 from app.models.models_stock import StockInformation
+from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import FinancialCountry, TranslateCountry
+from app.modules.common.schemas import BaseResponse
 from app.modules.common.services import CommonService, get_common_service
+from app.modules.common.utils import contry_mapping
 from app.modules.financial.crud import FinancialCrud
 from app.modules.financial.schemas import (
+    CashFlowDetail,
     CashFlowResponse,
-    FinPosDetail,
-    FinPosResponse,
     DebtRatioResponse,
     FinancialRatioResponse,
+    FinPosDetail,
+    FinPosResponse,
+    IncomeMetric,
     IncomePerformanceResponse,
     IncomeStatementDetail,
-    CashFlowDetail,
     IncomeStatementResponse,
     InterestCoverageRatioResponse,
     LiquidityRatioResponse,
     QuarterlyIncome,
-    IncomeMetric,
 )
-from app.modules.common.schemas import BaseResponse
-from app.core.exception.custom import DataNotFoundException, InvalidCountryException, AnalysisException
-from app.modules.common.utils import contry_mapping
+from app.utils.oauth_utils import get_current_user
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 class FinancialService:
@@ -56,12 +60,12 @@ class FinancialService:
         self.cashflow_tables = create_table_mapping("cashflow")
         self.finpos_tables = create_table_mapping("finpos")
 
-    def _get_date_conditions(self, start_date: Optional[str], end_date: Optional[str]) -> Dict:
+    def _get_date_conditions(self, start_date: Optional[str], end_date: Optional[str], user: AlphafinderUser) -> Dict:
         """
         날짜 조건 생성
         start_date (Optional[str]): YYYYMM 형식의 시작일
         end_date (Optional[str]): YYYYMM 형식의 종료일
-        기본값은 2000년도부터 현재까지
+        기본값은 최근 10년간의 데이터
         """
         from datetime import datetime
 
@@ -78,8 +82,8 @@ class FinancialService:
         latest_quarter_month = str(latest_quarter_month).zfill(2)  # 한 자리 월을 두 자리로 변환
 
         if not start_date:
-            # 2000년부터 현재까지의 데이터 조회
-            conditions["period_q__gte"] = "200001"  # 2000년 1월부터
+            # 항상 10년치 데이터를 가져온 다음, 사용자 권한에 따라 처리
+            conditions["period_q__gte"] = f"{current_year - 10}01"  # 10년 전부터 데이터 조회
             conditions["period_q__lte"] = f"{current_year}{latest_quarter_month}"  # 현재 연도의 마지막 분기
         else:
             conditions["period_q__gte"] = f"{start_date[:4]}01"  # 시작년도의 1월
@@ -161,6 +165,7 @@ class FinancialService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         db: Session = Depends(db.get_db),
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[IncomePerformanceResponse]:
         """
         실적 데이터 조회
@@ -209,10 +214,10 @@ class FinancialService:
             all_shares = await self.get_all_shares_by_tickers(tickers, ctry)
 
             quarterly_statements = await self._process_income_performance_quarterly_result(
-                result, ticker, ctry, tickers, all_shares
+                result, ticker, ctry, tickers, all_shares, user
             )
             yearly_statements = await self._process_income_performance_yearly_result(
-                result, ticker, ctry, tickers, all_shares
+                result, ticker, ctry, tickers, all_shares, user
             )
 
             ctry = contry_mapping.get(ctry)
@@ -244,6 +249,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[IncomeStatementResponse]:
         """
         손익계산서 시계열 분석
@@ -251,7 +257,9 @@ class FinancialService:
         logger.info(f"Starting income analysis for {ticker}")
 
         try:
-            income_data = self.get_income_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+            income_data = self.get_income_data(
+                ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, user=user
+            )
             # data를 details로 변경
             if not income_data.data.details:
                 logger.warning(f"No data found for ticker: {ticker}")
@@ -275,12 +283,15 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[CashFlowResponse]:
         """
         현금흐름 시계열 분석
         """
         try:
-            cashflow_data = self.get_cashflow_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+            cashflow_data = self.get_cashflow_data(
+                ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, user=user
+            )
             if not cashflow_data.data.details:
                 logger.warning(f"No data found for ticker: {ticker}")
                 return BaseResponse[CashFlowResponse](
@@ -303,12 +314,15 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[FinPosResponse]:
         """
         재무상태표 시계열 분석
         """
         try:
-            finpos_data = self.get_finpos_data(ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date)
+            finpos_data = self.get_finpos_data(
+                ctry=ctry, ticker=ticker, start_date=start_date, end_date=end_date, user=user
+            )
 
             if not finpos_data.data.details:
                 return BaseResponse[FinPosResponse](
@@ -401,6 +415,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[IncomeStatementResponse]:
         """
         손익계산서 데이터 조회
@@ -412,7 +427,7 @@ class FinancialService:
                 raise InvalidCountryException(country=ctry)
 
             db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
-            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date, user)}
 
             logger.debug(f"Querying income data for {ticker} with conditions: {conditions}")
 
@@ -427,7 +442,7 @@ class FinancialService:
                 ticker_list = [ticker[0] for ticker in same_company_tickers]
                 ticker_list = [f"{t}-US" if ctry == FinancialCountry.USA else t for t in ticker_list if t != ticker]
                 if len(ticker_list) == 1:
-                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date)}
+                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date, user)}
                     result = self.db._select(table=table_name, **conditions)
                 elif not ticker_list and len(ticker_list) > 1:
                     logger.warning(f"No income data found for ticker: {ticker}")
@@ -441,10 +456,16 @@ class FinancialService:
 
             name = sorted_result[0][1] if sorted_result else ""
 
-            # 정렬된 결과로 처리
-            statements = self._process_income_statement_result(sorted_result)
+            # 정렬된 결과로 처리 - 사용자 권한에 따라 데이터 필터링 적용
+            statements = self._process_income_statement_result(sorted_result, user=user)
             ttm = self._process_income_ttm_result(sorted_result)
-            total = self._process_income_total_result(sorted_result)
+            total = self._process_income_total_result(sorted_result, user=user)
+
+            # 구독 레벨 1인 경우, TTM 데이터에 대한 접근 권한 확인
+            subscribed_level = getattr(user, "subscription_level", 1)
+            if subscribed_level < 3:
+                # TTM 데이터는 항상 접근 가능 (최신 데이터이므로)
+                pass
 
             ctry_code = contry_mapping.get(ctry.value, "").lower()
 
@@ -475,6 +496,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[CashFlowResponse]:
         """
         현금흐름표 데이터 조회
@@ -486,7 +508,7 @@ class FinancialService:
                 raise InvalidCountryException(country=ctry)
 
             db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
-            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date, user)}
 
             logger.debug(f"Querying cashflow data for {ticker} with conditions: {conditions}")
             result = self.db._select(table=table_name, **conditions)
@@ -499,7 +521,7 @@ class FinancialService:
                 ticker_list = [ticker[0] for ticker in same_company_tickers]
                 ticker_list = [f"{t}-US" if ctry == FinancialCountry.USA else t for t in ticker_list if t != ticker]
                 if len(ticker_list) == 1:
-                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date)}
+                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date, user)}
                     result = self.db._select(table=table_name, **conditions)
                 elif not ticker_list and len(ticker_list) > 1:
                     logger.warning(f"No cashflow data found for ticker: {ticker}")
@@ -511,10 +533,17 @@ class FinancialService:
                 key=lambda x: (-int(x.period_q[:4]), -int(x.period_q[4:])),  # 연도, 분기 순으로 내림차순 정렬
             )
 
-            statements = self._process_cashflow_result(sorted_result)
+            # 사용자 권한에 따라 데이터 필터링 적용
+            statements = self._process_cashflow_result(sorted_result, user=user)
             ttm = self._process_cashflow_ttm_result(sorted_result)
             name = sorted_result[0][1] if sorted_result else ""
-            total = self._process_cashflow_total_result(sorted_result)
+            total = self._process_cashflow_total_result(sorted_result, user=user)
+
+            # 구독 레벨 1인 경우, TTM 데이터에 대한 접근 권한은 항상 제공
+            subscribed_level = getattr(user, "subscription_level", 1)
+            if subscribed_level < 3:
+                # TTM 데이터는 항상 접근 가능 (최신 데이터이므로)
+                pass
 
             ctry_code = contry_mapping.get(ctry.value, "").lower()
             cashflow_response = CashFlowResponse(
@@ -539,6 +568,7 @@ class FinancialService:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        user: AlphafinderUser = Depends(get_current_user),
     ) -> BaseResponse[FinPosResponse]:
         """
         재무상태표 데이터 조회
@@ -550,7 +580,7 @@ class FinancialService:
                 raise InvalidCountryException(country=ctry)
 
             db_ticker = f"{ticker}-US" if ctry == FinancialCountry.USA else ticker
-            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date)}
+            conditions = {"Code": db_ticker, **self._get_date_conditions(start_date, end_date, user)}
 
             logger.debug(f"Querying finpos data for {ticker} with conditions: {conditions}")
             result = self.db._select(table=table_name, **conditions)
@@ -563,7 +593,7 @@ class FinancialService:
                 ticker_list = [ticker[0] for ticker in same_company_tickers]
                 ticker_list = [f"{t}-US" if ctry == FinancialCountry.USA else t for t in ticker_list if t != ticker]
                 if len(ticker_list) == 1:
-                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date)}
+                    conditions = {"Code": ticker_list[0], **self._get_date_conditions(start_date, end_date, user)}
                     result = self.db._select(table=table_name, **conditions)
                 elif not ticker_list and len(ticker_list) > 1:
                     logger.warning(f"No finpos data found for ticker: {ticker}")
@@ -575,10 +605,17 @@ class FinancialService:
                 key=lambda x: (-int(x.period_q[:4]), -int(x.period_q[4:])),  # 연도, 분기 순으로 내림차순 정렬
             )
 
-            statements = self._process_finpos_result(sorted_result)
+            # 사용자 권한에 따라 데이터 필터링 적용
+            statements = self._process_finpos_result(sorted_result, user=user)
             ttm = self._process_finpos_ttm_result(sorted_result)
             name = sorted_result[0][1] if sorted_result else ""
-            total = self._process_finpos_total_result(sorted_result)
+            total = self._process_finpos_total_result(sorted_result, user=user)
+
+            # 구독 레벨 1인 경우, TTM 데이터에 대한 접근 권한은 항상 제공
+            subscribed_level = getattr(user, "subscription_level", 1)
+            if subscribed_level < 3:
+                # TTM 데이터는 항상 접근 가능 (최신 데이터이므로)
+                pass
 
             ctry_code = contry_mapping.get(ctry.value, "").lower()
             finpos_response = FinPosResponse(
@@ -1106,7 +1143,7 @@ class FinancialService:
 
         return self._create_finpos_detail(latest_quarter_dict)
 
-    def _process_income_total_result(self, result) -> List[IncomeStatementDetail]:
+    def _process_income_total_result(self, result, user: Optional[AlphafinderUser] = None) -> List[IncomeStatementDetail]:
         """
         년도별 손익계산서 조회 - 각 년도의 분기 데이터를 합산하여 연간 총계 계산
         """
@@ -1148,9 +1185,16 @@ class FinancialService:
             yearly_statement = self._create_income_statement_detail(year_dict)
             yearly_statements.append(yearly_statement)
 
+        # 최근 10년치 데이터만 사용
+        yearly_statements = yearly_statements[:10]
+
+        # 사용자 구독 레벨에 따른 접근 제어 적용
+        if user:
+            yearly_statements = self._apply_subscription_based_access(yearly_statements, user, is_yearly=True)
+
         return yearly_statements
 
-    def _process_cashflow_total_result(self, result) -> List[CashFlowDetail]:
+    def _process_cashflow_total_result(self, result, user: Optional[AlphafinderUser] = None) -> List[CashFlowDetail]:
         """
         년도별 현금흐름표 조회 - 각 년도의 분기 데이터를 합산하여 연간 총계 계산
         """
@@ -1192,9 +1236,16 @@ class FinancialService:
             yearly_statement = self._create_cashflow_detail(year_dict)
             yearly_statements.append(yearly_statement)
 
+        # 최근 10년치 데이터만 사용
+        yearly_statements = yearly_statements[:10]
+
+        # 사용자 구독 레벨에 따른 접근 제어 적용
+        if user:
+            yearly_statements = self._apply_subscription_based_access(yearly_statements, user, is_yearly=True)
+
         return yearly_statements
 
-    def _process_finpos_total_result(self, result) -> List[FinPosDetail]:
+    def _process_finpos_total_result(self, result, user: Optional[AlphafinderUser] = None) -> List[FinPosDetail]:
         """
         년도별 재무상태표 조회 - 각 년도의 분기 데이터를 합산하여 연간 총계 계산
         재무상태표는 특성상 마지막 분기의 데이터를 사용
@@ -1227,12 +1278,19 @@ class FinancialService:
             yearly_statement = self._create_finpos_detail(yearly_data[year])
             yearly_statements.append(yearly_statement)
 
+        # 최근 10년치 데이터만 사용
+        yearly_statements = yearly_statements[:10]
+
+        # 사용자 구독 레벨에 따른 접근 제어 적용
+        if user:
+            yearly_statements = self._apply_subscription_based_access(yearly_statements, user, is_yearly=True)
+
         return yearly_statements
 
     ########################################## 결과 처리 메서드 #########################################
     # 분기 실적
     async def _process_income_performance_quarterly_result(
-        self, result, ticker, ctry, sector_tickers, all_shares
+        self, result, ticker, ctry, sector_tickers, all_shares, user: Optional[AlphafinderUser] = None
     ) -> List[QuarterlyIncome]:
         if not result:
             return []
@@ -1324,11 +1382,18 @@ class FinancialService:
             )
             quarterly_results.append(quarterly_income)
 
-        return quarterly_results[:10]
+        # 최근 10분기 데이터만 사용
+        quarterly_results = quarterly_results[:10]
+
+        # # 사용자 구독 레벨에 따른 접근 제어 적용
+        # if user:
+        #     quarterly_results = self._apply_subscription_based_access(quarterly_results, user, is_yearly=False)
+
+        return quarterly_results
 
     # 연간 실적
     async def _process_income_performance_yearly_result(
-        self, result, ticker, ctry, sector_tickers, all_shares
+        self, result, ticker, ctry, sector_tickers, all_shares, user: Optional[AlphafinderUser] = None
     ) -> List[QuarterlyIncome]:
         if not result:
             return []
@@ -1436,7 +1501,14 @@ class FinancialService:
             )
             yearly_results.append(yearly_income)
 
-        return yearly_results[:10]
+        # 최근 10년치 데이터만 사용
+        yearly_results = yearly_results[:10]
+
+        # 사용자 구독 레벨에 따른 접근 제어 적용
+        # if user:
+        #     yearly_results = self._apply_subscription_based_access(yearly_results, user, is_yearly=True)
+
+        return yearly_results
 
     async def get_all_shares_by_tickers(self, tickers: List[str], country: str) -> Dict[str, float]:
         """한 번에 모든 티커의 shares 조회"""
@@ -1471,7 +1543,7 @@ class FinancialService:
 
     # 손익계산서
     def _process_income_statement_result(
-        self, result, exclude_columns=["Code", "Name", "StmtDt"]
+        self, result, exclude_columns=["Code", "Name", "StmtDt"], user: Optional[AlphafinderUser] = None
     ) -> List[IncomeStatementDetail]:
         """
         손익계산 결과 처리
@@ -1485,10 +1557,19 @@ class FinancialService:
             row_dict = {col: val for col, val in zip(row._fields, row) if col not in exclude_columns}
             statements.append(self._create_income_statement_detail(row_dict))
 
+        # 가장 최근 40분기(10년) 데이터만 사용
+        statements = statements[:40]
+
+        # 사용자 구독 레벨에 따른 접근 제어 적용
+        if user:
+            statements = self._apply_subscription_based_access(statements, user, is_yearly=False)
+
         return statements
 
     # 현금흐름표
-    def _process_cashflow_result(self, result, exclude_columns=["Code", "Name", "StmtDt"]) -> List[CashFlowDetail]:
+    def _process_cashflow_result(
+        self, result, exclude_columns=["Code", "Name", "StmtDt"], user: Optional[AlphafinderUser] = None
+    ) -> List[CashFlowDetail]:
         """
         현금흐름 결과 처리
         """
@@ -1501,10 +1582,19 @@ class FinancialService:
             row_dict = {col: val for col, val in zip(row._fields, row) if col not in exclude_columns}
             statements.append(self._create_cashflow_detail(row_dict))
 
+        # 가장 최근 40분기(10년) 데이터만 사용
+        statements = statements[:40]
+
+        # 사용자 구독 레벨에 따른 접근 제어 적용
+        if user:
+            statements = self._apply_subscription_based_access(statements, user, is_yearly=False)
+
         return statements
 
     # 재무상태표
-    def _process_finpos_result(self, result, exclude_columns=["Code", "Name", "StmtDt"]) -> List[FinPosDetail]:
+    def _process_finpos_result(
+        self, result, exclude_columns=["Code", "Name", "StmtDt"], user: Optional[AlphafinderUser] = None
+    ) -> List[FinPosDetail]:
         """
         재무상태표 결과 처리
         """
@@ -1516,6 +1606,13 @@ class FinancialService:
             # 제외할 컬럼들의 인덱스를 제외한 데이터만 사용
             row_dict = {col: val for col, val in zip(row._fields, row) if col not in exclude_columns}
             statements.append(self._create_finpos_detail(row_dict))
+
+        # 가장 최근 40분기(10년) 데이터만 사용
+        statements = statements[:40]
+
+        # 사용자 구독 레벨에 따른 접근 제어 적용
+        if user:
+            statements = self._apply_subscription_based_access(statements, user, is_yearly=False)
 
         return statements
 
@@ -1599,6 +1696,100 @@ class FinancialService:
         rounded = round(value, 1)
         # float의 is_integer() 메서드 사용
         return int(rounded) if float(rounded).is_integer() else rounded
+
+    def _apply_subscription_based_access(self, data_list, user: AlphafinderUser, is_yearly: bool = False):
+        """
+        사용자 구독 레벨에 따라 데이터 접근 제어를 적용
+        level 3: 10년 전체 데이터 제공
+        level 1: 5년치 데이터만 제공 (나머지는 period_q만 제공하고 데이터는 마스킹)
+
+        Args:
+            data_list: 처리할 데이터 리스트
+            user: 사용자 정보
+            is_yearly: 연간 데이터 여부 (True: 연간, False: 분기)
+
+        Returns:
+            처리된 데이터 리스트
+        """
+        from app.modules.financial.schemas import (
+            CashFlowDetail,
+            FinPosDetail,
+            IncomeMetric,
+            IncomeStatementDetail,
+            QuarterlyIncome,
+        )
+
+        if not data_list:
+            return []
+
+        # 구독 레벨 확인
+        subscribed_level = getattr(user, "subscription_level", 1)  # 기본값은 1
+
+        # 레벨 3 이상인 경우 전체 데이터 제공
+        if subscribed_level >= 3:
+            return data_list
+
+        # 레벨 1인 경우 최근 5년치 데이터만 제공
+
+        # 연간 데이터와 분기 데이터의 처리 방식 차이
+        years_to_show = 5
+        periods_to_show = years_to_show * (1 if is_yearly else 4)  # 연간은 5년, 분기는 20분기
+
+        # 결과 리스트 초기화
+        result = []
+
+        # 모든 데이터의 period_q를 유지하되, 접근 가능한 기간 이외의 데이터는 마스킹
+        for i, item in enumerate(data_list):
+            if i < periods_to_show:
+                # 접근 가능한 기간의 데이터는 그대로 추가
+                result.append(item)
+            else:
+                # 접근 불가능한 기간의 데이터는 period_q만 유지하고 나머지는 마스킹
+                if hasattr(item, "rev") and hasattr(item.rev, "company") and hasattr(item.rev, "industry_avg"):
+                    # QuarterlyIncome 타입 (실적 데이터)
+
+                    # 원본 period_q 유지
+                    period_q = item.period_q
+
+                    # 새 IncomeMetric 객체들 생성 (company는 None으로, industry_avg는 유지)
+                    masked_rev = IncomeMetric(company=None, industry_avg=item.rev.industry_avg)
+                    masked_operating_income = IncomeMetric(company=None, industry_avg=item.operating_income.industry_avg)
+                    masked_net_income = IncomeMetric(company=None, industry_avg=item.net_income.industry_avg)
+                    masked_eps = IncomeMetric(company=None, industry_avg=item.eps.industry_avg)
+
+                    # 새로운 QuarterlyIncome 객체 생성
+                    masked_item = QuarterlyIncome(
+                        period_q=period_q,
+                        rev=masked_rev,
+                        operating_income=masked_operating_income,
+                        net_income=masked_net_income,
+                        eps=masked_eps,
+                    )
+
+                    result.append(masked_item)
+                else:
+                    # IncomeStatementDetail, CashFlowDetail, FinPosDetail 타입 (재무제표 데이터)
+                    # 모델 타입에 따라 적절한 클래스 결정
+
+                    if isinstance(item, IncomeStatementDetail):
+                        model_class = IncomeStatementDetail
+                    elif isinstance(item, CashFlowDetail):
+                        model_class = CashFlowDetail
+                    elif isinstance(item, FinPosDetail):
+                        model_class = FinPosDetail
+                    else:
+                        # 일치하는 모델 클래스를 찾을 수 없으면 원본 반환
+                        result.append(item)
+                        continue
+
+                    # period_q만 유지하고 나머지 필드는 None으로 설정
+                    masked_data = {"period_q": item.period_q}
+
+                    # 새 모델 인스턴스 생성
+                    masked_item = model_class(**masked_data)
+                    result.append(masked_item)
+
+        return result
 
 
 def get_financial_service(common_service: CommonService = Depends(get_common_service)) -> FinancialService:

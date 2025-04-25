@@ -1,8 +1,9 @@
+import socket
+import traceback
 from typing import Dict, Union
+
 import psutil
 import requests
-import traceback
-import socket
 
 
 class SlackNotifier:

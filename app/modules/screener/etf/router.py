@@ -1,24 +1,28 @@
+from datetime import datetime
+from io import StringIO
 from typing import Dict, List, Literal
-from fastapi import APIRouter, Depends, HTTPException
-import time
-from fastapi.responses import FileResponse
+
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
 
 from app.batches.run_etf_screener import run_etf_screener_data
+from app.common.constants import ETF_MARKET_MAP, FACTOR_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN
+from app.core.exception.base import CustomException
+from app.core.logger import setup_logger
 from app.enum.type import StockType
 from app.models.models_factors import CategoryEnum
-from app.modules.screener.stock.schemas import FactorResponse, GroupMetaData, ETFGroupFilter, ETFGroupFilterResponse
+from app.models.models_users import AlphafinderUser
 from app.modules.screener.etf.enum import ETFMarketEnum
-from app.modules.screener.etf.schemas import FilteredETF
+from app.modules.screener.etf.schemas import FilteredETF, PaginatedFilteredETF
 from app.modules.screener.etf.service import ScreenerETFService
-from app.utils.oauth_utils import get_current_user
-from app.core.logging.config import get_logger
-from app.common.constants import FACTOR_KOREAN_TO_ENGLISH_MAP, REVERSE_FACTOR_MAP, REVERSE_FACTOR_MAP_EN, ETF_MARKET_MAP
-from app.core.exception.base import CustomException
+from app.modules.screener.stock.schemas import ETFGroupFilter, ETFGroupFilterResponse, FactorResponse, GroupMetaData
 from app.modules.screener.utils import screener_utils
+from app.modules.user.schemas import DataDownloadHistory
+from app.modules.user.service import UserService, get_user_service
+from app.utils.oauth_utils import get_current_user
 
 router = APIRouter()
-logger = get_logger(__name__)
+logger = setup_logger(__name__)
 
 
 @router.get("/factors/{market}", response_model=List[FactorResponse])
@@ -44,6 +48,7 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
             custom_filters = [
                 {
                     "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "values": condition.values,
                     "above": condition.above,
                     "below": condition.below,
                 }
@@ -76,6 +81,9 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
             lang=filtered_etf.lang,
         )
 
+        if not etfs_data:
+            return {"data": [], "has_next": False}
+
         has_next = filtered_etf.offset * filtered_etf.limit + filtered_etf.limit < total_count
 
         print("ETF", etfs_data[0].keys())
@@ -95,6 +103,84 @@ def get_filtered_etfs(filtered_etf: FilteredETF, screener_etf_service: ScreenerE
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/paginated", response_model=Dict)
+def get_paginated_etfs(
+    filtered_etf: PaginatedFilteredETF, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)
+):
+    """
+    페이지네이션을 포함한 필터링된 ETF 목록 조회
+
+    page: 페이지 번호 (1부터 시작)
+    """
+    try:
+        custom_filters = []
+        if filtered_etf.custom_filters:
+            custom_filters = [
+                {
+                    "factor": REVERSE_FACTOR_MAP[condition.factor],
+                    "values": condition.values,
+                    "above": condition.above,
+                    "below": condition.below,
+                }
+                for condition in filtered_etf.custom_filters
+            ]
+
+        request_columns = ["Code", "Name", "manager", "country"]
+        reverse_factor_map = REVERSE_FACTOR_MAP
+        if filtered_etf.lang == "en":
+            reverse_factor_map = REVERSE_FACTOR_MAP_EN
+
+        for column in [reverse_factor_map[column] for column in filtered_etf.factor_filters]:
+            if column not in request_columns:
+                request_columns.append(column)
+
+        sort_by = "score"
+        ascending = False
+        if filtered_etf.sort_info:
+            sort_by = reverse_factor_map[filtered_etf.sort_info.sort_by]
+            ascending = filtered_etf.sort_info.ascending
+
+        page = filtered_etf.page if filtered_etf.page > 0 else 1
+        offset = page - 1
+
+        etfs_data, total_count = screener_etf_service.get_filtered_data(
+            market_filter=filtered_etf.market_filter,
+            custom_filters=custom_filters,
+            columns=request_columns,
+            limit=filtered_etf.limit,
+            offset=offset,
+            sort_by=sort_by,
+            ascending=ascending,
+            lang=filtered_etf.lang,
+        )
+
+        if not etfs_data:
+            return {"data": [], "pagination": {"total_count": 0, "total_pages": 0, "current_page": page}}
+
+        total_pages = (total_count + filtered_etf.limit - 1) // filtered_etf.limit if total_count > 0 else 0
+
+        if filtered_etf.lang == "kr":
+            for etf in etfs_data:
+                if "시장" in etf and etf["시장"] in ETF_MARKET_MAP:
+                    etf["시장"] = ETF_MARKET_MAP[etf["시장"]]
+
+        result = {
+            "data": etfs_data,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "current_page": page,
+        }
+        return result
+
+    except CustomException as e:
+        logger.exception(f"Error getting paginated etfs: {e}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+    except Exception as e:
+        logger.exception(f"Error getting paginated etfs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/count", response_model=Dict)
 def get_filtered_etfs_count(
     filtered_etf: FilteredETF, screener_etf_service: ScreenerETFService = Depends(ScreenerETFService)
@@ -106,6 +192,7 @@ def get_filtered_etfs_count(
                 "factor": REVERSE_FACTOR_MAP[condition.factor],
                 "above": condition.above,
                 "below": condition.below,
+                "values": condition.values,
             }
             for condition in filtered_etf.custom_filters
         ]
@@ -148,8 +235,9 @@ async def create_or_update_group(
     필터 생성 또는 업데이트
     """
     try:
+        group_id = None
         if group_filter.id:
-            is_success = await screener_etf_service.update_group(
+            group_id = await screener_etf_service.update_group(
                 group_id=group_filter.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
@@ -160,19 +248,18 @@ async def create_or_update_group(
                 sort_info=group_filter.sort_info,
                 type=group_filter.type,
             )
-            message = "Filter updated successfully"
         else:
-            is_success = await screener_etf_service.create_group(
+            group_id = await screener_etf_service.create_group(
                 user_id=current_user.id,
                 name=group_filter.name,
                 market_filter=group_filter.market_filter,
-                sector_filter=group_filter.sector_filter,
                 custom_filters=group_filter.custom_filters,
+                factor_filters=group_filter.factor_filters,
+                sort_info=group_filter.sort_info,
                 type=group_filter.type,
             )
-            message = "Group created successfully"
-        if is_success:
-            return {"message": message}
+        return {"group_id": group_id}
+
     except CustomException as e:
         logger.error(f"Error creating group: {e}")
         raise HTTPException(status_code=e.status_code, detail=e.message)
@@ -228,7 +315,7 @@ def get_group_filters(
 
     for stock_filter in stock_filters:
         if stock_filter["factor"] == "시장":
-            market_filter = stock_filter["value"]
+            market_filter = stock_filter["values"][0]
         elif stock_filter["factor"] == "산업":
             continue
         else:
@@ -338,8 +425,15 @@ def get_old_parquet(screener_etf_service: ScreenerETFService = Depends(ScreenerE
 
 @router.post("/download")
 async def download_filtered_etfs(
-    filtered_etfs: FilteredETF, screener_service: ScreenerETFService = Depends(ScreenerETFService)
+    filtered_etfs: FilteredETF,
+    screener_service: ScreenerETFService = Depends(ScreenerETFService),
+    user: AlphafinderUser = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
 ):
+    if user is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    if user.subscription_level == 1:
+        raise HTTPException(status_code=403, detail="구독 레벨이 낮습니다.")
     custom_filters = []
     if filtered_etfs.custom_filters:
         custom_filters = [
@@ -347,6 +441,7 @@ async def download_filtered_etfs(
                 "factor": REVERSE_FACTOR_MAP[condition.factor],
                 "above": condition.above,
                 "below": condition.below,
+                "values": condition.values,
             }
             for condition in filtered_etfs.custom_filters
         ]
@@ -376,9 +471,28 @@ async def download_filtered_etfs(
     )
 
     if df is None or df.empty:
-        return JSONResponse(content={"error": "No data found"}, status_code=404)
+        return JSONResponse(content={"error": "데이터가 없습니다"}, status_code=404)
 
-    filename = f"temp_export_{int(time.time())}.csv"
-    df.to_csv(filename, index=False)
+    csv_data = StringIO()
+    df.to_csv(csv_data, index=False, encoding="utf-8-sig")
 
-    return FileResponse(path=filename, filename="etfs_export.csv", media_type="text/csv")
+    data_download_history = DataDownloadHistory(
+        user_id=user.id,
+        data_type="screener",
+        data_detail="etf",
+        download_datetime=datetime.now(),
+    )
+    user_service.save_data_download_history(data_download_history)
+
+    market_str = (
+        filtered_etfs.market_filter.value
+        if hasattr(filtered_etfs.market_filter, "value")
+        else str(filtered_etfs.market_filter)
+    )
+    filename = f"etf_export_{market_str}.csv"
+
+    return Response(
+        content=csv_data.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

@@ -1,13 +1,15 @@
-from dataclasses import asdict, dataclass, field
 import time
-from sqlalchemy import MetaData, bindparam
-from sqlalchemy import select, insert, update, delete, desc, asc, or_, and_
-from sqlalchemy.exc import IntegrityError
 from contextlib import contextmanager
-import logging
-from sqlalchemy import func
+from dataclasses import asdict, dataclass, field
+
+from sqlalchemy import MetaData, and_, asc, bindparam, delete, desc, func, insert, or_, select, update
+from sqlalchemy.exc import IntegrityError
+
 from app.core.config import get_database_config
-from app.database.conn import db, db_service
+from app.core.logger import setup_logger
+from app.database.conn import db, db_service, db_user
+
+logger = setup_logger(__name__)
 
 
 @dataclass
@@ -69,7 +71,7 @@ class BaseDatabase:
                 connection.execute(select(1))
             return True
         except Exception as e:
-            logging.error(f"Database connection check failed: {str(e)}")
+            logger.error(f"Database connection check failed: {str(e)}")
             return False
 
     def _execute(self, query, *args):
@@ -79,10 +81,10 @@ class BaseDatabase:
                 result = connection.execute(query, *args)
                 return result
             except IntegrityError as e:
-                logging.error(f"Integrity Error in query execution: {str(e)}")
+                logger.error(f"Integrity Error in query execution: {str(e)}")
                 raise
             except Exception as e:
-                logging.error(f"Error in query execution: {str(e)}")
+                logger.error(f"Error in query execution: {str(e)}")
                 raise
 
     def get_condition(self, obj: object, **kwargs) -> list:
@@ -167,7 +169,7 @@ class BaseDatabase:
                 result = connection.execute(stmt)
                 return result
         except Exception as e:
-            logging.error(f"Error in update operation: {str(e)}")
+            logger.error(f"Error in update operation: {str(e)}")
             raise
 
     def _delete(self, table: str, **kwargs):
@@ -184,7 +186,7 @@ class BaseDatabase:
                 result = connection.execute(stmt)
                 return result
         except Exception as e:
-            logging.error(f"Error in delete operation: {str(e)}")
+            logger.error(f"Error in delete operation: {str(e)}")
             raise
 
     def _insert(self, table: str, sets: dict | list):
@@ -204,7 +206,7 @@ class BaseDatabase:
                 result = connection.execute(stmt)
                 return result
         except Exception as e:
-            logging.error(f"Error in insert operation: {str(e)}")
+            logger.error(f"Error in insert operation: {str(e)}")
             raise
 
     def _select(
@@ -296,7 +298,7 @@ class BaseDatabase:
                 return result.fetchall()
 
         except Exception as e:
-            logging.error(f"Error in select operation: {str(e)}")
+            logger.error(f"Error in select operation: {str(e)}")
             raise
 
     def _join(self, join_info: JoinInfo):
@@ -319,7 +321,7 @@ class BaseDatabase:
 
             return join_obj
         except Exception as e:
-            logging.error(f"Error in join operation: {str(e)}")
+            logger.error(f"Error in join operation: {str(e)}")
             raise
 
     def _count(self, table: str, join_info: JoinInfo | None = None, **kwargs) -> int:
@@ -339,7 +341,7 @@ class BaseDatabase:
                 return result.scalar() or 0
 
         except Exception as e:
-            logging.error(f"Error in count operation: {str(e)}")
+            logger.error(f"Error in count operation: {str(e)}")
             raise
 
     def _bulk_update(self, table: str, data: list[dict], key_column: str, chunk_size: int = 1000):
@@ -374,13 +376,13 @@ class BaseDatabase:
                 with self.get_connection() as connection:
                     connection.execute(stmt, update_params)
 
-                logging.info(
+                logger.info(
                     f"Bulk update completed for chunk {i//chunk_size + 1}, " f"processed {len(chunk)} records in {table}"
                 )
                 time.sleep(1)
 
         except Exception as e:
-            logging.error(f"Error in bulk update operation: {str(e)}")
+            logger.error(f"Error in bulk update operation: {str(e)}")
             raise
 
     async def insert_wrapper(self, table: str, sets: dict | list):
@@ -388,7 +390,69 @@ class BaseDatabase:
         try:
             return self._insert(table, sets)
         except Exception as e:
-            logging.error(f"Error in insert operation: {str(e)}")
+            logger.error(f"Error in insert operation: {str(e)}")
+            raise
+
+    def _bulk_update_multi_key(self, table: str, data: list[dict], key_columns: list[str], chunk_size: int = 1000):
+        """벌크 업데이트를 수행하는 메서드 (복합 키 지원)
+
+        Args:
+            table: 업데이트할 테이블 이름
+            data: 업데이트할 데이터 리스트 (각 항목은 딕셔너리)
+            key_columns: 레코드를 식별하는 키 컬럼 이름 리스트
+            chunk_size: 한 번에 처리할 레코드 수 (기본값 1000)
+        """
+        try:
+            if not data:
+                return
+
+            obj = self.meta_data.tables[table]
+
+            # 키 컬럼들이 테이블에 존재하는지 확인
+            for key_col in key_columns:
+                if key_col not in obj.columns:
+                    raise ValueError(f"Key column '{key_col}' does not exist in table '{table}'")
+
+            sample_data = data[0]
+            invalid_columns = [col for col in sample_data if col not in obj.columns]
+            if invalid_columns:
+                raise ValueError(f"Invalid columns found: {invalid_columns}")
+
+            # 업데이트할 컬럼 목록 (키 컬럼 제외)
+            update_columns = [col for col in sample_data.keys() if col not in key_columns]
+
+            for i in range(0, len(data), chunk_size):
+                chunk = data[i : i + chunk_size]
+
+                # WHERE 조건 생성 (복합 키)
+                where_conditions = [
+                    getattr(obj.columns, key_col) == bindparam("_old_" + key_col) for key_col in key_columns
+                ]
+
+                # UPDATE 문 생성
+                stmt = (
+                    update(obj)
+                    .where(and_(*where_conditions))
+                    .values({col_name: bindparam(col_name) for col_name in update_columns})
+                )
+
+                # 파라미터 생성
+                update_params = []
+                for item in chunk:
+                    param = {"_old_" + key_col: item[key_col] for key_col in key_columns}
+                    param.update({col: item[col] for col in update_columns})
+                    update_params.append(param)
+
+                with self.get_connection() as connection:
+                    connection.execute(stmt, update_params)
+
+                logger.info(
+                    f"Bulk update completed for chunk {i//chunk_size + 1}, " f"processed {len(chunk)} records in {table}"
+                )
+                time.sleep(1)
+
+        except Exception as e:
+            logger.error(f"Error in bulk update operation: {str(e)}")
             raise
 
 
@@ -404,5 +468,12 @@ class DatabaseService(BaseDatabase):
         super().__init__(self.db)
 
 
+class DatabaseUser(BaseDatabase):
+    def __init__(self):
+        self.db = db_user
+        super().__init__(self.db)
+
+
 database = Database()
 database_service = DatabaseService()
+database_user = DatabaseUser()

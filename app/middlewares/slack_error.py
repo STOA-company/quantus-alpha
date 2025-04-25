@@ -1,14 +1,16 @@
+from typing import Any, Callable, Dict, List, Optional
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-import logging
-from typing import Callable, Dict, Any, Optional, List
+
 from app.core.exception.base import CustomException
 
 # 아래와 같이 수정: 직접 SlackNotifier 클래스를 가져오도록 함
 from app.core.extra.SlackNotifier import SlackNotifier
+from app.core.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class SlackExceptionMiddleware(BaseHTTPMiddleware):
@@ -35,9 +37,13 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> JSONResponse:
         try:
+            # 스트리밍 엔드포인트 처리를 위한 검사
+            path = request.url.path
+            is_streaming_endpoint = path.endswith("/stream") or "stream" in path
+
             # Create a copy of the request body before processing
             body = None
-            if self.include_request_body:
+            if self.include_request_body and not is_streaming_endpoint:
                 body = await request.body()
 
                 # Create a new request with the same body
@@ -61,9 +67,6 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
             return response
 
         except CustomException as exc:
-            # 커스텀 예외 로깅
-            logger.error(f"CustomException: {exc.message}", exc_info=True)
-
             # 특정 환경에서만 슬랙 알림 전송
             if self.environment in self.notify_environments:
                 await self._send_slack_notification(
@@ -80,8 +83,7 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
             raise
 
         except Exception as exc:
-            # 일반 예외 로깅
-            logger.exception(f"Unhandled exception: {exc}")
+            # 로깅 코드 제거 - 전역 예외 핸들러에서 한 번만 로깅하도록 함
 
             # 특정 환경에서만 슬랙 알림 전송
             if self.environment in self.notify_environments:

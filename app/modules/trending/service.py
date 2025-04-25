@@ -1,8 +1,9 @@
 from typing import List
-from app.database.crud import database, JoinInfo
+
 from app.database.conn import db
+from app.database.crud import JoinInfo, database
 from app.modules.common.enum import TranslateCountry
-from app.modules.trending.schemas import TrendingStockRequest, TrendingStock, TrendingType
+from app.modules.trending.schemas import TrendingStock, TrendingStockRequest, TrendingType
 
 
 class TrendingService:

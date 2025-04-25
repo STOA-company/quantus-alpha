@@ -1,6 +1,9 @@
-from datetime import datetime
 import time
-import logging
+from datetime import datetime
+
+from app.core.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 from typing import Optional
 
@@ -32,8 +35,8 @@ class KISAPIManager:
                 time.sleep(60 - (current_time - self._last_token_refresh).total_seconds())
                 if self._api.refresh_token():
                     self._last_token_refresh = datetime.now()
-                    logging.info("Successfully refreshed token")
+                    logger.info("Successfully refreshed token")
                 else:
-                    logging.error("Failed to refresh token")
+                    logger.error("Failed to refresh token")
 
         return self._api

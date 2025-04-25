@@ -1,25 +1,21 @@
-from typing import Optional, List, Dict, Tuple
-import logging
-from app.utils.score_utils import score_utils
-from app.cache.factors import factors_cache
-import pandas as pd
-import numpy as np
 import json
-from app.modules.screener.stock.schemas import MarketEnum, ExcludeEnum
-from app.modules.screener.utils import screener_utils
-from app.common.constants import (
-    FACTOR_MAP,
-    NON_NUMERIC_COLUMNS,
-    FACTOR_MAP_EN,
-    UNIT_MAP,
-)
-from app.modules.screener.stock.schemas import StockType
-from app.core.exception.custom import CustomException
-from app.modules.screener.base import BaseScreenerService
-from app.utils.test_utils import time_it
-from app.core.redis import redis_client
+from typing import Dict, List, Optional, Tuple
 
-logger = logging.getLogger(__name__)
+import numpy as np
+import pandas as pd
+
+from app.cache.factors import factors_cache
+from app.common.constants import BASE_COLUMNS, FACTOR_MAP, FACTOR_MAP_EN, SELECT_MAP, UNIT_MAP
+from app.core.exception.custom import CustomException
+from app.core.logger import setup_logger
+from app.core.redis import redis_client
+from app.modules.screener.base import BaseScreenerService
+from app.modules.screener.stock.schemas import ExcludeEnum, MarketEnum, StockType
+from app.modules.screener.utils import screener_utils
+from app.utils.score_utils import score_utils
+from app.utils.test_utils import time_it
+
+logger = setup_logger(__name__)
 
 
 class ScreenerStockService(BaseScreenerService):
@@ -40,10 +36,9 @@ class ScreenerStockService(BaseScreenerService):
         """
         try:
             factors = screener_utils.get_factors(market)
-
             if market in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 nation = "us"
-            elif market in [MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
+            elif market in [MarketEnum.KR, MarketEnum.KOSPI, MarketEnum.KOSDAQ]:
                 nation = "kr"
             elif market == MarketEnum.ALL:
                 nation = "global"
@@ -52,13 +47,10 @@ class ScreenerStockService(BaseScreenerService):
             for factor in factors:
                 if factor["unit"] == "small_price":
                     unit = "원" if nation == "kr" else "$"
-                    type = "input"
                 elif factor["unit"] == "big_price":
                     unit = "억원" if nation == "kr" else "K$"
-                    type = "input"
                 else:
                     unit = UNIT_MAP[factor["unit"]]
-                    type = "slider"
 
                 result.append(
                     {
@@ -69,7 +61,7 @@ class ScreenerStockService(BaseScreenerService):
                         "direction": factor["direction"],
                         "min_value": factor["min_value"],
                         "max_value": factor["max_value"],
-                        "type": type,
+                        "type": factor["type"],
                         "presets": factor["presets"],
                     }
                 )
@@ -113,6 +105,10 @@ class ScreenerStockService(BaseScreenerService):
             if scored_df.empty:
                 return [], 0
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
+
+            # 티커(Code) 기준으로 중복 데이터 제거 (첫번째 항목만 유지)
+            merged_df = merged_df.drop_duplicates(subset=["Code"])
+
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
@@ -140,11 +136,23 @@ class ScreenerStockService(BaseScreenerService):
                 stock_data = {}
 
                 for col in selected_columns:
-                    if col in NON_NUMERIC_COLUMNS:
-                        if col in row:
-                            stock_data[col] = row[col]
+                    if col in BASE_COLUMNS:
+                        stock_data[col] = row[col]
+                    elif col in SELECT_MAP:
+                        value_info = next(
+                            (
+                                {"value": item["value"], "display": item["display"]}
+                                for item in SELECT_MAP[col]
+                                if item["value"] == row[col]
+                            ),
+                            {"value": row[col], "display": row[col]},
+                        )
+                        stock_data[col] = value_info
                     elif col == "score":
-                        stock_data[col] = {"value": float(row[col]), "unit": ""}
+                        if pd.isna(row[col]) or np.isinf(row[col]):
+                            stock_data[col] = {"value": "", "unit": ""}
+                        else:
+                            stock_data[col] = {"value": float(row[col]), "unit": ""}
                     elif col in row:
                         if pd.isna(row[col]) or np.isinf(row[col]):  # NA / INF -> 빈 문자열
                             stock_data[col] = {"value": "", "unit": ""}
@@ -159,12 +167,24 @@ class ScreenerStockService(BaseScreenerService):
 
                 result.append(stock_data)
 
+            # 결과를 매핑 및 필터링
             factor_map = FACTOR_MAP
             if lang == "en":
                 factor_map = FACTOR_MAP_EN
 
             mapped_result = []
+            # 티커 중복 방지를 위한 세트
+            seen_codes = set()
             for item in result:
+                # 티커 코드가 이미 처리된 경우 스킵
+                if "Code" in item and item["Code"] in seen_codes:
+                    continue
+
+                # 새로운 티커 코드 기록
+                if "Code" in item:
+                    seen_codes.add(item["Code"])
+
+                # NULL display 값 포함 - 모든 항목 결과에 포함
                 mapped_item = {}
                 for key in ordered_columns:
                     if key in item:
@@ -211,6 +231,7 @@ class ScreenerStockService(BaseScreenerService):
     def get_filtered_data_count(
         self,
         market_filter: Optional[MarketEnum] = None,
+        exclude_filters: Optional[List[ExcludeEnum]] = None,
         sector_filter: Optional[List[str]] = None,
         custom_filters: Optional[List[Dict]] = None,
         columns: Optional[List[str]] = None,
@@ -219,7 +240,7 @@ class ScreenerStockService(BaseScreenerService):
         필터링된 주식 개수 조회
         """
         try:
-            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters)
+            stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters, exclude_filters)
             filtered_df = screener_utils.get_filtered_stocks_df(market_filter, stocks, columns)
 
             return len(filtered_df)
@@ -250,20 +271,16 @@ class ScreenerStockService(BaseScreenerService):
                         raise CustomException(status_code=400, message=f"Invalid sector: {sector}")
 
             stocks = screener_utils.filter_stocks(market_filter, sector_filter, custom_filters)
-            print(f"Filtered stocks count: {len(stocks)}")
             filtered_df = screener_utils.get_filtered_stocks_df(market_filter, stocks, columns)
-            print(f"filtered_df shape: {filtered_df.shape}")
             scored_df = score_utils.calculate_factor_score(filtered_df)
-            print(f"scored_df shape: {scored_df.shape}")
             if scored_df.empty:
                 print(f"scored_df is empty. filtered_df columns: {filtered_df.columns.tolist()}")
 
                 return pd.DataFrame()
 
             merged_df = filtered_df.merge(scored_df, on="Code", how="inner")
-            print(f"merged_df shape: {merged_df.shape}")
+
             sorted_df = merged_df.sort_values(by=sort_by, ascending=ascending).reset_index(drop=True)
-            print(f"sorted_df shape: {sorted_df.shape}")
 
             if market_filter in [MarketEnum.US, MarketEnum.SNP500, MarketEnum.NASDAQ]:
                 sorted_df["Code"] = sorted_df["Code"].str.replace("-US", "")
@@ -281,22 +298,29 @@ class ScreenerStockService(BaseScreenerService):
 
             factors = factors_cache.get_configs()
             for col in ordered_columns:
-                if col in NON_NUMERIC_COLUMNS or col in ["Code", "Name"]:
+                if col in BASE_COLUMNS or col in ["Code", "Name"]:
                     continue
                 elif col == "score":
                     sorted_df[col] = sorted_df[col].astype(float)
                 elif col in sorted_df.columns:
 
                     def convert_value(x):
-                        if pd.isna(x) or np.isinf(x):
-                            return ""
-                        value, _ = screener_utils.convert_unit_and_value(
-                            market_filter,
-                            float(x),
-                            factors[col].get("unit", "") if col in factors else "",
-                            lang,
-                        )
-                        return value
+                        try:
+                            if pd.isna(x):
+                                return ""
+                            if isinstance(x, (int, float)) and np.isinf(x):
+                                return ""
+                            if not isinstance(x, (int, float)):
+                                return x
+                            value, _ = screener_utils.convert_unit_and_value(
+                                market_filter,
+                                float(x),
+                                factors[col].get("unit", "") if col in factors else "",
+                                lang,
+                            )
+                            return value
+                        except Exception:
+                            return x
 
                     sorted_df[col] = sorted_df[col].apply(convert_value)
 
@@ -317,3 +341,12 @@ class ScreenerStockService(BaseScreenerService):
                 all_sectors = self.get_available_sectors()
                 await self.create_group(user_id=user.id, sector_filter=all_sectors)
                 await self.create_group(user_id=user.id, type=StockType.ETF)
+
+    def get_multi_select_factors(self):
+        mapped_select_map = {}
+        for key, value in SELECT_MAP.items():
+            mapped_key = FACTOR_MAP.get(key, key)
+            filtered_values = [item for item in value if item["value"] not in ["no_dividend", "insufficient_data"]]
+            if filtered_values:
+                mapped_select_map[mapped_key] = filtered_values
+        return mapped_select_map

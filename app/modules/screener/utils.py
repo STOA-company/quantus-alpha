@@ -1,27 +1,26 @@
-import pandas as pd
-from app.database.crud import database
-from typing import Dict, List, Optional
-from Aws.logic.s3 import get_data_from_bucket
 import io
-from app.modules.screener.stock.schemas import MarketEnum, ExcludeEnum
-from app.common.constants import NEED_TO_MULTIPLY_100, MARKET_MAP, UNIT_MAP, UNIT_MAP_EN
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+
 import numpy as np
-from app.modules.screener.etf.enum import ETFMarketEnum
+import pandas as pd
+
+from app.common.constants import MARKET_MAP, NEED_TO_MULTIPLY_100, UNIT_MAP, UNIT_MAP_EN
 from app.core.extra.SlackNotifier import SlackNotifier
-from app.models.models_factors import CategoryEnum
-import logging
+from app.core.logger import setup_logger
+from app.database.crud import database
+from app.kispy.manager import KISAPIManager
+from app.models.models_factors import CategoryEnum, FactorTypeEnum
+from app.modules.screener.etf.enum import ETFMarketEnum
+from app.modules.screener.etf.utils import ETFDataLoader
+from app.modules.screener.stock.schemas import ExcludeEnum, MarketEnum, StockType
 from app.utils.data_utils import ceil_to_integer, floor_to_integer
 from app.utils.date_utils import is_holiday
-from datetime import datetime, timedelta
-from Aws.logic.s3 import upload_file_to_bucket
-from app.modules.screener.etf.utils import ETFDataLoader
-from pandas.api.types import is_numeric_dtype
-from app.modules.screener.stock.schemas import StockType
-from app.utils.test_utils import time_it
-from app.kispy.manager import KISAPIManager
 from app.utils.dividend_utils import DividendUtils
+from app.utils.test_utils import time_it
+from Aws.logic.s3 import get_data_from_bucket, upload_file_to_bucket
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 notifier = SlackNotifier()
 
@@ -33,7 +32,7 @@ class ScreenerUtils:
         self.etf_factor_loader = ETFDataLoader()
 
     def get_factors(self, market: MarketEnum) -> List[dict]:
-        factors = self.db._select(table="factors", is_stock=True)
+        factors = self.db._select(table="factors", is_stock=True, order="order", ascending=True)
         # 시장별 팩터 최소/최대값 계산
         market_data = self.get_df_from_parquet(market)
 
@@ -42,14 +41,49 @@ class ScreenerUtils:
             factor_name = factor.factor
             factor_presets = self.db._select(table="factors_preset", factor=factor_name, order="order", ascending=True)
             classified_presets = self.classify_factors_preset(factor_presets)
-
-            if factor_name in market_data.columns:
+            factor_type = factor.type.lower()
+            min_value = None
+            max_value = None
+            if factor_type == FactorTypeEnum.SLIDER.value:
                 min_value = market_data[factor_name].min()
                 max_value = market_data[factor_name].max()
 
-                if factor_name == "dividend_count":
-                    min_value = 0
-                    max_value = 52
+            result.append(
+                {
+                    "factor": factor_name,
+                    "description": factor.description,
+                    "unit": str(factor.unit).lower(),
+                    "category": str(factor.category).lower(),
+                    "direction": factor.sort_direction,
+                    "min_value": floor_to_integer(min_value),
+                    "max_value": ceil_to_integer(max_value),
+                    "presets": classified_presets,
+                    "type": factor_type,
+                }
+            )
+
+        return result
+
+    def get_etf_factors(self, market: ETFMarketEnum) -> List[dict]:
+        factors = self.db._select(table="factors", is_etf=True, order="order", ascending=True)
+        market_data = self.etf_factor_loader.load_etf_factors(market.value)
+
+        result = []
+        for factor in factors:
+            factor_name = factor.factor
+            factor_presets = self.db._select(table="factors_preset", factor=factor_name, order="order", ascending=True)
+            classified_presets = self.classify_factors_preset(factor_presets)
+            factor_type = factor.type.lower()
+
+            if factor_name in market_data.columns:
+                min_value = None
+                max_value = None
+                if factor_type == FactorTypeEnum.SLIDER.value:
+                    market_data[factor_name] = pd.to_numeric(market_data[factor_name], errors="coerce")
+                    valid_data = market_data[factor_name].dropna()
+                    if not valid_data.empty:
+                        min_value = valid_data.min()
+                        max_value = valid_data.max()
 
                 result.append(
                     {
@@ -61,41 +95,7 @@ class ScreenerUtils:
                         "min_value": floor_to_integer(min_value),
                         "max_value": ceil_to_integer(max_value),
                         "presets": classified_presets,
-                    }
-                )
-            else:
-                raise ValueError(f"팩터 '{factor_name}'가 데이터에 존재하지 않습니다.")
-
-        return result
-
-    def get_etf_factors(self, market: ETFMarketEnum) -> List[dict]:
-        factors = self.db._select(table="factors", is_etf=True)
-        # 시장별 팩터 최소/최대값 계산
-        market_data = self.etf_factor_loader.load_etf_factors(market.value)
-
-        result = []
-        for factor in factors:
-            factor_name = factor.factor
-            factor_presets = self.db._select(table="factors_preset", factor=factor_name, order="order", ascending=True)
-            classified_presets = self.classify_factors_preset(factor_presets)
-
-            if factor_name in market_data.columns:
-                min_value = None
-                max_value = None
-                if is_numeric_dtype(market_data[factor_name]):
-                    min_value = floor_to_integer(market_data[factor_name].min())
-                    max_value = ceil_to_integer(market_data[factor_name].max())
-
-                result.append(
-                    {
-                        "factor": factor_name,
-                        "description": factor.description,
-                        "unit": str(factor.unit).lower(),
-                        "category": str(factor.category).lower(),
-                        "direction": factor.sort_direction,
-                        "min_value": min_value,
-                        "max_value": max_value,
-                        "presets": classified_presets,
+                        "type": factor_type,
                     }
                 )
 
@@ -117,25 +117,19 @@ class ScreenerUtils:
         if not category:
             return base_columns
 
-        # technical_columns = ["beta", "rsi_14", "sharpe", "momentum_6", "vol"]
-        technical_columns = ["close", "marketCap", "median_trade", "abs_beta", "sharpe"]
+        technical_columns = ["close", "marketCap", "median_trade", "abs_beta", "Log_RS_100", "sharpe"]
         dividend_columns = [
-            "dividend_count",
+            "dividend_frequency",
             "ttm_dividend_yield",
-            "consecutive_dividend_growth_count",
             "div_yield_growth_qoq",
             "div_yield_growth_yoy",
         ]
         if type == StockType.ETF:
-            # technical_columns = ["median_trade", "rsi_14", "sharpe", "momentum_6", "vol"]
-            technical_columns = ["close", "marketCap", "median_trade", "momentum_6", "sharpe", "sortino"]
-
             dividend_columns = [
-                "recent_dividend_yield",
-                "dividend_count",
+                "dividend_frequency",
+                "ttm_dividend_yield",
                 "last_dividend_per_share",
                 "dividend_growth_rate_5y",
-                "risk_rating",
             ]
 
         additional_columns = {
@@ -198,11 +192,14 @@ class ScreenerUtils:
         unique_tickers = df["Code"].unique().tolist()
 
         dividend_data = self._get_dividend_data_for_tickers(unique_tickers)
+        dividend_utils = DividendUtils()
+        dividend_frequencies = dividend_utils.get_dividend_frequency(unique_tickers)
 
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
         df["consecutive_dividend_payment_count"] = np.nan
         df["dividend_count"] = np.nan
+        df["dividend_frequency"] = ""
 
         for index, row in df.iterrows():
             ticker = row["Code"]
@@ -222,6 +219,9 @@ class ScreenerUtils:
 
             if ticker in dividend_data["dividend_count"]:
                 df.at[index, "dividend_count"] = dividend_data["dividend_count"][ticker]
+
+            if ticker in dividend_frequencies:
+                df.at[index, "dividend_frequency"] = dividend_frequencies[ticker]
 
         # 필터링된 데이터프레임 선택 (모든 컬럼 유지)
         df_result = df[df["market"].isin(["KOSPI", "KOSDAQ"])].copy()
@@ -307,11 +307,14 @@ class ScreenerUtils:
         unique_tickers = df["Code"].unique().tolist()
 
         dividend_data = self._get_dividend_data_for_tickers(unique_tickers)
+        dividend_utils = DividendUtils()
+        dividend_frequencies = dividend_utils.get_dividend_frequency(unique_tickers)
 
         df["ttm_dividend_yield"] = np.nan
         df["consecutive_dividend_growth_count"] = np.nan
         df["consecutive_dividend_payment_count"] = np.nan
         df["dividend_count"] = np.nan
+        df["dividend_frequency"] = ""
         df["last_dividend_per_share"] = np.nan
 
         for index, row in df.iterrows():
@@ -335,6 +338,9 @@ class ScreenerUtils:
 
             if ticker in dividend_data["dividend_per_share"]:
                 df.at[index, "last_dividend_per_share"] = dividend_data["dividend_per_share"][ticker]
+
+            if ticker in dividend_frequencies:
+                df.at[index, "dividend_frequency"] = dividend_frequencies[ticker]
 
         # 필터링된 데이터프레임 선택 (모든 컬럼 유지)
         df_result = df[df["market"].isin(["NAS", "NYS"])].copy()
@@ -503,6 +509,20 @@ class ScreenerUtils:
         df = self.get_df_from_parquet(market_filter)
         if exclude_filters:
             df = self.add_exclude_flags_to_dataframe(df, exclude_filters)
+            # 제외 필터 적용
+            if ExcludeEnum.FINANCIAL in exclude_filters:
+                df = df[~df["is_financial"]]
+            if ExcludeEnum.HOLDING in exclude_filters:
+                df = df[~df["is_holding"]]
+            if ExcludeEnum.WARNED in exclude_filters:
+                df = df[~df["is_warned"]]
+            if ExcludeEnum.DEFICIT in exclude_filters:
+                df = df[~df["is_deficit"]]
+            if ExcludeEnum.ANNUAL_DEFICIT in exclude_filters:
+                df = df[~df["is_annual_deficit"]]
+            if ExcludeEnum.PTP in exclude_filters:
+                df = df[~df["is_ptp"]]
+
         # 종목 필터링
         if market_filter:
             if market_filter == MarketEnum.SNP500:
@@ -518,10 +538,18 @@ class ScreenerUtils:
                 factor = filter["factor"]
                 if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
+
                 if filter["above"] is not None:
                     df = df[df[factor] >= filter["above"]]
                 if filter["below"] is not None:
                     df = df[df[factor] <= filter["below"]]
+                if filter["values"] is not None:
+                    if len(filter["values"]) > 0:
+                        # OR
+                        value_conditions = pd.Series(False, index=df.index)
+                        for value in filter["values"]:
+                            value_conditions = value_conditions | (df[factor] == value)
+                        df = df[value_conditions]
 
         stock_codes = df["Code"].tolist()
         return stock_codes
@@ -532,6 +560,8 @@ class ScreenerUtils:
         custom_filters: Optional[List[Dict]] = None,
     ) -> List[str]:
         df = self.etf_factor_loader.load_etf_factors(market_filter)
+        print(f"Initial DataFrame shape: {df.shape}")
+        print(f"DataFrame columns: {df.columns.tolist()}")
 
         # 종목 필터링
         if market_filter:
@@ -541,18 +571,34 @@ class ScreenerUtils:
                 df = df[df["country"] == "kr"]
             elif market_filter in [ETFMarketEnum.NASDAQ, ETFMarketEnum.NYSE, ETFMarketEnum.BATS]:
                 df = df[df["market"] == market_filter.value.upper()]
+            print(f"After market filter shape: {df.shape}")
 
         if custom_filters:
             for filter in custom_filters:
                 factor = filter["factor"]
+                if factor == "배당 주기":
+                    factor = "dividend_frequency"
                 if factor not in df.columns:
                     raise ValueError(f"팩터 '{factor}'가 데이터에 존재하지 않습니다.")
-                if filter["above"] is not None:
+
+                print(f"\nProcessing filter for {factor}:")
+                print(f"Unique values before filtering: {df[factor].value_counts().to_dict()}")
+                print(f"Filter values: {filter.get('values')}")
+
+                if filter.get("above") is not None:
                     df = df[df[factor] >= filter["above"]]
-                if filter["below"] is not None:
+                    print(f"After 'above' filter shape: {df.shape}")
+                if filter.get("below") is not None:
                     df = df[df[factor] <= filter["below"]]
+                    print(f"After 'below' filter shape: {df.shape}")
+                if filter.get("values") is not None and len(filter.get("values", [])) > 0:
+                    print(f"Filtering for values: {filter['values']}")
+                    df = df[df[factor].isin(filter["values"])]
+                    print(f"After value filter shape: {df.shape}")
+                    print(f"Remaining unique values: {df[factor].value_counts().to_dict()}")
 
         etf_tickers = df["Code"].tolist()
+        print(f"Final number of tickers: {len(etf_tickers)}")
         return etf_tickers
 
     @time_it
@@ -722,6 +768,7 @@ class ScreenerUtils:
         for preset in presets:
             classified_preset = {
                 "display": preset.display,
+                "value": preset.value,
                 "above": preset.above,
                 "below": preset.below,
             }
