@@ -598,6 +598,47 @@ class InterestService:
             logger.exception(e)
             raise HTTPException(status_code=500, detail=str(e))
 
+    def move_interest(self, from_group_id: int, to_group_id: int, tickers: List[str], user_id: int):
+        # 유저 권한 체크
+        from_group = self.db._select(table="alphafinder_interest_group", columns=["user_id"], id=from_group_id, limit=1)
+        if not from_group:
+            raise HTTPException(status_code=400, detail="관심 그룹이 존재하지 않습니다.")
+        if from_group[0].user_id != user_id:
+            raise HTTPException(status_code=403, detail="관심 그룹 편집 권한이 없습니다.")
+
+        # 1. 티커들이 해당 종목에 있는지 확인
+        from_group_tickers = self.db._select(
+            table="alphafinder_interest_stock", group_id=from_group_id, ticker__in=tickers
+        )
+        if len(from_group_tickers) != len(tickers):
+            raise HTTPException(status_code=400, detail="관심 그룹에 존재하지 않는 종목이 포함되어 있습니다.")
+
+        # 2. 해당 종목이 이동하는 그룹에 있는지 확인
+        to_group_tickers = self.db._select(table="alphafinder_interest_stock", group_id=to_group_id, ticker__in=tickers)
+
+        # 3. 해당 종목이 이동하는 그룹에 있으면 예외 처리
+        # 3-1. 해당 종목이 이동하는 그룹에 있으면 제외
+        set_from_group_tickers = {ticker.ticker for ticker in from_group_tickers}
+        set_to_group_tickers = {ticker.ticker for ticker in to_group_tickers}
+        move_tickers = set_from_group_tickers - set_to_group_tickers
+
+        # 4. 이동할 그룹의 현재 최대 order 값 조회
+        query = "SELECT MAX(`order`) as max_order FROM alphafinder_interest_stock WHERE group_id = :group_id"
+        result = self.db._execute(text(query), {"group_id": to_group_id})
+        max_order_row = result.fetchone()
+        next_order = (max_order_row[0] if max_order_row and max_order_row[0] is not None else 0) + 1
+
+        # 5. 이동하려는 종목들을 From 그룹에서 제거
+        self.db._delete(table="alphafinder_interest_stock", group_id=from_group_id, ticker__in=tickers)
+
+        # 6. 이동하려는 종목들을 To 그룹에 추가 (order 값 설정)
+        insert_data = [
+            {"group_id": to_group_id, "ticker": ticker, "order": next_order + idx}
+            for idx, ticker in enumerate(move_tickers)
+        ]
+        self.db._insert(table="alphafinder_interest_stock", sets=insert_data)
+        return True
+
     def get_interest_price(self, tickers: List[str], group_id: int, lang: TranslateCountry = TranslateCountry.KO):
         if lang == TranslateCountry.KO:
             name_column = "kr_name"
