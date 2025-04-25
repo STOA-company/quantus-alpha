@@ -10,7 +10,7 @@ import pandas as pd
 from fastapi import Request
 from sse_starlette import EventSourceResponse
 
-from app.common.constants import KST, MARKET_MAP, MARKET_MAP_EN
+from app.common.constants import ETF_MARKET_MAP, ETF_MARKET_MAP_EN, KST, MARKET_MAP, MARKET_MAP_EN
 from app.core.exception.custom import DataNotFoundException
 from app.core.logger import setup_logger
 from app.database.conn import db
@@ -635,11 +635,14 @@ class PriceService:
             last_day_close = None
             market_cap = None
 
-        sector, name, market = self._get_sector_name_market(ticker, lang)
+        sector, name, market = self._get_sector_name_market(ticker, ctry, type, lang)
         sector = sector or ""
         name = name or ""
         if market:
-            market = MARKET_MAP[market] if lang == TranslateCountry.KO else MARKET_MAP_EN[market]
+            if type == "stock":
+                market = MARKET_MAP[market] if lang == TranslateCountry.KO else MARKET_MAP_EN[market]
+            elif type == "etf":
+                market = ETF_MARKET_MAP[market] if lang == TranslateCountry.KO else ETF_MARKET_MAP_EN[market]
         is_market_close = check_market_status(ctry.upper())
 
         response_data = {
@@ -726,7 +729,7 @@ class PriceService:
         # 가장 최근 날짜를 제외한 첫 번째 데이터의 종가를 반환
         return float(sorted_df.iloc[1]["Close"])
 
-    def _get_sector_name_market(self, ticker: str, lang: TranslateCountry) -> Tuple[str, str, str]:
+    def _get_sector_name_market(self, ticker: str, ctry: str, type: str, lang: TranslateCountry) -> Tuple[str, str, str]:
         """
         종목 섹터, 이름, 시장 조회
         """
@@ -734,6 +737,10 @@ class PriceService:
             columns = ["sector_ko", "kr_name", "market"]
         elif lang == TranslateCountry.EN:
             columns = ["sector_2", "en_name", "market"]
+
+        if type == "etf" and ctry == "us":
+            columns = ["sector_2", "en_name", "market"]
+
         data = self.database._select(table="stock_information", columns=columns, ticker=ticker)
 
         return data[0]
@@ -776,7 +783,7 @@ class PriceService:
                 Date__gte=one_year_ago,
             )
         )
-
+        print("ETF DATA", etf_data)
         if etf_data.empty:
             # 데이터가 없는 경우 기본값 반환
             return pd.DataFrame([{"week_52_high": 0.0, "week_52_low": 0.0, "last_close": 0.0, "market_cap": None}])
@@ -784,12 +791,14 @@ class PriceService:
         # 52주 고가, 저가 계산
         week_52_high = etf_data["High"].max() if not etf_data["High"].empty else 0.0
         week_52_low = etf_data["Low"].min() if not etf_data["Low"].empty else 0.0
-
+        print("WEEK 52 HIGH", week_52_high)
+        print("WEEK 52 LOW", week_52_low)
         # 가장 최근 종가와 시가총액 가져오기
         etf_data = etf_data.sort_values("Date", ascending=False)
         last_close = etf_data["Close"].iloc[0] if not etf_data.empty else 0.0
         market_cap = etf_data["MarketCap"].iloc[0] if not etf_data.empty and "MarketCap" in etf_data.columns else None
-
+        print("LAST CLOSE", last_close)
+        print("MARKET CAP", market_cap)
         # 결과 데이터 프레임 생성
         result_data = {
             "week_52_high": week_52_high,
@@ -797,7 +806,7 @@ class PriceService:
             "last_close": last_close,
             "market_cap": market_cap,
         }
-
+        print("RESULT DATA", result_data)
         return pd.DataFrame([result_data])
 
 

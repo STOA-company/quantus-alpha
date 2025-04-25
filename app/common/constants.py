@@ -45,14 +45,27 @@ MARKET_MAP_EN = {
 }
 
 
-ETF_MARKET_MAP = {"BATS": "바츠", "NYSE": "뉴욕 증권 거래소", "NAS": "나스닥", "KRX": "한국 거래소"}
+ETF_MARKET_MAP = {
+    "BATS": "바츠",
+    "NYSE": "뉴욕 증권 거래소",
+    "NYS": "뉴욕 증권 거래소",
+    "NAS": "나스닥",
+    "KRX": "한국 거래소",
+    "135": "나스닥",
+    "278": "바츠",
+    "147": "OTC",
+}
 
 
 ETF_MARKET_MAP_EN = {
+    "NYS": "NYSE",
     "BATS": "BATS",
     "NYSE": "NYSE",
     "NASDAQ": "NASDAQ",
     "KRX": "KRX",
+    "135": "NASDAQ",
+    "278": "BATS",
+    "147": "OTC",
 }
 
 MARKET_KOREAN_TO_ENGLISH_MAP = {
