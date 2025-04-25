@@ -29,6 +29,7 @@ class AlphafinderPost(ServiceBase, BaseMixin):
     user_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=True)
     depth: Mapped[int] = mapped_column(Integer, default=0, comment="게시글 깊이")
     tagging_post_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=True, comment="인용된 게시글 ID")
+    is_reported: Mapped[bool] = mapped_column(Boolean, default=False, comment="신고 여부")
 
     # Foreign Key
     parent_id: Mapped[BigInteger] = mapped_column(
@@ -41,6 +42,7 @@ class AlphafinderPost(ServiceBase, BaseMixin):
         Index("idx_af_posts_like_count", "like_count"),
         Index("idx_af_posts_category_id", "category_id"),
         Index("idx_af_posts_user_id", "user_id"),
+        Index("idx_af_posts_parent_id_created_at", "parent_id", "created_at"),
     )
 
     def __str__(self):
@@ -60,7 +62,10 @@ class AlphafinderPostLike(ServiceBase, BaseMixin):
         BigInteger, ForeignKey("af_posts.id", ondelete="CASCADE"), nullable=False, primary_key=True
     )
 
-    __table_args__ = (Index("idx_af_post_likes_user", user_id),)
+    __table_args__ = (
+        Index("idx_af_post_likes_user", user_id),
+        Index("idx_af_post_likes_created_at_post_id", "created_at", "post_id"),
+    )
 
     def __str__(self):
         return f"<AlphafinderPostLike(id={self.id}, post_id={self.post_id}, user_id={self.user_id})>"
@@ -85,3 +90,18 @@ class AlphafinderBookmark(ServiceBase, BaseMixin):
 
     def __repr__(self):
         return f"<AlphafinderBookmark(id={self.id}, post_id={self.post_id}, user_id={self.user_id})>"
+
+
+class AlphafinderPostReport(ServiceBase, BaseMixin):
+    __tablename__ = "af_post_reports"
+
+    id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    post_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=False)
+    user_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=False)
+
+
+class AlphafinderPostReportItem(ServiceBase, BaseMixin):
+    __tablename__ = "af_post_report_items"
+
+    id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[String] = mapped_column(String(255), nullable=False)
