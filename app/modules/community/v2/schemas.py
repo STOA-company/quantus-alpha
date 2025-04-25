@@ -209,6 +209,7 @@ class BookmarkItem(BaseModel):
 class TrendingPostResponse(BaseModel):
     id: int
     rank: int
+    content: str | None = None
     created_at: datetime
     user_info: UserInfo
 
