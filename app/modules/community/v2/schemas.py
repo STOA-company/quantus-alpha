@@ -33,6 +33,7 @@ class UserInfo(BaseModel):
     nickname: str
     profile_image: Optional[str] = None
     image_format: Optional[str] = None
+    is_official: bool
 
 
 class StockInfo(BaseModel):
