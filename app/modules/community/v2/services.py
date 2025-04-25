@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from app.common.constants import KST, UNKNOWN_USER_EN, UNKNOWN_USER_KO, UTC
 from app.core.exception.custom import PostException, TooManyStockTickersException
+from app.core.extra.SlackNotifier import SlackNotifier
 from app.core.logging.config import get_logger
 from app.core.redis import redis_client
 from app.database.crud import database, database_service, database_user
@@ -21,6 +22,8 @@ from .schemas import (
     CommentUpdate,
     PostCreate,
     PostUpdate,
+    ReportItemResponse,
+    ReportRequest,
     ResponsePost,
     StockInfo,
     TaggingPostInfo,
@@ -29,6 +32,9 @@ from .schemas import (
 )
 
 logger = get_logger(__name__)
+slack_notifier = SlackNotifier(
+    webhook_url="https://hooks.slack.com/services/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"
+)
 
 
 class CommunityService:
@@ -519,21 +525,7 @@ class CommunityService:
 
         # 사용자 정보 조회 (user DB에서)
         user_ids = [post["user_id"] for post in posts if post["user_id"]]
-        user_info_map = {}
-
-        # 공식 계정 여부 일괄 조회
-        official_user_ids = self._get_official_users(user_ids)
-
-        if user_ids:
-            user_results = database_user._select(table="quantus_user", columns=["id", "nickname"], id__in=user_ids)
-            for user in user_results:
-                user_info_map[user.id] = UserInfo(
-                    id=user.id,
-                    nickname=user.nickname,
-                    profile_image=None,
-                    image_format=None,  # TODO :: 추후 추가해야 함
-                    is_official=user.id in official_user_ids,
-                )
+        user_info_map = self._get_user_info_map(set(user_ids))
 
         # 게시글 응답 생성
         response_posts = []
@@ -570,7 +562,7 @@ class CommunityService:
                                 nickname=user["nickname"],
                                 profile_image=None,
                                 image_format=None,
-                                is_official=user_id in official_user_ids,
+                                is_official=user_id in self._get_official_users(list(user_ids)),
                             ),
                             image_url=tagging_image_urls,
                             image_format=tagging_image_format,
@@ -1209,16 +1201,7 @@ class CommunityService:
 
         # 사용자 정보 조회 (user DB에서)
         user_ids = [post["user_id"] for post in posts if post["user_id"]]
-        user_info_map = {}
-        if user_ids:
-            user_results = database_user._select(table="quantus_user", columns=["id", "nickname"], id__in=user_ids)
-            for user in user_results:
-                user_info_map[user.id] = UserInfo(
-                    id=user.id,
-                    nickname=user.nickname,
-                    profile_image=None,
-                    image_format=None,  # TODO :: 추후 추가해야 함
-                )
+        user_info_map = self._get_user_info_map(set(user_ids))
 
         return [
             TrendingPostResponse(
@@ -1229,7 +1212,11 @@ class CommunityService:
                 user_info=user_info_map.get(
                     post["user_id"],
                     UserInfo(
-                        id=0, nickname="(알 수 없는 유저)", profile_image=None, image_format=None, is_official=False
+                        id=0,
+                        nickname="(알 수 없는 유저)",
+                        profile_image=None,
+                        image_format=None,
+                        is_official=False,
                     ),
                 ),
             )
@@ -1390,6 +1377,62 @@ class CommunityService:
         self._cache_presigned_url(image_key, presigned_data, "get")
 
         return presigned_data
+
+    def get_report_items(self) -> List[ReportItemResponse]:
+        """신고 가능 항목 조회"""
+        report_items = self.db._select(table="report_items", columns=["id", "name"])
+        return [ReportItemResponse(id=item.id, name=item.name) for item in report_items]
+
+    def report_post(self, report_request: ReportRequest, current_user: AlphafinderUser) -> bool:
+        """게시글 신고"""
+        user_id = current_user["uid"] if current_user else None
+
+        if not user_id:
+            raise PostException(message="로그인이 필요합니다", status_code=401)
+
+        # 1. 게시글 확인
+        post = self.db._select(
+            table="af_posts", columns=["id", "user_id"], id=report_request.post_id, is_reported=False, limit=1
+        )
+        if not post:
+            raise PostException(message="게시글을 찾을 수 없습니다", status_code=404)
+
+        # 2. 이미 신고 하였는지 확인
+        report_exists = bool(
+            self.db._select(
+                table="report_posts", columns=["id"], post_id=report_request.post_id, user_id=user_id, limit=1
+            )
+        )
+        if report_exists:
+            raise PostException(message="이미 신고 하였습니다", status_code=400)
+
+        # 3. 신고 항목 확인
+        report_items = self.db._select(
+            table="report_items",
+            columns=["id", "name"],
+            id__in=report_request.report_item_ids,
+            limit=len(report_request.report_item_ids),
+        )
+        if len(report_items) != len(report_request.report_item_ids):
+            raise PostException(message="신고 항목을 찾을 수 없습니다", status_code=404)
+
+        # 4. 슬랙으로 신고 알림 보내기
+        slack_notifier.notify_report_post(report_request.post_id, user_id, [item.name for item in report_items])
+
+        # 3. 신고 정보 저장
+        report_data = []
+        for report_item_id in report_request.report_item_ids:
+            report_data.append(
+                {
+                    "post_id": report_request.post_id,
+                    "user_id": user_id,
+                    "report_item_id": report_item_id,
+                    "created_at": datetime.now(UTC),
+                    "updated_at": datetime.now(UTC),
+                }
+            )
+        self.db._insert("report_posts", report_data)
+        return True
 
 
 def get_community_service() -> CommunityService:

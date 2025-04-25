@@ -19,6 +19,8 @@ from app.modules.community.v2.schemas import (
     PostUpdate,
     PresignedUrlRequest,
     PresignedUrlResponse,
+    ReportItemResponse,
+    ReportRequest,
     ResponsePost,
     TrendingPostResponse,
 )
@@ -607,3 +609,26 @@ async def get_categories(
 ):
     categories = await community_service.get_categories()
     return BaseResponse(status_code=200, message="카테고리 리스트를 조회하였습니다.", data=categories)
+
+
+########################
+# 신고 기능
+########################
+# 신고 가능 항목
+@router.get("/report", response_model=BaseResponse[List[ReportItemResponse]], summary="신고 가능 항목 조회")
+async def get_report_items(
+    community_service: CommunityService = Depends(get_community_service),
+):
+    report_items = await community_service.get_report_items()
+    return BaseResponse(status_code=200, message="신고 가능 항목을 조회하였습니다.", data=report_items)
+
+
+# 신고 기능
+@router.post("/report", response_model=BaseResponse[bool], summary="신고 기능")
+async def report(
+    report_request: ReportRequest,
+    community_service: CommunityService = Depends(get_community_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    report_response = await community_service.report_post(report_request)
+    return BaseResponse(status_code=200, message="신고 기능을 완료하였습니다.", data=report_response)
