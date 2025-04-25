@@ -66,7 +66,6 @@ async def get_combined(
 
         if type == "etf":
             etf_info = await stock_service.get_etf_info(ticker)
-            print("ETF INFO ROUTER", etf_info)
             logger.info("Successfully fetched etf_info")
 
     except Exception as e:
