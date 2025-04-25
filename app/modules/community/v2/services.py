@@ -1380,7 +1380,7 @@ class CommunityService:
 
     def get_report_items(self) -> List[ReportItemResponse]:
         """신고 가능 항목 조회"""
-        report_items = self.db._select(table="report_items", columns=["id", "name"])
+        report_items = self.db._select(table="af_post_report_items", columns=["id", "name"])
         return [ReportItemResponse(id=item.id, name=item.name) for item in report_items]
 
     def report_post(self, report_request: ReportRequest, current_user: AlphafinderUser) -> bool:
@@ -1431,7 +1431,7 @@ class CommunityService:
                     "updated_at": datetime.now(UTC),
                 }
             )
-        self.db._insert("report_posts", report_data)
+        self.db._insert("af_post_reports", report_data)
         return True
 
 
