@@ -50,27 +50,6 @@ class ChatService:
         self, query: str, conversation_id: int = None, model: str = LLM_MODEL
     ) -> AsyncGenerator[str, None]:
         """LLM 스트리밍 요청 처리"""
-        # 캐시된 작업 ID 확인
-        job_id = None
-        if conversation_id:
-            conversation = self.get_conversation(conversation_id)
-            if conversation and conversation.latest_job_id:
-                job_id = conversation.latest_job_id
-
-        # 기존 작업 ID가 있으면 해당 작업을 계속 사용
-        if job_id:
-            try:
-                # 기존 작업 상태 확인 로직을 구현하는 대신,
-                # 그냥 llm_client에 기존 job_id 전달
-                # 이미 완료된 작업이면 해당 결과를 바로 가져올 수 있음
-                async for chunk in llm_client.process_query(query, model, job_id):
-                    yield chunk
-                return
-            except Exception:
-                # 기존 작업 사용 중 에러 발생 시 새 작업 시작
-                pass
-
-        # 새 작업 시작
         async for chunk in llm_client.process_query(query, model):
             data = json.loads(chunk)
 

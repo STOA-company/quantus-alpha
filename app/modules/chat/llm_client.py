@@ -21,9 +21,7 @@ class LLMClient:
         self.timeout = llm_config.timeout
         self.api_key = llm_config.api_key
 
-    async def process_query(
-        self, query: str, model: str = LLM_MODEL, existing_job_id: str = None
-    ) -> AsyncGenerator[str, None]:
+    async def process_query(self, query: str, model: str = LLM_MODEL) -> AsyncGenerator[str, None]:
         """LLM API에 요청을 전송하고 응답을 스트리밍으로 반환"""
         request_data = ChatRequest(query=query, model=model)
 
@@ -37,41 +35,34 @@ class LLMClient:
             try:
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
                     headers = {"Content-Type": "application/json", "Access-Key": self.api_key}
+                    response = await client.post(self.base_url, json=request_data.model_dump(), headers=headers)
 
-                    # 기존 job_id가 제공된 경우 새 요청을 보내지 않고 기존 작업 결과 확인
-                    if existing_job_id:
-                        job_id = existing_job_id
-                        logger.info(f"기존 작업 사용: {job_id}")
-                    else:
-                        # 새 요청 전송
-                        response = await client.post(self.base_url, json=request_data.model_dump(), headers=headers)
+                    if response.status_code != 200:
+                        error_text = response.text
+                        logger.error(f"LLM API 초기 요청 오류: {response.status_code} - {error_text}")
+                        error_message = f"LLM 서비스 오류: {response.status_code}"
+                        msg = {"status": "failed", "content": error_message}
+                        yield json.dumps(msg, ensure_ascii=False)
+                        return
 
-                        if response.status_code != 200:
-                            error_text = response.text
-                            logger.error(f"LLM API 초기 요청 오류: {response.status_code} - {error_text}")
-                            error_message = f"LLM 서비스 오류: {response.status_code}"
-                            msg = {"status": "failed", "content": error_message}
-                            yield json.dumps(msg, ensure_ascii=False)
-                            return
+                    response_data = response.json()
+                    job_id = response_data.get("job_id")
 
-                        response_data = response.json()
-                        job_id = response_data.get("job_id")
+                    if not job_id:
+                        logger.error(f"LLM API 응답에 job_id가 없음: {response_data}")
+                        error_message = "LLM 서비스 응답 형식 오류"
+                        msg = {"status": "failed", "content": error_message}
+                        yield json.dumps(msg, ensure_ascii=False)
+                        return
 
-                        if not job_id:
-                            logger.error(f"LLM API 응답에 job_id가 없음: {response_data}")
-                            error_message = "LLM 서비스 응답 형식 오류"
-                            msg = {"status": "failed", "content": error_message}
-                            yield json.dumps(msg, ensure_ascii=False)
-                            return
+                    logger.info(f"작업 요청 성공: {job_id}")
 
-                        logger.info(f"작업 요청 성공: {job_id}")
-
-                        initial_msg = {
-                            "status": "submitted",
-                            "content": "주요 뉴스, 공시, 기업 이슈 등을 종합 분석하여 질문에 대한 답변을 준비하고 있습니다.",
-                            "job_id": job_id,
-                        }
-                        yield json.dumps(initial_msg, ensure_ascii=False)
+                    initial_msg = {
+                        "status": "submitted",
+                        "content": "주요 뉴스, 공시, 기업 이슈 등을 종합 분석하여 질문에 대한 답변을 준비하고 있습니다.",
+                        "job_id": job_id,
+                    }
+                    yield json.dumps(initial_msg, ensure_ascii=False)
 
                     polling_interval = 3.0  # 기본 폴링 간격
                     max_timeout = 550  # nginx 설정과 동기화 (600초보다 약간 적게 설정)
@@ -87,9 +78,7 @@ class LLMClient:
                         if elapsed_time > 180:  # 3분 이상 지난 경우
                             polling_interval = 5.0
 
-                        # 기존 작업인 경우 첫 번째 요청에서는 대기하지 않음
-                        if not existing_job_id or elapsed_time > 0:
-                            await asyncio.sleep(polling_interval)
+                        await asyncio.sleep(polling_interval)
 
                         # 상태 확인 요청
                         status_response = await client.get(
