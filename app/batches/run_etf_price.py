@@ -6,6 +6,7 @@ import pandas as pd
 
 from app.batches.run_update_kr_ticker import update_kr_ticker
 from app.common.constants import ETF_DATA_DIR
+from app.common.mapping import etf_market_map
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.core.logger.logger import setup_logger
 from app.database.crud import database
@@ -41,6 +42,9 @@ def update_etf_information(ctry: str, df: pd.DataFrame):
         logger.info("df is empty")
         return
     logger.info(f"new_tickers: {df['Ticker'].unique()}")
+    # Market 맵핑
+    df["Market"] = df["Market"].map(etf_market_map)
+
     insert_data = []
     for _, row in df.iterrows():
         insert_data.append(
