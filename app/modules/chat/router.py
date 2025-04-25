@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from prometheus_client import Counter, Histogram
 
@@ -118,7 +118,11 @@ def delete_conversation(conversation_id: int, current_user: str = Depends(get_cu
 
 @router.get("/stream")
 async def stream_chat(
-    query: str, conversation_id: int, model: str = LLM_MODEL, current_user: str = Depends(get_current_user)
+    query: str,
+    conversation_id: int,
+    model: str = LLM_MODEL,
+    current_user: str = Depends(get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """채팅 스트리밍 응답"""
     if not current_user:
@@ -147,33 +151,27 @@ async def stream_chat(
     CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
     STREAMING_CONNECTIONS.inc()
 
-    async def event_generator():
-        """표준 SSE 형식의 이벤트 생성기"""
+    # 백그라운드 작업을 위한 LLM 응답 처리 및 DB 저장 함수
+    async def process_and_save_response():
+        """클라이언트 연결 상태와 무관하게 응답을 완료하고 저장하는 함수"""
         assistant_response = None
         system_response = ""
         try:
-            message_count = 0
             async for chunk in chat_service.process_query(query, conversation_id, model):
-                message_count += 1
-                # 올바른 SSE 형식으로 응답 생성 (각 행이 data: 로 시작하고 빈 줄로 끝나야 함)
-                if isinstance(chunk, str):
-                    STREAMING_MESSAGES_COUNT.labels(model=model, conversation_id=str(conversation_id)).inc()
+                try:
+                    chunk_data = json.loads(chunk)
+                    if chunk_data.get("status") == "success":
+                        assistant_response = chunk_data.get("content", "")
+                    elif chunk_data.get("status") == "progress":
+                        system_response += chunk_data.get("content", "")
+                        system_response += "\n"
+                except json.JSONDecodeError:
+                    # JSON 파싱 실패 시 무시
+                    pass
 
-                    try:
-                        chunk_data = json.loads(chunk)
-                        if chunk_data.get("status") == "success":
-                            assistant_response = chunk_data.get("content", "")
-                        else:
-                            system_response += chunk_data.get("content", "")
-                            system_response += "\n"
-                    except json.JSONDecodeError:
-                        # JSON 파싱 실패시 그대로 전달
-                        pass
+            logger.info("백그라운드 응답 생성 완료")
 
-                    yield f"data: {chunk}\n\n"
-
-            logger.info(f"스트리밍 응답 완료: 총 {message_count}개 메시지 전송됨")
-
+            # 응답 저장
             if assistant_response:
                 chat_service.add_message(
                     conversation_id=conversation_id,
@@ -192,19 +190,33 @@ async def stream_chat(
             if system_response:
                 chat_service.add_message(
                     conversation_id=conversation_id,
-                    content=system_response,
+                    content=system_response.strip(),
                     role="system",
                     root_message_id=root_message.id,
                 )
                 logger.info(f"시스템 응답 저장 완료: {system_response[:50]}...")
 
         except Exception as e:
-            logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
-            # TODO: ROLLBACK
-            STREAMING_ERRORS.labels(model=model, error_type="streaming_error", conversation_id=str(conversation_id)).inc()
-            yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
+            logger.error(f"백그라운드 응답 생성 중 오류: {str(e)}")
+            STREAMING_ERRORS.labels(
+                model=model, error_type="background_error", conversation_id=str(conversation_id)
+            ).inc()
         finally:
             STREAMING_CONNECTIONS.dec()
+
+    # 백그라운드 작업으로 응답 생성 및 저장 등록
+    background_tasks.add_task(process_and_save_response)
+
+    async def event_generator():
+        """스트리밍 SSE 이벤트 생성기"""
+        try:
+            async for chunk in chat_service.process_query(query, conversation_id, model):
+                STREAMING_MESSAGES_COUNT.labels(model=model, conversation_id=str(conversation_id)).inc()
+                yield f"data: {chunk}\n\n"
+        except Exception as e:
+            logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
+            STREAMING_ERRORS.labels(model=model, error_type="streaming_error", conversation_id=str(conversation_id)).inc()
+            yield f'data: {{"status": "failed", "content": "오류가 발생했습니다: {str(e)}"}}\n\n'
 
     # 올바른 SSE 응답을 위한 헤더 설정
     headers = {
