@@ -22,6 +22,12 @@ class StockInfoService:
         self.file_path = "static"
         self.file_name = "stock_{}_info.csv"
 
+    def get_ctry_by_ticker(self, ticker: str) -> str:
+        """
+        종목 코드에 따른 국가 코드 조회
+        """
+        return self.db._select(table="stock_information", columns=["ctry"], **{"ticker": ticker})[0].ctry
+
     async def get_stock_info(self, ctry: str, ticker: str, lang: TranslateCountry) -> StockInfo:
         """
         주식 정보 조회
@@ -312,7 +318,6 @@ class StockInfoService:
         ETF 정보 조회
         """
         ticker = ticker.replace("A", "")
-        print("TICKER", ticker)
         df = pd.read_parquet("check_data/etf_krx/etf_integrated.parquet")
         df = df[df["단축코드"] == ticker]
         etf_info = df.to_dict(orient="records")
@@ -352,9 +357,3 @@ class StockInfoService:
 
 def get_stock_info_service() -> StockInfoService:
     return StockInfoService()
-
-
-if __name__ == "__main__":
-    stock_info_service = get_stock_info_service()
-    print(stock_info_service.get_etf_holdings("A0001P0"))
-    print(stock_info_service.get_etf_info("A0001P0"))

@@ -52,7 +52,9 @@ async def get_combined(
     price_service: PriceService = Depends(get_price_service),
 ):
     type = stock_service.get_type(ticker)
-    ctry = check_ticker_country_len_2(ticker)
+    ctry = stock_service.get_ctry_by_ticker(ticker)
+    if ctry is None:
+        ctry = check_ticker_country_len_2(ticker)
     logger.info(f"Processing combined data for {ticker} ({ctry})")
 
     try:
