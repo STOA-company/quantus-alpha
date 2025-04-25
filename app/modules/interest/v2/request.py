@@ -27,3 +27,9 @@ class UpdateInterestRequest(BaseModel):
 class UpdateInterestOrderRequest(BaseModel):
     group_id: int | None = None
     order: List[int] | List[str]
+
+
+class MoveInterestRequest(BaseModel):
+    from_group_id: int
+    to_group_id: int
+    tickers: List[str]
