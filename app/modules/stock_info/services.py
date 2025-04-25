@@ -347,6 +347,7 @@ class StockInfoService:
         _, en_name = self.get_name_by_ticker(original_ticker)
 
         df["en_name"] = en_name
+        df["ticker"] = original_ticker
 
         etf_info = df.to_dict(orient="records")[0] if not df.empty else {}
 
