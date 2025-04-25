@@ -246,6 +246,7 @@ class CommunityService:
                             nickname=tagging_user[0][1],
                             profile_image=None,
                             image_format=None,
+                            is_official=self._is_official_user(tagging_user[0][0]),
                         ),
                         image_url=tagging_image_urls,
                         image_format=tagging_image_format,
@@ -274,6 +275,7 @@ class CommunityService:
                             nickname=self._get_unknown_user_nickname(lang),
                             profile_image=None,
                             image_format=None,
+                            is_official=False,
                         ),
                         image_url=tagging_image_urls,
                         image_format=tagging_image_format,
@@ -289,6 +291,7 @@ class CommunityService:
                         nickname=self._get_unknown_user_nickname(lang),
                         profile_image=None,
                         image_format=None,
+                        is_official=False,
                     ),
                     image_url=None,
                     image_format=None,
@@ -305,11 +308,16 @@ class CommunityService:
                     nickname=user.nickname,
                     profile_image=None,
                     image_format=None,
+                    is_official=self._is_official_user(user.id),
                 )
 
         if not user_info:
             user_info = UserInfo(
-                id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None
+                id=0,
+                nickname=self._get_unknown_user_nickname(lang),
+                profile_image=None,
+                image_format=None,
+                is_official=False,
             )
 
         # 5. 이미지 URL 처리
@@ -446,7 +454,7 @@ class CommunityService:
         """
         if not post_ids:
             return []
-        stock_result = self.db._execute(text(stock_query), {"post_ids": post_ids})
+        stock_result = self.db._execute(text(stock_query), {"post_ids": tuple(post_ids)})
 
         # post_id별 stock_tickers 매핑
         post_stocks = {}
@@ -512,14 +520,19 @@ class CommunityService:
         # 사용자 정보 조회 (user DB에서)
         user_ids = [post["user_id"] for post in posts if post["user_id"]]
         user_info_map = {}
+
+        # 공식 계정 여부 일괄 조회
+        official_user_ids = self._get_official_users(user_ids)
+
         if user_ids:
             user_results = database_user._select(table="quantus_user", columns=["id", "nickname"], id__in=user_ids)
             for user in user_results:
                 user_info_map[user.id] = UserInfo(
                     id=user.id,
                     nickname=user.nickname,
-                    profile_image=None,  # TODO :: 추후 추가해야 함
+                    profile_image=None,
                     image_format=None,  # TODO :: 추후 추가해야 함
+                    is_official=user.id in official_user_ids,
                 )
 
         # 게시글 응답 생성
@@ -557,6 +570,7 @@ class CommunityService:
                                 nickname=user["nickname"],
                                 profile_image=None,
                                 image_format=None,
+                                is_official=user_id in official_user_ids,
                             ),
                             image_url=tagging_image_urls,
                             image_format=tagging_image_format,
@@ -572,6 +586,7 @@ class CommunityService:
                                 nickname=self._get_unknown_user_nickname(lang),
                                 profile_image=None,
                                 image_format=None,
+                                is_official=False,
                             ),
                             image_url=tagging_image_urls,
                             image_format=tagging_image_format,
@@ -587,6 +602,7 @@ class CommunityService:
                             nickname=self._get_unknown_user_nickname(lang),
                             profile_image=None,
                             image_format=None,
+                            is_official=False,
                         ),
                         image_url=None,
                         image_format=None,
@@ -624,7 +640,11 @@ class CommunityService:
                     user_info=user_info_map.get(
                         post["user_id"],
                         UserInfo(
-                            id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None
+                            id=0,
+                            nickname=self._get_unknown_user_nickname(lang),
+                            profile_image=None,
+                            image_format=None,
+                            is_official=False,
                         ),
                     ),
                     tagging_post_info=tagging_post_info,
@@ -825,6 +845,9 @@ class CommunityService:
         if not user_ids:
             return {}
 
+        # 공식 계정 여부 일괄 조회
+        official_user_ids = self._get_official_users(list(user_ids))
+
         user_results = database_user._select(table="quantus_user", columns=["id", "nickname"], id__in=list(user_ids))
         return {
             user.id: UserInfo(
@@ -832,6 +855,7 @@ class CommunityService:
                 nickname=user.nickname,
                 profile_image=None,
                 image_format=None,
+                is_official=user.id in official_user_ids,
             )
             for user in user_results
         }
@@ -859,7 +883,12 @@ class CommunityService:
         }
 
     def _create_tagging_post_info(
-        self, comment: Dict, tagging_posts: Dict[int, Dict], tagging_users: Dict[int, UserInfo], lang: TranslateCountry
+        self,
+        comment: Dict,
+        tagging_posts: Dict[int, Dict],
+        tagging_users: Dict[int, UserInfo],
+        lang: TranslateCountry,
+        official_user_ids: Set[int],
     ) -> Optional[TaggingPostInfo]:
         """태깅된 게시글 정보 생성"""
         if not comment["tagging_post_id"]:
@@ -871,14 +900,26 @@ class CommunityService:
 
         user_info = tagging_users.get(
             tagging_post["user_id"],
-            UserInfo(id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None),
+            UserInfo(
+                id=0,
+                nickname=self._get_unknown_user_nickname(lang),
+                profile_image=None,
+                image_format=None,
+                is_official=False,
+            ),
         )
 
         return TaggingPostInfo(
             post_id=tagging_post["id"],
             content=tagging_post["content"],
             created_at=tagging_post["created_at"].astimezone(KST),
-            user_info=user_info,
+            user_info=UserInfo(
+                id=user_info.id,
+                nickname=user_info.nickname,
+                profile_image=user_info.profile_image,
+                image_format=user_info.image_format,
+                is_official=user_info.id in official_user_ids,
+            ),
             image_url=json.loads(tagging_post["image_url"]) if tagging_post["image_url"] else None,
             image_format=None,
         )
@@ -952,7 +993,11 @@ class CommunityService:
         tagging_user_ids = {post["user_id"] for post in tagging_posts.values() if post["user_id"]}
         tagging_users = self._get_user_info_map(tagging_user_ids)
 
-        # 5. 최종 응답 구성
+        # 5. 공식 계정 여부 일괄 조회
+        all_user_ids = set(user_ids | tagging_user_ids)
+        official_user_ids = self._get_official_users(list(all_user_ids))
+
+        # 6. 최종 응답 구성
         comment_list = [
             CommentItem(
                 id=comment["id"],
@@ -967,14 +1012,22 @@ class CommunityService:
                 is_mine=comment["user_id"] == current_user_id if current_user_id else False,
                 user_info=user_info_map.get(
                     comment["user_id"],
-                    UserInfo(id=0, nickname=self._get_unknown_user_nickname(lang), profile_image=None, image_format=None),
+                    UserInfo(
+                        id=0,
+                        nickname=self._get_unknown_user_nickname(lang),
+                        profile_image=None,
+                        image_format=None,
+                        is_official=False,
+                    ),
                 ),
                 sub_comments=[],
                 image_url=json.loads(comment["image_url"]) if comment["image_url"] else None,
                 stock_tickers=[
                     stock_info_map[ticker] for ticker in stock_map.get(comment["id"], []) if ticker in stock_info_map
                 ],
-                tagging_post_info=self._create_tagging_post_info(comment, tagging_posts, tagging_users, lang),
+                tagging_post_info=self._create_tagging_post_info(
+                    comment, tagging_posts, tagging_users, lang, official_user_ids
+                ),
             )
             for comment in comments
         ]
@@ -1174,7 +1227,10 @@ class CommunityService:
                 content=post["content"],
                 created_at=post["created_at"].astimezone(KST),
                 user_info=user_info_map.get(
-                    post["user_id"], UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None, image_format=None)
+                    post["user_id"],
+                    UserInfo(
+                        id=0, nickname="(알 수 없는 유저)", profile_image=None, image_format=None, is_official=False
+                    ),
                 ),
             )
             for post in posts
@@ -1222,6 +1278,31 @@ class CommunityService:
     def _get_unknown_user_nickname(self, lang: TranslateCountry) -> str:
         """언어에 따른 알 수 없는 사용자 닉네임 반환"""
         return UNKNOWN_USER_KO if lang == TranslateCountry.KO else UNKNOWN_USER_EN
+
+    def _is_official_user(self, user_id: int) -> bool:
+        """사용자가 공식 계정인지 확인 (단일 사용자)"""
+        if not user_id:
+            return False
+        query = text("""
+            SELECT EXISTS (
+                SELECT 1 FROM alphafinder_official_account
+                WHERE user_id = :user_id
+            ) as is_official
+        """)
+        result = self.db._execute(query, {"user_id": user_id})
+        return bool(result.scalar())
+
+    def _get_official_users(self, user_ids: List[int]) -> Set[int]:
+        """여러 사용자의 공식 계정 여부를 한 번에 확인"""
+        if not user_ids:
+            return set()
+
+        query = text("""
+            SELECT user_id FROM alphafinder_official_account
+            WHERE user_id IN :user_ids
+        """)
+        result = self.db._execute(query, {"user_ids": tuple(user_ids)})
+        return {row[0] for row in result}
 
     def _get_extension_from_content_type(self, content_type: str) -> str:
         """Content-Type에서 확장자 추출"""
