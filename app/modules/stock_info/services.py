@@ -338,7 +338,7 @@ class StockInfoService:
             "상장일": "listing_date",
             "운용사": "company",
             "순자산가치(NAV)": "nav",
-            "시가총액": "marketCap",
+            "시가총액": "market_cap",
             "상장좌수": "listed_shares",
             "순자산총액": "total_net_assets",
         }
@@ -347,6 +347,7 @@ class StockInfoService:
         _, en_name = self.get_name_by_ticker(original_ticker)
 
         df["en_name"] = en_name
+        df["ticker"] = original_ticker
 
         etf_info = df.to_dict(orient="records")[0] if not df.empty else {}
 
@@ -383,6 +384,73 @@ class StockInfoService:
             result.append({"ticker": None, "weight": 100 - sum_weight, "kr_name": "기타", "en_name": "Others"})
         return result
 
+    async def get_us_etf_info(self, ticker: str) -> dict:
+        """
+        미국 ETF 정보 조회
+
+        Args:
+            ticker (str): 미국 ETF 티커
+
+        Returns:
+            dict: ETF 정보 (종목코드, 종목명, 상장일, 운용사, 시가총액, 상장좌수)
+        """
+        try:
+            etf_info = {
+                "ticker": ticker,
+                "en_name": None,
+                "kr_name": None,
+                "listing_date": None,
+                "company": None,
+                "market_cap": None,
+                "listed_shares": None,
+                "nav": None,
+                "total_net_assets": None,
+            }
+
+            # 기본 정보 가져오기 (이름, 상장일 등)
+            stock_info = self.db._select(
+                table="stock_information", columns=["ticker", "en_name", "kr_name", "listing_date"], **{"ticker": ticker}
+            )
+
+            if stock_info:
+                etf_info["ticker"] = stock_info[0].ticker
+                etf_info["en_name"] = stock_info[0].en_name
+                etf_info["kr_name"] = stock_info[0].kr_name if stock_info[0].kr_name else stock_info[0].en_name
+                if stock_info[0].listing_date and hasattr(stock_info[0].listing_date, "strftime"):
+                    etf_info["listing_date"] = stock_info[0].listing_date.strftime("%Y-%m-%d")
+
+            # 운용사 정보 가져오기
+            try:
+                morningstar_df = pd.read_parquet("check_data/etf_morningstar/us_etf_morningstar_rating.parquet")
+                morningstar_data = morningstar_df[morningstar_df["ticker"] == ticker]
+
+                if not morningstar_data.empty:
+                    company_name = morningstar_data.iloc[0]["company_name"]
+                    etf_info["company"] = company_name if company_name is not None else None
+            except Exception as e:
+                logger.error(f"Error loading morningstar data for {ticker}: {str(e)}")
+
+            # ETF 가격 및 시가총액 정보 가져오기
+            try:
+                price_df = pd.read_parquet("check_data/etf/us_etf_price.parquet")
+                # 최신 데이터만 선택
+                price_df = price_df[price_df["Ticker"] == ticker].sort_values("MarketDate", ascending=False)
+
+                if not price_df.empty:
+                    latest_data = price_df.iloc[0]
+                    etf_info["market_cap"] = float(latest_data["MktCap"]) if pd.notna(latest_data["MktCap"]) else None
+                    etf_info["listed_shares"] = (
+                        float(latest_data["NumShrs"]) if pd.notna(latest_data["NumShrs"]) else None
+                    )
+            except Exception as e:
+                logger.error(f"Error loading price data for {ticker}: {str(e)}")
+
+            return etf_info
+
+        except Exception as e:
+            logger.error(f"Error in get_us_etf_info for {ticker}: {str(e)}")
+            return {"ticker": ticker, "error": str(e)}
+
 
 def get_stock_info_service() -> StockInfoService:
     return StockInfoService()
@@ -390,4 +458,5 @@ def get_stock_info_service() -> StockInfoService:
 
 if __name__ == "__main__":
     stock_info_service = get_stock_info_service()
-    data = asyncio.run(stock_info_service.get_etf_info("A0001P0"))
+    data = asyncio.run(stock_info_service.get_us_etf_info("ACES"))
+    print(data)
