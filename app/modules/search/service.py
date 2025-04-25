@@ -1,10 +1,10 @@
 from typing import List
 
 from app.core.logger import setup_logger
-from app.database.crud import database
+from app.database.crud import database, database_service
 from app.modules.common.enum import TranslateCountry
 from app.modules.community.services import get_community_service
-from app.modules.search.schemas import CommunitySearchItem, SearchItem
+from app.modules.search.schemas import CommunitySearchItem, InterestSearchItem, SearchItem
 
 logger = setup_logger(__name__)
 
@@ -12,6 +12,7 @@ logger = setup_logger(__name__)
 class SearchService:
     def __init__(self):
         self.db = database
+        self.service_db = database_service
 
     def search(self, query: str, ctry: TranslateCountry, offset: int, limit: int) -> List[SearchItem]:
         """
@@ -395,6 +396,174 @@ class SearchService:
             )
             for row in search_result
         ]
+
+    def search_interest(
+        self, query: str, group_id: int, ctry: TranslateCountry, offset: int, limit: int
+    ) -> List[InterestSearchItem]:
+        """
+        관심 종목 검색
+
+        Args:
+            query (str): 검색어
+            group_id (int): 그룹 ID
+            ctry (TranslateCountry): 언어 설정
+            offset (int): 시작 위치
+            limit (int): 요청할 항목 수
+
+        Returns:
+            List[InterestSearchItem]: 검색 결과 리스트
+        """
+        original_query = query.strip()
+
+        # 공백 제거
+        normalized_query = original_query.replace(" ", "")
+
+        # 각 글자 사이에 와일드카드
+        query_chars = list(normalized_query)
+        wildcard_query = "%".join(query_chars)
+
+        # 양방향 LIKE 검색
+        original_search_term = f"%{original_query}%"
+        normalized_search_term = f"%{normalized_query}%"
+        wildcard_search_term = f"%{wildcard_query}%"
+
+        logger.warning(
+            f"Search started with: '{original_query}', Normalized: '{normalized_query}', Wildcard: '{wildcard_query}'"
+        )
+
+        or_conditions = []
+
+        or_conditions.append({"ticker": original_query})
+        or_conditions.append({"ticker__like": original_search_term})
+        or_conditions.append({"ticker__like": normalized_search_term})
+
+        # 모든 글자가 순서대로 있지만 사이에 다른 문자가 있을 수 있는 경우 (ex: 메타플 -> 메타 플랫폼스)
+        for char in query_chars:
+            or_conditions.append({"ticker__like": f"%{char}%"})
+            or_conditions.append({"kr_name__like": f"%{char}%"})
+            or_conditions.append({"en_name__like": f"%{char}%"})
+
+        or_conditions.append({"kr_name__like": original_search_term})
+        or_conditions.append({"en_name__like": original_search_term})
+        or_conditions.append({"kr_name__like": normalized_search_term})
+        or_conditions.append({"en_name__like": normalized_search_term})
+        or_conditions.append({"kr_name__like": wildcard_search_term})
+        or_conditions.append({"en_name__like": wildcard_search_term})
+
+        # 각 단어 검색 (띄어쓰기로 구분된 각 단어 검색)
+        words = original_query.split()
+        if len(words) > 1:
+            for word in words:
+                if len(word) >= 2:  # 최소 2글자 이상인 단어만 검색
+                    or_conditions.append({"kr_name__like": f"%{word}%"})
+                    or_conditions.append({"en_name__like": f"%{word}%"})
+
+        search_result = self.db._select(
+            table="stock_information",
+            columns=["ticker", "kr_name", "en_name", "ctry"],
+            or__=or_conditions,
+            is_activate=1,
+            is_delisted=0,
+        )
+
+        logger.warning(f"Search query: '{original_query}', Normalized: '{normalized_query}'")
+        logger.warning(f"Initial search result count: {len(search_result)}")
+
+        if not search_result:
+            return []
+
+        # Get interest stocks for the group
+        interest_stocks = self.service_db._select(
+            table="alphafinder_interest_stock", columns=["ticker"], group_id=group_id
+        )
+        interest_tickers = {stock.ticker for stock in interest_stocks}
+
+        # 메모리 레벨에서 향상된 필터링 및 점수 부여
+        scored_results = []
+        for row in search_result:
+            mapping = row._mapping
+            ticker = mapping["ticker"].lower() if mapping["ticker"] else ""
+            kr_name = mapping["kr_name"].lower() if mapping["kr_name"] else ""
+            en_name = mapping["en_name"].lower() if mapping["en_name"] else ""
+
+            # 검색어도 소문자로 변환
+            original_lower = original_query.lower()
+            normalized_lower = normalized_query.lower()
+
+            # 초기 점수 설정
+            score = 0
+
+            # 1. 정확한 일치 시 높은 점수
+            if ticker == original_lower or ticker == normalized_lower:
+                score += 100
+            elif kr_name == original_lower or en_name == original_lower:
+                score += 90
+
+            # 2. 부분 문자열 일치 시 점수 추가
+            if original_lower in ticker:
+                score += 80
+            elif normalized_lower in ticker.replace(" ", ""):
+                score += 75
+
+            if original_lower in kr_name:
+                score += 70
+            elif normalized_lower in kr_name.replace(" ", ""):
+                score += 65
+
+            if original_lower in en_name:
+                score += 70
+            elif normalized_lower in en_name.replace(" ", ""):
+                score += 65
+
+            # 3. 검색어의 모든 문자가 순서대로 포함되어 있는지 확인
+            # 예: '메타플'이 '메타 플랫폼스'에 포함되는지
+            name_without_spaces = kr_name.replace(" ", "")
+            if normalized_lower in name_without_spaces:
+                score += 60
+
+            name_without_spaces = en_name.replace(" ", "")
+            if normalized_lower in name_without_spaces:
+                score += 60
+
+            # 4. 단어 단위 일치 여부
+            if len(words) > 1:
+                for word in words:
+                    word_lower = word.lower()
+                    if word_lower in kr_name.split() or word_lower in en_name.split():
+                        score += 40
+
+            # 일정 점수 이상인 결과만 포함
+            if score > 0:
+                scored_results.append((row, score))
+
+        # 점수 기준으로 정렬하고 상위 결과만 유지
+        scored_results.sort(key=lambda x: x[1], reverse=True)
+        search_result = [item[0] for item in scored_results]
+
+        logger.warning(f"Scored and filtered results count: {len(search_result)}")
+
+        if scored_results:
+            top_results = [(r[0]._mapping["ticker"], r[0]._mapping["kr_name"], r[1]) for r in scored_results[:5]]
+            logger.warning(f"Top scoring results: {top_results}")
+
+        search_result = search_result[offset : offset + limit]
+
+        logger.warning(f"Final result count after offset/limit: {len(search_result)}")
+
+        search_items = []
+        for row in search_result:
+            mapping = row._mapping
+            ticker = mapping["ticker"]
+            search_items.append(
+                InterestSearchItem(
+                    ticker=ticker,
+                    name=mapping["kr_name"] if ctry == TranslateCountry.KO else mapping["en_name"],
+                    ctry=mapping["ctry"],
+                    is_interest=ticker in interest_tickers,
+                )
+            )
+
+        return search_items
 
 
 def get_search_service() -> SearchService:
