@@ -1130,7 +1130,7 @@ class CommunityService:
 
     async def get_trending_posts(
         self,
-        limit: int = 5,
+        limit: int = 10,
     ) -> List[TrendingPostResponse]:
         """실시간 인기 게시글 조회 (30일)"""
         query = """
@@ -1141,7 +1141,7 @@ class CommunityService:
                 GROUP BY post_id
             )
             SELECT
-                p.id, p.title, p.created_at, p.user_id,
+                p.id, p.created_at, p.user_id,
                 ROW_NUMBER() OVER (ORDER BY COALESCE(plc.daily_likes, 0) DESC, p.created_at DESC) as rank_num
             FROM af_posts p
             LEFT JOIN post_likes_count plc ON p.id = plc.post_id
@@ -1169,7 +1169,6 @@ class CommunityService:
             TrendingPostResponse(
                 id=post["id"],
                 rank=post["rank_num"],
-                title=post["title"],
                 created_at=post["created_at"].astimezone(KST),
                 user_info=user_info_map.get(
                     post["user_id"], UserInfo(id=0, nickname="(알 수 없는 유저)", profile_image=None, image_format=None)
