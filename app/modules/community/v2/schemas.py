@@ -253,3 +253,18 @@ class PresignedUrlResponse(BaseModel):
     upload_url: str = Field(..., description="S3 업로드용 presigned URL")
     image_key: str = Field(..., description="S3에 저장될 이미지 키")
     image_index: int = Field(..., description="이미지 순서 (0부터 시작)", ge=0, le=2)  # 최대 3개 이미지
+
+
+########################
+# 신고 기능
+########################
+
+
+class ReportItemResponse(BaseModel):
+    id: int
+    name: str
+
+
+class ReportRequest(BaseModel):
+    post_id: int
+    report_item_ids: List[int]

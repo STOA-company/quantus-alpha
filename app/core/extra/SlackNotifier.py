@@ -1,6 +1,6 @@
 import socket
 import traceback
-from typing import Dict, Union
+from typing import Dict, List, Union
 
 import psutil
 import requests
@@ -94,3 +94,11 @@ class SlackNotifier:
 
         color = "#ff0000" if memory_info["percent"] >= 90 else "#f39c12" if memory_info["percent"] >= 80 else "#36a64f"
         return self.send_message(message, color=color)
+
+    def notify_report_post(self, post_id: int, user_id: int, report_items: List[str]):
+        """게시글 신고 알림을 슬랙으로 전송합니다."""
+        message = "📝 *게시글 신고 알림*\n"
+        message += f"`게시글 ID`: {post_id}\n"
+        message += f"`신고 항목`: {', '.join(report_items)}\n"
+        message += f"`신고자`: {user_id}\n"
+        return self.send_message(message, color="#f39c12")
