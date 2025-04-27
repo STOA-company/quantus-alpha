@@ -166,6 +166,15 @@ class CommunityService:
         """게시글 상세 조회"""
         current_user_id = current_user["uid"] if current_user else None
 
+        # 사용자가 신고한 글인지 조회
+        is_reported = self.db._execute(
+            text("SELECT EXISTS(SELECT 1 FROM af_post_reports WHERE post_id = :post_id AND user_id = :current_user_id)"),
+            {"post_id": post_id, "current_user_id": current_user_id},
+        )
+        is_reported = is_reported.scalar()
+        if is_reported:
+            raise PostException(message="신고된 게시글입니다", status_code=400)
+
         # 1. 게시글, 작성자, 카테고리 정보 조회
         query = """
             SELECT
@@ -187,6 +196,7 @@ class CommunityService:
             FROM af_posts p
             JOIN categories c ON p.category_id = c.id
             WHERE p.id = :post_id
+            AND p.is_reported = 0
         """
 
         result = self.db._execute(text(query), {"post_id": post_id, "current_user_id": current_user_id})
@@ -196,7 +206,7 @@ class CommunityService:
             raise PostException(message="게시글을 찾을 수 없습니다", status_code=404, post_id=post_id)
 
         # 2. 연결된 종목 조회
-        stock_tickers = self.db._select(table="post_stocks", columns=["stock_ticker"], post_id=post_id)
+        stock_tickers = self.db._select(table="af_post_stock_tags", columns=["stock_ticker"], post_id=post_id)
         stock_tickers = [row[0] for row in stock_tickers]
 
         # 종목 정보 조회
@@ -422,6 +432,8 @@ class CommunityService:
             JOIN categories c ON p.category_id = c.id
             {stock_join}  /* stock_ticker 조건 시 JOIN */
             WHERE p.depth = 0
+            AND p.id NOT IN (SELECT post_id FROM af_post_reports WHERE user_id = :current_user_id)
+            AND p.is_reported = 0
             {category_condition}  /* category_id 조건 */
             {stock_condition}  /* stock_ticker 조건 */
             ORDER BY p.{order_by} DESC
@@ -455,7 +467,7 @@ class CommunityService:
         post_ids = [post["id"] for post in posts]
         stock_query = """
             SELECT post_id, stock_ticker
-            FROM post_stocks
+            FROM af_post_stock_tags
             WHERE post_id IN :post_ids
         """
         if not post_ids:
