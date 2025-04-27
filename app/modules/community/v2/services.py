@@ -448,7 +448,7 @@ class CommunityService:
             params["category_id"] = category_id
 
         if stock_ticker:
-            conditions["stock_join"] = "JOIN post_stocks ps_filter ON p.id = ps_filter.post_id"
+            conditions["stock_join"] = "JOIN af_post_stock_tags ps_filter ON p.id = ps_filter.post_id"
             conditions["stock_condition"] = "AND ps_filter.stock_ticker = :stock_ticker"
             params["stock_ticker"] = stock_ticker
 
