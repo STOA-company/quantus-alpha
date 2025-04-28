@@ -51,6 +51,18 @@ def get_groups(
     return service.get_interest_group(current_user["uid"])
 
 
+# 관심 그룹 조회
+@router.get("/groups/{ticker}", summary="관심 그룹 조회")
+def get_groups_by_ticker(
+    ticker: str,
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: InterestService = Depends(get_interest_service),
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return service.get_interest_group_by_ticker(current_user["uid"], ticker)
+
+
 # 관심 그룹 생성
 @router.post("/groups", summary="관심 그룹 생성")
 def create_group(

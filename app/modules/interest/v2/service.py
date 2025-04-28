@@ -299,6 +299,34 @@ class InterestService:
         ]
         return result
 
+    def get_interest_group_by_ticker(self, user_id: int, ticker: str):
+        query = """
+            SELECT
+                g.id,
+                g.name,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM alphafinder_interest_stock
+                    WHERE group_id = g.id AND ticker = :ticker
+                ) THEN 1 ELSE 0 END as has_ticker
+            FROM alphafinder_interest_group g
+            LEFT JOIN alphafinder_interest_stock i ON g.id = i.group_id
+            WHERE g.user_id = :user_id
+            GROUP BY g.id, g.name
+            ORDER BY g.order ASC
+        """
+
+        result = self.db._execute(text(query), {"user_id": user_id, "ticker": ticker})
+        rows = result.fetchall()
+
+        if not rows:
+            return []
+
+        return [
+            {"id": row.id, "name": row.name, "has_ticker": bool(row.has_ticker)}
+            for row in rows
+            if row.name != "실시간 인기"
+        ]
+
     def init_interest_group(self, user_id: int):
         """
         사용자의 기본 관심 그룹을 초기화합니다.
