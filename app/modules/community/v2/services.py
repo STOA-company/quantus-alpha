@@ -533,6 +533,7 @@ class CommunityService:
                     nickname=user.nickname,
                     profile_image=None,
                     image_format=None,
+                    is_official=self._is_official_user(user.id),
                 )
 
         # 사용자 정보 조회 (user DB에서)
@@ -570,11 +571,11 @@ class CommunityService:
                             content=tagging_post["content"],
                             created_at=tagging_post["created_at"],
                             user_info=UserInfo(
-                                id=user["id"],
-                                nickname=user["nickname"],
+                                id=user.id,
+                                nickname=user.nickname,
                                 profile_image=None,
                                 image_format=None,
-                                is_official=user_id in self._get_official_users(list(user_ids)),
+                                is_official=user.is_official,
                             ),
                             image_url=tagging_image_urls,
                             image_format=tagging_image_format,
