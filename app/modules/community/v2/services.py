@@ -8,7 +8,7 @@ from sqlalchemy import text
 from app.common.constants import KST, UNKNOWN_USER_EN, UNKNOWN_USER_KO, UTC
 from app.core.exception.custom import PostException, TooManyStockTickersException
 from app.core.extra.SlackNotifier import SlackNotifier
-from app.core.logging.config import get_logger
+from app.core.logger.logger.base import setup_logger
 from app.core.redis import redis_client
 from app.database.crud import database, database_service, database_user
 from app.models.models_users import AlphafinderUser
@@ -31,7 +31,7 @@ from .schemas import (
     UserInfo,
 )
 
-logger = get_logger(__name__)
+logger = setup_logger(__name__, level="DEBUG")
 slack_notifier = SlackNotifier(
     webhook_url="https://hooks.slack.com/services/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"
 )
@@ -1002,39 +1002,66 @@ class CommunityService:
         official_user_ids = self._get_official_users(list(all_user_ids))
 
         # 6. 최종 응답 구성
-        comment_list = [
-            CommentItem(
-                id=comment["id"],
-                content=comment["content"],
-                like_count=comment["like_count"],
-                comment_count=comment["comment_count"],
-                depth=comment["depth"],
-                parent_id=comment["parent_id"],
-                created_at=comment["created_at"].astimezone(KST),
-                is_changed=comment["created_at"] != comment["updated_at"],
-                is_liked=comment["is_liked"],
-                is_mine=comment["user_id"] == current_user_id if current_user_id else False,
-                user_info=user_info_map.get(
-                    comment["user_id"],
-                    UserInfo(
-                        id=0,
-                        nickname=self._get_unknown_user_nickname(lang),
-                        profile_image=None,
-                        image_format=None,
-                        is_official=False,
+        comment_list = []
+        for comment in comments:
+            # 이미지 URL 처리
+            image_urls = []
+            if comment["image_url"]:
+                try:
+                    image_urls = json.loads(comment["image_url"])
+                    for i, url in enumerate(image_urls):
+                        presigned_url = self.generate_get_presigned_url(url)
+                        image_urls[i] = presigned_url["get_url"]
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse image_url JSON for comment {comment['id']}")
+
+            # 태깅된 게시글의 이미지 URL 처리
+            tagging_image_urls = []
+            if comment["tagging_post_id"] and comment["tagging_post_id"] in tagging_posts:
+                tagging_post = tagging_posts[comment["tagging_post_id"]]
+                if tagging_post["image_url"]:
+                    try:
+                        logger.info(f"tagging_post['image_url']: {tagging_post['image_url']}")
+                        tagging_image_urls = json.loads(tagging_post["image_url"])
+                        for i, url in enumerate(tagging_image_urls):
+                            presigned_url = self.generate_get_presigned_url(url)
+                            logger.info(f"presigned_url: {presigned_url}")
+                            tagging_image_urls[i] = presigned_url["get_url"]
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to parse image_url JSON for tagging post {comment['tagging_post_id']}")
+
+            comment_list.append(
+                CommentItem(
+                    id=comment["id"],
+                    content=comment["content"],
+                    image_url=image_urls,
+                    like_count=comment["like_count"],
+                    comment_count=comment["comment_count"],
+                    depth=comment["depth"],
+                    parent_id=comment["parent_id"],
+                    created_at=comment["created_at"].astimezone(KST),
+                    is_changed=comment["created_at"] != comment["updated_at"],
+                    is_liked=comment["is_liked"],
+                    is_mine=comment["user_id"] == current_user_id if current_user_id else False,
+                    user_info=user_info_map.get(
+                        comment["user_id"],
+                        UserInfo(
+                            id=0,
+                            nickname=self._get_unknown_user_nickname(lang),
+                            profile_image=None,
+                            image_format=None,
+                            is_official=False,
+                        ),
                     ),
-                ),
-                sub_comments=[],
-                image_url=json.loads(comment["image_url"]) if comment["image_url"] else None,
-                stock_tickers=[
-                    stock_info_map[ticker] for ticker in stock_map.get(comment["id"], []) if ticker in stock_info_map
-                ],
-                tagging_post_info=self._create_tagging_post_info(
-                    comment, tagging_posts, tagging_users, lang, official_user_ids
-                ),
+                    sub_comments=[],
+                    stock_tickers=[
+                        stock_info_map[ticker] for ticker in stock_map.get(comment["id"], []) if ticker in stock_info_map
+                    ],
+                    tagging_post_info=self._create_tagging_post_info(
+                        comment, tagging_posts, tagging_users, lang, official_user_ids
+                    ),
+                )
             )
-            for comment in comments
-        ]
 
         return comment_list, has_more
 

@@ -130,6 +130,7 @@ class CommentCreate(BaseModel):
 class CommentItem(BaseModel):
     id: int
     content: str
+    image_url: Optional[List[str]] = None
     like_count: int
     comment_count: int
     depth: int
