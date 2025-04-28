@@ -1,6 +1,6 @@
 import urllib.parse
 
-from fastapi import FastAPI, Form
+from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
 from app.core.extra.SlackNotifier import SlackNotifier
@@ -8,10 +8,10 @@ from app.database.crud import database_service
 
 slack_notifier = SlackNotifier()
 
-app = FastAPI()
+router = APIRouter()
 
 
-@app.post("/report_interactivity")
+@router.post("/report_interactivity")
 async def report_interactivity(payload: str = Form(...)):
     data = urllib.parse.parse_qs(payload)
     payload_data = data.get("payload")[0]
