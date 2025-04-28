@@ -555,11 +555,11 @@ class CommunityService:
                     if tagging_post["image_url"]:
                         try:
                             tagging_image_urls = json.loads(tagging_post["image_url"])
-                            if tagging_image_urls:
-                                tagging_image_format = self._get_image_format(tagging_image_urls[0])
                             for i, url in enumerate(tagging_image_urls):
                                 presigned_url = self.generate_get_presigned_url(url)
                                 tagging_image_urls[i] = presigned_url["get_url"]
+                            # 처리된 presigned URLs를 저장
+                            tagging_post["processed_image_urls"] = tagging_image_urls
                         except json.JSONDecodeError:
                             logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
 
@@ -924,7 +924,7 @@ class CommunityService:
                 image_format=user_info.image_format,
                 is_official=user_info.id in official_user_ids,
             ),
-            image_url=json.loads(tagging_post["image_url"]) if tagging_post["image_url"] else None,
+            image_url=tagging_post.get("processed_image_urls", []),  # 이미 처리된 presigned URLs 사용
             image_format=None,
         )
 
@@ -1027,6 +1027,8 @@ class CommunityService:
                             presigned_url = self.generate_get_presigned_url(url)
                             logger.info(f"presigned_url: {presigned_url}")
                             tagging_image_urls[i] = presigned_url["get_url"]
+                        # 처리된 presigned URLs를 저장
+                        tagging_post["processed_image_urls"] = tagging_image_urls
                     except json.JSONDecodeError:
                         logger.error(f"Failed to parse image_url JSON for tagging post {comment['tagging_post_id']}")
 
