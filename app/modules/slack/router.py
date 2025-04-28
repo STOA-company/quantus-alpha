@@ -1,5 +1,4 @@
 import json
-import urllib.parse
 
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
@@ -14,10 +13,8 @@ router = APIRouter()
 
 @router.post("/report_interactivity")
 async def report_interactivity(payload: str = Form(...)):
-    data = urllib.parse.parse_qs(payload)
-    payload_data = data.get("payload")[0]
-
-    payload_json = json.loads(payload_data)
+    print(payload)  # JSON 문자열
+    payload_json = json.loads(payload)
 
     action_id = payload_json["actions"][0]["action_id"]
     post_id = payload_json["actions"][0]["value"]

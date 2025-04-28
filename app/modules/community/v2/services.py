@@ -33,7 +33,7 @@ from .schemas import (
 
 logger = setup_logger(__name__, level="DEBUG")
 slack_notifier = SlackNotifier(
-    webhook_url="https://hooks.slack.com/services/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"
+    webhook_url="https://hooks.slack.com/services/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"
 )
 
 
@@ -173,7 +173,7 @@ class CommunityService:
         )
         is_reported = is_reported.scalar()
         if is_reported:
-            raise PostException(message="신고된 게시글입니다", status_code=400)
+            raise PostException(message="신고된 게시글입니다", status_code=410)
 
         # 1. 게시글, 작성자, 카테고리 정보 조회
         query = """

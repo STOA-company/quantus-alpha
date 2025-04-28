@@ -105,20 +105,16 @@ class SlackNotifier:
         else:
             base_url = "https://develop.alphafinder.dev"
 
-        message_blocks = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        "📝 *게시글 신고 알림*\n"
-                        f"`게시글 ID`: {post_id}\n"
-                        f"`신고 항목`: {', '.join(report_items)}\n"
-                        f"`신고자`: {user_id}\n"
-                        f"`게시글 링크`: <{base_url}/ko/community/{post_id}|게시글 바로가기>"
-                    ),
-                },
-            },
+        message = (
+            "📝 *게시글 신고 알림*\n"
+            f"`게시글 ID`: {post_id}\n"
+            f"`신고 항목`: {', '.join(report_items)}\n"
+            f"`신고자`: {user_id}\n"
+            f"`게시글 링크`: <{base_url}/ko/community/{post_id}|게시글 바로가기>"
+        )
+
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": message}},
             {
                 "type": "actions",
                 "elements": [
@@ -146,7 +142,7 @@ class SlackNotifier:
         }
         payload = {
             "channel": "C08Q10HCR6V",
-            "blocks": message_blocks,
+            "blocks": blocks,
         }
         response = requests.post("https://slack.com/api/chat.postMessage", headers=headers, json=payload)
         return response.status_code == 200 and response.json().get("ok")
