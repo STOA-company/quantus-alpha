@@ -16,6 +16,7 @@ from app.modules.screener.etf.router import router as screener_etf_router
 from app.modules.screener.stock.router import router as screener_router
 from app.modules.search.router import router as search_router
 from app.modules.sector.router import router as sector_router
+from app.modules.slack.router import router as slack_router
 from app.modules.stock_indices.router import router as stock_indices_router
 from app.modules.stock_info.router import router as stock_info_router
 from app.modules.trending.router import router as trending_router
@@ -43,3 +44,4 @@ api_router.include_router(payments_router, prefix="/payments", tags=["payments"]
 api_router.include_router(interest_router, prefix="/interest", tags=["interest"])
 api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
 api_router.include_router(cs_router, prefix="/cs", tags=["cs"])
+api_router.include_router(slack_router, prefix="/slack", tags=["slack"])
