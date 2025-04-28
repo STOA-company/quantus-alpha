@@ -630,5 +630,5 @@ async def report(
     community_service: CommunityService = Depends(get_community_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
-    report_response = await community_service.report_post(report_request)
+    report_response = await community_service.report_post(report_request, current_user)
     return BaseResponse(status_code=200, message="신고 기능을 완료하였습니다.", data=report_response)

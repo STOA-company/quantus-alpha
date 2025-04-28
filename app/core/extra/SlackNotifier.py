@@ -5,6 +5,8 @@ from typing import Dict, List, Union
 import psutil
 import requests
 
+from app.core.config import settings
+
 
 class SlackNotifier:
     SLACK_USER_IDS = {"고경민": "U08011KHGJK", "김광윤": "U089KGFM9CG"}
@@ -97,8 +99,14 @@ class SlackNotifier:
 
     def notify_report_post(self, post_id: int, user_id: int, report_items: List[str]):
         """게시글 신고 알림을 슬랙으로 전송합니다."""
+
+        if settings.ENV == "staging":
+            base_url = "https://www.alphafinder.dev"
+        else:
+            base_url = "https://develop.alphafinder.dev"
         message = "📝 *게시글 신고 알림*\n"
         message += f"`게시글 ID`: {post_id}\n"
         message += f"`신고 항목`: {', '.join(report_items)}\n"
         message += f"`신고자`: {user_id}\n"
+        message += f"`게시글 링크`: <{base_url}/ko/community/{post_id}|게시글 바로가기>"
         return self.send_message(message, color="#f39c12")

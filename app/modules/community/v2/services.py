@@ -1467,7 +1467,7 @@ class CommunityService:
                 {
                     "post_id": report_request.post_id,
                     "user_id": user_id,
-                    "report_item_id": report_item_id,
+                    "report_id": report_item_id,
                 }
             )
         self.db._insert("af_post_reports", report_data)
