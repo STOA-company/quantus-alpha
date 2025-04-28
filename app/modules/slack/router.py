@@ -1,3 +1,4 @@
+import json
 import urllib.parse
 
 from fastapi import APIRouter, Form
@@ -16,8 +17,6 @@ async def report_interactivity(payload: str = Form(...)):
     data = urllib.parse.parse_qs(payload)
     payload_data = data.get("payload")[0]
 
-    import json
-
     payload_json = json.loads(payload_data)
 
     action_id = payload_json["actions"][0]["action_id"]
@@ -28,7 +27,7 @@ async def report_interactivity(payload: str = Form(...)):
     if action_id == "approve_report":
         # 게시글 신고 승인
         database_service._update(
-            table="af_post_report",
+            table="af_posts",
             sets={"is_reported": True},
             where={"id": post_id},
         )
