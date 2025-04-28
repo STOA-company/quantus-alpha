@@ -27,18 +27,20 @@ class ChatService:
         if latest_message.role == "user":
             final_response_id, final_response = self.store_final_response(conversation_id, latest_message.id)
             analysis_history_id, analysis_history = self.store_analysis_history(conversation_id, latest_message.id)
-            conversation.add_message(
-                content=final_response,
-                role="assistant",
-                id=final_response_id,
-                root_message_id=latest_message.id,
-            )
-            conversation.add_message(
-                content=analysis_history,
-                role="system",
-                id=analysis_history_id,
-                root_message_id=latest_message.id,
-            )
+            if final_response is not None:
+                conversation.add_message(
+                    content=final_response,
+                    role="assistant",
+                    id=final_response_id,
+                    root_message_id=latest_message.id,
+                )
+            if analysis_history is not None:
+                conversation.add_message(
+                    content=analysis_history,
+                    role="system",
+                    id=analysis_history_id,
+                    root_message_id=latest_message.id,
+                )
         return conversation
 
     def get_conversation_list(self, user_id: int) -> List[Conversation]:
@@ -89,7 +91,7 @@ class ChatService:
     def get_final_response(self, conversation_id: int) -> tuple[str, str]:
         latest_job_id = conversation_repository.get_latest_job_id(conversation_id)
         if not latest_job_id:
-            raise ValueError("최신 작업 ID가 없습니다.")
+            return None, None
 
         if self.get_status(conversation_id) != "success":
             raise ValueError("작업이 아직 완료되지 않았습니다.")
@@ -100,17 +102,21 @@ class ChatService:
 
     def store_final_response(self, conversation_id: int, root_message_id: int) -> tuple[int, str]:
         final_response, _ = self.get_final_response(conversation_id)
-        message = conversation_repository.add_message(
-            conversation_id=conversation_id, content=final_response, role="assistant", root_message_id=root_message_id
-        )
-        return message.id, final_response
+        if final_response is not None:
+            message = conversation_repository.add_message(
+                conversation_id=conversation_id, content=final_response, role="assistant", root_message_id=root_message_id
+            )
+            return message.id, final_response
+        return None, None
 
     def store_analysis_history(self, conversation_id: int, root_message_id: int) -> tuple[int, str]:
         _, analysis_history = self.get_final_response(conversation_id)
-        message = conversation_repository.add_message(
-            conversation_id=conversation_id, content=analysis_history, role="system", root_message_id=root_message_id
-        )
-        return message.id, analysis_history
+        if analysis_history is not None:
+            message = conversation_repository.add_message(
+                conversation_id=conversation_id, content=analysis_history, role="system", root_message_id=root_message_id
+            )
+            return message.id, analysis_history
+        return None, None
 
 
 # 싱글톤 인스턴스 생성
