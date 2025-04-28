@@ -754,6 +754,203 @@ class NewsService:
 
         return stories_data
 
+    def etf_news_detail(
+        self,
+        ticker: str,
+        date: str = None,
+        end_date: str = None,
+        page: int = 1,
+        size: int = 6,
+        lang: TranslateCountry | None = None,
+        user: AlphafinderUser | None = None,
+    ):
+        """
+        ETF 구성 종목들의 뉴스를 조회하는 서비스 메소드
+
+        Args:
+            ticker: ETF 티커
+            date: 시작 날짜 (YYYYMMDD 형식)
+            end_date: 종료 날짜 (YYYYMMDD 형식)
+            page: 페이지 번호
+            size: 페이지 크기
+            lang: 언어 설정
+            user: 사용자 정보
+
+        Returns:
+            뉴스 데이터, 총 개수, 총 페이지, 오프셋, 감정 분석 결과, 국가 코드
+        """
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        if lang == TranslateCountry.KO:
+            lang = "ko-KR"
+        else:
+            lang = "en-US"
+
+        kst = pytz.timezone("Asia/Seoul")
+        utc = pytz.timezone("UTC")
+
+        # 시작 날짜 설정
+        if not date:
+            kst_date = datetime.now(kst).replace(tzinfo=None)
+        else:
+            kst_date = datetime.strptime(date, "%Y%m%d")
+
+        # 종료 날짜 설정
+        if end_date:
+            kst_end_date = datetime.strptime(end_date, "%Y%m%d")
+        else:
+            kst_end_date = kst_date
+
+        # 시작 / 종료 시간 localize
+        kst_start_datetime = kst.localize(datetime.combine(kst_date, datetime.min.time()))
+        kst_end_datetime = kst.localize(datetime.combine(kst_end_date, time(23, 59, 59)))
+
+        # 시작 / 종료 시간 UTC로 변환
+        utc_start_datetime = kst_start_datetime.astimezone(utc)
+        utc_end_datetime = kst_end_datetime.astimezone(utc)
+
+        # 현재 시간 + 5분까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+
+        if end_date:
+            end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
+
+        ctry = check_ticker_country_len_2(ticker)
+        print("Ticker: ", ticker)
+
+        holdings = self.db._select(
+            table="etf_top_holdings",
+            columns=["holding_ticker"],
+            ticker=ticker,
+        )
+
+        print("HOLDINGS : ", holdings)
+
+        if not holdings:
+            print("ETF 구성 종목이 없습니다.")
+            emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
+            return [], 0, 0, 0, emotion_count, ctry
+
+        holding_tickers = [holding[0] for holding in holdings if holding[0]]
+
+        if not holding_tickers:
+            emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
+            return [], 0, 0, 0, emotion_count, ctry
+
+        # 구성 종목별 정보 조회
+        stock_info_map = {}
+        stock_infos = self.db._select(
+            table="stock_information",
+            columns=["ticker", "en_name", "kr_name"],
+            ticker__in=holding_tickers,
+        )
+
+        for stock_info in stock_infos:
+            stock_info_map[stock_info[0]] = {
+                "en_name": stock_info[1],
+                "kr_name": stock_info[2] if len(stock_info) > 2 else None,
+            }
+
+        # 뉴스 조회 조건
+        condition = {
+            "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "is_exist": True,
+            "is_related": True,
+            "lang": lang,
+            "ticker__in": holding_tickers,
+        }
+
+        # 구성 종목들의 뉴스 데이터 조회
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_analysis",
+                columns=[
+                    "id",
+                    "ticker",
+                    "ctry",
+                    "date",
+                    "title",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "that_time_price",
+                ],
+                order="date",
+                ascending=False,
+                **condition,
+            )
+        )
+
+        if df_news.empty:
+            emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
+            return [], 0, 0, 0, emotion_count, ctry
+
+        # 유저 레벨에 따른 마스킹 처리
+        recent_news_id = self.db._select(
+            table="news_analysis",
+            columns=["id"],
+            order="date",
+            ascending=False,
+            limit=10,
+            **{
+                "is_related": True,
+                "lang": lang,
+                "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "ticker__in": holding_tickers,
+            },
+        )
+        recent_news_id = [id[0] for id in recent_news_id]
+
+        user_level = user.subscription_level if user else 1
+        # 최근 10개를 제외한 데이터 마스킹
+        if user_level == 1:
+            df_news = self.mask_fields(df=df_news, recent_news_id=recent_news_id)
+
+        # 감정 분석 및 페이지네이션 처리
+        offset = (page - 1) * size
+        df_news["emotion"] = df_news["emotion"].str.lower()
+        total_count = df_news.shape[0]
+        total_page = math.ceil(total_count / size)
+        emotion_count = self._count_emotion(df_news)
+
+        if offset >= total_count:
+            page = total_page
+            offset = (page - 1) * size
+
+        # 현재 페이지 데이터 추출
+        df_news = df_news[offset : offset + size]
+
+        # 타임존 변환
+        df_news["date"] = pd.to_datetime(df_news["date"]).dt.tz_localize(utc).dt.tz_convert(kst)
+        df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
+
+        # 응답 데이터 생성
+        data = []
+        for _, row in df_news.iterrows():
+            ticker_info = stock_info_map.get(row["ticker"], {})
+            data.append(
+                NewsDetailItemV2(
+                    id=row["id"],
+                    ctry=row["ctry"],
+                    date=row["date"],
+                    title=row["title"],
+                    summary=row["summary"],
+                    impact_reason=row["impact_reason"],
+                    key_points=row["key_points"],
+                    emotion=row["emotion"],
+                    price_impact=0,
+                    kr_name=ticker_info.get("kr_name"),
+                    en_name=ticker_info.get("en_name"),
+                )
+            )
+
+        return data, total_count, total_page, offset, emotion_count, ctry
+
 
 def get_news_service() -> NewsService:
     return NewsService()

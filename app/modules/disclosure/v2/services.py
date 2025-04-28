@@ -297,7 +297,6 @@ class DisclosureService:
                     "key_points": row["key_points"],
                     "summary": row["summary"],
                     "document_url": row["url"],
-                    "price_impact": 0,
                 }
             )
 
