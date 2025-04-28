@@ -97,54 +97,56 @@ class SlackNotifier:
         color = "#ff0000" if memory_info["percent"] >= 90 else "#f39c12" if memory_info["percent"] >= 80 else "#36a64f"
         return self.send_message(message, color=color)
 
+    def notify_report_post(self, post_id: int, user_id: int, report_items: List[str]):
+        """게시글 신고 알림을 슬랙으로 전송합니다."""
 
-def notify_report_post(self, post_id: int, user_id: int, report_items: List[str]):
-    if settings.ENV == "staging":
-        base_url = "https://www.alphafinder.dev"
-    else:
-        base_url = "https://develop.alphafinder.dev"
+        if settings.ENV == "staging":
+            base_url = "https://www.alphafinder.dev"
+        else:
+            base_url = "https://develop.alphafinder.dev"
 
-    message_blocks = [
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": (
-                    "📝 *게시글 신고 알림*\n"
-                    f"`게시글 ID`: {post_id}\n"
-                    f"`신고 항목`: {', '.join(report_items)}\n"
-                    f"`신고자`: {user_id}\n"
-                    f"`게시글 링크`: <{base_url}/ko/community/{post_id}|게시글 바로가기>"
-                ),
+        message_blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        "📝 *게시글 신고 알림*\n"
+                        f"`게시글 ID`: {post_id}\n"
+                        f"`신고 항목`: {', '.join(report_items)}\n"
+                        f"`신고자`: {user_id}\n"
+                        f"`게시글 링크`: <{base_url}/ko/community/{post_id}|게시글 바로가기>"
+                    ),
+                },
             },
-        },
-        {
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "승인"},
-                    "style": "primary",
-                    "value": str(post_id),
-                    "action_id": "approve_report",
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "거절"},
-                    "style": "danger",
-                    "value": str(post_id),
-                    "action_id": "reject_report",
-                },
-            ],
-        },
-    ]
-    headers = {
-        "Authorization": "Bearer xoxb-3733525480166-8811746680101-MVQ7f3AQLm7gxNGhWaJODdLH",  # 99-알파파인더-신고-로그
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "channel": "C08M2P4D64U",
-        "blocks": message_blocks,
-    }
-    response = requests.post("https://slack.com/api/chat.postMessage", headers=headers, json=payload)
-    return response.status_code == 200 and response.json().get("ok")
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "승인"},
+                        "style": "primary",
+                        "value": str(post_id),
+                        "action_id": "approve_report",
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "거절"},
+                        "style": "danger",
+                        "value": str(post_id),
+                        "action_id": "reject_report",
+                    },
+                ],
+            },
+        ]
+
+        headers = {
+            "Authorization": "Bearer xoxb-3733525480166-8811746680101-MVQ7f3AQLm7gxNGhWaJODdLH",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "channel": "C08Q10HCR6V",
+            "blocks": message_blocks,
+        }
+        response = requests.post("https://slack.com/api/chat.postMessage", headers=headers, json=payload)
+        return response.status_code == 200 and response.json().get("ok")
