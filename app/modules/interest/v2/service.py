@@ -174,6 +174,28 @@ class InterestService:
             raise HTTPException(status_code=500, detail=str(e))
 
     def update_interest(self, user_id: int, group_ids: List[int], ticker: str):
+        # 빈 배열이 들어오면 모든 그룹에서 해당 티커 삭제
+        if not group_ids:
+            # 1. 사용자의 모든 그룹에서 해당 티커가 있는지 확인
+            query = """
+                SELECT group_id
+                FROM alphafinder_interest_stock
+                WHERE ticker = :ticker
+                AND group_id IN (
+                    SELECT id
+                    FROM alphafinder_interest_group
+                    WHERE user_id = :user_id
+                )
+            """
+            result = self.db._execute(text(query), {"ticker": ticker, "user_id": user_id})
+            groups_to_remove = [row[0] for row in result.fetchall()]
+
+            # 2. 해당 티커가 있는 모든 그룹에서 삭제
+            if groups_to_remove:
+                self.db._delete(table="alphafinder_interest_stock", ticker=ticker, group_id__in=groups_to_remove)
+
+            return True
+
         # 1. Get current status of all groups in a single query
         query = """
             WITH user_groups AS (
