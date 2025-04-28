@@ -1,6 +1,6 @@
 from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
@@ -15,6 +15,7 @@ router = APIRouter()
 def news_detail_v2(
     ticker: Annotated[str, Query(..., description="종목 코드, 예시: AAPL, A110090")],
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
+    type: Annotated[str, Query(description="타입, 예시: stock, etf")] = None,
     date: Annotated[str, Query(description="시작 날짜, YYYYMMDD")] = None,
     end_date: Annotated[str, Query(description="종료 날짜, YYYYMMDD")] = None,
     page: Annotated[int, Query(description="페이지 번호, 기본값: 1")] = 1,
@@ -22,9 +23,18 @@ def news_detail_v2(
     news_service: NewsService = Depends(get_news_service),
     user: AlphafinderUser = Depends(get_current_user),
 ):
-    data, total_count, total_page, offset, emotion_count, ctry = news_service.news_detail(
-        ticker=ticker, date=date, end_date=end_date, page=page, size=size, lang=lang, user=user
-    )
+    type = type.lower()
+    if type == "stock":
+        data, total_count, total_page, offset, emotion_count, ctry = news_service.news_detail(
+            ticker=ticker, date=date, end_date=end_date, page=page, size=size, lang=lang, user=user
+        )
+    elif type == "etf":
+        data, total_count, total_page, offset, emotion_count, ctry = news_service.etf_news_detail(
+            ticker=ticker, date=date, end_date=end_date, page=page, size=size, lang=lang, user=user
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Invalid type")
+
     return NewsResponse(
         status_code=200,
         message="Successfully retrieved news data",
