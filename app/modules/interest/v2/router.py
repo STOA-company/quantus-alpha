@@ -12,6 +12,7 @@ from app.modules.interest.v2.request import (
     DeleteInterestRequest,
     MoveInterestRequest,
     UpdateInterestOrderRequest,
+    UpdateInterestRequest,
 )
 from app.modules.interest.v2.response import InterestGroupResponse, InterestPriceResponse
 from app.modules.interest.v2.service import InterestService, get_interest_service
@@ -49,6 +50,18 @@ def get_groups(
     if not current_user:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return service.get_interest_group(current_user["uid"])
+
+
+# 관심 그룹 조회
+@router.get("/groups/{ticker}", summary="관심 그룹 조회")
+def get_groups_by_ticker(
+    ticker: str,
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: InterestService = Depends(get_interest_service),
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return service.get_interest_group_by_ticker(current_user["uid"], ticker)
 
 
 # 관심 그룹 생성
@@ -195,6 +208,26 @@ def delete_interest(
 
         service.delete_interest(request.group_id, request.tickers, current_user["uid"])
         return {"message": f"관심 종목에서 {', '.join(request.tickers)}가 삭제되었습니다."}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 관심 종목 수정
+@router.put("/", summary="관심 종목 수정")
+def update_interest(
+    request: UpdateInterestRequest,
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: InterestService = Depends(get_interest_service),
+):
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        service.update_interest(user_id=current_user["uid"], group_ids=request.group_ids, ticker=request.ticker)
+        return {"message": f"{request.ticker}가 {', '.join(map(str, request.group_ids))} 그룹에 추가되었습니다."}
     except HTTPException as e:
         raise e
     except Exception as e:
