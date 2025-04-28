@@ -174,16 +174,77 @@ class InterestService:
             raise HTTPException(status_code=500, detail=str(e))
 
     def update_interest(self, user_id: int, group_ids: List[int], ticker: str):
-        groups = self.db._select(table="interest_group", user_id=user_id)
-        if not groups:
-            raise HTTPException(status_code=404, detail="관심 그룹이 존재하지 않습니다.")
+        # 1. Get current status of all groups in a single query
+        query = """
+            WITH user_groups AS (
+                SELECT id
+                FROM alphafinder_interest_group
+                WHERE user_id = :user_id
+            ),
+            current_groups AS (
+                SELECT group_id
+                FROM alphafinder_interest_stock
+                WHERE ticker = :ticker
+                AND group_id IN (SELECT id FROM user_groups)
+            ),
+            requested_groups AS (
+                SELECT id as group_id
+                FROM user_groups
+                WHERE id IN :group_ids
+            )
+            SELECT
+                CASE
+                    WHEN c.group_id IS NOT NULL THEN 'current'
+                    ELSE 'requested'
+                END as status,
+                r.group_id
+            FROM requested_groups r
+            LEFT JOIN current_groups c ON r.group_id = c.group_id
+            UNION
+            SELECT
+                'current' as status,
+                c.group_id
+            FROM current_groups c
+            LEFT JOIN requested_groups r ON c.group_id = r.group_id
+            WHERE r.group_id IS NULL
+        """
 
-        self.db._delete(table="user_stock_interest", ticker=ticker, group_id__not_in=group_ids)
-        for group_id in group_ids:
-            group = self.db._select(table="interest_group", id=group_id, user_id=user_id)
-            if not group:
-                raise HTTPException(status_code=404, detail=f"그룹 {group_id}이 존재하지 않습니다.")
-            self.db._insert(table="user_stock_interest", sets={"group_id": group_id, "ticker": ticker})
+        result = self.db._execute(text(query), {"ticker": ticker, "user_id": user_id, "group_ids": tuple(group_ids)})
+
+        # 2. Process results
+        groups_to_remove = set()
+        groups_to_add = set()
+        max_orders = {}
+
+        for row in result.fetchall():
+            if row.status == "current" and row.group_id not in group_ids:
+                print(f"row.group_id : {row}")
+                groups_to_remove.add(row.group_id)
+            elif row.status == "requested" and row.group_id not in groups_to_remove:
+                print(f"row.group_id : {row}")
+                groups_to_add.add(row.group_id)
+
+        # 3. Get max orders for groups to add
+        if groups_to_add:
+            query = """
+                SELECT group_id, MAX(`order`) as max_order
+                FROM alphafinder_interest_stock
+                WHERE group_id IN :group_ids
+                GROUP BY group_id
+            """
+            result = self.db._execute(text(query), {"group_ids": tuple(groups_to_add)})
+            max_orders = {row[0]: (row[1] or 0) for row in result.fetchall()}
+
+        # 4. Execute updates
+        if groups_to_remove:
+            self.db._delete(table="alphafinder_interest_stock", ticker=ticker, group_id__in=list(groups_to_remove))
+
+        if groups_to_add:
+            insert_data = [
+                {"group_id": group_id, "ticker": ticker, "order": max_orders.get(group_id, 0) + 1}
+                for group_id in groups_to_add
+            ]
+            self.db._insert(table="alphafinder_interest_stock", sets=insert_data)
 
         return True
 
