@@ -94,7 +94,7 @@ class ChatService:
             return None, None
 
         if self.get_status(conversation_id) != "success":
-            raise ValueError("작업이 아직 완료되지 않았습니다.")
+            return None, None
 
         final_response, analysis_history = llm_client.get_final_response(latest_job_id)
         analysis_history = "\n".join(analysis_history)
