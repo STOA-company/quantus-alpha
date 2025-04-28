@@ -6,9 +6,9 @@ from typing import AsyncGenerator
 
 import httpx
 
-from .config import llm_config
-from .constants import LLM_MODEL
-from .schemas import ChatRequest
+from app.modules.chat.config import llm_config
+from app.modules.chat.constants import LLM_MODEL
+from app.modules.chat.schemas import ChatRequest
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +204,16 @@ class LLMClient:
         await asyncio.sleep(1.5)
         final_msg = {"status": "success", "content": final_content}
         yield json.dumps(final_msg, ensure_ascii=False)
+
+    def get_final_response(self, job_id: str) -> tuple[str, list[str]]:
+        response = httpx.get(f"{self.base_url}/{job_id}", headers={"Access-Key": self.api_key})
+        data = response.json()
+        result = data.get("result", {})
+
+        final_response = result.get("result", "")
+        analysis_history = result.get("analysis_history", [])
+
+        return final_response, analysis_history
 
 
 # 싱글톤 인스턴스 생성
