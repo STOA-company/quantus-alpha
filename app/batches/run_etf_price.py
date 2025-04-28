@@ -84,6 +84,7 @@ def run_etf_price(ctry: str):
                 "Ticker",
                 "MarketDate",
                 "DsQtName",
+                "DsQtName",
                 "Open_",
                 "High",
                 "Low",

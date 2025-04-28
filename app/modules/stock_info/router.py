@@ -65,7 +65,10 @@ async def get_combined(
             logger.info("Successfully fetched stock_info")
 
         if type == "etf":
-            etf_info = await stock_service.get_etf_info(ticker)
+            if ctry == "us":
+                etf_info = await stock_service.get_us_etf_info(ticker)
+            else:
+                etf_info = await stock_service.get_etf_info(ticker)
             logger.info("Successfully fetched etf_info")
 
     except Exception as e:
