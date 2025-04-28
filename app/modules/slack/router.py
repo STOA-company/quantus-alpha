@@ -29,7 +29,7 @@ async def report_interactivity(payload: str = Form(...)):
         database_service._update(
             table="af_posts",
             sets={"is_reported": True},
-            where={"id": post_id},
+            id=post_id,
         )
         slack_notifier.send_message(f"게시글 {post_id} 신고 승인.")
     elif action_id == "reject_report":
