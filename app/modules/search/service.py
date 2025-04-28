@@ -1,5 +1,7 @@
 from typing import List
 
+from sqlalchemy import text
+
 from app.core.logger import setup_logger
 from app.database.crud import database, database_service
 from app.modules.common.enum import TranslateCountry
@@ -398,14 +400,14 @@ class SearchService:
         ]
 
     def search_interest(
-        self, query: str, group_id: int, ctry: TranslateCountry, offset: int, limit: int
+        self, query: str, user_id: int, ctry: TranslateCountry, offset: int, limit: int
     ) -> List[InterestSearchItem]:
         """
         관심 종목 검색
 
         Args:
             query (str): 검색어
-            group_id (int): 그룹 ID
+            user_id (int): 유저 ID
             ctry (TranslateCountry): 언어 설정
             offset (int): 시작 위치
             limit (int): 요청할 항목 수
@@ -473,10 +475,18 @@ class SearchService:
             return []
 
         # Get interest stocks for the group
-        interest_stocks = self.service_db._select(
-            table="alphafinder_interest_stock", columns=["ticker"], group_id=group_id
-        )
-        interest_tickers = {stock.ticker for stock in interest_stocks}
+        # interest_stocks = self.service_db._select(
+        #     table="alphafinder_interest_stock", columns=["ticker"], group_id=group_id
+        # )
+        # interest_tickers = {stock.ticker for stock in interest_stocks}
+
+        query = """
+            SELECT DISTINCT ticker
+            FROM alphafinder_interest_stock
+            WHERE group_id IN (SELECT group_id FROM alphafinder_interest_group WHERE user_id = :user_id)
+        """
+        interest_tickers = self.service_db._execute(text(query), {"user_id": user_id})
+        interest_tickers = [ticker[0] for ticker in interest_tickers.fetchall()]
 
         # 메모리 레벨에서 향상된 필터링 및 점수 부여
         scored_results = []
