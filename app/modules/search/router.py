@@ -1,15 +1,18 @@
 from typing import Dict, List, Optional, Union
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.cache.leaderboard import StockLeaderboard
 from app.database.conn import db
+from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import InfiniteScrollResponse
 from app.modules.community.services import CommunityService, get_community_service
 from app.modules.search.schemas import CommunitySearchItem, InterestSearchItem, SearchResponse
 from app.modules.search.service import SearchService, get_search_service
+from app.utils.quantus_auth_utils import get_current_user
 
 router = APIRouter()
 
@@ -53,24 +56,27 @@ async def search_community(
     )
 
 
-@router.get("/interest/{group_id}", summary="ETF 검색")
+@router.get("/interest", summary="관심 종목 검색")
 def search_interest(
-    group_id: int,
     query: str | None = None,
     ctry: TranslateCountry = TranslateCountry.KO,
     offset: int = 0,
     limit: int = 10,
     service: SearchService = Depends(get_search_service),
     community_service: CommunityService = Depends(get_community_service),
+    user: AlphafinderUser = Depends(get_current_user),
 ) -> InfiniteScrollResponse[InterestSearchItem]:
     if query is None:
         # Get trending stocks
         trending_stocks = community_service.get_trending_stocks()
         # Get interest stocks for the group
-        interest_stocks = service.service_db._select(
-            table="alphafinder_interest_stock", columns=["ticker"], group_id=group_id
-        )
-        interest_tickers = {stock.ticker for stock in interest_stocks}
+        query = """
+            SELECT DISTINCT ticker
+            FROM alphafinder_interest_stock
+            WHERE group_id IN (SELECT group_id FROM alphafinder_interest_group WHERE user_id = :user_id)
+        """
+        interest_tickers = service.db._execute(text(query), {"user_id": user["uid"]})
+        interest_tickers = [ticker[0] for ticker in interest_tickers.fetchall()]
 
         # Get stock information for trending stocks
         stock_info = service.db._select(
@@ -93,7 +99,7 @@ def search_interest(
                 )
             )
     else:
-        search_result = service.search_interest(query, group_id, ctry, offset, limit)
+        search_result = service.search_interest(query, user["uid"], ctry, offset, limit)
 
     has_more = len(search_result) > limit
     if has_more:
