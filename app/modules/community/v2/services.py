@@ -189,7 +189,7 @@ class CommunityService:
                 ELSE false END as is_bookmarked,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
-                        SELECT 1 FROM post_likes pl
+                        SELECT 1 FROM af_post_likes pl
                         WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
                     )
                 ELSE false END as is_liked
@@ -424,7 +424,7 @@ class CommunityService:
                 ELSE false END as is_bookmarked,
                 CASE WHEN :current_user_id IS NOT NULL THEN
                     EXISTS(
-                        SELECT 1 FROM post_likes pl
+                        SELECT 1 FROM af_post_likes pl
                         WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
                     )
                 ELSE false END as is_liked
@@ -1419,12 +1419,12 @@ class CommunityService:
 
         return presigned_data
 
-    def get_report_items(self) -> List[ReportItemResponse]:
+    async def get_report_items(self) -> List[ReportItemResponse]:
         """신고 가능 항목 조회"""
         report_items = self.db._select(table="af_post_report_items", columns=["id", "name"])
         return [ReportItemResponse(id=item.id, name=item.name) for item in report_items]
 
-    def report_post(self, report_request: ReportRequest, current_user: AlphafinderUser) -> bool:
+    async def report_post(self, report_request: ReportRequest, current_user: AlphafinderUser) -> bool:
         """게시글 신고"""
         user_id = current_user["uid"] if current_user else None
 
@@ -1441,7 +1441,7 @@ class CommunityService:
         # 2. 이미 신고 하였는지 확인
         report_exists = bool(
             self.db._select(
-                table="report_posts", columns=["id"], post_id=report_request.post_id, user_id=user_id, limit=1
+                table="af_post_reports", columns=["id"], post_id=report_request.post_id, user_id=user_id, limit=1
             )
         )
         if report_exists:
@@ -1449,7 +1449,7 @@ class CommunityService:
 
         # 3. 신고 항목 확인
         report_items = self.db._select(
-            table="report_items",
+            table="af_post_report_items",
             columns=["id", "name"],
             id__in=report_request.report_item_ids,
             limit=len(report_request.report_item_ids),
@@ -1468,8 +1468,6 @@ class CommunityService:
                     "post_id": report_request.post_id,
                     "user_id": user_id,
                     "report_item_id": report_item_id,
-                    "created_at": datetime.now(UTC),
-                    "updated_at": datetime.now(UTC),
                 }
             )
         self.db._insert("af_post_reports", report_data)
