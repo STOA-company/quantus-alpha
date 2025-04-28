@@ -99,7 +99,7 @@ def search_interest(
                 )
             )
     else:
-        search_result = service.search_interest(query, user["uid"], ctry, offset, limit)
+        search_result = service.search_interest(query, user["uid"], ctry, offset, limit + 1)
 
     has_more = len(search_result) > limit
     if has_more:
