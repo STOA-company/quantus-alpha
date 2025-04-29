@@ -111,6 +111,9 @@ if settings.ENV == "stage":
 else:
     webhook_url = dev_webhook_url
 
+# Add Prometheus middleware first to monitor all requests
+app.add_middleware(PrometheusMiddleware)
+
 # Slack 오류 알림 미들웨어 설정
 add_slack_middleware(
     app=app,
@@ -130,28 +133,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*", "Authorization", "Authorization_Swagger", "Sns-Type", "Client-Type"],
 )
-
-
-# 레이트 리미팅 미들웨어 설정
-exclude_paths = [
-    "/health-check",
-    "/metrics",
-    "/docs",
-    "/redoc",
-    "/admin",
-    "/api/v1/search",
-    "/api/v1/search/community",
-]
-
-# app.add_middleware(
-#     GlobalRateLimitMiddleware,
-#     max_requests=150,
-#     window_seconds=60,
-#     exclude_paths=exclude_paths,
-# )
-
-# Add Prometheus middleware
-app.add_middleware(PrometheusMiddleware)
 
 
 class HealthCheckDetails(BaseModel):
