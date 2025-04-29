@@ -54,7 +54,7 @@ class TaggingPostInfo(BaseModel):
 class ResponsePost(BaseModel):
     id: int
     content: str
-    category_name: str
+    category_name: str | None = None
     image_url: Optional[List[str]] = None
     image_format: Optional[str] = None
     like_count: int
