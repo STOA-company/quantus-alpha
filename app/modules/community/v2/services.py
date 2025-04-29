@@ -462,7 +462,7 @@ class CommunityService:
             params["stock_ticker"] = stock_ticker
 
         if user_reported_post_ids:
-            conditions["reported_posts_condition"] = "AND p.id NOT IN (:user_reported_post_ids)"
+            conditions["reported_posts_condition"] = "AND p.id NOT IN :user_reported_post_ids"
             params["user_reported_post_ids"] = tuple(user_reported_post_ids)
 
         # 쿼리 완성
