@@ -169,18 +169,14 @@ class CommunityService:
         current_user_id = current_user["uid"] if current_user else None
 
         # 사용자가 신고한 글인지 조회
-        is_reported = self.db._execute(
-            text("SELECT EXISTS(SELECT 1 FROM af_post_reports WHERE post_id = :post_id AND user_id = :current_user_id)"),
-            {"post_id": post_id, "current_user_id": current_user_id},
-        )
-        is_reported = is_reported.scalar()
+        is_reported = self._check_reported_post(post_id, current_user_id)
         if is_reported:
-            raise PostException(message="신고된 게시글입니다", status_code=410)
+            raise PostException(message="신고된 게시글입니다", status_code=404)
 
         # 1. 게시글, 작성자, 카테고리 정보 조회
         query = """
             SELECT
-                p.id, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at, p.depth, p.tagging_post_id,
+                p.id, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at, p.depth, p.tagging_post_id, p.parent_id,
                 c.name as category_name,
                 p.user_id,
                 CASE WHEN :current_user_id IS NOT NULL THEN
@@ -231,30 +227,45 @@ class CommunityService:
         # 3. 태깅된 게시글 정보 조회
         tagging_post_info = None
         if post["tagging_post_id"]:
+            is_user_reported = self._check_reported_post(post["tagging_post_id"], current_user_id)
             tagging_post = self.db._select(
                 table="af_posts",
-                columns=["id", "content", "created_at", "user_id", "image_url"],
+                columns=["id", "content", "created_at", "user_id", "image_url", "is_reported"],
                 id=post["tagging_post_id"],
             )
-            if tagging_post:
+            if tagging_post[0][5] == 1 or is_user_reported:
+                # 태깅된 게시글이 신고된 경우
+                tagging_post_info = TaggingPostInfo(
+                    post_id=post["tagging_post_id"],
+                    content="해당 게시글은 신고가 접수되어 비공개 처리되었습니다.",
+                    created_at=post["created_at"],
+                    user_info=UserInfo(
+                        id=0,
+                        nickname=self._get_unknown_user_nickname(lang),
+                        profile_image=None,
+                        image_format=None,
+                        is_official=False,
+                    ),
+                )
+            elif tagging_post and tagging_post[0][5] == 0:
+                # 태깅된 게시글의 이미지 URL 처리
+                tagging_image_urls = []
+                tagging_image_format = None
+                if tagging_post[0][4]:
+                    try:
+                        tagging_image_urls = json.loads(tagging_post[0][4])
+                        if tagging_image_urls:
+                            tagging_image_format = self._get_image_format(tagging_image_urls[0])
+                        for i, url in enumerate(tagging_image_urls):
+                            presigned_url = self.generate_get_presigned_url(url)
+                            tagging_image_urls[i] = presigned_url["get_url"]
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
+
                 tagging_user = database_user._select(
                     table="quantus_user", columns=["id", "nickname"], id=tagging_post[0][3]
                 )
                 if tagging_user:
-                    # 태깅된 게시글의 이미지 URL 처리
-                    tagging_image_urls = []
-                    tagging_image_format = None
-                    if tagging_post[0][4]:
-                        try:
-                            tagging_image_urls = json.loads(tagging_post[0][4])
-                            if tagging_image_urls:
-                                tagging_image_format = self._get_image_format(tagging_image_urls[0])
-                            for i, url in enumerate(tagging_image_urls):
-                                presigned_url = self.generate_get_presigned_url(url)
-                                tagging_image_urls[i] = presigned_url["get_url"]
-                        except json.JSONDecodeError:
-                            logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
-
                     tagging_post_info = TaggingPostInfo(
                         post_id=tagging_post[0][0],
                         content=tagging_post[0][1],
@@ -270,20 +281,6 @@ class CommunityService:
                         image_format=tagging_image_format,
                     )
                 else:
-                    # 태깅된 게시글의 작성자가 삭제된 경우
-                    tagging_image_urls = []
-                    tagging_image_format = None
-                    if tagging_post[0][4]:
-                        try:
-                            tagging_image_urls = json.loads(tagging_post[0][4])
-                            if tagging_image_urls:
-                                tagging_image_format = self._get_image_format(tagging_image_urls[0])
-                            for i, url in enumerate(tagging_image_urls):
-                                presigned_url = self.generate_get_presigned_url(url)
-                                tagging_image_urls[i] = presigned_url["get_url"]
-                        except json.JSONDecodeError:
-                            logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
-
                     tagging_post_info = TaggingPostInfo(
                         post_id=tagging_post[0][0],
                         content=tagging_post[0][1],
@@ -363,6 +360,7 @@ class CommunityService:
             is_bookmarked=post["is_bookmarked"],
             is_liked=post["is_liked"],
             is_mine=post["user_id"] == current_user_id,
+            parent_id=post["parent_id"] if post["parent_id"] else None,
             created_at=post["created_at"].astimezone(KST),
             depth=post["depth"],
             stock_tickers=stock_information,
@@ -434,7 +432,7 @@ class CommunityService:
             JOIN categories c ON p.category_id = c.id
             {stock_join}  /* stock_ticker 조건 시 JOIN */
             WHERE p.depth = 0
-            AND p.id NOT IN (SELECT post_id FROM af_post_reports WHERE user_id = :current_user_id)
+            AND p.id NOT IN (SELECT post_id FROM af_post_reports WHERE user_id = :current_user_id) /* 해당 유저가 신고한 게시글 제외 */
             AND p.is_reported = 0
             {category_condition}  /* category_id 조건 */
             {stock_condition}  /* stock_ticker 조건 */
@@ -1504,6 +1502,15 @@ class CommunityService:
             )
         self.db._insert("af_post_reports", report_data)
         return True
+
+    def _check_reported_post(self, post_id: int, user_id: int) -> bool:
+        """게시글 신고 여부 확인"""
+        result = self.db._execute(
+            text("SELECT EXISTS(SELECT 1 FROM af_post_reports WHERE post_id = :post_id AND user_id = :user_id)"),
+            {"post_id": post_id, "user_id": user_id},
+        )
+        is_reported = result.scalar()
+        return bool(is_reported)
 
 
 def get_community_service() -> CommunityService:
