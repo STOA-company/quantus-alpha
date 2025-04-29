@@ -133,7 +133,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "트래픽이 가장 많은 5개 엔드포인트를 쉽게 파악할 수 있습니다.",
+      "description": "트래픽이 가장 많은 5개 엔드포인트를 보여줍니다.",
       "fieldConfig": {
         "defaults": {
           "color": {
