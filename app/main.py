@@ -1,6 +1,9 @@
+import os
+
 from fastapi import FastAPI, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette_exporter import PrometheusMiddleware, handle_metrics
 
 from app.api import routers
 from app.core.config import get_database_config, settings
@@ -55,9 +58,21 @@ app = FastAPI(
 )
 handler.initialize(app)
 
+app_name = os.getenv("APP_NAME", "unknown")
+
+app.add_middleware(
+    PrometheusMiddleware,
+    app_name=app_name,
+    group_paths=True,
+    prefix="fastapi_",
+    buckets=[0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10],
+)
+
 app.include_router(routers.router)
 # Include rate limiter admin router
 app.include_router(rate_limiter_admin_router)
+
+app.add_route("/metrics", handle_metrics)
 
 db_config = get_database_config()
 db.init_app(app, **db_config.__dict__)
