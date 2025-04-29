@@ -412,6 +412,15 @@ class CommunityService:
         current_user_id = current_user["uid"] if current_user else None
         order_by = order_by.value
 
+        # 사용자가 신고한 게시글 id 조회
+        user_reported_post_ids = self.db._select(
+            table="af_post_reports",
+            columns=["post_id"],
+            user_id=current_user_id,
+            distinct=True,
+        )
+        user_reported_post_ids = [row[0] for row in user_reported_post_ids]
+
         base_query = """
             SELECT p.id, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at, p.depth, p.tagging_post_id,
                 c.name as category_name,
@@ -432,15 +441,15 @@ class CommunityService:
             JOIN categories c ON p.category_id = c.id
             {stock_join}  /* stock_ticker 조건 시 JOIN */
             WHERE p.depth = 0
-            AND p.id NOT IN (SELECT post_id FROM af_post_reports WHERE user_id = :current_user_id) /* 해당 유저가 신고한 게시글 제외 */
             AND p.is_reported = 0
+            {reported_posts_condition}  /* 해당 유저가 신고한 게시글 제외 */
             {category_condition}  /* category_id 조건 */
             {stock_condition}  /* stock_ticker 조건 */
             ORDER BY p.{order_by} DESC
             LIMIT :limit OFFSET :offset
         """
 
-        conditions = {"stock_join": "", "category_condition": "", "stock_condition": ""}
+        conditions = {"stock_join": "", "category_condition": "", "stock_condition": "", "reported_posts_condition": ""}
         params = {"current_user_id": current_user_id, "limit": limit, "offset": offset}
 
         if category_id:
@@ -452,11 +461,16 @@ class CommunityService:
             conditions["stock_condition"] = "AND ps_filter.stock_ticker = :stock_ticker"
             params["stock_ticker"] = stock_ticker
 
+        if user_reported_post_ids:
+            conditions["reported_posts_condition"] = "AND p.id NOT IN (:user_reported_post_ids)"
+            params["user_reported_post_ids"] = tuple(user_reported_post_ids)
+
         # 쿼리 완성
         query = base_query.format(
             stock_join=conditions["stock_join"],
             category_condition=conditions["category_condition"],
             stock_condition=conditions["stock_condition"],
+            reported_posts_condition=conditions["reported_posts_condition"],
             order_by=order_by,
         )
 
@@ -506,7 +520,7 @@ class CommunityService:
         tagging_posts = {}
         if tagging_post_ids:
             tagging_post_query = """
-                SELECT id, content, created_at, user_id, image_url
+                SELECT id, content, created_at, user_id, image_url, is_reported
                 FROM af_posts
                 WHERE id IN :post_ids
             """
@@ -518,6 +532,7 @@ class CommunityService:
                     "created_at": row[2],
                     "user_id": row[3],
                     "image_url": row[4],
+                    "is_reported": row[5],
                 }
 
         # 태깅된 게시글의 작성자 정보 조회
@@ -550,41 +565,11 @@ class CommunityService:
                     tagging_post = tagging_posts[post["tagging_post_id"]]
                     user_id = tagging_post["user_id"]
 
-                    # 태깅된 게시글의 이미지 URL 처리
-                    tagging_image_urls = []
-                    tagging_image_format = None
-                    if tagging_post["image_url"]:
-                        try:
-                            tagging_image_urls = json.loads(tagging_post["image_url"])
-                            for i, url in enumerate(tagging_image_urls):
-                                presigned_url = self.generate_get_presigned_url(url)
-                                tagging_image_urls[i] = presigned_url["get_url"]
-                            # 처리된 presigned URLs를 저장
-                            tagging_post["processed_image_urls"] = tagging_image_urls
-                        except json.JSONDecodeError:
-                            logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
-
-                    if user_id in tagging_users:
-                        user = tagging_users[user_id]
+                    # 신고된 게시글인 경우
+                    if tagging_post["is_reported"] == 1 or tagging_post["id"] in user_reported_post_ids:
                         tagging_post_info = TaggingPostInfo(
                             post_id=tagging_post["id"],
-                            content=tagging_post["content"],
-                            created_at=tagging_post["created_at"],
-                            user_info=UserInfo(
-                                id=user.id,
-                                nickname=user.nickname,
-                                profile_image=None,
-                                image_format=None,
-                                is_official=user.is_official,
-                            ),
-                            image_url=tagging_image_urls,
-                            image_format=tagging_image_format,
-                        )
-                    else:
-                        # 태깅된 게시글의 작성자가 삭제된 경우
-                        tagging_post_info = TaggingPostInfo(
-                            post_id=tagging_post["id"],
-                            content=tagging_post["content"],
+                            content="해당 게시글은 신고가 접수되어 비공개 처리되었습니다.",
                             created_at=tagging_post["created_at"],
                             user_info=UserInfo(
                                 id=0,
@@ -593,9 +578,56 @@ class CommunityService:
                                 image_format=None,
                                 is_official=False,
                             ),
-                            image_url=tagging_image_urls,
-                            image_format=tagging_image_format,
+                            image_url=None,
+                            image_format=None,
                         )
+                    else:
+                        # 태깅된 게시글의 이미지 URL 처리
+                        tagging_image_urls = []
+                        tagging_image_format = None
+                        if tagging_post["image_url"]:
+                            try:
+                                tagging_image_urls = json.loads(tagging_post["image_url"])
+                                for i, url in enumerate(tagging_image_urls):
+                                    presigned_url = self.generate_get_presigned_url(url)
+                                    tagging_image_urls[i] = presigned_url["get_url"]
+                                # 처리된 presigned URLs를 저장
+                                tagging_post["processed_image_urls"] = tagging_image_urls
+                            except json.JSONDecodeError:
+                                logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
+
+                        if user_id in tagging_users:
+                            user = tagging_users[user_id]
+                            tagging_post_info = TaggingPostInfo(
+                                post_id=tagging_post["id"],
+                                content=tagging_post["content"],
+                                created_at=tagging_post["created_at"],
+                                user_info=UserInfo(
+                                    id=user.id,
+                                    nickname=user.nickname,
+                                    profile_image=None,
+                                    image_format=None,
+                                    is_official=user.is_official,
+                                ),
+                                image_url=tagging_image_urls,
+                                image_format=tagging_image_format,
+                            )
+                        else:
+                            # 태깅된 게시글의 작성자가 삭제된 경우
+                            tagging_post_info = TaggingPostInfo(
+                                post_id=tagging_post["id"],
+                                content=tagging_post["content"],
+                                created_at=tagging_post["created_at"],
+                                user_info=UserInfo(
+                                    id=0,
+                                    nickname=self._get_unknown_user_nickname(lang),
+                                    profile_image=None,
+                                    image_format=None,
+                                    is_official=False,
+                                ),
+                                image_url=tagging_image_urls,
+                                image_format=tagging_image_format,
+                            )
                 else:
                     # 태깅된 게시글이 삭제된 경우
                     tagging_post_info = TaggingPostInfo(
