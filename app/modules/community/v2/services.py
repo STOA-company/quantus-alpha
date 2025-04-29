@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import text
@@ -52,6 +52,8 @@ class CommunityService:
         self.PRESIGNED_URL_EXPIRES_IN = 300
         # Redis 캐시 만료 시간 (4분 30초)
         self.REDIS_CACHE_EXPIRES_IN = 270
+        # 트렌딩 게시글 기간 (30일)
+        self.TRENDING_POSTS_PERIOD_DAYS = 30
 
     def _handle_stock_tickers(self, post_id: int, stock_tickers: Optional[List[str]]) -> None:
         """종목 정보 처리"""
@@ -1218,13 +1220,27 @@ class CommunityService:
     async def get_trending_posts(
         self,
         limit: int = 10,
+        current_user: Optional[AlphafinderUser] = None,
     ) -> List[TrendingPostResponse]:
-        """실시간 인기 게시글 조회 (30일)"""
+        """실시간 인기 게시글 조회"""
+        # 1. 사용자가 신고한 게시글 조회
+        if current_user:
+            user_reported_posts = self.db._select(
+                table="af_post_reports",
+                columns=["post_id"],
+                user_id=current_user["uid"],
+                created_at__gte=datetime.now(UTC) - timedelta(days=self.TRENDING_POSTS_PERIOD_DAYS),
+            )
+            user_reported_posts = [post.post_id for post in user_reported_posts]
+        else:
+            user_reported_posts = []
+
+        # 2. 신고한 게시글 제외
         query = """
             WITH post_likes_count AS (
                 SELECT post_id, COUNT(*) as daily_likes
                 FROM af_post_likes
-                WHERE created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY
+                WHERE created_at >= UTC_TIMESTAMP() - INTERVAL :period_days DAY
                 GROUP BY post_id
             )
             SELECT
@@ -1234,11 +1250,26 @@ class CommunityService:
             LEFT JOIN post_likes_count plc ON p.id = plc.post_id
             WHERE p.parent_id IS NULL
             AND p.content IS NOT NULL
+            AND p.is_reported = 0
+            {reported_posts_condition}
             ORDER BY COALESCE(plc.daily_likes, 0) DESC, p.created_at DESC
             LIMIT :limit
         """
 
-        result = self.db._execute(text(query), {"limit": limit})
+        params = {
+            "limit": limit,
+            "period_days": self.TRENDING_POSTS_PERIOD_DAYS,
+        }
+
+        if user_reported_posts:
+            reported_posts_condition = "AND p.id NOT IN :user_reported_posts"
+            params["user_reported_posts"] = tuple(user_reported_posts)
+        else:
+            reported_posts_condition = ""
+
+        query = query.format(reported_posts_condition=reported_posts_condition)
+
+        result = self.db._execute(text(query), params)
         posts = result.mappings().all()
 
         # 사용자 정보 조회 (user DB에서)
