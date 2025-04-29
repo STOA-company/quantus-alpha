@@ -903,7 +903,7 @@ class CommunityService:
             return {}
 
         tagging_query = """
-            SELECT p.id, p.content, p.created_at, p.user_id, p.image_url
+            SELECT p.id, p.content, p.created_at, p.user_id, p.image_url, p.is_reported
             FROM af_posts p
             WHERE p.id IN :post_ids
         """
@@ -915,6 +915,7 @@ class CommunityService:
                 "created_at": row[2],
                 "user_id": row[3],
                 "image_url": row[4],
+                "is_reported": row[5],
             }
             for row in tagging_result
         }
@@ -926,6 +927,7 @@ class CommunityService:
         tagging_users: Dict[int, UserInfo],
         lang: TranslateCountry,
         official_user_ids: Set[int],
+        user_reported_post_ids: Optional[Set[int]] = None,
     ) -> Optional[TaggingPostInfo]:
         """태깅된 게시글 정보 생성"""
         if not comment["tagging_post_id"]:
@@ -934,6 +936,23 @@ class CommunityService:
         tagging_post = tagging_posts.get(comment["tagging_post_id"])
         if not tagging_post:
             return None
+
+        # 신고된 게시글인 경우
+        if tagging_post["is_reported"] == 1 or (user_reported_post_ids and tagging_post["id"] in user_reported_post_ids):
+            return TaggingPostInfo(
+                post_id=-1,
+                content="해당 게시글은 신고가 접수되어 비공개 처리되었습니다.",
+                created_at=tagging_post["created_at"].astimezone(KST),
+                user_info=UserInfo(
+                    id=0,
+                    nickname=self._get_unknown_user_nickname(lang),
+                    profile_image=None,
+                    image_format=None,
+                    is_official=False,
+                ),
+                image_url=None,
+                image_format=None,
+            )
 
         user_info = tagging_users.get(
             tagging_post["user_id"],
@@ -972,6 +991,17 @@ class CommunityService:
         """댓글 목록 조회"""
         current_user_id = current_user["uid"] if current_user else None
 
+        # 사용자가 신고한 게시글 id 조회
+        user_reported_post_ids = set()
+        if current_user_id:
+            reported_posts = self.db._select(
+                table="af_post_reports",
+                columns=["post_id"],
+                user_id=current_user_id,
+                distinct=True,
+            )
+            user_reported_post_ids = {row[0] for row in reported_posts}
+
         # 1. 댓글 조회 (limit + 1개)
         query = """
             SELECT
@@ -985,11 +1015,20 @@ class CommunityService:
                 ELSE false END as is_liked
             FROM af_posts p
             WHERE p.parent_id = :post_id
+            AND p.is_reported = 0
+            {reported_posts_condition}
             ORDER BY p.created_at ASC
             LIMIT :limit OFFSET :offset
         """
 
         params = {"post_id": post_id, "limit": limit + 1, "offset": offset, "current_user_id": current_user_id}
+
+        # 신고된 게시글 제외 조건 추가
+        if user_reported_post_ids:
+            query = query.format(reported_posts_condition="AND p.id NOT IN :user_reported_post_ids")
+            params["user_reported_post_ids"] = tuple(user_reported_post_ids)
+        else:
+            query = query.format(reported_posts_condition="")
 
         result = self.db._execute(text(query), params)
         comments = result.mappings().all()
@@ -1093,7 +1132,7 @@ class CommunityService:
                         stock_info_map[ticker] for ticker in stock_map.get(comment["id"], []) if ticker in stock_info_map
                     ],
                     tagging_post_info=self._create_tagging_post_info(
-                        comment, tagging_posts, tagging_users, lang, official_user_ids
+                        comment, tagging_posts, tagging_users, lang, official_user_ids, user_reported_post_ids
                     ),
                 )
             )
