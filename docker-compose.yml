@@ -143,7 +143,25 @@ services:
             - alpha-network
         restart: unless-stopped
 
+    grafana:
+        image: grafana/grafana:latest
+        container_name: grafana
+        ports:
+            - "3000:3000"
+        environment:
+            - GF_SECURITY_ADMIN_USER=admin
+            - GF_SECURITY_ADMIN_PASSWORD=admin
+            - GF_USERS_ALLOW_SIGN_UP=false
+        volumes:
+            - grafana_data:/var/lib/grafana
+        depends_on:
+            - prometheus
+        networks:
+            - alpha-network
+        restart: unless-stopped
+
 volumes:
+    grafana_data:
     redis_data:
     prometheus_data:  # Prometheus 데이터를 위한 볼륨
     pip-cache:    # pip 캐시를 위한 볼륨
