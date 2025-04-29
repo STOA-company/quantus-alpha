@@ -33,12 +33,20 @@ class Conversation(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
-    def add_message(self, content: str, role: str) -> Message:
+    def add_message(
+        self,
+        content: str,
+        role: str,
+        id: Optional[int] = None,
+        root_message_id: Optional[int] = None,
+    ) -> Message:
         """대화에 새 메시지 추가"""
         message = Message(
+            id=id,
             conversation_id=self.id,
             content=content,
             role=role,
+            root_message_id=root_message_id,
         )
         self.messages.append(message)
         self.updated_at = datetime.now()
