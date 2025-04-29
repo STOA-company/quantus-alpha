@@ -587,8 +587,9 @@ async def update_like(
 async def get_trending_posts(
     limit: int = Query(5, description="조회할 게시글 수 / default: 5", ge=1, le=50),
     community_service: CommunityService = Depends(get_community_service),
+    current_user: Optional[AlphafinderUser] = Depends(get_current_user),
 ):
-    trending_posts = await community_service.get_trending_posts(limit=limit)
+    trending_posts = await community_service.get_trending_posts(limit=limit, current_user=current_user)
     return BaseResponse(status_code=200, message="실시간 인기 게시글을 조회하였습니다.", data=trending_posts)
 
 
