@@ -19,10 +19,10 @@ from app.modules.disclosure.mapping import (
     DOCUMENT_TYPE_MAPPING_EN,
     FORM_TYPE_MAPPING,
 )
-from app.modules.news.schemas import NewsRenewalItem
 from app.modules.news.v2.schemas import (
     DisclosureRenewalItem,
     NewsDetailItemV2,
+    NewsRenewalItem,
     TopStoriesItem,
     TopStoriesResponse,
 )
@@ -250,7 +250,7 @@ class NewsService:
         news_condition["date__lte"] = allowed_time
 
         df_news = pd.DataFrame(
-            self.data_db._select(
+            self.db._select(
                 table="news_analysis",
                 columns=[
                     "id",
@@ -345,8 +345,8 @@ class NewsService:
                     "form_type",
                     "category_type",
                     "that_time_price",
-                    "current_price",
-                    "change_rt",
+                    # "current_price",
+                    # "change_rt",
                 ],
                 order="date",
                 ascending=False,
