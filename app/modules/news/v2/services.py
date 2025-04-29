@@ -5,7 +5,7 @@ from typing import List, Optional, Union
 
 import pandas as pd
 import pytz
-from fastapi import Request
+from fastapi import Request, Response
 
 from app.cache.story_view import get_story_view_cache
 from app.common.constants import KST, UTC
@@ -818,7 +818,6 @@ class NewsService:
             end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
 
         ctry = check_ticker_country_len_2(ticker)
-        print("Ticker: ", ticker)
 
         holdings = self.db._select(
             table="etf_top_holdings",
@@ -826,10 +825,7 @@ class NewsService:
             ticker=ticker,
         )
 
-        print("HOLDINGS : ", holdings)
-
         if not holdings:
-            print("ETF 구성 종목이 없습니다.")
             emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
             return [], 0, 0, 0, emotion_count, ctry
 
@@ -950,6 +946,45 @@ class NewsService:
             )
 
         return data, total_count, total_page, offset, emotion_count, ctry
+
+    def mark_story_as_viewed(
+        self,
+        ticker: str,
+        type: str,
+        id: int,
+        request: Request,
+        response: Response,
+        user: Optional[AlphafinderUser] = None,
+    ) -> bool:
+        """
+        Mark a story as viewed by a user using Redis.
+        For authenticated users, use their user ID.
+        For anonymous users, use a cookie-based ID.
+
+        Args:
+            ticker: Stock ticker symbol
+            type: Type of story ('news' or 'disclosure')
+            id: ID of the story
+            request: FastAPI request object
+            response: FastAPI response object
+            user: Optional authenticated user
+
+        Returns:
+            bool: True if the operation was successful
+        """
+        story_cache = get_story_view_cache()
+
+        # For authenticated users, use their user ID
+        if user:
+            user_id = f"auth_{user.id}"
+        else:
+            # For anonymous users, use a cookie-based ID
+            user_id = f"anon_{story_cache.get_or_create_anonymous_id(request, response)}"
+
+        # Mark the story as viewed in Redis
+        story_cache.mark_story_as_viewed(user_id=user_id, ticker=ticker, story_type=type, story_id=id)
+
+        return True
 
 
 def get_news_service() -> NewsService:
