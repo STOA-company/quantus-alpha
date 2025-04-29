@@ -196,7 +196,7 @@ class CommunityService:
                     )
                 ELSE false END as is_liked
             FROM af_posts p
-            JOIN categories c ON p.category_id = c.id
+            LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.id = :post_id
             AND p.is_reported = 0
         """
@@ -354,7 +354,7 @@ class CommunityService:
         response = ResponsePost(
             id=post["id"],
             content=post["content"],
-            category_name=post["category_name"],
+            category_name=post["category_name"] if post["category_name"] else None,
             image_url=image_urls,
             image_format=post["image_format"],
             like_count=post["like_count"],
