@@ -150,7 +150,6 @@ async def stream_chat(
     async def event_generator():
         """표준 SSE 형식의 이벤트 생성기"""
         assistant_response = None
-        system_response = ""
         try:
             message_count = 0
             async for chunk in chat_service.process_query(query, conversation_id, model):
@@ -163,9 +162,7 @@ async def stream_chat(
                         chunk_data = json.loads(chunk)
                         if chunk_data.get("status") == "success":
                             assistant_response = chunk_data.get("content", "")
-                        else:
-                            system_response += chunk_data.get("content", "")
-                            system_response += "\n"
+
                     except json.JSONDecodeError:
                         # JSON 파싱 실패시 그대로 전달
                         pass
@@ -175,12 +172,9 @@ async def stream_chat(
             logger.info(f"스트리밍 응답 완료: 총 {message_count}개 메시지 전송됨")
 
             if assistant_response:
-                chat_service.add_message(
-                    conversation_id=conversation_id,
-                    content=assistant_response,
-                    role="assistant",
-                    root_message_id=root_message.id,
-                )
+                chat_service.store_final_response(conversation_id, root_message.id)
+                chat_service.store_analysis_history(conversation_id, root_message.id)
+
                 if conversation.preview is None:
                     conversation.preview = assistant_response[:100]
                     chat_service.update_conversation(
@@ -188,15 +182,6 @@ async def stream_chat(
                         preview=conversation.preview,
                     )
                 logger.info(f"성공 응답 저장 완료: {assistant_response[:50]}...")
-
-            if system_response:
-                chat_service.add_message(
-                    conversation_id=conversation_id,
-                    content=system_response,
-                    role="system",
-                    root_message_id=root_message.id,
-                )
-                logger.info(f"시스템 응답 저장 완료: {system_response[:50]}...")
 
         except Exception as e:
             logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
