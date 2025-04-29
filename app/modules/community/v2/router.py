@@ -76,7 +76,6 @@ async def generate_presigned_url(
     community_service: CommunityService = Depends(get_community_service),
     current_user: Optional[AlphafinderUser] = Depends(get_current_user),
 ):
-    print(f"current_user : {current_user}")
     """이미지 업로드용 presigned URL 발급"""
     results = []
     for req in request:

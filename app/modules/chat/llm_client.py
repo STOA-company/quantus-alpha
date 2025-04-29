@@ -6,8 +6,8 @@ from typing import AsyncGenerator
 
 import httpx
 
-from app.modules.chat.config import llm_config
-from app.modules.chat.constants import LLM_MODEL
+from app.modules.chat.infrastructure.config import llm_config
+from app.modules.chat.infrastructure.constants import LLM_MODEL
 from app.modules.chat.schemas import ChatRequest
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ class LLMClient:
                     yield json.dumps(initial_msg, ensure_ascii=False)
 
                     polling_interval = 3.0  # 기본 폴링 간격
-                    max_timeout = 550  # nginx 설정과 동기화 (600초보다 약간 적게 설정)
+                    max_timeout = self.timeout - 50  # nginx 설정과 동기화 (1800 약간 적게 설정)
 
                     start_time = time.time()
                     previous_result = ""  # 이전 결과 저장
@@ -146,7 +146,7 @@ class LLMClient:
 
                     # 최대 시간을 초과한 경우
                     logger.warning(f"최대 대기 시간 초과: {job_id}")
-                    timeout_msg = {"status": "failed", "content": "응답 시간이 초과되었습니다. 다시 시도해주세요."}
+                    timeout_msg = {"status": "failed", "content": "응답이 생성이 길어지고 있습니다. 잠시만 기다려주세요."}
                     yield json.dumps(timeout_msg, ensure_ascii=False)
                     return
 
