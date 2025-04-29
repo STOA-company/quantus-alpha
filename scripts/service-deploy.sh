@@ -104,19 +104,12 @@ server {
     listen 80;
 
     # 타임아웃 설정 증가
-    proxy_connect_timeout 300s;
-    proxy_read_timeout 300s;
-    proxy_send_timeout 300s;
+    proxy_connect_timeout 1800s;
+    proxy_read_timeout 1800s;
+    proxy_send_timeout 1800s;
 
     # 버퍼링 설정 비활성화 (스트리밍용)
     proxy_buffering off;
-
-    location /stub_status {
-        stub_status on;
-        allow 127.0.0.1;
-        allow 172.16.0.0/12;
-        deny all;
-    }
 
     location / {
         proxy_pass http://${service}:8000;
@@ -137,7 +130,14 @@ server {
         chunked_transfer_encoding off;
         proxy_buffering off;
         proxy_cache off;
-        proxy_read_timeout 600s;  # 스트리밍용 더 긴 타임아웃
+        proxy_read_timeout 1800s;  # 스트리밍 용 더 긴 타임아웃
+    }
+
+    location /nginx_status {
+        stub_status on;
+        access_log off;
+        allow 172.16.0.0/12;  # Docker 내부 네트워크 접근 허용
+        deny all;
     }
 
     location /health-check {

@@ -4,21 +4,14 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from prometheus_client import Counter, Histogram
 
 from app.modules.chat.infrastructure.constants import LLM_MODEL
-from app.modules.chat.infrastructure.metrics import STREAMING_CONNECTIONS, STREAMING_ERRORS, STREAMING_MESSAGES_COUNT
 from app.modules.chat.service import chat_service
 from app.utils.oauth_utils import get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# 프로메테우스 메트릭
-CHAT_REQUEST_COUNT = Counter("chat_requests_total", "Total number of chat requests", ["model", "status"])
-
-CHAT_RESPONSE_TIME = Histogram("chat_response_time_seconds", "Chat response time in seconds", ["model"])
 
 
 @router.post("/conversation")
@@ -143,8 +136,6 @@ async def stream_chat(
         root_message = chat_service.add_message(conversation_id, query, "user")
 
     logger.info(f"스트리밍 채팅 요청 수신: query={query[:30]}..., model={model}")
-    CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
-    STREAMING_CONNECTIONS.inc()
 
     async def event_generator():
         """표준 SSE 형식의 이벤트 생성기"""
@@ -155,8 +146,6 @@ async def stream_chat(
                 message_count += 1
                 # 올바른 SSE 형식으로 응답 생성 (각 행이 data: 로 시작하고 빈 줄로 끝나야 함)
                 if isinstance(chunk, str):
-                    STREAMING_MESSAGES_COUNT.labels(model=model, conversation_id=str(conversation_id)).inc()
-
                     try:
                         chunk_data = json.loads(chunk)
                         if chunk_data.get("status") == "success":
@@ -185,10 +174,7 @@ async def stream_chat(
         except Exception as e:
             logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
             # TODO: ROLLBACK
-            STREAMING_ERRORS.labels(model=model, error_type="streaming_error", conversation_id=str(conversation_id)).inc()
             yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
-        finally:
-            STREAMING_CONNECTIONS.dec()
 
     # 올바른 SSE 응답을 위한 헤더 설정
     headers = {
