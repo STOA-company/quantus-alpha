@@ -1,9 +1,6 @@
-import os
-
 from fastapi import FastAPI, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from starlette_exporter import PrometheusMiddleware, handle_metrics
 
 from app.api import routers
 from app.core.config import get_database_config, settings
@@ -14,6 +11,8 @@ from app.database.crud import database
 from app.middlewares.rate_limiter_admin import router as rate_limiter_admin_router
 from app.middlewares.slack_error import add_slack_middleware
 from app.middlewares.trusted_hosts import get_current_username
+from app.monitoring.endpoints import router as metrics_router
+from app.monitoring.middleware import PrometheusMiddleware
 
 # 여기로 로거 설정 이동
 stage_webhook_url = "https://hooks.slack.com/services/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"
@@ -58,31 +57,10 @@ app = FastAPI(
 )
 handler.initialize(app)
 
-app_name = os.getenv("APP_NAME", "unknown")
-
-exclude_paths = [
-    "/",
-    "/metrics",
-    "/health-check",
-    "/docs",
-    "/redoc",
-    "/openapi.json",
-]
-
-app.add_middleware(
-    PrometheusMiddleware,
-    app_name=app_name,
-    group_paths=True,
-    prefix="fastapi",
-    buckets=[0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10],
-    exclude_paths=exclude_paths,
-)
-
 app.include_router(routers.router)
 # Include rate limiter admin router
 app.include_router(rate_limiter_admin_router)
-
-app.add_route("/metrics", handle_metrics)
+app.include_router(metrics_router)  # Add metrics endpoints
 
 db_config = get_database_config()
 db.init_app(app, **db_config.__dict__)
@@ -152,6 +130,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*", "Authorization", "Authorization_Swagger", "Sns-Type", "Client-Type"],
 )
+
+
+# 레이트 리미팅 미들웨어 설정
+exclude_paths = [
+    "/health-check",
+    "/metrics",
+    "/docs",
+    "/redoc",
+    "/admin",
+    "/api/v1/search",
+    "/api/v1/search/community",
+]
+
+# app.add_middleware(
+#     GlobalRateLimitMiddleware,
+#     max_requests=150,
+#     window_seconds=60,
+#     exclude_paths=exclude_paths,
+# )
+
+# Add Prometheus middleware
+app.add_middleware(PrometheusMiddleware)
 
 
 class HealthCheckDetails(BaseModel):
