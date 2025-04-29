@@ -47,10 +47,10 @@ class InterestService:
             allowed_time = current_datetime + timedelta(minutes=5)
             query_us = f"""
                 SELECT st.ticker
-                FROM stock_trend st
+                FROM quantus.stock_trend st
                 JOIN (
                     SELECT DISTINCT ticker
-                    FROM news_analysis
+                    FROM quantus.news_analysis
                     WHERE date >= '{before_24_hours}'
                     AND date <= '{allowed_time}'
                     AND is_related = TRUE
@@ -63,10 +63,10 @@ class InterestService:
             top_stories_data_us = self.db._execute(text(query_us))
             query_kr = f"""
                 SELECT st.ticker
-                FROM stock_trend st
+                FROM quantus.stock_trend st
                 JOIN (
                     SELECT DISTINCT ticker
-                    FROM news_analysis
+                    FROM quantus.news_analysis
                     WHERE date >= '{before_24_hours}'
                     AND date <= '{allowed_time}'
                     AND is_related = TRUE
@@ -755,6 +755,7 @@ class InterestService:
             name_column = "kr_name"
         else:
             name_column = "en_name"
+        print(f"tickers : {tickers}")
 
         ticker_price_data = self.data_db._select(
             table="stock_trend",
@@ -771,11 +772,18 @@ class InterestService:
             }
             for row in ticker_price_data
         ]
+        print(f"ticker_price_data : {ticker_price_data}")
         # 순서 정렬
         interest_order_data = self.db._select(
             table="alphafinder_interest_stock", columns=["ticker", "order"], group_id=group_id, ticker__in=tickers
         )
         interest_order_data = {row.ticker: row.order for row in interest_order_data}
+        print(f"interest_order_data : {interest_order_data}")
+
+        # interest_order_data가 비어있는 경우 원래 순서대로 반환
+        if not interest_order_data:
+            return ticker_price_data
+
         ticker_price_data = sorted(ticker_price_data, key=lambda x: interest_order_data[x["ticker"]])
         return ticker_price_data
 
