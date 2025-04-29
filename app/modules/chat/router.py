@@ -6,11 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from prometheus_client import Counter, Histogram
 
+from app.modules.chat.infrastructure.constants import LLM_MODEL
+from app.modules.chat.infrastructure.metrics import STREAMING_CONNECTIONS, STREAMING_ERRORS, STREAMING_MESSAGES_COUNT
+from app.modules.chat.service import chat_service
 from app.utils.oauth_utils import get_current_user
-
-from .constants import LLM_MODEL
-from .metrics import STREAMING_CONNECTIONS, STREAMING_ERRORS, STREAMING_MESSAGES_COUNT
-from .service import chat_service
 
 logger = logging.getLogger(__name__)
 

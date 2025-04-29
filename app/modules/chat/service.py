@@ -4,11 +4,11 @@ from typing import AsyncGenerator, List, Optional
 
 import httpx
 
-from .config import llm_config
-from .constants import LLM_MODEL
-from .llm_client import llm_client
-from .models import Conversation, Message
-from .repository import conversation_repository, message_repository
+from app.modules.chat.infrastructure.config import llm_config
+from app.modules.chat.infrastructure.constants import LLM_MODEL
+from app.modules.chat.llm_client import llm_client
+from app.modules.chat.models import Conversation, Message
+from app.modules.chat.repository import conversation_repository, message_repository
 
 logger = logging.getLogger(__name__)
 
