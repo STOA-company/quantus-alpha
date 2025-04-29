@@ -1,129 +1,85 @@
-import time
-from typing import Dict
+import logging
 
-import psutil
 from prometheus_client import Counter, Gauge, Histogram
-from prometheus_client.metrics import MetricWrapperBase
 
-# HTTP request metrics
-REQUEST_COUNT = Counter("http_requests_total", "Total number of HTTP requests", ["method", "endpoint", "status_code"])
+# 로거 설정
+logger = logging.getLogger(__name__)
 
-# IP 주소와 엔드포인트별 요청 수를 추적하는 새 메트릭
-IP_REQUEST_COUNT = Counter(
-    "http_ip_requests_total", "Total number of HTTP requests by IP", ["client_ip", "endpoint", "method"]
+# 기본 요청 측정 메트릭
+REQUEST_COUNT = Counter("starlette_requests_total", "Total HTTP requests", ["app_name", "method", "path", "status_code"])
+
+CLIENT_REQUEST_COUNT = Counter(
+    "starlette_client_requests_total", "Total HTTP requests by client IP", ["client_ip", "endpoint", "method"]
 )
 
 REQUEST_LATENCY = Histogram(
-    "http_request_duration_seconds",
-    "HTTP request duration in seconds",
-    ["method", "endpoint"],
-    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0],
+    "starlette_request_duration_seconds",
+    "HTTP request duration, in seconds",
+    ["app_name", "method", "path", "status_code"],
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0),
 )
 
-# System metrics
-CPU_USAGE = Gauge("process_cpu_percent", "Current CPU usage percentage")
+# 요청 진행 상태 메트릭
+REQUESTS_IN_PROGRESS = Gauge(
+    "starlette_requests_in_progress", "Total HTTP requests currently in progress", ["app_name", "method"]
+)
 
-MEMORY_USAGE = Gauge("process_memory_rss", "Current memory usage in bytes")
-
-# 시스템 전체 메모리 관련 메트릭 추가
-TOTAL_SYSTEM_MEMORY = Gauge("system_memory_total_bytes", "Total system memory in bytes")
-AVAILABLE_SYSTEM_MEMORY = Gauge("system_memory_available_bytes", "Available system memory in bytes")
-MEMORY_USAGE_PERCENT = Gauge("system_memory_usage_percent", "System memory usage percentage")
-
-# Error rate gauge - 직접 계산된 오류율 메트릭 (0-100%)
-ERROR_RATE = Gauge("endpoint_error_rate_percent", "Error rate percentage by endpoint", ["endpoint"])
-
-# 마지막 CPU 측정 시간
-last_cpu_measure_time = 0
-# 초기 CPU 사용량 측정값
-initial_cpu_percent = psutil.Process().cpu_percent()
+# 에러율 메트릭
+ERROR_RATE = Gauge("starlette_error_rate", "Current error rate (percentage of all requests)", ["app_name", "path"])
 
 
-# Update system metrics
-def update_system_metrics():
-    global last_cpu_measure_time, initial_cpu_percent
-    process = psutil.Process()
+# 스트리밍 관련 메트릭
+STREAMING_CONNECTIONS = Gauge(
+    "starlette_streaming_connections",
+    "Current number of active streaming connections",
+)
 
-    # CPU 사용량 측정 - 최소 1초 간격으로 측정하여 정확성 향상
-    current_time = time.time()
-    if current_time - last_cpu_measure_time >= 1.0:
-        cpu_percent = process.cpu_percent(interval=0)
-        if cpu_percent > 0:  # 유효한 값만 설정
-            CPU_USAGE.set(cpu_percent)
-            last_cpu_measure_time = current_time
+STREAMING_MESSAGES_COUNT = Counter(
+    "starlette_streaming_messages_total", "Total number of streaming messages sent", ["conversation_id"]
+)
 
-    # 메모리 사용량 측정
-    MEMORY_USAGE.set(process.memory_info().rss)
+STREAMING_ERRORS = Counter(
+    "starlette_streaming_errors_total", "Total number of streaming errors", ["error_type", "conversation_id"]
+)
 
-    # 시스템 전체 메모리 정보 수집
-    mem = psutil.virtual_memory()
-    TOTAL_SYSTEM_MEMORY.set(mem.total)
-    AVAILABLE_SYSTEM_MEMORY.set(mem.available)
-    MEMORY_USAGE_PERCENT.set(mem.percent)
+# 전역 카운터 변수 (에러율 계산용)
+_total_requests = 0
+_error_requests = {}  # path별 에러 카운트
 
 
-# 엔드포인트별 오류율 업데이트 함수
 def update_error_rates():
-    # 모든 요청과 오류 요청에 대한 정보를 수집
-    from prometheus_client.core import REGISTRY
+    """
+    각 경로별 에러율을 계산하여 메트릭 업데이트
+    """
+    global _total_requests, _error_requests
 
-    # 엔드포인트별 총 요청 수
-    endpoints_total = {}
-    # 엔드포인트별 오류 요청 수
-    endpoints_errors = {}
-
-    # 모든 요청 카운터 데이터 수집
-    for metric in REGISTRY.collect():
-        if metric.name == "http_requests_total":
-            for sample in metric.samples:
-                if "endpoint" in sample.labels and "status_code" in sample.labels:
-                    endpoint = sample.labels["endpoint"]
-                    status_code = sample.labels["status_code"]
-
-                    # 해당 엔드포인트의 총 요청 수 업데이트
-                    if endpoint not in endpoints_total:
-                        endpoints_total[endpoint] = 0
-                    endpoints_total[endpoint] += sample.value
-
-                    # 오류 요청(4xx, 5xx)인 경우 오류 카운트 업데이트
-                    if status_code.startswith("4") or status_code.startswith("5"):
-                        if endpoint not in endpoints_errors:
-                            endpoints_errors[endpoint] = 0
-                        endpoints_errors[endpoint] += sample.value
-
-    # 각 엔드포인트별 오류율 계산 및 게이지 업데이트
-    for endpoint in endpoints_total:
-        if endpoints_total[endpoint] > 0:
-            error_count = endpoints_errors.get(endpoint, 0)
-            error_rate = (error_count / endpoints_total[endpoint]) * 100
-            ERROR_RATE.labels(endpoint=endpoint).set(error_rate)
+    # 현재 응답 코드별 총 요청 수 가져오기
+    for path, error_count in _error_requests.items():
+        if _total_requests > 0:
+            error_rate = (error_count / _total_requests) * 100
+            ERROR_RATE.labels(app_name="starlette", path=path).set(error_rate)
+            logger.debug(f"Updated error rate for path {path}: {error_rate:.2f}% ({error_count}/{_total_requests})")
 
 
-# Application metrics
-ACTIVE_USERS = Gauge("app_active_users", "Number of currently active users")
+def track_request_status(path, status_code):
+    """
+    요청 결과를 추적하여 에러율 계산을 위한 카운터 업데이트
 
-DB_CONNECTION_POOL = Gauge("app_db_connection_pool_size", "Database connection pool size")
+    Args:
+        path (str): 요청 경로
+        status_code (int): 응답 상태 코드
+    """
+    global _total_requests, _error_requests
 
-# Redis metrics
-REDIS_OPERATIONS = Counter("app_redis_operations_total", "Total number of Redis operations", ["operation", "status"])
+    _total_requests += 1
 
-REDIS_OPERATION_LATENCY = Histogram(
-    "app_redis_operation_duration_seconds",
-    "Redis operation duration in seconds",
-    ["operation"],
-    buckets=[0.001, 0.005, 0.01, 0.05, 0.1],
-)
+    # 에러 응답(4xx, 5xx)인 경우 에러 카운트 증가
+    if status_code >= 400:
+        if path not in _error_requests:
+            _error_requests[path] = 0
+        _error_requests[path] += 1
+        logger.debug(f"Tracked error for path {path}, status code {status_code}")
 
-# All metrics collection for easy access
-METRICS: Dict[str, MetricWrapperBase] = {
-    "request_count": REQUEST_COUNT,
-    "request_latency": REQUEST_LATENCY,
-    "ip_request_count": IP_REQUEST_COUNT,
-    "cpu_usage": CPU_USAGE,
-    "memory_usage": MEMORY_USAGE,
-    "error_rate": ERROR_RATE,
-    "active_users": ACTIVE_USERS,
-    "db_connection_pool": DB_CONNECTION_POOL,
-    "redis_operations": REDIS_OPERATIONS,
-    "redis_operation_latency": REDIS_OPERATION_LATENCY,
-}
+    # 디버그 로깅
+    if _total_requests % 100 == 0:
+        logger.info(f"Total requests tracked: {_total_requests}, Total errors: {sum(_error_requests.values())}")
