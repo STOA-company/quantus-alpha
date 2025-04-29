@@ -648,7 +648,6 @@ class NewsService:
         # 결과 생성
         result = []
         for ticker in unique_tickers:
-            print(f"ticker: {ticker}")
             ticker_news = total_df[total_df["ticker"] == ticker]
             if ticker_news.empty:
                 continue
@@ -690,7 +689,6 @@ class NewsService:
                     is_viewed=False,  # Default to false, will be updated later
                 )
             )
-            print(f"news_items: {len(news_items)}")
         # Update the viewed status using Redis
         result = self.check_stories_viewed_status(result, request, user)
 
@@ -715,7 +713,7 @@ class NewsService:
 
         # 인증된 사용자의 경우 사용자 ID를 사용
         if user:
-            user_id = f"auth_{user.id}"
+            user_id = f"auth_{user['uid']}"
         else:
             # 익명 사용자의 경우 쿠키에서 ID를 가져옴 (존재하지 않으면 생성하지 않음)
             anonymous_id = request.cookies.get(story_cache.anonymous_cookie_name)
