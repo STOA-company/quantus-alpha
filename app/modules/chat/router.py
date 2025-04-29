@@ -185,7 +185,7 @@ async def stream_chat(
         except Exception as e:
             logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
             # TODO: ROLLBACK
-            STREAMING_ERRORS.labels(model=model, error_type="streaming_error", conversation_id=str(conversation_id)).inc()
+            STREAMING_ERRORS.labels(error_type="streaming_error", conversation_id=str(conversation_id)).inc()
             yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
         finally:
             STREAMING_CONNECTIONS.dec()
