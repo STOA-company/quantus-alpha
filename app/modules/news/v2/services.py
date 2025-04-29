@@ -976,7 +976,7 @@ class NewsService:
 
         # For authenticated users, use their user ID
         if user:
-            user_id = f"auth_{user.id}"
+            user_id = f"auth_{user['uid']}"
         else:
             # For anonymous users, use a cookie-based ID
             user_id = f"anon_{story_cache.get_or_create_anonymous_id(request, response)}"
