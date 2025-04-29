@@ -7,7 +7,13 @@ from app.core.logger import setup_logger
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
-from app.modules.interest.v2.request import AddInterestRequest, DeleteInterestRequest, UpdateInterestOrderRequest
+from app.modules.interest.v2.request import (
+    AddInterestRequest,
+    DeleteInterestRequest,
+    MoveInterestRequest,
+    UpdateInterestOrderRequest,
+    UpdateInterestRequest,
+)
 from app.modules.interest.v2.response import InterestGroupResponse, InterestPriceResponse
 from app.modules.interest.v2.service import InterestService, get_interest_service
 from app.modules.news.v2.schemas import InterestDisclosureResponse, InterestNewsResponse, TopStoriesResponse
@@ -44,6 +50,18 @@ def get_groups(
     if not current_user:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return service.get_interest_group(current_user["uid"])
+
+
+# 관심 그룹 조회
+@router.get("/groups/{ticker}", summary="관심 그룹 조회")
+def get_groups_by_ticker(
+    ticker: str,
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: InterestService = Depends(get_interest_service),
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return service.get_interest_group_by_ticker(current_user["uid"], ticker)
 
 
 # 관심 그룹 생성
@@ -197,6 +215,26 @@ def delete_interest(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# 관심 종목 수정
+@router.put("/", summary="관심 종목 수정")
+def update_interest(
+    request: UpdateInterestRequest,
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: InterestService = Depends(get_interest_service),
+):
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        service.update_interest(user_id=current_user["uid"], group_ids=request.group_ids, ticker=request.ticker)
+        return {"message": f"{request.ticker}가 {', '.join(map(str, request.group_ids))} 그룹에 추가되었습니다."}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 ########################################################
 # 관심 그룹 / 종목 리스트
 @router.get("/list", summary="관심 그룹 / 종목 리스트", response_model=BaseResponse[List[InterestGroupResponse]])
@@ -242,6 +280,23 @@ def update_order(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# 관심 종목 그룹 이동
+@router.post("/move", summary="관심 종목 그룹 이동")
+def move_interest(
+    request: MoveInterestRequest,
+    current_user: AlphafinderUser = Depends(get_current_user),
+    service: InterestService = Depends(get_interest_service),
+):
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+        service.move_interest(request.from_group_id, request.to_group_id, request.tickers, current_user["uid"])
+        return {"message": "관심 종목 그룹 이동이 완료되었습니다."}
+    except HTTPException as e:
+        raise e
+
+
 ########################################################
 # 관심 종목 주요소식 모아보기 / 스토리
 @router.get(
@@ -263,7 +318,7 @@ def top_stories(
     # subscription_level = user.subscription_level if user else 1 # TODO :: 유저 테이블 통합 후 주석 해제
     # stories_count = 30 if subscription_level >= 3 else 10
     data = news_service.top_stories(
-        request=request, tickers=tickers, lang=lang, stories_count=30
+        request=request, tickers=tickers, lang=lang, stories_count=30, user=user
     )  # TODO :: stories_count 변경 필요
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 

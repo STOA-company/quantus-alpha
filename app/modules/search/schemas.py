@@ -22,3 +22,10 @@ class SearchResponse(BaseModel):
     message: str
     has_more: bool
     data: List[SearchItem]
+
+
+class InterestSearchItem(BaseModel):
+    ticker: str
+    name: str
+    ctry: str
+    is_interest: bool

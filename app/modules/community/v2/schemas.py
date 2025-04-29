@@ -33,6 +33,7 @@ class UserInfo(BaseModel):
     nickname: str
     profile_image: Optional[str] = None
     image_format: Optional[str] = None
+    is_official: bool
 
 
 class StockInfo(BaseModel):
@@ -53,7 +54,7 @@ class TaggingPostInfo(BaseModel):
 class ResponsePost(BaseModel):
     id: int
     content: str
-    category_name: str
+    category_name: str | None = None
     image_url: Optional[List[str]] = None
     image_format: Optional[str] = None
     like_count: int
@@ -62,6 +63,7 @@ class ResponsePost(BaseModel):
     is_bookmarked: bool
     is_liked: bool
     is_mine: bool
+    parent_id: Optional[int] = None
     created_at: datetime
     depth: int
     stock_tickers: List[StockInfo]
@@ -129,6 +131,7 @@ class CommentCreate(BaseModel):
 class CommentItem(BaseModel):
     id: int
     content: str
+    image_url: Optional[List[str]] = None
     like_count: int
     comment_count: int
     depth: int
@@ -209,6 +212,7 @@ class BookmarkItem(BaseModel):
 class TrendingPostResponse(BaseModel):
     id: int
     rank: int
+    content: str | None = None
     created_at: datetime
     user_info: UserInfo
 
@@ -251,3 +255,18 @@ class PresignedUrlResponse(BaseModel):
     upload_url: str = Field(..., description="S3 업로드용 presigned URL")
     image_key: str = Field(..., description="S3에 저장될 이미지 키")
     image_index: int = Field(..., description="이미지 순서 (0부터 시작)", ge=0, le=2)  # 최대 3개 이미지
+
+
+########################
+# 신고 기능
+########################
+
+
+class ReportItemResponse(BaseModel):
+    id: int
+    name: str
+
+
+class ReportRequest(BaseModel):
+    post_id: int
+    report_item_ids: List[int]

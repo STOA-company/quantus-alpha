@@ -47,10 +47,10 @@ class InterestService:
             allowed_time = current_datetime + timedelta(minutes=5)
             query_us = f"""
                 SELECT st.ticker
-                FROM stock_trend st
+                FROM quantus.stock_trend st
                 JOIN (
                     SELECT DISTINCT ticker
-                    FROM news_analysis
+                    FROM quantus.news_analysis
                     WHERE date >= '{before_24_hours}'
                     AND date <= '{allowed_time}'
                     AND is_related = TRUE
@@ -63,10 +63,10 @@ class InterestService:
             top_stories_data_us = self.db._execute(text(query_us))
             query_kr = f"""
                 SELECT st.ticker
-                FROM stock_trend st
+                FROM quantus.stock_trend st
                 JOIN (
                     SELECT DISTINCT ticker
-                    FROM news_analysis
+                    FROM quantus.news_analysis
                     WHERE date >= '{before_24_hours}'
                     AND date <= '{allowed_time}'
                     AND is_related = TRUE
@@ -174,16 +174,97 @@ class InterestService:
             raise HTTPException(status_code=500, detail=str(e))
 
     def update_interest(self, user_id: int, group_ids: List[int], ticker: str):
-        groups = self.db._select(table="interest_group", user_id=user_id)
-        if not groups:
-            raise HTTPException(status_code=404, detail="관심 그룹이 존재하지 않습니다.")
+        # 빈 배열이 들어오면 모든 그룹에서 해당 티커 삭제
+        if not group_ids:
+            # 1. 사용자의 모든 그룹에서 해당 티커가 있는지 확인
+            query = """
+                SELECT group_id
+                FROM alphafinder_interest_stock
+                WHERE ticker = :ticker
+                AND group_id IN (
+                    SELECT id
+                    FROM alphafinder_interest_group
+                    WHERE user_id = :user_id
+                )
+            """
+            result = self.db._execute(text(query), {"ticker": ticker, "user_id": user_id})
+            groups_to_remove = [row[0] for row in result.fetchall()]
 
-        self.db._delete(table="user_stock_interest", ticker=ticker, group_id__not_in=group_ids)
-        for group_id in group_ids:
-            group = self.db._select(table="interest_group", id=group_id, user_id=user_id)
-            if not group:
-                raise HTTPException(status_code=404, detail=f"그룹 {group_id}이 존재하지 않습니다.")
-            self.db._insert(table="user_stock_interest", sets={"group_id": group_id, "ticker": ticker})
+            # 2. 해당 티커가 있는 모든 그룹에서 삭제
+            if groups_to_remove:
+                self.db._delete(table="alphafinder_interest_stock", ticker=ticker, group_id__in=groups_to_remove)
+
+            return True
+
+        # 1. Get current status of all groups in a single query
+        query = """
+            WITH user_groups AS (
+                SELECT id
+                FROM alphafinder_interest_group
+                WHERE user_id = :user_id
+            ),
+            current_groups AS (
+                SELECT group_id
+                FROM alphafinder_interest_stock
+                WHERE ticker = :ticker
+                AND group_id IN (SELECT id FROM user_groups)
+            ),
+            requested_groups AS (
+                SELECT id as group_id
+                FROM user_groups
+                WHERE id IN :group_ids
+            )
+            SELECT
+                CASE
+                    WHEN c.group_id IS NOT NULL THEN 'current'
+                    ELSE 'requested'
+                END as status,
+                r.group_id
+            FROM requested_groups r
+            LEFT JOIN current_groups c ON r.group_id = c.group_id
+            UNION
+            SELECT
+                'current' as status,
+                c.group_id
+            FROM current_groups c
+            LEFT JOIN requested_groups r ON c.group_id = r.group_id
+            WHERE r.group_id IS NULL
+        """
+
+        result = self.db._execute(text(query), {"ticker": ticker, "user_id": user_id, "group_ids": tuple(group_ids)})
+
+        # 2. Process results
+        groups_to_remove = set()
+        groups_to_add = set()
+        max_orders = {}
+
+        for row in result.fetchall():
+            if row.status == "current" and row.group_id not in group_ids:
+                groups_to_remove.add(row.group_id)
+            elif row.status == "requested" and row.group_id not in groups_to_remove:
+                groups_to_add.add(row.group_id)
+
+        # 3. Get max orders for groups to add
+        if groups_to_add:
+            query = """
+                SELECT group_id, MAX(`order`) as max_order
+                FROM alphafinder_interest_stock
+                WHERE group_id IN :group_ids
+                GROUP BY group_id
+            """
+            result = self.db._execute(text(query), {"group_ids": tuple(groups_to_add)})
+            max_orders = {row[0]: (row[1] or 0) for row in result.fetchall()}
+
+        # 4. Execute updates
+        if groups_to_remove:
+            self.db._delete(table="alphafinder_interest_stock", ticker=ticker, group_id__in=list(groups_to_remove))
+
+        if groups_to_add:
+            insert_data = [
+                {"group_id": group_id, "ticker": ticker, "order": max_orders.get(group_id, 0) + 1}
+                for group_id in groups_to_add
+            ]
+            self.db._insert(table="alphafinder_interest_stock", sets=insert_data)
 
         return True
 
@@ -193,10 +274,10 @@ class InterestService:
             SELECT
                 g.id,
                 g.name,
-                g.order,
+                g.order as group_order,
                 g.is_editable,
                 i.ticker,
-                i.order
+                i.order as stock_order
             FROM
                 alphafinder_interest_group g
             LEFT JOIN
@@ -242,19 +323,33 @@ class InterestService:
                 groups[group_id] = {
                     "id": group_id,
                     "name": row.name,
-                    "order": row.order or 0,
                     "is_editable": row.is_editable,
                     "stocks": [],
+                    "order": row.group_order,
                 }
             if row.ticker and row.ticker in stock_info:  # Only add if we have stock info
                 ticker_data = {
                     "ticker": row.ticker,
                     "name": stock_info[row.ticker]["name"],
                     "ctry": stock_info[row.ticker]["ctry"],
+                    "order": row.stock_order,
                 }
                 groups[group_id]["stocks"].append(ticker_data)
 
-        return list(groups.values())
+        # 5. Convert to list and sort by group order
+        groups_list = list(groups.values())
+        groups_list.sort(key=lambda x: x["order"])
+
+        # 6. Sort stocks within each group by their order and remove order field
+        for group in groups_list:
+            group["stocks"].sort(key=lambda x: x["order"])
+            # Remove order field from stocks
+            for stock in group["stocks"]:
+                del stock["order"]
+            # Remove order field from group
+            del group["order"]
+
+        return groups_list
 
     def get_interest_group(self, user_id: int):
         """
@@ -284,6 +379,34 @@ class InterestService:
             for group in groups
         ]
         return result
+
+    def get_interest_group_by_ticker(self, user_id: int, ticker: str):
+        query = """
+            SELECT
+                g.id,
+                g.name,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM alphafinder_interest_stock
+                    WHERE group_id = g.id AND ticker = :ticker
+                ) THEN 1 ELSE 0 END as has_ticker
+            FROM alphafinder_interest_group g
+            LEFT JOIN alphafinder_interest_stock i ON g.id = i.group_id
+            WHERE g.user_id = :user_id
+            GROUP BY g.id, g.name
+            ORDER BY g.order ASC
+        """
+
+        result = self.db._execute(text(query), {"user_id": user_id, "ticker": ticker})
+        rows = result.fetchall()
+
+        if not rows:
+            return []
+
+        return [
+            {"id": row.id, "name": row.name, "has_ticker": bool(row.has_ticker)}
+            for row in rows
+            if row.name != "실시간 인기"
+        ]
 
     def init_interest_group(self, user_id: int):
         """
@@ -376,8 +499,6 @@ class InterestService:
             group = self.db._select(
                 table="alphafinder_interest_group", columns=["user_id", "is_editable"], id=group_id, limit=1
             )
-            print(f"group : {group}")
-            print(f"group[0] : {group[0]}")
             if group[0].user_id != user_id:
                 raise HTTPException(status_code=400, detail="관심 그룹 삭제 권한이 없습니다.")
             if group[0].is_editable == 0:
@@ -552,7 +673,7 @@ class InterestService:
                 # 그룹 순서 변경
                 # 모든 그룹이 사용자의 것인지 확인
                 groups = self.db._select(table="alphafinder_interest_group", user_id=user_id, id__in=order_list)
-                if len(groups[0]) != len(order_list):
+                if len(groups) != len(order_list):
                     raise HTTPException(status_code=400, detail="잘못된 그룹 ID가 포함되어 있습니다.")
 
                 # 그룹 순서 업데이트
@@ -584,6 +705,47 @@ class InterestService:
             logger.exception(e)
             raise HTTPException(status_code=500, detail=str(e))
 
+    def move_interest(self, from_group_id: int, to_group_id: int, tickers: List[str], user_id: int):
+        # 유저 권한 체크
+        from_group = self.db._select(table="alphafinder_interest_group", columns=["user_id"], id=from_group_id, limit=1)
+        if not from_group:
+            raise HTTPException(status_code=400, detail="관심 그룹이 존재하지 않습니다.")
+        if from_group[0].user_id != user_id:
+            raise HTTPException(status_code=403, detail="관심 그룹 편집 권한이 없습니다.")
+
+        # 1. 티커들이 해당 종목에 있는지 확인
+        from_group_tickers = self.db._select(
+            table="alphafinder_interest_stock", group_id=from_group_id, ticker__in=tickers
+        )
+        if len(from_group_tickers) != len(tickers):
+            raise HTTPException(status_code=400, detail="관심 그룹에 존재하지 않는 종목이 포함되어 있습니다.")
+
+        # 2. 해당 종목이 이동하는 그룹에 있는지 확인
+        to_group_tickers = self.db._select(table="alphafinder_interest_stock", group_id=to_group_id, ticker__in=tickers)
+
+        # 3. 해당 종목이 이동하는 그룹에 있으면 예외 처리
+        # 3-1. 해당 종목이 이동하는 그룹에 있으면 제외
+        set_from_group_tickers = {ticker.ticker for ticker in from_group_tickers}
+        set_to_group_tickers = {ticker.ticker for ticker in to_group_tickers}
+        move_tickers = set_from_group_tickers - set_to_group_tickers
+
+        # 4. 이동할 그룹의 현재 최대 order 값 조회
+        query = "SELECT MAX(`order`) as max_order FROM alphafinder_interest_stock WHERE group_id = :group_id"
+        result = self.db._execute(text(query), {"group_id": to_group_id})
+        max_order_row = result.fetchone()
+        next_order = (max_order_row[0] if max_order_row and max_order_row[0] is not None else 0) + 1
+
+        # 5. 이동하려는 종목들을 From 그룹에서 제거
+        self.db._delete(table="alphafinder_interest_stock", group_id=from_group_id, ticker__in=tickers)
+
+        # 6. 이동하려는 종목들을 To 그룹에 추가 (order 값 설정)
+        insert_data = [
+            {"group_id": to_group_id, "ticker": ticker, "order": next_order + idx}
+            for idx, ticker in enumerate(move_tickers)
+        ]
+        self.db._insert(table="alphafinder_interest_stock", sets=insert_data)
+        return True
+
     def get_interest_price(self, tickers: List[str], group_id: int, lang: TranslateCountry = TranslateCountry.KO):
         if lang == TranslateCountry.KO:
             name_column = "kr_name"
@@ -610,6 +772,11 @@ class InterestService:
             table="alphafinder_interest_stock", columns=["ticker", "order"], group_id=group_id, ticker__in=tickers
         )
         interest_order_data = {row.ticker: row.order for row in interest_order_data}
+
+        # interest_order_data가 비어있는 경우 원래 순서대로 반환
+        if not interest_order_data:
+            return ticker_price_data
+
         ticker_price_data = sorted(ticker_price_data, key=lambda x: interest_order_data[x["ticker"]])
         return ticker_price_data
 

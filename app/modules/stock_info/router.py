@@ -52,7 +52,9 @@ async def get_combined(
     price_service: PriceService = Depends(get_price_service),
 ):
     type = stock_service.get_type(ticker)
-    ctry = check_ticker_country_len_2(ticker)
+    ctry = stock_service.get_ctry_by_ticker(ticker)
+    if ctry is None:
+        ctry = check_ticker_country_len_2(ticker)
     logger.info(f"Processing combined data for {ticker} ({ctry})")
 
     try:
@@ -63,8 +65,10 @@ async def get_combined(
             logger.info("Successfully fetched stock_info")
 
         if type == "etf":
-            etf_info = await stock_service.get_etf_info(ticker)
-            print("ETF INFO ROUTER", etf_info)
+            if ctry == "us":
+                etf_info = await stock_service.get_us_etf_info(ticker)
+            else:
+                etf_info = await stock_service.get_etf_info(ticker)
             logger.info("Successfully fetched etf_info")
 
     except Exception as e:
