@@ -240,10 +240,8 @@ class InterestService:
 
         for row in result.fetchall():
             if row.status == "current" and row.group_id not in group_ids:
-                print(f"row.group_id : {row}")
                 groups_to_remove.add(row.group_id)
             elif row.status == "requested" and row.group_id not in groups_to_remove:
-                print(f"row.group_id : {row}")
                 groups_to_add.add(row.group_id)
 
         # 3. Get max orders for groups to add
@@ -501,8 +499,6 @@ class InterestService:
             group = self.db._select(
                 table="alphafinder_interest_group", columns=["user_id", "is_editable"], id=group_id, limit=1
             )
-            print(f"group : {group}")
-            print(f"group[0] : {group[0]}")
             if group[0].user_id != user_id:
                 raise HTTPException(status_code=400, detail="관심 그룹 삭제 권한이 없습니다.")
             if group[0].is_editable == 0:
@@ -755,7 +751,6 @@ class InterestService:
             name_column = "kr_name"
         else:
             name_column = "en_name"
-        print(f"tickers : {tickers}")
 
         ticker_price_data = self.data_db._select(
             table="stock_trend",
@@ -772,13 +767,11 @@ class InterestService:
             }
             for row in ticker_price_data
         ]
-        print(f"ticker_price_data : {ticker_price_data}")
         # 순서 정렬
         interest_order_data = self.db._select(
             table="alphafinder_interest_stock", columns=["ticker", "order"], group_id=group_id, ticker__in=tickers
         )
         interest_order_data = {row.ticker: row.order for row in interest_order_data}
-        print(f"interest_order_data : {interest_order_data}")
 
         # interest_order_data가 비어있는 경우 원래 순서대로 반환
         if not interest_order_data:
