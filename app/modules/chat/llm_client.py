@@ -6,8 +6,8 @@ from typing import AsyncGenerator
 
 import httpx
 
-from app.modules.chat.config import llm_config
-from app.modules.chat.constants import LLM_MODEL
+from app.modules.chat.infrastructure.config import llm_config
+from app.modules.chat.infrastructure.constants import LLM_MODEL
 from app.modules.chat.schemas import ChatRequest
 
 logger = logging.getLogger(__name__)

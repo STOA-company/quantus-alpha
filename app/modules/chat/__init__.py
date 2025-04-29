@@ -1,7 +1,7 @@
 import logging
 
-from .config import llm_config
-from .service import chat_service
+from app.modules.chat.infrastructure.config import llm_config
+from app.modules.chat.service import chat_service
 
 logger = logging.getLogger(__name__)
 
