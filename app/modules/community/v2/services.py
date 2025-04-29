@@ -236,7 +236,7 @@ class CommunityService:
             if tagging_post[0][5] == 1 or is_user_reported:
                 # 태깅된 게시글이 신고된 경우
                 tagging_post_info = TaggingPostInfo(
-                    post_id=post["tagging_post_id"],
+                    post_id=-1,
                     content="해당 게시글은 신고가 접수되어 비공개 처리되었습니다.",
                     created_at=post["created_at"],
                     user_info=UserInfo(
@@ -298,7 +298,7 @@ class CommunityService:
             else:
                 # 태깅된 게시글이 삭제된 경우
                 tagging_post_info = TaggingPostInfo(
-                    post_id=post["tagging_post_id"],
+                    post_id=-2,
                     content="해당 게시글은 작성자에 의해 삭제되어, 현재 내용을 볼 수 없습니다.",
                     created_at=post["created_at"],
                     user_info=UserInfo(
@@ -568,7 +568,7 @@ class CommunityService:
                     # 신고된 게시글인 경우
                     if tagging_post["is_reported"] == 1 or tagging_post["id"] in user_reported_post_ids:
                         tagging_post_info = TaggingPostInfo(
-                            post_id=tagging_post["id"],
+                            post_id=-1,
                             content="해당 게시글은 신고가 접수되어 비공개 처리되었습니다.",
                             created_at=tagging_post["created_at"],
                             user_info=UserInfo(
@@ -613,7 +613,6 @@ class CommunityService:
                                 image_format=tagging_image_format,
                             )
                         else:
-                            # 태깅된 게시글의 작성자가 삭제된 경우
                             tagging_post_info = TaggingPostInfo(
                                 post_id=tagging_post["id"],
                                 content=tagging_post["content"],
@@ -631,7 +630,7 @@ class CommunityService:
                 else:
                     # 태깅된 게시글이 삭제된 경우
                     tagging_post_info = TaggingPostInfo(
-                        post_id=post["tagging_post_id"],
+                        post_id=-2,
                         content="해당 게시글은 작성자에 의해 삭제되어, 현재 내용을 볼 수 없습니다.",
                         created_at=post["created_at"],
                         user_info=UserInfo(
@@ -935,7 +934,21 @@ class CommunityService:
 
         tagging_post = tagging_posts.get(comment["tagging_post_id"])
         if not tagging_post:
-            return None
+            # 삭제된 게시글인 경우
+            return TaggingPostInfo(
+                post_id=-2,
+                content="해당 게시글은 작성자에 의해 삭제되어, 현재 내용을 볼 수 없습니다.",
+                created_at=comment["created_at"].astimezone(KST),
+                user_info=UserInfo(
+                    id=0,
+                    nickname=self._get_unknown_user_nickname(lang),
+                    profile_image=None,
+                    image_format=None,
+                    is_official=False,
+                ),
+                image_url=None,
+                image_format=None,
+            )
 
         # 신고된 게시글인 경우
         if tagging_post["is_reported"] == 1 or (user_reported_post_ids and tagging_post["id"] in user_reported_post_ids):
@@ -1099,7 +1112,6 @@ class CommunityService:
                             presigned_url = self.generate_get_presigned_url(url)
                             logger.info(f"presigned_url: {presigned_url}")
                             tagging_image_urls[i] = presigned_url["get_url"]
-                        # 처리된 presigned URLs를 저장
                         tagging_post["processed_image_urls"] = tagging_image_urls
                     except json.JSONDecodeError:
                         logger.error(f"Failed to parse image_url JSON for tagging post {comment['tagging_post_id']}")
