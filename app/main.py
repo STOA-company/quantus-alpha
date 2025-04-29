@@ -60,12 +60,22 @@ handler.initialize(app)
 
 app_name = os.getenv("APP_NAME", "unknown")
 
+exclude_paths = [
+    "/",
+    "/metrics",
+    "/health-check",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+]
+
 app.add_middleware(
     PrometheusMiddleware,
     app_name=app_name,
     group_paths=True,
     prefix="fastapi",
     buckets=[0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10],
+    exclude_paths=exclude_paths,
 )
 
 app.include_router(routers.router)
