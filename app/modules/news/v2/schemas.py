@@ -54,7 +54,6 @@ class NewsDetailItemV2(BaseModel):
     impact_reason: str | None
     key_points: str | None
     emotion: str | None
-    price_impact: float | None
 
 
 class DisclosureRenewalItem(BaseModel):

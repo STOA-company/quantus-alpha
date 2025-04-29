@@ -173,7 +173,6 @@ class NewsService:
                     "impact_reason",
                     "key_points",
                     "emotion",
-                    "that_time_price",
                 ],
                 order="date",
                 ascending=False,
@@ -204,21 +203,19 @@ class NewsService:
 
         df_news = df_news[offset : offset + size]
         df_news["date"] = pd.to_datetime(df_news["date"]).dt.tz_localize(utc).dt.tz_convert(kst)
-        df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
 
         data = []
         for _, row in df_news.iterrows():
             data.append(
                 NewsDetailItemV2(
                     id=row["id"],
-                    ctry=row["ctry"],
+                    ctry=row["ctry"].lower(),
                     date=row["date"],
                     title=row["title"],
                     summary=row["summary"],
                     impact_reason=row["impact_reason"],
                     key_points=row["key_points"],
                     emotion=row["emotion"],
-                    price_impact=0,
                 )
             )
         return data, total_count, total_page, offset, emotion_count, ctry
