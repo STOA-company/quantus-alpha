@@ -176,7 +176,7 @@ class CommunityService:
         # 1. 게시글, 작성자, 카테고리 정보 조회
         query = """
             SELECT
-                p.id, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at, p.depth, p.tagging_post_id,
+                p.id, p.content, p.image_url, p.image_format, p.like_count, p.comment_count, p.created_at, p.updated_at, p.depth, p.tagging_post_id, p.parent_id,
                 c.name as category_name,
                 p.user_id,
                 CASE WHEN :current_user_id IS NOT NULL THEN
@@ -360,6 +360,7 @@ class CommunityService:
             is_bookmarked=post["is_bookmarked"],
             is_liked=post["is_liked"],
             is_mine=post["user_id"] == current_user_id,
+            parent_id=post["parent_id"] if post["parent_id"] else None,
             created_at=post["created_at"].astimezone(KST),
             depth=post["depth"],
             stock_tickers=stock_information,
@@ -431,7 +432,7 @@ class CommunityService:
             JOIN categories c ON p.category_id = c.id
             {stock_join}  /* stock_ticker 조건 시 JOIN */
             WHERE p.depth = 0
-            AND p.id NOT IN (SELECT post_id FROM af_post_reports WHERE user_id = :current_user_id)
+            AND p.id NOT IN (SELECT post_id FROM af_post_reports WHERE user_id = :current_user_id) /* 해당 유저가 신고한 게시글 제외 */
             AND p.is_reported = 0
             {category_condition}  /* category_id 조건 */
             {stock_condition}  /* stock_ticker 조건 */
