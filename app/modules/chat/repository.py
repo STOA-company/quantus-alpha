@@ -266,10 +266,14 @@ class MessageRepository:
 
     def update_feedback(self, message_id: int, is_liked: bool, feedback: Optional[str]) -> Feedback:
         update_set = {}
-        if is_liked:
-            update_set["is_liked"] = is_liked
-        if feedback:
+
+        update_set["is_liked"] = is_liked
+
+        if feedback is not None:
             update_set["feedback"] = feedback
+
+        if not update_set:
+            raise ValueError("업데이트할 내용이 없습니다.")
 
         database_service._update("chat_feedback", sets=update_set, response_id=message_id)
 

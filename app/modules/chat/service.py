@@ -123,15 +123,20 @@ class ChatService:
     def feedback_response(
         self, message_id: int, user_id: int, is_liked: bool, feedback: Optional[str] = None
     ) -> Feedback:
-        message = message_repository.get_by_id(message_id)
+        try:
+            message = message_repository.get_by_id(message_id)
 
-        if message.role != "assistant":
-            raise ValueError("답변에 대한 피드백만 가능합니다.")
-        existing_feedback = message_repository.get_feedback(message_id)
-        if existing_feedback:
-            return message_repository.update_feedback(message_id, is_liked, feedback)
-        else:
-            return message_repository.create_feedback(message_id, user_id, is_liked, feedback)
+            if message.role != "assistant":
+                raise ValueError("답변에 대한 피드백만 가능합니다.")
+            existing_feedback = message_repository.get_feedback(message_id)
+            if existing_feedback:
+                return message_repository.update_feedback(message_id, is_liked, feedback)
+            else:
+                return message_repository.create_feedback(message_id, user_id, is_liked, feedback)
+        except ValueError as e:
+            raise ValueError(f"피드백 처리 중 오류 발생: {e}")
+        except Exception as e:
+            raise Exception(f"피드백 처리 중 오류 발생: {e}")
 
     def get_feedback(self, message_id: int) -> Feedback:
         return message_repository.get_feedback(message_id)
