@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from prometheus_client import Counter, Histogram
 
 from app.modules.chat.infrastructure.constants import LLM_MODEL
-from app.modules.chat.infrastructure.rate import check_rate_limit, increment_rate_limit
+from app.modules.chat.infrastructure.rate import check_rate_limit, decrement_rate_limit, increment_rate_limit
 from app.modules.chat.service import chat_service
 from app.monitoring.metrics import STREAMING_CONNECTIONS, STREAMING_ERRORS, STREAMING_MESSAGES_COUNT
 from app.utils.oauth_utils import get_current_user, is_staff
@@ -166,6 +166,8 @@ async def stream_chat(
     CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
     STREAMING_CONNECTIONS.inc()
 
+    increment_rate_limit(current_user.id, user_is_staff)
+
     async def event_generator():
         """표준 SSE 형식의 이벤트 생성기"""
         assistant_response = None
@@ -211,9 +213,8 @@ async def stream_chat(
             yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
         finally:
             STREAMING_CONNECTIONS.dec()
-            # 성공적으로 처리된 경우에만 API 호출 횟수 증가
-            if success:
-                increment_rate_limit(current_user.id, user_is_staff)
+            if not success:
+                decrement_rate_limit(current_user.id)
 
     # 올바른 SSE 응답을 위한 헤더 설정
     headers = {
