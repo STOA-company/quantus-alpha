@@ -51,3 +51,12 @@ class Conversation(BaseModel):
         self.messages.append(message)
         self.updated_at = datetime.now()
         return message
+
+
+class Feedback(BaseModel):
+    """피드백 도메인 모델"""
+
+    response_id: int
+    user_id: int
+    is_liked: bool
+    feedback: str
