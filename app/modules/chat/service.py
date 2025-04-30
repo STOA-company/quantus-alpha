@@ -23,24 +23,26 @@ class ChatService:
 
     def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
         conversation = conversation_repository.get_by_id(conversation_id)
-        latest_message = conversation.messages[-1]
-        if latest_message.role == "user":
-            final_response_id, final_response = self.store_final_response(conversation_id, latest_message.id)
-            analysis_history_id, analysis_history = self.store_analysis_history(conversation_id, latest_message.id)
-            if final_response is not None:
-                conversation.add_message(
-                    content=final_response,
-                    role="assistant",
-                    id=final_response_id,
-                    root_message_id=latest_message.id,
-                )
-            if analysis_history is not None:
-                conversation.add_message(
-                    content=analysis_history,
-                    role="system",
-                    id=analysis_history_id,
-                    root_message_id=latest_message.id,
-                )
+        messages = conversation.messages
+        if messages:
+            latest_message = messages[-1]
+            if latest_message.role == "user":
+                final_response_id, final_response = self.store_final_response(conversation_id, latest_message.id)
+                analysis_history_id, analysis_history = self.store_analysis_history(conversation_id, latest_message.id)
+                if final_response is not None:
+                    conversation.add_message(
+                        content=final_response,
+                        role="assistant",
+                        id=final_response_id,
+                        root_message_id=latest_message.id,
+                    )
+                if analysis_history is not None:
+                    conversation.add_message(
+                        content=analysis_history,
+                        role="system",
+                        id=analysis_history_id,
+                        root_message_id=latest_message.id,
+                    )
         return conversation
 
     def get_conversation_list(self, user_id: int) -> List[Conversation]:

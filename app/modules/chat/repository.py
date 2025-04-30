@@ -91,6 +91,9 @@ class ConversationRepository:
 
     def delete(self, conversation_id: int) -> bool:
         result = database_service._delete("chat_conversation", id=conversation_id)
+        conversation = self.get_by_id(conversation_id)
+        if conversation:
+            conversation.delete()
         return result.rowcount > 0
 
     def add_message(
