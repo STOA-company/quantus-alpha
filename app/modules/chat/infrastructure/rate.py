@@ -36,3 +36,9 @@ def increment_rate_limit(user_id: int, user_is_staff: bool) -> None:
             redis.setex(key, 86400, 1)
         else:
             redis.incr(key)
+
+
+def decrement_rate_limit(user_id: int) -> None:
+    key = get_rate_limit_key(user_id)
+    redis = redis_client()
+    redis.decr(key)
