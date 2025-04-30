@@ -243,7 +243,10 @@ class MessageRepository:
         result = database_service._delete("chat_message", id=message_id)
         return result.rowcount > 0
 
-    def create_feedback(self, message_id: int, user_id: int, is_liked: bool, feedback: str) -> Feedback:
+    def create_feedback(self, message_id: int, user_id: int, is_liked: bool, feedback: Optional[str]) -> Feedback:
+        if feedback is None:
+            feedback = ""
+
         database_service._insert(
             "chat_feedback",
             {"response_id": message_id, "user_id": user_id, "is_liked": is_liked, "feedback": feedback},
