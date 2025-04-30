@@ -155,7 +155,7 @@ async def stream_chat(
                 message_count += 1
                 # 올바른 SSE 형식으로 응답 생성 (각 행이 data: 로 시작하고 빈 줄로 끝나야 함)
                 if isinstance(chunk, str):
-                    STREAMING_MESSAGES_COUNT.labels(model=model, conversation_id=str(conversation_id)).inc()
+                    STREAMING_MESSAGES_COUNT.labels(conversation_id=str(conversation_id)).inc()
 
                     try:
                         chunk_data = json.loads(chunk)
