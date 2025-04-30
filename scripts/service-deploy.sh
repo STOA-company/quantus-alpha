@@ -104,7 +104,7 @@ server {
     listen 80;
 
     # 타임아웃 설정 증가
-    proxy_connect_timeout 300s;
+    proxy_connect_timeout 1800s;
     proxy_read_timeout 300s;
     proxy_send_timeout 300s;
 
