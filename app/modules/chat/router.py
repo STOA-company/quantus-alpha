@@ -7,9 +7,10 @@ from fastapi.responses import StreamingResponse
 from prometheus_client import Counter, Histogram
 
 from app.modules.chat.infrastructure.constants import LLM_MODEL
+from app.modules.chat.infrastructure.rate import check_rate_limit, increment_rate_limit
 from app.modules.chat.service import chat_service
 from app.monitoring.metrics import STREAMING_CONNECTIONS, STREAMING_ERRORS, STREAMING_MESSAGES_COUNT
-from app.utils.oauth_utils import get_current_user
+from app.utils.oauth_utils import get_current_user, is_staff
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,13 @@ async def stream_chat(
     if not current_user:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
+    # 사용자가 스태프인지 확인
+    user_is_staff = is_staff(current_user)
+
+    # 요청 제한 확인 (스태프가 아닌 경우)
+    if not user_is_staff and not check_rate_limit(current_user.id, user_is_staff):
+        raise HTTPException(status_code=429, detail="일일 사용 한도를 초과했습니다. 하루에 3번만 요청할 수 있습니다.")
+
     status = chat_service.get_status(conversation_id)
     if status == "pending":
         raise HTTPException(status_code=429, detail="대기 중입니다.")
@@ -149,6 +157,7 @@ async def stream_chat(
     async def event_generator():
         """표준 SSE 형식의 이벤트 생성기"""
         assistant_response = None
+        success = False
         try:
             message_count = 0
             async for chunk in chat_service.process_query(query, conversation_id, model):
@@ -181,6 +190,7 @@ async def stream_chat(
                         preview=conversation.preview,
                     )
                 logger.info(f"성공 응답 저장 완료: {assistant_response[:50]}...")
+                success = True
 
         except Exception as e:
             logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
@@ -189,6 +199,9 @@ async def stream_chat(
             yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
         finally:
             STREAMING_CONNECTIONS.dec()
+            # 성공적으로 처리된 경우에만 API 호출 횟수 증가
+            if success:
+                increment_rate_limit(current_user.id, user_is_staff)
 
     # 올바른 SSE 응답을 위한 헤더 설정
     headers = {
