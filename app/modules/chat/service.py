@@ -7,7 +7,7 @@ import httpx
 from app.modules.chat.infrastructure.config import llm_config
 from app.modules.chat.infrastructure.constants import LLM_MODEL
 from app.modules.chat.llm_client import llm_client
-from app.modules.chat.models import Conversation, Message
+from app.modules.chat.models import Conversation, Feedback, Message
 from app.modules.chat.repository import conversation_repository, message_repository
 
 logger = logging.getLogger(__name__)
@@ -119,6 +119,22 @@ class ChatService:
             )
             return message.id, analysis_history
         return None, None
+
+    def feedback_response(
+        self, message_id: int, user_id: int, is_liked: bool, feedback: Optional[str] = None
+    ) -> Feedback:
+        message = message_repository.get_by_id(message_id)
+
+        if message.role != "assistant":
+            raise ValueError("답변에 대한 피드백만 가능합니다.")
+        existing_feedback = message_repository.get_feedback(message_id)
+        if existing_feedback:
+            return message_repository.update_feedback(message_id, is_liked, feedback)
+        else:
+            return message_repository.create_feedback(message_id, user_id, is_liked, feedback)
+
+    def get_feedback(self, message_id: int) -> Feedback:
+        return message_repository.get_feedback(message_id)
 
 
 # 싱글톤 인스턴스 생성

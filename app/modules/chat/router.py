@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import timedelta
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -66,7 +67,11 @@ def get_conversation(conversation_id: int, current_user: str = Depends(get_curre
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
 
     messages = [
-        {**message.dict(), "created_at": message.created_at + timedelta(hours=9) if message.created_at else None}
+        {
+            **message.dict(),
+            "created_at": message.created_at + timedelta(hours=9) if message.created_at else None,
+            "is_liked": chat_service.get_feedback(message.id).is_liked if chat_service.get_feedback(message.id) else None,
+        }
         for message in conversation.messages
     ]
 
@@ -230,3 +235,23 @@ def get_status(conversation_id: int, current_user: str = Depends(get_current_use
 
     status = chat_service.get_status(conversation_id)
     return {"status": status}
+
+
+@router.post("/feedback")
+def feedback_response(
+    message_id: int, is_liked: bool, feedback: Optional[str] = None, current_user: str = Depends(get_current_user)
+):
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+        created_feedback = chat_service.feedback_response(message_id, current_user.id, is_liked, feedback)
+        return {
+            "message_id": created_feedback.response_id,
+            "is_liked": created_feedback.is_liked,
+            "feedback": created_feedback.feedback,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

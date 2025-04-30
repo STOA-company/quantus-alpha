@@ -27,6 +27,7 @@ class AlphafinderUser(BaseMixin, ServiceBase):
     groups = relationship("ScreenerGroup", back_populates="user", cascade="all, delete-orphan")
     toss_payment_history = relationship("TossPaymentHistory", back_populates="user")
     conversations = relationship("ChatConversation", back_populates="user")
+    feedback = relationship("ChatFeedback", back_populates="user")
     interest_groups = relationship("InterestGroup", back_populates="user")
 
     def __repr__(self) -> str:
