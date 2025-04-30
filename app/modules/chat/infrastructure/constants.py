@@ -1,1 +1,2 @@
 LLM_MODEL = "gpt41mi"
+MAX_REQUEST_COUNT = 3
