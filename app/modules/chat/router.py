@@ -29,6 +29,13 @@ def create_conversation(first_message: str, current_user: str = Depends(get_curr
     if not current_user:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
+    # 사용자가 스태프인지 확인
+    user_is_staff = is_staff(current_user)
+
+    # 요청 제한 확인 (스태프가 아닌 경우)
+    if not user_is_staff and not check_rate_limit(current_user.id, user_is_staff):
+        raise HTTPException(status_code=429, detail="일일 사용 한도를 초과했습니다. 하루에 3번만 요청할 수 있습니다.")
+
     conversation = chat_service.create_conversation(first_message, current_user.id)
     return {"conversation_id": conversation.id, "title": conversation.title}
 
@@ -58,13 +65,6 @@ def get_conversation(conversation_id: int, current_user: str = Depends(get_curre
     """대화 조회"""
     if not current_user:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
-
-    # 사용자가 스태프인지 확인
-    user_is_staff = is_staff(current_user)
-
-    # 요청 제한 확인 (스태프가 아닌 경우)
-    if not user_is_staff and not check_rate_limit(current_user.id, user_is_staff):
-        raise HTTPException(status_code=429, detail="일일 사용 한도를 초과했습니다. 하루에 3번만 요청할 수 있습니다.")
 
     conversation = chat_service.get_conversation(conversation_id)
     if not conversation:
