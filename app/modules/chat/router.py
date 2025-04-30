@@ -153,6 +153,8 @@ async def stream_chat(
     if not conversation:
         raise HTTPException(status_code=404, detail="존재하지 않는 대화입니다.")
 
+    increment_rate_limit(current_user.id, user_is_staff)
+
     if len(conversation.messages) == 0:
         title = query
         chat_service.update_conversation(conversation_id, title)
@@ -166,12 +168,9 @@ async def stream_chat(
     CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
     STREAMING_CONNECTIONS.inc()
 
-    increment_rate_limit(current_user.id, user_is_staff)
-
     async def event_generator():
         """표준 SSE 형식의 이벤트 생성기"""
         assistant_response = None
-        success = False
         try:
             message_count = 0
             async for chunk in chat_service.process_query(query, conversation_id, model):
@@ -204,17 +203,15 @@ async def stream_chat(
                         preview=conversation.preview,
                     )
                 logger.info(f"성공 응답 저장 완료: {assistant_response[:50]}...")
-                success = True
 
         except Exception as e:
             logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
             # TODO: ROLLBACK
             STREAMING_ERRORS.labels(error_type="streaming_error", conversation_id=str(conversation_id)).inc()
+            decrement_rate_limit(current_user.id)
             yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
         finally:
             STREAMING_CONNECTIONS.dec()
-            if not success:
-                decrement_rate_limit(current_user.id)
 
     # 올바른 SSE 응답을 위한 헤더 설정
     headers = {
