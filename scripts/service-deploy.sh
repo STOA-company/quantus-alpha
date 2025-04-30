@@ -137,7 +137,7 @@ server {
         chunked_transfer_encoding off;
         proxy_buffering off;
         proxy_cache off;
-        proxy_read_timeout 600s;  # 스트리밍용 더 긴 타임아웃
+        proxy_read_timeout 1800s;  # 스트리밍용 더 긴 타임아웃
     }
 
     location /health-check {
