@@ -142,7 +142,6 @@ def get_current_user(
             )
 
         if not token_record:
-            print("token_record is None")
             raise HTTPException(
                 status_code=401,
                 detail="Invalid token",
@@ -150,7 +149,6 @@ def get_current_user(
             )
 
         token_data = token_record[0]
-        print("token_data is not None : ", token_data)
         try:
             payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
             user_id = int(payload.get("sub"))
@@ -187,3 +185,8 @@ def get_current_user(
             detail="Invalid token format",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def is_staff(user: AlphafinderUser):
+    email = user.email
+    return email.split("@")[1] in ["stoa-investment.com"]

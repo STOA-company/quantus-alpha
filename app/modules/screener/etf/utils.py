@@ -680,12 +680,6 @@ class ETFDataDownloader:
             """
         df = self._get_refinitiv_data(query)
 
-        list_db_tickers = self._get_db_tickers_list(ctry)
-
-        if ctry == "KR":
-            list_db_tickers = [self.kr_pattern.sub("K", ticker) for ticker in list_db_tickers]
-        df = df[df["ticker"].isin(list_db_tickers)]
-
         if download:
             if ctry == "KR":
                 df.to_parquet(os.path.join(self.DATA_DIR, "kr_etf_dividend.parquet"), index=False)
@@ -790,6 +784,53 @@ class ETFDataDownloader:
         tickers = self.db._select(table="stock_information", columns=["ticker"], ctry=ctry, type=type)
         tickers = [ticker[0] for ticker in tickers]
         return tickers
+
+    def get_suspended_etf(self, ctry: str) -> pd.DataFrame:
+        if ctry not in ["US", "KR"]:
+            raise ValueError("ctry must be US or KR")
+        # db에 저장된 etf ticker 가져오기
+        etf_tickers = pd.DataFrame(self.db._select(table="stock_information", columns=["ticker"], ctry=ctry, type="etf"))
+
+        # 티커 변환 규칙 적용
+        if ctry == "KR":
+            etf_tickers["ticker"] = etf_tickers["ticker"].apply(lambda x: "K" + x[1:] if x.startswith("A") else x)
+
+        # 레피니티브에서 해당 종목들의 상태 가져오기
+        ticker_list = [f"'{ticker}'" for ticker in etf_tickers["ticker"].tolist()]
+        if ctry == "KR":
+            query = f"""
+            SELECT
+                a.DsLocalCode,
+                a.StatusCode
+            FROM
+                Ds2CtryQtInfo a
+            WHERE
+                a.DsLocalCode IN ({', '.join(ticker_list)})
+                AND a.TypeCode = 'ET'
+            """
+        if ctry == "US":
+            query = f"""
+            SELECT
+                c.Ticker,
+                a.StatusCode
+            FROM
+                Ds2CtryQtInfo a
+            JOIN
+                Ds2MnemChg c
+                ON c.InfoCode = a.InfoCode
+                AND c.EndDate = (
+                    SELECT MAX(EndDate)
+                    FROM Ds2MnemChg
+                    WHERE InfoCode = a.InfoCode
+                )
+            WHERE
+                a.DsQtName IN ({', '.join(ticker_list)})
+                AND a.TypeCode = 'ET'
+                AND c.EndDate >= '2025-01-01'
+            """
+
+        etf_status = self._get_refinitiv_data(query)
+        return etf_status
 
 
 class KRXDownloader:
@@ -973,9 +1014,9 @@ class ETFDataLoader:
     def load_etf_info(self, ctry):
         country = "kr" if ctry == "KR" else "us"
         if ctry == "KR":
-            select_colums = ["ticker", "ctry", "market"]
+            select_colums = ["ticker", "ctry", "market", "is_delisted"]
         else:
-            select_colums = ["ticker", "ctry", "market", "en_name"]
+            select_colums = ["ticker", "ctry", "market", "en_name", "is_delisted"]
         etf_info = pd.DataFrame(
             self.db._select(table="stock_information", columns=select_colums, ctry=country, type="etf")
         )
@@ -999,15 +1040,41 @@ class ETFDataLoader:
         df = pd.read_parquet(os.path.join(self.base_dir, file_name))
         return df
 
-    def load_krx(self, base=False, detail=False):
-        if not base and not detail:
-            raise ValueError("base or detail must be True")
+    def load_krx(self, base=False, detail=False, price=False):
+        if not base and not detail and not price:
+            raise ValueError("base or detail or price must be True")
 
+        rename_columns = {
+            "ISU_CD": "표준코드",
+            "ISU_SRT_CD": "단축코드",
+            "ISU_NM": "한글종목명",
+            "ISU_ABBRV": "한글종목약명",
+            "ISU_ENG_NM": "영문종목명",
+            "LIST_DD": "상장일",
+            "ETF_OBJ_IDX_NM": "기초지수명",
+            "IDX_CALC_INST_NM1": "지수산출기관",
+            "IDX_CALC_INST_NM2": "추적배수",
+            "ETF_REPLICA_METHD_TP_CD": "복제방법",
+            "IDX_MKT_CLSS_NM": "기초시장분류",
+            "IDX_ASST_CLSS_NM": "기초자산분류",
+            "LIST_SHRS": "상장좌수",
+            "COM_ABBRV": "운용사",
+            "CU_QTY": "CU수량",
+            "ETF_TOT_FEE": "총보수",
+            "TAX_TP_CD": "과세유형",
+            "NETASST_TOTAMT": "순자산총액",
+            "NAV": "순자산가치(NAV)",
+            "MKTCAP": "시가총액",
+        }
         if base:
             df_base = pd.read_parquet(os.path.join(self.krx_dir, "data_base.parquet"))
+            df_base = df_base.rename(columns=rename_columns)
         if detail:
             df_detail = pd.read_parquet(os.path.join(self.krx_dir, "data_detail.parquet"))
-
+            df_detail = df_detail.rename(columns=rename_columns)
+        if price:
+            df_price = pd.read_parquet(os.path.join(self.krx_dir, "data_price.parquet"))
+            df_price = df_price.rename(columns=rename_columns)
         if base and detail:
             df_krx = pd.merge(df_base, df_detail, left_on="단축코드", right_on="종목코드", how="left")
         elif base:
@@ -1044,6 +1111,11 @@ class ETFDataLoader:
             df_rating = pd.read_parquet(os.path.join(self.morningstar_dir, "us_etf_morningstar_rating.parquet"))
             df = df_rating if df.empty else pd.merge(df, df_rating, on="ticker", how="left")
         return df
+
+    def get_db_tickers_list(self, ctry: str, type: str = "etf"):
+        tickers = self.db._select(table="stock_information", columns=["ticker"], ctry=ctry, type=type)
+        tickers = [ticker[0] for ticker in tickers]
+        return tickers
 
 
 class ETFDividendFactorExtractor:
@@ -1498,6 +1570,9 @@ class ETFDataPreprocessor:
         pass
 
     def krx_data_preprocess(self, df: pd.DataFrame):
+        """
+        KRX 데이터 전처리
+        """
         select_columns_base = [
             "단축코드",
             "한글종목약명",
@@ -1772,7 +1847,7 @@ class ETFDataPreprocessor:
         else:
             raise ValueError(f"Invalid country: {ctry}")
 
-        all_columns = ["ticker", "ctry", "market", "en_name"]
+        all_columns = ["ticker", "ctry", "market", "en_name", "is_delisted"]
         select_columns = [col for col in all_columns if col in df.columns]
         df_select = df[select_columns]
 
@@ -2393,7 +2468,7 @@ class ETFDataMerger:
                 df_merged = df_info if df_merged is None else pd.merge(df_merged, df_info, on="ticker", how="left")
         if krx:
             # 데이터 가져오기
-            df_krx = self.loader.load_krx(base=True, detail=True)
+            df_krx = self.loader.load_krx(base=True, detail=True, price=True)
             # 데이터 전처리
             df_krx = self.preprocessor.krx_data_preprocess(df_krx)
             # 데이터 합치기
@@ -2421,6 +2496,10 @@ class ETFDataMerger:
                     # pd.to_numeric 함수를 사용하여 변환 가능한 값만 숫자로 변환
                     df_merged[col] = pd.to_numeric(df_merged[col], errors="ignore")
 
+        # 상폐 종목 제거
+        df_merged = df_merged[df_merged["is_delisted"] == False]  # noqa: E712
+        # exist_tickers = self.loader.get_db_tickers_list(ctry)
+        # df_merged = df_merged[df_merged["Code"].isin(exist_tickers)]
         return df_merged
 
 

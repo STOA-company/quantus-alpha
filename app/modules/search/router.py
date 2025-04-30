@@ -1,14 +1,18 @@
 from typing import Dict, List, Optional, Union
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.cache.leaderboard import StockLeaderboard
 from app.database.conn import db
+from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import InfiniteScrollResponse
-from app.modules.search.schemas import CommunitySearchItem, SearchResponse
+from app.modules.community.services import CommunityService, get_community_service
+from app.modules.search.schemas import CommunitySearchItem, InterestSearchItem, SearchResponse
 from app.modules.search.service import SearchService, get_search_service
+from app.utils.quantus_auth_utils import get_current_user
 
 router = APIRouter()
 
@@ -43,6 +47,60 @@ async def search_community(
     service: SearchService = Depends(get_search_service),
 ) -> InfiniteScrollResponse[CommunitySearchItem]:
     search_result = await service.search_community(query, lang, offset, limit + 1)
+    has_more = len(search_result) > limit
+    if has_more:
+        search_result = search_result[:-1]  # 마지막 항목 제거
+
+    return InfiniteScrollResponse(
+        status_code=200, message="검색이 완료되었습니다.", data=search_result, has_more=has_more
+    )
+
+
+@router.get("/interest", summary="관심 종목 검색")
+def search_interest(
+    query: str | None = None,
+    ctry: TranslateCountry = TranslateCountry.KO,
+    offset: int = 0,
+    limit: int = 10,
+    service: SearchService = Depends(get_search_service),
+    community_service: CommunityService = Depends(get_community_service),
+    user: AlphafinderUser = Depends(get_current_user),
+) -> InfiniteScrollResponse[InterestSearchItem]:
+    if query is None:
+        # Get trending stocks
+        trending_stocks = community_service.get_trending_stocks()
+        # Get interest stocks for the group
+        query = """
+            SELECT DISTINCT ticker
+            FROM alphafinder_interest_stock
+            WHERE group_id IN (SELECT group_id FROM alphafinder_interest_group WHERE user_id = :user_id)
+        """
+        interest_tickers = service.db._execute(text(query), {"user_id": user["uid"]})
+        interest_tickers = [ticker[0] for ticker in interest_tickers.fetchall()]
+
+        # Get stock information for trending stocks
+        stock_info = service.db._select(
+            table="stock_information",
+            columns=["ticker", "kr_name", "en_name", "ctry"],
+            ticker__in=[ticker for ticker, _ in trending_stocks],
+            is_activate=1,
+            is_delisted=0,
+        )
+
+        # Convert to InterestSearchItem format
+        search_result = []
+        for row in stock_info:
+            search_result.append(
+                InterestSearchItem(
+                    ticker=row.ticker,
+                    name=row.kr_name if ctry == TranslateCountry.KO else row.en_name,
+                    ctry=row.ctry,
+                    is_interest=row.ticker in interest_tickers,
+                )
+            )
+    else:
+        search_result = service.search_interest(query, user["uid"], ctry, offset, limit + 1)
+
     has_more = len(search_result) > limit
     if has_more:
         search_result = search_result[:-1]  # 마지막 항목 제거

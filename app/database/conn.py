@@ -185,5 +185,12 @@ class SQLAlchemyService(BaseSQLAlchemy):
         super().__init__(app, url_key, **kwargs)
 
 
+class SQLAlchemyUser(BaseSQLAlchemy):
+    def __init__(self, app: FastAPI = None, **kwargs):
+        url_key = "DB_USER_URL"
+        super().__init__(app, url_key, **kwargs)
+
+
 db = SQLAlchemy()
 db_service = SQLAlchemyService()
+db_user = SQLAlchemyUser()

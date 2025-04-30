@@ -37,9 +37,13 @@ class SlackExceptionMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> JSONResponse:
         try:
+            # 스트리밍 엔드포인트 처리를 위한 검사
+            path = request.url.path
+            is_streaming_endpoint = path.endswith("/stream") or "stream" in path
+
             # Create a copy of the request body before processing
             body = None
-            if self.include_request_body:
+            if self.include_request_body and not is_streaming_endpoint:
                 body = await request.body()
 
                 # Create a new request with the same body

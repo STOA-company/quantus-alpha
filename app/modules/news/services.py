@@ -1,4 +1,3 @@
-import json
 import math
 import re
 from datetime import datetime, time, timedelta
@@ -11,6 +10,7 @@ from fastapi import Request, Response
 from sqlalchemy import text
 
 from app.cache.leaderboard import DisclosureLeaderboard, NewsLeaderboard
+from app.cache.story_view import get_story_view_cache
 from app.common.constants import KST, UTC
 from app.core.exception.custom import DataNotFoundException
 from app.database.crud import JoinInfo, database
@@ -147,6 +147,11 @@ class NewsService:
         news_condition = condition.copy()
         news_condition["is_related"] = True
 
+        # 현재 시간에 5분을 더한 시간까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+        news_condition["date__lte"] = allowed_time
+
         change_rate_column = "change_rt"
 
         join_info = lambda table: JoinInfo(  # noqa: E731
@@ -209,6 +214,11 @@ class NewsService:
             disclosure_name = "en_name"
 
         disclosure_condition = condition.copy()
+
+        # 현재 시간에 5분을 더한 시간까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+        disclosure_condition["date__lte"] = allowed_time
 
         change_rate_column = "change_rt"
 
@@ -478,20 +488,14 @@ class NewsService:
         tickers: Optional[List[str]] = None,
         lang: TranslateCountry | None = None,
         stories_count: int = 30,
+        user: Optional[AlphafinderUser] = None,
     ):
-        viewed_stories = set()
-        if request.cookies.get("viewed_stories"):
-            cookie_data = request.cookies.get("viewed_stories", "[]")
-            try:
-                viewed_stories = set(json.loads(cookie_data))
-            except json.JSONDecodeError:
-                viewed_stories = set()
-
         if lang is None:
             lang = TranslateCountry.KO
 
         current_datetime = now_utc()
         before_24_hours = current_datetime - timedelta(hours=24)
+        allowed_time = current_datetime + timedelta(minutes=5)
 
         if tickers:
             top_stories_tickers = tickers
@@ -513,6 +517,9 @@ class NewsService:
                     SELECT DISTINCT ticker
                     FROM news_analysis
                     WHERE date >= '{before_24_hours}'
+                    AND date <= '{allowed_time}'
+                    AND is_related = TRUE
+                    AND is_exist = TRUE
                 ) na ON st.ticker = na.ticker
                 WHERE ctry = 'US'
                 ORDER BY st.volume_change_rt DESC
@@ -526,6 +533,9 @@ class NewsService:
                     SELECT DISTINCT ticker
                     FROM news_analysis
                     WHERE date >= '{before_24_hours}'
+                    AND date <= '{allowed_time}'
+                    AND is_related = TRUE
+                    AND is_exist = TRUE
                 ) na ON st.ticker = na.ticker
                 WHERE ctry = 'KR'
                 ORDER BY st.volume_change_rt DESC
@@ -552,7 +562,12 @@ class NewsService:
         if not top_stories_tickers:
             return []  # 빠른 반환
 
-        condition = {"is_exist": True, "date__gte": before_24_hours, "ticker__in": top_stories_tickers}
+        condition = {
+            "is_exist": True,
+            "date__gte": before_24_hours,
+            "date__lte": allowed_time,
+            "ticker__in": top_stories_tickers,
+        }
 
         news_condition = condition.copy()
         disclosure_condition = condition.copy()
@@ -685,33 +700,29 @@ class NewsService:
             total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"])
             total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
 
-            mask = (total_df["current_price"] != 0) & (total_df["that_time_price"] != 0)
+            # mask = (total_df["current_price"] != 0) & (total_df["that_time_price"] != 0)
             total_df["price_impact"] = 0.0
-            total_df.loc[mask, "price_impact"] = (
-                (total_df.loc[mask, "current_price"] - total_df.loc[mask, "that_time_price"])
-                / total_df.loc[mask, "that_time_price"]
-                * 100
-            ).round(2)
+            # total_df.loc[mask, "price_impact"] = (
+            #     (total_df.loc[mask, "current_price"] - total_df.loc[mask, "that_time_price"])
+            #     / total_df.loc[mask, "that_time_price"]
+            #     * 100
+            # ).round(2)
             total_df = NewsService._convert_to_kst(total_df)
 
         # 결과 생성
         result = []
         for ticker in unique_tickers:
+            print(f"ticker: {ticker}")
             ticker_news = total_df[total_df["ticker"] == ticker]
             if ticker_news.empty:
                 continue
 
             news_items = []
-            ticker_has_unviewed = False
             for _, row in ticker_news.iterrows():
                 if len(news_items) >= stories_count:
                     break
-                news_key = f'{ticker}_{row["type"]}_{row["id"]}'
-                is_viewed = news_key in viewed_stories
 
-                if not is_viewed:
-                    ticker_has_unviewed = True
-
+                # Remove the cookie-based view checking
                 price_impact = float(row["price_impact"]) if pd.notnull(row["price_impact"]) else 0.0
                 news_items.append(
                     TopStoriesItem(
@@ -724,7 +735,7 @@ class NewsService:
                         key_points=row["key_points"],
                         emotion=row["emotion"],
                         type=row["type"],
-                        is_viewed=is_viewed,
+                        is_viewed=False,  # Default to false, will be updated later
                     )
                 )
             if lang == TranslateCountry.KO:
@@ -743,37 +754,141 @@ class NewsService:
                     change_rate=ticker_news.iloc[0]["change_rt"],
                     items_count=len(news_items),
                     news=news_items,
-                    is_viewed=not ticker_has_unviewed,
+                    is_viewed=False,  # Default to false, will be updated later
                 )
             )
-        result.sort(key=lambda x: x.is_viewed, reverse=False)
+            print(f"news_items: {len(news_items)}")
+        # Update the viewed status using Redis
+        result = self.check_stories_viewed_status(result, request, user)
 
         return result
 
-    def mark_story_as_viewed(self, ticker: str, type: str, id: int, request: Request, response: Response) -> bool:
-        # 기존 쿠키 확인
-        current_viewed = request.cookies.get("viewed_stories", "[]")
-        viewed_list = json.loads(current_viewed)
+    def mark_story_as_viewed(
+        self,
+        ticker: str,
+        type: str,
+        id: int,
+        request: Request,
+        response: Response,
+        user: Optional[AlphafinderUser] = None,
+    ) -> bool:
+        """
+        Mark a story as viewed by a user using Redis.
+        For authenticated users, use their user ID.
+        For anonymous users, use a cookie-based ID.
 
-        # 새로운 조회 기록 추가
-        story_key = f"{ticker}_{type}_{id}"
-        if story_key not in viewed_list:
-            viewed_list.append(story_key)
+        Args:
+            ticker: Stock ticker symbol
+            type: Type of story ('news' or 'disclosure')
+            id: ID of the story
+            request: FastAPI request object
+            response: FastAPI response object
+            user: Optional authenticated user
 
-            if len(viewed_list) > 100:  # 최대 100개 기록 유지
-                viewed_list.pop(0)
+        Returns:
+            bool: True if the operation was successful
+        """
+        story_cache = get_story_view_cache()
 
-        # 쿠키 업데이트
-        response.set_cookie(
-            key="viewed_stories",
-            value=json.dumps(viewed_list),
-            max_age=86400,  # 24시간
-            httponly=True,
-            # secure=True,
-            samesite="lax",
-        )
+        # For authenticated users, use their user ID
+        if user:
+            user_id = f"auth_{user.id}"
+        else:
+            # For anonymous users, use a cookie-based ID
+            user_id = f"anon_{story_cache.get_or_create_anonymous_id(request, response)}"
+
+        # Mark the story as viewed in Redis
+        story_cache.mark_story_as_viewed(user_id=user_id, ticker=ticker, story_type=type, story_id=id)
 
         return True
+
+    def is_story_viewed(
+        self, ticker: str, type: str, id: int, request: Request, user: Optional[AlphafinderUser] = None
+    ) -> bool:
+        """
+        Check if a story has been viewed by the current user.
+
+        Args:
+            ticker: Stock ticker symbol
+            type: Type of story ('news' or 'disclosure')
+            id: ID of the story
+            request: FastAPI request object
+            user: Optional authenticated user
+
+        Returns:
+            bool: True if the story has been viewed
+        """
+        story_cache = get_story_view_cache()
+
+        # For authenticated users, use their user ID
+        if user:
+            user_id = f"auth_{user.id}"
+        else:
+            # For anonymous users, get ID from cookie (don't create if doesn't exist)
+            anonymous_id = request.cookies.get(story_cache.anonymous_cookie_name)
+            if not anonymous_id:
+                return False
+            user_id = f"anon_{anonymous_id}"
+
+        return story_cache.is_story_viewed(user_id=user_id, ticker=ticker, story_type=type, story_id=id)
+
+    def check_stories_viewed_status(
+        self, stories_data: List[TopStoriesResponse], request: Request, user: Optional[AlphafinderUser] = None
+    ) -> List[TopStoriesResponse]:
+        """
+        Check if stories have been viewed by the current user and update their status.
+        This is used to update the viewed status of stories in the top_stories response.
+
+        Args:
+            stories_data: List of TopStoriesResponse objects
+            request: FastAPI request object
+            user: Optional authenticated user
+
+        Returns:
+            List[TopStoriesResponse]: Updated stories data with viewed status
+        """
+        story_cache = get_story_view_cache()
+
+        # For authenticated users, use their user ID
+        if user:
+            user_id = f"auth_{user.id}"
+        else:
+            # For anonymous users, get ID from cookie (don't create if doesn't exist)
+            anonymous_id = request.cookies.get(story_cache.anonymous_cookie_name)
+            if not anonymous_id:
+                return stories_data  # Return as is, all will be marked as unviewed
+            user_id = f"anon_{anonymous_id}"
+
+        # Get all viewed stories for this user
+        viewed_stories = story_cache.get_viewed_stories(user_id)
+
+        # Update viewed status for each story and sort items within each ticker group
+        for story_group in stories_data:
+            ticker = story_group.ticker
+            has_unviewed = False
+
+            # First update the viewed status for all items
+            for item in story_group.news:
+                story_key = f"{ticker}_{item.type}_{item.id}"
+                item.is_viewed = story_key in viewed_stories
+                if not item.is_viewed:
+                    has_unviewed = True
+
+            # Then sort items: viewed first, then by date (newest first)
+            story_group.news.sort(key=lambda x: (-x.is_viewed, -x.date.timestamp()))
+
+            # Update group level viewed status
+            story_group.is_viewed = not has_unviewed
+
+        # Sort groups: unviewed first, then by date of most recent story
+        stories_data.sort(
+            key=lambda x: (
+                x.is_viewed,  # Unviewed groups first
+                -max([item.date.timestamp() for item in x.news] if x.news else [0]),  # Then by most recent story date
+            )
+        )
+
+        return stories_data
 
     def news_detail(self, ticker: str, date: str = None, page: int = 1, size: int = 6):
         if not date:
@@ -883,30 +998,39 @@ class NewsService:
         utc_start_datetime = kst_start_datetime.astimezone(utc)
         utc_end_datetime = kst_end_datetime.astimezone(utc)
 
+        # 현재 시간 + 5분까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+
         if end_date:
             end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
 
         ctry = check_ticker_country_len_2(ticker)
 
-        stock_info_columns = ["ticker", "en_name", "is_pub"]
+        stock_info_columns = ["ticker", "en_name", "kr_name", "is_pub"]
         stock_info = self.db._select(
             table="stock_information",
             columns=stock_info_columns,
-            **{"ticker": ticker},
+            ticker=ticker,
         )
         duplicate_stock_info = self.db._select(
             table="stock_information",
             columns=["ticker"],
-            **{"en_name": stock_info[0][1]},
+            en_name=stock_info[0][1],
         )
         condition = {
             "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
             "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S"),
             "is_exist": True,
             "is_related": True,
             "lang": lang,
         }
-        recent_news_condition = {"is_related": True, "lang": lang}
+        recent_news_condition = {
+            "is_related": True,
+            "lang": lang,
+            "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
 
         if len(duplicate_stock_info) == 2:
             unique_tickers = [info[0] for info in duplicate_stock_info]
@@ -972,6 +1096,9 @@ class NewsService:
         df_news["date"] = pd.to_datetime(df_news["date"]).dt.tz_localize(utc).dt.tz_convert(kst)
         df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
 
+        kr_name = stock_info[0][2] if len(stock_info[0]) > 2 else None
+        en_name = stock_info[0][1] if len(stock_info[0]) > 1 else None
+
         data = []
         for _, row in df_news.iterrows():
             data.append(
@@ -985,8 +1112,207 @@ class NewsService:
                     key_points=row["key_points"],
                     emotion=row["emotion"],
                     price_impact=0,
+                    kr_name=kr_name,
+                    en_name=en_name,
                 )
             )
+        return data, total_count, total_page, offset, emotion_count, ctry
+
+    def etf_news_detail_v2(
+        self,
+        ticker: str,
+        date: str = None,
+        end_date: str = None,
+        page: int = 1,
+        size: int = 6,
+        lang: TranslateCountry | None = None,
+        user: AlphafinderUser | None = None,
+    ):
+        """
+        ETF 구성 종목들의 뉴스를 조회하는 서비스 메소드
+
+        Args:
+            ticker: ETF 티커
+            date: 시작 날짜 (YYYYMMDD 형식)
+            end_date: 종료 날짜 (YYYYMMDD 형식)
+            page: 페이지 번호
+            size: 페이지 크기
+            lang: 언어 설정
+            user: 사용자 정보
+
+        Returns:
+            뉴스 데이터, 총 개수, 총 페이지, 오프셋, 감정 분석 결과, 국가 코드
+        """
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        if lang == TranslateCountry.KO:
+            lang = "ko-KR"
+        else:
+            lang = "en-US"
+
+        kst = pytz.timezone("Asia/Seoul")
+        utc = pytz.timezone("UTC")
+
+        # 시작 날짜 설정
+        if not date:
+            kst_date = datetime.now(kst).replace(tzinfo=None)
+        else:
+            kst_date = datetime.strptime(date, "%Y%m%d")
+
+        # 종료 날짜 설정
+        if end_date:
+            kst_end_date = datetime.strptime(end_date, "%Y%m%d")
+        else:
+            kst_end_date = kst_date
+
+        # 시작 / 종료 시간 localize
+        kst_start_datetime = kst.localize(datetime.combine(kst_date, datetime.min.time()))
+        kst_end_datetime = kst.localize(datetime.combine(kst_end_date, time(23, 59, 59)))
+
+        # 시작 / 종료 시간 UTC로 변환
+        utc_start_datetime = kst_start_datetime.astimezone(utc)
+        utc_end_datetime = kst_end_datetime.astimezone(utc)
+
+        # 현재 시간 + 5분까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+
+        if end_date:
+            end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
+
+        ctry = check_ticker_country_len_2(ticker)
+        print("Ticker: ", ticker)
+
+        holdings = self.db._select(
+            table="etf_top_holdings",
+            columns=["holding_ticker"],
+            ticker=ticker,
+        )
+
+        print("HOLDINGS : ", holdings)
+
+        if not holdings:
+            print("ETF 구성 종목이 없습니다.")
+            emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
+            return [], 0, 0, 0, emotion_count, ctry
+
+        holding_tickers = [holding[0] for holding in holdings if holding[0]]
+
+        if not holding_tickers:
+            emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
+            return [], 0, 0, 0, emotion_count, ctry
+
+        # 구성 종목별 정보 조회
+        stock_info_map = {}
+        stock_infos = self.db._select(
+            table="stock_information",
+            columns=["ticker", "en_name", "kr_name"],
+            ticker__in=holding_tickers,
+        )
+
+        for stock_info in stock_infos:
+            stock_info_map[stock_info[0]] = {
+                "en_name": stock_info[1],
+                "kr_name": stock_info[2] if len(stock_info) > 2 else None,
+            }
+
+        # 뉴스 조회 조건
+        condition = {
+            "date__gte": utc_start_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "date__lt": utc_end_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+            "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "is_exist": True,
+            "is_related": True,
+            "lang": lang,
+            "ticker__in": holding_tickers,
+        }
+
+        # 구성 종목들의 뉴스 데이터 조회
+        df_news = pd.DataFrame(
+            self.db._select(
+                table="news_analysis",
+                columns=[
+                    "id",
+                    "ticker",
+                    "ctry",
+                    "date",
+                    "title",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "that_time_price",
+                ],
+                order="date",
+                ascending=False,
+                **condition,
+            )
+        )
+
+        if df_news.empty:
+            emotion_count = {"positive": 0, "negative": 0, "neutral": 0}
+            return [], 0, 0, 0, emotion_count, ctry
+
+        # 유저 레벨에 따른 마스킹 처리
+        recent_news_id = self.db._select(
+            table="news_analysis",
+            columns=["id"],
+            order="date",
+            ascending=False,
+            limit=10,
+            **{
+                "is_related": True,
+                "lang": lang,
+                "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "ticker__in": holding_tickers,
+            },
+        )
+        recent_news_id = [id[0] for id in recent_news_id]
+
+        user_level = user.subscription_level if user else 1
+        # 최근 10개를 제외한 데이터 마스킹
+        if user_level == 1:
+            df_news = self.mask_fields(df=df_news, recent_news_id=recent_news_id)
+
+        # 감정 분석 및 페이지네이션 처리
+        offset = (page - 1) * size
+        df_news["emotion"] = df_news["emotion"].str.lower()
+        total_count = df_news.shape[0]
+        total_page = math.ceil(total_count / size)
+        emotion_count = self._count_emotion(df_news)
+
+        if offset >= total_count:
+            page = total_page
+            offset = (page - 1) * size
+
+        # 현재 페이지 데이터 추출
+        df_news = df_news[offset : offset + size]
+
+        # 타임존 변환
+        df_news["date"] = pd.to_datetime(df_news["date"]).dt.tz_localize(utc).dt.tz_convert(kst)
+        df_news["that_time_price"] = df_news["that_time_price"].fillna(0.0)
+
+        # 응답 데이터 생성
+        data = []
+        for _, row in df_news.iterrows():
+            ticker_info = stock_info_map.get(row["ticker"], {})
+            data.append(
+                NewsDetailItemV2(
+                    id=row["id"],
+                    ctry=row["ctry"],
+                    date=row["date"],
+                    title=row["title"],
+                    summary=row["summary"],
+                    impact_reason=row["impact_reason"],
+                    key_points=row["key_points"],
+                    emotion=row["emotion"],
+                    price_impact=0,
+                    kr_name=ticker_info.get("kr_name"),
+                    en_name=ticker_info.get("en_name"),
+                )
+            )
+
         return data, total_count, total_page, offset, emotion_count, ctry
 
     def remove_parentheses(self, text):

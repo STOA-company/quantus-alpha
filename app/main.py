@@ -8,7 +8,6 @@ from app.core.exception import handler
 from app.core.logger import configure, get_logger
 from app.database.conn import db
 from app.database.crud import database
-from app.middlewares.rate_limiter import GlobalRateLimitMiddleware
 from app.middlewares.rate_limiter_admin import router as rate_limiter_admin_router
 from app.middlewares.slack_error import add_slack_middleware
 from app.middlewares.trusted_hosts import get_current_username
@@ -51,6 +50,7 @@ app = FastAPI(
         "persistAuthorization": True,  # 인증 정보 유지
         "defaultModelsExpandDepth": -1,  # 모델 확장 깊이 설정 / -1은 축소
         "docExpansion": "none",
+        "filter": True,  # 태그 검색 기능 활성화
     },
     docs_url=None,
     redoc_url=None,
@@ -72,10 +72,6 @@ def root():
 
 
 origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
     "https://alpha-dev.quantus.kr",
     "https://develop.alphafinder.dev",
     "https://develop.alphafinder.dev/ko",
@@ -85,12 +81,39 @@ origins = [
     "https://live.alphafinder.dev",
     "https://www.alphafinder.dev",
     "https://alphafinder-l2xhjep9g-quantus-68c7517d.vercel.app",
+    "https://supper-app-dev.quantus.kr",
 ]
+
+if settings.ENV == "dev":
+    # 개발 환경에서는 로컬 개발을 위한 접근 허용
+    origins.extend(
+        [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:8000",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://127.0.0.1:8000",
+        ]
+    )
+elif settings.ENV == "stage":
+    # 스테이징 환경에서는 제한된 접근만 허용
+    origins.extend(
+        [
+            "http://localhost:3000",  # 프론트엔드 개발 서버
+            "http://127.0.0.1:3000",  # 프론트엔드 개발 서버
+            "http://localhost:8000",  # 백엔드 개발 서버
+            "http://127.0.0.1:8000",  # 백엔드 개발 서버
+        ]
+    )
 
 if settings.ENV == "stage":
     webhook_url = stage_webhook_url
 else:
     webhook_url = dev_webhook_url
+
+# Add Prometheus middleware first to monitor all requests
+app.add_middleware(PrometheusMiddleware)
 
 # Slack 오류 알림 미들웨어 설정
 add_slack_middleware(
@@ -106,33 +129,11 @@ add_slack_middleware(
 # CORS 미들웨어 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=origins if settings.ENV == "stage" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*", "Authorization", "Authorization_Swagger"],
+    allow_headers=["*", "Authorization", "Authorization_Swagger", "Sns-Type", "Client-Type"],
 )
-
-
-# 레이트 리미팅 미들웨어 설정
-exclude_paths = [
-    "/health-check",
-    "/metrics",
-    "/docs",
-    "/redoc",
-    "/admin",
-    "/api/v1/search",
-    "/api/v1/search/community",
-]
-
-app.add_middleware(
-    GlobalRateLimitMiddleware,
-    max_requests=150,
-    window_seconds=60,
-    exclude_paths=exclude_paths,
-)
-
-# Add Prometheus middleware
-app.add_middleware(PrometheusMiddleware)
 
 
 class HealthCheckDetails(BaseModel):
@@ -210,3 +211,15 @@ def request_test(request: TestRequest):
         return request.num / 0
     else:
         return request.num / 1
+
+
+# 앱 시작/종료 이벤트 핸들러
+@app.on_event("startup")
+async def startup_event():
+    # 채팅 서비스 초기화
+    logger.info("Application started successfully")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("Application shutting down")

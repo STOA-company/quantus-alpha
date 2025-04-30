@@ -26,6 +26,9 @@ class AlphafinderUser(BaseMixin, ServiceBase):
 
     groups = relationship("ScreenerGroup", back_populates="user", cascade="all, delete-orphan")
     toss_payment_history = relationship("TossPaymentHistory", back_populates="user")
+    conversations = relationship("ChatConversation", back_populates="user")
+    feedback = relationship("ChatFeedback", back_populates="user")
+    interest_groups = relationship("InterestGroup", back_populates="user")
 
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, nickname={self.nickname!r}, email={self.email!r})"
@@ -60,10 +63,46 @@ class UserStockInterest(BaseMixin, ServiceBase):
     )
     ticker: Mapped[String] = mapped_column(String(length=20), nullable=False)
 
-    user = relationship("AlphafinderUser", back_populates="user_stock_interests")
     group = relationship("InterestGroup", back_populates="user_stock_interests")
 
     __table_args__ = (UniqueConstraint("group_id", "ticker", name="uix_group_id_ticker"),)
+
+
+class AlphafinderInterestGroup(BaseMixin, ServiceBase):
+    __tablename__ = "alphafinder_interest_group"
+
+    id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[String] = mapped_column(String(length=100), nullable=False)
+    user_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=False)
+    order: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_editable: Mapped[Boolean] = mapped_column(Boolean, nullable=False, default=True)
+
+    interest_stocks = relationship("AlphafinderUserStockInterest", back_populates="interest_group")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uix_user_id_name"),
+        Index("idx_user_id_order", "user_id", "order"),
+        {"extend_existing": True},
+    )
+
+
+class AlphafinderUserStockInterest(BaseMixin, ServiceBase):
+    __tablename__ = "alphafinder_interest_stock"
+
+    id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    group_id: Mapped[BigInteger] = mapped_column(
+        BigInteger, ForeignKey("alphafinder_interest_group.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    ticker: Mapped[String] = mapped_column(String(length=20), nullable=False)
+    order: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    interest_group = relationship("AlphafinderInterestGroup", back_populates="interest_stocks")
+
+    __table_args__ = (
+        UniqueConstraint("group_id", "ticker", name="uix_group_id_ticker"),
+        Index("idx_group_id_order", "group_id", "order"),
+        {"extend_existing": True},
+    )
 
 
 class AlphaFinderOAuthToken(BaseMixin, ServiceBase):
@@ -104,3 +143,10 @@ class DataDownloadHistory(ServiceBase):
     data_type: Mapped[String] = mapped_column(String(length=100), nullable=False)
     data_detail: Mapped[String] = mapped_column(String(length=100), nullable=True)
     download_datetime: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
+
+
+class AlphafinderOfficialAccount(BaseMixin, ServiceBase):
+    __tablename__ = "alphafinder_official_account"
+
+    id: Mapped[BigInteger] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=False)

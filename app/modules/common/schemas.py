@@ -15,6 +15,7 @@ class ListResponseSchema(ResponseSchema, Generic[T]):
 
 
 class BaseResponse(BaseModel, Generic[T]):
+    type: Optional[str] = None
     status_code: int
     message: str
     data: Optional[T] = None

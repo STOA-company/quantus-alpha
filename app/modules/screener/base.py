@@ -559,9 +559,15 @@ class BaseScreenerService(ABC):
 
             default_filters = self.get_default_custom_filters(type)
 
-            existing_factors = {filter.get("factor") for filter in custom_filters}
+            # 딕셔너리와 객체를 모두 처리할 수 있도록 수정
+            existing_factors = set()
+            for filter_item in custom_filters:
+                if hasattr(filter_item, "factor"):
+                    existing_factors.add(filter_item.factor)
+                elif isinstance(filter_item, dict) and "factor" in filter_item:
+                    existing_factors.add(filter_item["factor"])
 
-            # Add missing default filters
+            # Add missing default filters - 딕셔너리 형태로 추가
             for default_filter in default_filters:
                 if default_filter["factor"] not in existing_factors:
                     mapped_factor = FACTOR_MAP[default_filter["factor"]]
@@ -579,10 +585,26 @@ class BaseScreenerService(ABC):
 
             if custom_filters:
                 for condition in custom_filters:
-                    values = condition.get("values", [])
-                    filter_type = condition.get("type")
-                    if not filter_type:  # type이 없는 경우 기본값 설정
+                    # condition이 dict인지 객체인지 확인하여 처리
+                    if isinstance(condition, dict):
+                        values = condition.get("values", [])
+                        factor = condition.get("factor")
+                        filter_type = condition.get("type")
+                        above = condition.get("above")
+                        below = condition.get("below")
+                    else:
+                        values = condition.values if hasattr(condition, "values") else []
+                        factor = condition.factor if hasattr(condition, "factor") else None
+                        filter_type = (
+                            condition.type if hasattr(condition, "type") and condition.type is not None else None
+                        )
+                        above = condition.above if hasattr(condition, "above") else None
+                        below = condition.below if hasattr(condition, "below") else None
+
+                    if filter_type is None:
                         filter_type = FactorTypeEnum.SLIDER.value
+                    elif isinstance(filter_type, FactorTypeEnum):
+                        filter_type = filter_type.value
 
                     if values:
                         for value in values:
@@ -591,10 +613,10 @@ class BaseScreenerService(ABC):
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
-                                        "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                        "factor": REVERSE_FACTOR_MAP[factor],
                                         "type": filter_type,
-                                        "above": condition.get("above"),
-                                        "below": condition.get("below"),
+                                        "above": above,
+                                        "below": below,
                                         "value": value,
                                     },
                                 )
@@ -605,10 +627,10 @@ class BaseScreenerService(ABC):
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": REVERSE_FACTOR_MAP[condition["factor"]],
+                                    "factor": REVERSE_FACTOR_MAP[factor],
                                     "type": filter_type,
-                                    "above": condition.get("above"),
-                                    "below": condition.get("below"),
+                                    "above": above,
+                                    "below": below,
                                     "value": None,
                                 },
                             )
@@ -706,7 +728,27 @@ class BaseScreenerService(ABC):
 
             if custom_filters:
                 for condition in custom_filters:
-                    values = condition.get("values", [])
+                    # condition이 dict인지 객체인지 확인하여 처리
+                    if isinstance(condition, dict):
+                        values = condition.get("values", [])
+                        factor = condition.get("factor")
+                        filter_type = condition.get("type")
+                        above = condition.get("above")
+                        below = condition.get("below")
+                    else:
+                        values = condition.values if hasattr(condition, "values") else []
+                        factor = condition.factor if hasattr(condition, "factor") else None
+                        filter_type = (
+                            condition.type if hasattr(condition, "type") and condition.type is not None else None
+                        )
+                        above = condition.above if hasattr(condition, "above") else None
+                        below = condition.below if hasattr(condition, "below") else None
+
+                    if filter_type is None:
+                        filter_type = FactorTypeEnum.SLIDER.value
+                    elif isinstance(filter_type, FactorTypeEnum):
+                        filter_type = filter_type.value
+
                     if values:
                         for value in values:
                             insert_tasks.append(
@@ -714,10 +756,10 @@ class BaseScreenerService(ABC):
                                     table="screener_stock_filters",
                                     sets={
                                         "group_id": group_id,
-                                        "factor": REVERSE_FACTOR_MAP[condition["factor"]],
-                                        "type": condition.get("type"),
-                                        "above": condition.get("above"),
-                                        "below": condition.get("below"),
+                                        "factor": REVERSE_FACTOR_MAP[factor],
+                                        "type": filter_type,
+                                        "above": above,
+                                        "below": below,
                                         "value": value,
                                     },
                                 )
@@ -728,10 +770,10 @@ class BaseScreenerService(ABC):
                                 table="screener_stock_filters",
                                 sets={
                                     "group_id": group_id,
-                                    "factor": REVERSE_FACTOR_MAP[condition["factor"]],
-                                    "type": condition.get("type"),
-                                    "above": condition.get("above"),
-                                    "below": condition.get("below"),
+                                    "factor": REVERSE_FACTOR_MAP[factor],
+                                    "type": filter_type,
+                                    "above": above,
+                                    "below": below,
                                     "value": None,
                                 },
                             )
