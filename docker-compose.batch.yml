@@ -14,6 +14,8 @@ services:
             - redis
         volumes:
             - .:/app
+        ports:
+            - "8000:8000"
 
     rabbitmq:
         image: rabbitmq:3.11.1-management

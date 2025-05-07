@@ -31,3 +31,8 @@ scrape_configs:
         target_label: deployment
         regex: 'web-(blue|green)'
         replacement: '$1'
+
+  - job_name: 'batch_server'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['43.202.58.152:8000']
