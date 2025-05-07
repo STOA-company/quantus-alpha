@@ -12,6 +12,32 @@
           "iconColor": "rgba(0, 211, 255, 1)",
           "name": "Annotations & Alerts",
           "type": "dashboard"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "enable": true,
+          "expr": "sum(delta(batch_tasks_total{status=\"started\"}[1m])) by (task_name) > 0",
+          "iconColor": "green",
+          "name": "태스크 시작",
+          "tagKeys": ["task_name"],
+          "textFormat": "태스크 시작: {{task_name}}",
+          "titleFormat": "태스크 시작"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "enable": true,
+          "expr": "sum(delta(batch_tasks_total{status=\"failed\"}[1m])) by (task_name) > 0",
+          "iconColor": "red",
+          "name": "태스크 실패",
+          "tagKeys": ["task_name"],
+          "textFormat": "태스크 실패: {{task_name}}",
+          "titleFormat": "태스크 실패"
         }
       ]
     },
@@ -122,7 +148,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "batch_system_cpu_usage_percent / 100",
+            "expr": "batch_system_cpu_usage_percent{instance=~\"$instance\"} / 100",
             "instant": false,
             "legendFormat": "CPU 사용률",
             "range": true,
@@ -252,7 +278,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "batch_system_memory_usage_percent / 100",
+            "expr": "batch_system_memory_usage_percent{instance=~\"$instance\"} / 100",
             "instant": false,
             "legendFormat": "메모리 사용률",
             "range": true,
@@ -264,7 +290,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "batch_system_memory_usage_bytes",
+            "expr": "batch_system_memory_usage_bytes{instance=~\"$instance\"}",
             "hide": true,
             "instant": false,
             "legendFormat": "메모리 사용량",
@@ -334,7 +360,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "batch_system_memory_usage_percent / 100",
+            "expr": "batch_system_memory_usage_percent{instance=~\"$instance\"} / 100",
             "instant": false,
             "legendFormat": "__auto",
             "range": true,
@@ -403,14 +429,14 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "rate(process_cpu_seconds_total[1m])",
+            "expr": "rate(process_cpu_seconds_total{instance=~\"$instance\"}[1m])",
             "instant": false,
-            "legendFormat": "__auto",
+            "legendFormat": "{{deployment || instance}}",
             "range": true,
             "refId": "A"
           }
         ],
-        "title": "현재 CPU 사용률",
+        "title": "배치 서버 CPU 사용률",
         "type": "gauge"
       },
       {
@@ -466,7 +492,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "sum(batch_tasks_in_progress)",
+            "expr": "sum(batch_tasks_in_progress{instance=~\"$instance\", task_name=~\"$task_name\"})",
             "instant": false,
             "legendFormat": "__auto",
             "range": true,
@@ -533,7 +559,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "sum(batch_tasks_total{status=\"failed\"})",
+            "expr": "sum(batch_tasks_total{status=\"failed\", instance=~\"$instance\", task_name=~\"$task_name\"})",
             "instant": false,
             "legendFormat": "__auto",
             "range": true,
@@ -638,14 +664,14 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "sum(delta(batch_tasks_total[1h])) by (status)",
+            "expr": "sum(delta(batch_tasks_total{instance=~\"$instance\", task_name=~\"$task_name\"}[$__interval])) by (status)",
             "instant": false,
             "legendFormat": "{{status}}",
             "range": true,
             "refId": "A"
           }
         ],
-        "title": "태스크 실행 결과 (지난 1시간)",
+        "title": "태스크 실행 결과",
         "type": "timeseries"
       },
       {
@@ -730,7 +756,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "sum by(task_name) (batch_tasks_in_progress)",
+            "expr": "sum by(task_name) (batch_tasks_in_progress{instance=~\"$instance\", task_name=~\"$task_name\"})",
             "instant": false,
             "legendFormat": "{{task_name}}",
             "range": true,
@@ -879,7 +905,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "sum by(task_name) (batch_tasks_total{status=\"success\"})",
+            "expr": "sum by(task_name) (batch_tasks_total{status=\"success\", instance=~\"$instance\", task_name=~\"$task_name\"})",
             "format": "table",
             "instant": true,
             "legendFormat": "__auto",
@@ -892,7 +918,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "sum by(task_name) (batch_tasks_total{status=\"failed\"})",
+            "expr": "sum by(task_name) (batch_tasks_total{status=\"failed\", instance=~\"$instance\", task_name=~\"$task_name\"})",
             "format": "table",
             "instant": true,
             "legendFormat": "__auto",
@@ -905,7 +931,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "sum by(task_name) (batch_tasks_total{status=\"started\"})",
+            "expr": "sum by(task_name) (batch_tasks_total{status=\"started\", instance=~\"$instance\", task_name=~\"$task_name\"})",
             "format": "table",
             "hide": true,
             "instant": true,
@@ -1074,7 +1100,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "sum(rate(batch_task_execution_time_seconds_sum[5m])) by (task_name) / sum(rate(batch_task_execution_time_seconds_count[5m])) by (task_name) > 0",
+            "expr": "sum(rate(batch_task_execution_time_seconds_sum{instance=~\"$instance\", task_name=~\"$task_name\"}[5m])) by (task_name) / sum(rate(batch_task_execution_time_seconds_count{instance=~\"$instance\", task_name=~\"$task_name\"}[5m])) by (task_name) > 0",
             "instant": false,
             "legendFormat": "{{task_name}}",
             "range": true,
@@ -1162,7 +1188,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "sum by(task_name) (batch_tasks_total{status=\"success\"})",
+            "expr": "sum by(task_name) (batch_tasks_total{status=\"success\", instance=~\"$instance\", task_name=~\"$task_name\"})",
             "instant": true,
             "legendFormat": "{{task_name}}",
             "range": false,
@@ -1237,7 +1263,7 @@
               "uid": "prometheus"
             },
             "editorMode": "code",
-            "expr": "sum by(task_name) (batch_tasks_total{status=\"failed\"})",
+            "expr": "sum by(task_name) (batch_tasks_total{status=\"failed\", instance=~\"$instance\", task_name=~\"$task_name\"})",
             "instant": true,
             "legendFormat": "{{task_name}}",
             "range": false,
@@ -1246,6 +1272,293 @@
         ],
         "title": "태스크 분포 (실패)",
         "type": "piechart"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 53
+        },
+        "id": 16,
+        "panels": [],
+        "title": "메모리와 태스크 상관관계",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "auto",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byRegexp",
+                "options": "^메모리.*"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "percentunit"
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "blue",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "left"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byRegexp",
+                "options": "^태스크.*"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "short"
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "right"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 54
+        },
+        "id": 17,
+        "options": {
+          "legend": {
+            "calcs": ["lastNotNull", "max"],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "editorMode": "code",
+            "expr": "batch_system_memory_usage_percent{instance=~\"$instance\"} / 100",
+            "instant": false,
+            "legendFormat": "메모리 사용률",
+            "range": true,
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "editorMode": "code",
+            "expr": "sum by(task_name) (batch_tasks_in_progress{instance=~\"$instance\", task_name=~\"$task_name\"})",
+            "instant": false,
+            "legendFormat": "태스크: {{task_name}}",
+            "range": true,
+            "refId": "B"
+          }
+        ],
+        "title": "메모리 사용률과 실행 중인 태스크 상관관계",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "auto",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "메모리 사용률"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "percentunit"
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "blue",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 64
+        },
+        "id": 18,
+        "options": {
+          "legend": {
+            "calcs": ["lastNotNull", "max"],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "editorMode": "code",
+            "expr": "batch_system_memory_usage_percent{instance=~\"$instance\"} / 100",
+            "instant": false,
+            "legendFormat": "메모리 사용률",
+            "range": true,
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "editorMode": "code",
+            "expr": "sum(delta(batch_tasks_total{status=\"started\", instance=~\"$instance\", task_name=~\"$task_name\"}[5m])) by (task_name) > 0",
+            "instant": false,
+            "legendFormat": "시작: {{task_name}}",
+            "range": true,
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "editorMode": "code",
+            "expr": "sum(delta(batch_tasks_total{status=\"success\", instance=~\"$instance\", task_name=~\"$task_name\"}[5m])) by (task_name) > 0",
+            "instant": false,
+            "legendFormat": "완료: {{task_name}}",
+            "range": true,
+            "refId": "C"
+          }
+        ],
+        "title": "메모리 사용률과 태스크 시작/완료 상관관계",
+        "type": "timeseries"
       }
     ],
     "refresh": "10s",
@@ -1253,7 +1566,62 @@
     "style": "dark",
     "tags": ["batch", "monitoring"],
     "templating": {
-      "list": []
+      "list": [
+        {
+          "current": {
+            "selected": false,
+            "text": "All",
+            "value": "$__all"
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "definition": "label_values(batch_tasks_total, instance)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "인스턴스",
+          "multi": true,
+          "name": "instance",
+          "options": [],
+          "query": {
+            "query": "label_values(batch_tasks_total, instance)",
+            "refId": "PrometheusVariableQueryEditor-VariableQuery"
+          },
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "All",
+            "value": "$__all"
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "definition": "label_values(batch_tasks_total, task_name)",
+          "hide": 0,
+          "includeAll": true,
+          "label": "태스크 이름",
+          "multi": true,
+          "name": "task_name",
+          "options": [],
+          "query": {
+            "query": "label_values(batch_tasks_total, task_name)",
+            "refId": "PrometheusVariableQueryEditor-VariableQuery"
+          },
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        }
+      ]
     },
     "time": {
       "from": "now-6h",
