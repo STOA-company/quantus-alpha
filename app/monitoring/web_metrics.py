@@ -42,6 +42,11 @@ STREAMING_ERRORS = Counter(
     "starlette_streaming_errors_total", "Total number of streaming errors", ["error_type", "conversation_id"]
 )
 
+# 프로메테우스 메트릭
+CHAT_REQUEST_COUNT = Counter("chat_requests_total", "Total number of chat requests", ["model", "status"])
+
+CHAT_RESPONSE_TIME = Histogram("chat_response_time_seconds", "Chat response time in seconds", ["model"])
+
 # 전역 카운터 변수 (에러율 계산용)
 _total_requests = 0
 _error_requests = {}  # path별 에러 카운트
