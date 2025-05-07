@@ -154,6 +154,18 @@ EOF
     }
 }
 
+update_prometheus_config() {
+  local active_service=$1
+  local inactive_service=$2
+
+  echo "Updating Prometheus configuration for active service: $active_service"
+
+  # Prometheus 재로드
+  docker exec prometheus kill -HUP 1
+
+  echo "Prometheus configuration updated."
+}
+
 echo "Preparing deployment for $target_service..."
 
 if docker-compose ps $target_service | grep -q $target_service; then
@@ -196,6 +208,7 @@ if [ $attempt -gt $max_attempts ]; then
 fi
 
 update_nginx_upstream $target_service
+update_prometheus_config $target_service $idle_service
 
 echo "Traffic switched to $target_service. Waiting 10 seconds to ensure stability..."
 sleep 10
