@@ -10,7 +10,9 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=15d'
+      - '--storage.tsdb.retention.time=7d'
+      - '--storage.tsdb.retention.size=5GB'
+      - '--storage.tsdb.wal-compression'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
     ports:
@@ -18,8 +20,17 @@ services:
     networks:
       - quantus-alpha_alpha-network
     restart: unless-stopped
-    mem_limit: 256m
-    cpus: 0.5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.7'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   node-exporter:
     image: prom/node-exporter:v1.6.1
