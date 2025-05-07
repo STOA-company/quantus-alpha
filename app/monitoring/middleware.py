@@ -5,7 +5,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from .metrics import (
+from .web_metrics import (
     # 기존 메트릭
     CLIENT_REQUEST_COUNT,
     REQUEST_COUNT,

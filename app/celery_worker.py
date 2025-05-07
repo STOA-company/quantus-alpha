@@ -24,8 +24,8 @@ from app.core.extra.SlackNotifier import SlackNotifier
 from app.modules.common.enum import TrendingCountry
 from app.modules.screener.utils import screener_utils
 from app.monitoring.batch_metrics import (
-    CELERY_TASK_EXECUTION_TIME,
-    CELERY_TASKS_TOTAL,
+    TASK_COUNT,
+    TASK_EXECUTION_TIME,
     collect_system_metrics,
     start_metrics_server,
 )
@@ -54,7 +54,7 @@ def log_task_execution(func):
         task_name = func.__name__
 
         # 태스크 시작 카운트 증가
-        CELERY_TASKS_TOTAL.labels(task_name=task_name, status="started").inc()
+        TASK_COUNT.labels(task_name=task_name, status="started").inc()
 
         start_time = time.time()
 
@@ -62,16 +62,16 @@ def log_task_execution(func):
             logger.info(f"Starting task: {task_name}")
             result = func(*args, **kwargs)
 
-            CELERY_TASKS_TOTAL.labels(task_name=task_name, status="success").inc()
+            TASK_COUNT.labels(task_name=task_name, status="success").inc()
             execution_time = time.time() - start_time
-            CELERY_TASK_EXECUTION_TIME.labels(task_name=task_name, queue=getattr(func, "queue", "default")).observe(
+            TASK_EXECUTION_TIME.labels(task_name=task_name, queue=getattr(func, "queue", "default")).observe(
                 execution_time
             )
 
             logger.info(f"Successfully completed task: {task_name} in {execution_time:.2f} seconds")
             return result
         except Exception as e:
-            CELERY_TASKS_TOTAL.labels(task_name=task_name, status="failed").inc()
+            TASK_COUNT.labels(task_name=task_name, status="failed").inc()
             logger.error(f"Error in {task_name}: {str(e)}", exc_info=True)
             raise
 
