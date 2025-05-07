@@ -1,5 +1,4 @@
 import logging
-import time
 from functools import wraps
 
 from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_stat_cls_code_batch
@@ -23,12 +22,7 @@ from app.core.config import settings
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.modules.common.enum import TrendingCountry
 from app.modules.screener.utils import screener_utils
-from app.monitoring.batch_metrics import (
-    TASK_COUNT,
-    TASK_EXECUTION_TIME,
-    collect_system_metrics,
-    start_metrics_server,
-)
+from app.monitoring.batch_metrics import collect_system_metrics, monitor_task_execution, start_metrics_server
 from app.utils.date_utils import (
     check_market_status,
     get_session_checker,
@@ -49,31 +43,10 @@ logger = logging.getLogger(__name__)
 def log_task_execution(func):
     """태스크 실행 로깅 및 메트릭 수집 데코레이터"""
 
+    @monitor_task_execution
     @wraps(func)
     def wrapper(*args, **kwargs):
-        task_name = func.__name__
-
-        # 태스크 시작 카운트 증가
-        TASK_COUNT.labels(task_name=task_name, status="started").inc()
-
-        start_time = time.time()
-
-        try:
-            logger.info(f"Starting task: {task_name}")
-            result = func(*args, **kwargs)
-
-            TASK_COUNT.labels(task_name=task_name, status="success").inc()
-            execution_time = time.time() - start_time
-            TASK_EXECUTION_TIME.labels(task_name=task_name, queue=getattr(func, "queue", "default")).observe(
-                execution_time
-            )
-
-            logger.info(f"Successfully completed task: {task_name} in {execution_time:.2f} seconds")
-            return result
-        except Exception as e:
-            TASK_COUNT.labels(task_name=task_name, status="failed").inc()
-            logger.error(f"Error in {task_name}: {str(e)}", exc_info=True)
-            raise
+        return func(*args, **kwargs)
 
     return wrapper
 
@@ -176,7 +149,6 @@ def stock_trend_reset_us():
     if not is_business_day("US"):
         logger.info("US market is not a business day. stock_trend_reset_us process skipped.")
         return
-    notifier.notify_info("stock_trend_reset_us process started")
     notifier.notify_info("stock_trend_reset_us process started")
     try:
         run_stock_trend_reset_batch(ctry=TrendingCountry.US)
@@ -715,6 +687,7 @@ def collect_system_metrics_task():
 
 # Worker 시작점
 if __name__ == "__main__":
+    # 메트릭 서버 시작
     start_metrics_server(8000)
     logger.info("Started Prometheus metrics server on port 8000")
 
