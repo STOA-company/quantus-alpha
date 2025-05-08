@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from app.database.crud import database_service
 from app.models.models_chat import ChatConversation, ChatMessage
-from app.modules.chat.models import Conversation, Message
+from app.modules.chat.models import Conversation, Feedback, Message
 
 
 class ConversationRepository:
@@ -242,6 +242,67 @@ class MessageRepository:
     def delete(self, message_id: int) -> bool:
         result = database_service._delete("chat_message", id=message_id)
         return result.rowcount > 0
+
+    def create_feedback(self, message_id: int, user_id: int, is_liked: bool, feedback: Optional[str]) -> Feedback:
+        if feedback is None:
+            feedback = ""
+
+        database_service._insert(
+            "chat_feedback",
+            {"response_id": message_id, "user_id": user_id, "is_liked": is_liked, "feedback": feedback},
+        )
+
+        result = database_service._select("chat_feedback", response_id=message_id)
+        if not result:
+            return None
+
+        created_feedback = Feedback(
+            response_id=result[0].response_id,
+            user_id=result[0].user_id,
+            is_liked=result[0].is_liked,
+            feedback=result[0].feedback,
+        )
+        return created_feedback
+
+    def update_feedback(self, message_id: int, is_liked: bool, feedback: Optional[str]) -> Feedback:
+        update_set = {}
+
+        update_set["is_liked"] = is_liked
+
+        if feedback is not None:
+            update_set["feedback"] = feedback
+
+        if not update_set:
+            raise ValueError("업데이트할 내용이 없습니다.")
+
+        database_service._update("chat_feedback", sets=update_set, response_id=message_id)
+
+        result = database_service._select("chat_feedback", response_id=message_id)
+        if not result:
+            return None
+
+        updated_feedback = Feedback(
+            response_id=result[0].response_id,
+            user_id=result[0].user_id,
+            is_liked=result[0].is_liked,
+            feedback=result[0].feedback,
+        )
+
+        return updated_feedback
+
+    def get_feedback(self, message_id: int) -> Optional[Feedback]:
+        result = database_service._select("chat_feedback", response_id=message_id)
+        if not result:
+            return None
+
+        feedback = Feedback(
+            user_id=result[0].user_id,
+            response_id=result[0].response_id,
+            is_liked=result[0].is_liked,
+            feedback=result[0].feedback,
+        )
+
+        return feedback
 
     def _to_domain(self, db_message: ChatMessage) -> Message:
         return Message(

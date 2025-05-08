@@ -22,6 +22,7 @@ from app.core.config import settings
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.modules.common.enum import TrendingCountry
 from app.modules.screener.utils import screener_utils
+from app.monitoring.batch_metrics import collect_system_metrics, monitor_task_execution, start_metrics_server
 from app.utils.date_utils import (
     check_market_status,
     get_session_checker,
@@ -40,25 +41,19 @@ logger = logging.getLogger(__name__)
 
 
 def log_task_execution(func):
-    """태스크 실행 로깅 데코레이터"""
+    """태스크 실행 로깅 및 메트릭 수집 데코레이터"""
 
+    @monitor_task_execution
     @wraps(func)
     def wrapper(*args, **kwargs):
-        task_name = func.__name__
-        try:
-            logger.info(f"Starting task: {task_name}")
-            result = func(*args, **kwargs)
-            logger.info(f"Successfully completed task: {task_name}")
-            return result
-        except Exception as e:
-            logger.error(f"Error in {task_name}: {str(e)}", exc_info=True)
-            raise
+        return func(*args, **kwargs)
 
     return wrapper
 
 
 # US Stock Indices task
 @CELERY_APP.task(name="us_stock_indices_batch", ignore_result=True)
+@log_task_execution
 def us_stock_indices_batch():
     """미국 주가지수 데이터 업데이트"""
     notifier.notify_info("US_stock_indices_batch process started")
@@ -78,6 +73,7 @@ def us_stock_indices_batch():
 
 # KR Stock Indices task
 @CELERY_APP.task(name="kr_stock_indices_batch", ignore_result=True)
+@log_task_execution
 def kr_stock_indices_batch():
     """한국 주가지수 데이터 업데이트"""
 
@@ -154,7 +150,6 @@ def stock_trend_reset_us():
         logger.info("US market is not a business day. stock_trend_reset_us process skipped.")
         return
     notifier.notify_info("stock_trend_reset_us process started")
-    notifier.notify_info("stock_trend_reset_us process started")
     try:
         run_stock_trend_reset_batch(ctry=TrendingCountry.US)
         notifier.notify_success("stock_trend_reset_us process completed")
@@ -202,6 +197,7 @@ def stock_trend_tickers_task():
 
 
 @CELERY_APP.task(name="hello_task", ignore_result=True)
+@log_task_execution
 def hello_task():
     """Test task that prints Hello World"""
     current_time = now_kr().strftime("%Y-%m-%d %H:%M:%S")
@@ -211,6 +207,7 @@ def hello_task():
 
 
 @CELERY_APP.task(name="kr_disclosure_batch", ignore_result=True)
+@log_task_execution
 def kr_disclosure_batch():
     """한국 공시 배치"""
     notifier.notify_info("KR_disclosure_batch process started")
@@ -223,6 +220,7 @@ def kr_disclosure_batch():
 
 
 @CELERY_APP.task(name="us_disclosure_batch", ignore_result=True)
+@log_task_execution
 def us_disclosure_batch():
     """미국 공시 배치"""
     notifier.notify_info("US_disclosure_batch process started")
@@ -235,6 +233,7 @@ def us_disclosure_batch():
 
 
 @CELERY_APP.task(name="kr_news_renewal", ignore_result=True)
+@log_task_execution
 def kr_news_renewal():
     """한국 뉴스 업데이트"""
     notifier.notify_info("KR_news_renewal process started")
@@ -247,6 +246,7 @@ def kr_news_renewal():
 
 
 @CELERY_APP.task(name="us_news_renewal", ignore_result=True)
+@log_task_execution
 def us_news_renewal():
     """미국 뉴스 업데이트"""
     notifier.notify_info("US_news_renewal process started")
@@ -259,12 +259,14 @@ def us_news_renewal():
 
 
 @CELERY_APP.task(name="memory-status", ignore_result=True)
+@log_task_execution
 def memory_status():
     """메모리 상태 확인"""
     notifier.notify_memory_status()
 
 
 @CELERY_APP.task(name="kr_stock_minute_batch", ignore_result=True)
+@log_task_execution
 def kr_stock_minute_batch():
     """한국 주식 분봉 데이터 업데이트"""
     notifier.notify_info("KR_stock_minute_batch process started")
@@ -280,6 +282,7 @@ def kr_stock_minute_batch():
 
 
 @CELERY_APP.task(name="kr_stock_minute_batch_last", ignore_result=True)
+@log_task_execution
 def kr_stock_minute_batch_last():
     """한국 주식 분봉 데이터 업데이트 (장 마감 전)"""
     notifier.notify_info("KR_stock_minute_batch_last process started")
@@ -292,6 +295,7 @@ def kr_stock_minute_batch_last():
 
 
 @CELERY_APP.task(name="kr_stock_indices_collect", ignore_result=True)
+@log_task_execution
 def kr_stock_indices_collect():
     """한국 주가지수 데이터 수집"""
     now_kr_datetime = now_kr()
@@ -314,6 +318,7 @@ def kr_stock_indices_collect():
 
 
 @CELERY_APP.task(name="us_stock_indices_collect", ignore_result=True)
+@log_task_execution
 def us_stock_indices_collect():
     """미국 주가지수 데이터 수집"""
     if is_us_market_open_or_recently_closed(extra_hours=1):
@@ -331,6 +336,7 @@ def us_stock_indices_collect():
 
 
 @CELERY_APP.task(name="check_warned_stock_kr", ignore_result=True)
+@log_task_execution
 def check_warned_stock_kr():
     """한국 주식 경고 처리"""
     try:
@@ -343,6 +349,7 @@ def check_warned_stock_kr():
 
 
 @CELERY_APP.task(name="check_warned_stock_us", ignore_result=True)
+@log_task_execution
 def check_warned_stock_us():
     """미국 주식 경고 처리"""
     try:
@@ -355,6 +362,7 @@ def check_warned_stock_us():
 
 
 @CELERY_APP.task(name="reset_daily_leaderboard", ignore_result=True)
+@log_task_execution
 def reset_daily_leaderboard():
     """일일 리더보드 초기화"""
     notifier.notify_info("reset_daily_leaderboard process started")
@@ -369,6 +377,7 @@ def reset_daily_leaderboard():
 
 
 @CELERY_APP.task(name="update_us_top_gainers", ignore_result=True)
+@log_task_execution
 def update_us_top_gainers():
     """미국 상승 종목 업데이트"""
     notifier.notify_info("update_us_top_gainers process started")
@@ -381,6 +390,7 @@ def update_us_top_gainers():
 
 
 @CELERY_APP.task(name="update_us_top_losers", ignore_result=True)
+@log_task_execution
 def update_us_top_losers():
     """미국 하락 종목 업데이트"""
     notifier.notify_info("update_us_top_losers process started")
@@ -393,6 +403,7 @@ def update_us_top_losers():
 
 
 @CELERY_APP.task(name="update_kr_top_gainers", ignore_result=True)
+@log_task_execution
 def update_kr_top_gainers():
     """한국 상승 종목 업데이트"""
     notifier.notify_info("update_kr_top_gainers process started")
@@ -405,6 +416,7 @@ def update_kr_top_gainers():
 
 
 @CELERY_APP.task(name="update_kr_top_losers", ignore_result=True)
+@log_task_execution
 def update_kr_top_losers():
     """한국 하락 종목 업데이트"""
     notifier.notify_info("update_kr_top_losers process started")
@@ -417,6 +429,7 @@ def update_kr_top_losers():
 
 
 @CELERY_APP.task(name="update_us_stock_parquet", ignore_result=True)
+@log_task_execution
 def update_us_stock_parquet():
     """미국 주식 파일 업데이트"""
     notifier_1d.notify_info("update_us_stock_parquet process started")
@@ -429,6 +442,7 @@ def update_us_stock_parquet():
 
 
 @CELERY_APP.task(name="update_kr_stock_parquet", ignore_result=True)
+@log_task_execution
 def update_kr_stock_parquet():
     """한국 주식 파일 업데이트"""
     notifier_1d.notify_info("update_kr_stock_parquet process started")
@@ -441,6 +455,7 @@ def update_kr_stock_parquet():
 
 
 @CELERY_APP.task(name="update_kr_etf_parquet", ignore_result=True)
+@log_task_execution
 def update_kr_etf_parquet():
     """한국 ETF 팩터 파일 업데이트"""
     notifier_1d.notify_info("update_kr_etf_parquet process started")
@@ -457,6 +472,7 @@ def update_kr_etf_parquet():
 
 
 @CELERY_APP.task(name="update_us_etf_parquet", ignore_result=True)
+@log_task_execution
 def update_us_etf_parquet():
     """미국 ETF 팩터 파일 업데이트"""
     notifier_1d.notify_info("update_us_etf_parquet process started")
@@ -473,6 +489,7 @@ def update_us_etf_parquet():
 
 
 @CELERY_APP.task(name="update_us_stock_dividend_parquet", ignore_result=True)
+@log_task_execution
 def update_us_stock_dividend_parquet():
     """미국 주식 배당금 파일 업데이트"""
     notifier_1d.notify_info("update_us_stock_dividend_parquet process started")
@@ -492,6 +509,7 @@ def update_us_stock_dividend_parquet():
 
 
 @CELERY_APP.task(name="update_kr_stock_dividend_parquet", ignore_result=True)
+@log_task_execution
 def update_kr_stock_dividend_parquet():
     """한국 주식 배당금 파일 업데이트"""
     notifier_1d.notify_info("update_kr_stock_dividend_parquet process started")
@@ -511,6 +529,7 @@ def update_kr_stock_dividend_parquet():
 
 
 @CELERY_APP.task(name="update_us_dividend_rds", ignore_result=True)
+@log_task_execution
 def update_us_dividend_rds():
     """미국 주식/ETF 배당금 데이터베이스 업데이트"""
     notifier_1d.notify_info("update_us_dividend_rds process started")
@@ -534,6 +553,7 @@ def update_us_dividend_rds():
 
 
 @CELERY_APP.task(name="update_kr_dividend_rds", ignore_result=True)
+@log_task_execution
 def update_kr_dividend_rds():
     """한국 주식/ETF 배당금 데이터베이스 업데이트"""
     notifier_1d.notify_info("update_kr_dividend_rds process started")
@@ -557,6 +577,7 @@ def update_kr_dividend_rds():
 
 
 @CELERY_APP.task(name="update_us_etf_price", ignore_result=True)
+@log_task_execution
 def update_us_etf_price():
     """미국 ETF 시세 업데이트"""
     notifier_1d.notify_info("update_us_etf_price process started")
@@ -569,6 +590,7 @@ def update_us_etf_price():
 
 
 @CELERY_APP.task(name="update_kr_etf_price", ignore_result=True)
+@log_task_execution
 def update_kr_etf_price():
     """한국 ETF 시세 업데이트"""
     notifier_1d.notify_info("update_kr_etf_price process started")
@@ -581,6 +603,7 @@ def update_kr_etf_price():
 
 
 @CELERY_APP.task(name="kr_update_etf_status", ignore_result=True)
+@log_task_execution
 def kr_update_etf_status():
     """한국 ETF 상태 업데이트"""
     notifier_1d.notify_info("kr_update_etf_status process started")
@@ -593,6 +616,7 @@ def kr_update_etf_status():
 
 
 @CELERY_APP.task(name="us_update_etf_status", ignore_result=True)
+@log_task_execution
 def us_update_etf_status():
     """미국 ETF 상태 업데이트"""
     notifier_1d.notify_info("us_update_etf_status process started")
@@ -605,6 +629,7 @@ def us_update_etf_status():
 
 
 @CELERY_APP.task(name="kr_update_etf_holdings", ignore_result=True)
+@log_task_execution
 def kr_update_etf_holdings():
     """한국 ETF 구성종목 업데이트"""
     if is_business_day("KR"):
@@ -620,6 +645,7 @@ def kr_update_etf_holdings():
 
 
 @CELERY_APP.task(name="us_update_etf_holdings", ignore_result=True)
+@log_task_execution
 def us_update_etf_holdings():
     """미국 ETF 구성종목 업데이트"""
     if is_business_day("US"):
@@ -635,6 +661,7 @@ def us_update_etf_holdings():
 
 
 @CELERY_APP.task(name="update_krx_etf_data")
+@log_task_execution
 def update_krx_etf_data():
     """KRX의 ETF 통합 정보를 업데이트하는 태스크"""
     notifier_1d.notify_info("update_krx_etf_data process started")
@@ -652,8 +679,18 @@ def update_krx_etf_data():
         return {"status": "error", "message": error_msg}
 
 
+@CELERY_APP.task(name="collect_system_metrics", ignore_result=True)
+@log_task_execution
+def collect_system_metrics_task():
+    collect_system_metrics()
+
+
 # Worker 시작점
 if __name__ == "__main__":
+    # 메트릭 서버 시작
+    start_metrics_server(8000)
+    logger.info("Started Prometheus metrics server on port 8000")
+
     CONCURRENCY = getattr(settings, "CELERY_CONCURRENCY", 7)
     CELERY_APP.worker_main(
         argv=[

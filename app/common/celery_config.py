@@ -201,4 +201,8 @@ CELERY_APP.conf.beat_schedule = {
         "task": "update_krx_etf_data",
         "schedule": crontab(hour="17", minute="00"),
     },
+    "collect_system_metrics": {
+        "task": "collect_system_metrics",
+        "schedule": crontab(minute="*/15"),
+    },
 }

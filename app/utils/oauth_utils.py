@@ -185,3 +185,8 @@ def get_current_user(
             detail="Invalid token format",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def is_staff(user: AlphafinderUser):
+    email = user.email
+    return email.split("@")[1] in ["stoa-investment.com"]

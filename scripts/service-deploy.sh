@@ -104,7 +104,7 @@ server {
     listen 80;
 
     # 타임아웃 설정 증가
-    proxy_connect_timeout 300s;
+    proxy_connect_timeout 1800s;
     proxy_read_timeout 300s;
     proxy_send_timeout 300s;
 
@@ -137,7 +137,7 @@ server {
         chunked_transfer_encoding off;
         proxy_buffering off;
         proxy_cache off;
-        proxy_read_timeout 600s;  # 스트리밍용 더 긴 타임아웃
+        proxy_read_timeout 1800s;  # 스트리밍용 더 긴 타임아웃
     }
 
     location /health-check {
@@ -152,6 +152,18 @@ EOF
         echo "Failed to reload NGINX. Attempting to restart..."
         docker-compose restart nginx
     }
+}
+
+update_prometheus_config() {
+  local active_service=$1
+  local inactive_service=$2
+
+  echo "Updating Prometheus configuration for active service: $active_service"
+
+  # Prometheus 재로드
+  docker exec prometheus kill -HUP 1
+
+  echo "Prometheus configuration updated."
 }
 
 echo "Preparing deployment for $target_service..."
@@ -196,6 +208,7 @@ if [ $attempt -gt $max_attempts ]; then
 fi
 
 update_nginx_upstream $target_service
+update_prometheus_config $target_service $idle_service
 
 echo "Traffic switched to $target_service. Waiting 10 seconds to ensure stability..."
 sleep 10
