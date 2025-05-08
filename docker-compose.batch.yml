@@ -30,3 +30,9 @@ services:
         image: redis:6.0.6
         expose:
             - 6379
+
+    pushgateway:
+        image: prom/pushgateway:latest
+        ports:
+        - "9091:9091"
+        restart: unless-stopped

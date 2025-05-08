@@ -22,7 +22,7 @@ from app.core.config import settings
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.modules.common.enum import TrendingCountry
 from app.modules.screener.utils import screener_utils
-from app.monitoring.batch_metrics import collect_system_metrics, monitor_task_execution, start_metrics_server
+from app.monitoring.batch_metrics import collect_system_metrics, monitor_task_execution
 from app.utils.date_utils import (
     check_market_status,
     get_session_checker,
@@ -688,7 +688,6 @@ def collect_system_metrics_task():
 # Worker 시작점
 if __name__ == "__main__":
     # 메트릭 서버 시작
-    start_metrics_server(8000)
     logger.info("Started Prometheus metrics server on port 8000")
 
     CONCURRENCY = getattr(settings, "CELERY_CONCURRENCY", 7)
