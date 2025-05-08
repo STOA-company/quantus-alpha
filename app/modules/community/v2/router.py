@@ -5,16 +5,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.logger.logger import get_logger
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
-from app.modules.common.schemas import BaseResponse, InfiniteScrollResponse
+from app.modules.common.schemas import BaseResponse
 from app.modules.community.v2.enum import PostOrderBy
 from app.modules.community.v2.schemas import (
     CategoryResponse,
     CommentCreate,
     CommentListResponse,
     CommentUpdate,
-    FollowListResponse,
     FollowRequest,
     FollowResponse,
+    InfiniteScrollResponseWithTotalCount,
     LikeRequest,
     LikeResponse,
     PostCreate,
@@ -687,7 +687,9 @@ async def update_follow(
 
 
 # 팔로워 목록 조회
-@router.get("/follow/{user_id}/followers", response_model=FollowListResponse, summary="팔로워 목록 조회")
+@router.get(
+    "/follow/{user_id}/followers", response_model=InfiniteScrollResponseWithTotalCount, summary="팔로워 목록 조회"
+)
 def get_followers(
     user_id: int,
     offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
@@ -697,7 +699,7 @@ def get_followers(
 ):
     # followers = community_service.get_followers(user_id=user_id)
     result = followers
-    return FollowListResponse(
+    return InfiniteScrollResponseWithTotalCount(
         status_code=200,
         message="팔로워 목록을 조회하였습니다.",
         has_more=False,
@@ -707,7 +709,9 @@ def get_followers(
 
 
 # 팔로잉 목록 조회
-@router.get("/follow/{user_id}/following", response_model=FollowListResponse, summary="팔로잉 목록 조회")
+@router.get(
+    "/follow/{user_id}/following", response_model=InfiniteScrollResponseWithTotalCount, summary="팔로잉 목록 조회"
+)
 def get_following(
     user_id: int,
     offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
@@ -717,7 +721,7 @@ def get_following(
 ):
     # following = community_service.get_following(user_id=user_id)
     result = following
-    return FollowListResponse(
+    return InfiniteScrollResponseWithTotalCount(
         status_code=200,
         message="팔로잉 목록을 조회하였습니다.",
         has_more=False,
@@ -731,7 +735,7 @@ def get_following(
 ########################
 
 
-@router.get("/users/comments", response_model=InfiniteScrollResponse, summary="유저가 작성한 댓글 조회")
+@router.get("/users/comments", response_model=InfiniteScrollResponseWithTotalCount, summary="유저가 작성한 댓글 조회")
 def get_user_comments(
     user_id: int = None,
     offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
@@ -744,7 +748,7 @@ def get_user_comments(
     comments, has_more, total_count = community_service.get_user_comments_posts(
         current_user=current_user, user_id=user_id, offset=offset, limit=limit
     )
-    return InfiniteScrollResponse(
+    return InfiniteScrollResponseWithTotalCount(
         status_code=200,
         message="유저가 작성한 댓글을 조회하였습니다.",
         has_more=has_more,
@@ -753,7 +757,7 @@ def get_user_comments(
     )
 
 
-@router.get("/users/posts", response_model=InfiniteScrollResponse, summary="유저가 작성한 게시글 조회")
+@router.get("/users/posts", response_model=InfiniteScrollResponseWithTotalCount, summary="유저가 작성한 게시글 조회")
 def get_user_posts(
     user_id: int = None,
     offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
@@ -766,7 +770,7 @@ def get_user_posts(
     posts, has_more, total_count = community_service.get_user_comments_posts(
         current_user=current_user, user_id=user_id, offset=offset, limit=limit, is_comment=False
     )
-    return InfiniteScrollResponse(
+    return InfiniteScrollResponseWithTotalCount(
         status_code=200,
         message="유저가 작성한 게시글을 조회하였습니다.",
         has_more=has_more,
