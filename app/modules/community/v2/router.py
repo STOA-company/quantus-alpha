@@ -5,13 +5,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.logger.logger import get_logger
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
-from app.modules.common.schemas import BaseResponse
+from app.modules.common.schemas import BaseResponse, InfiniteScrollResponse
 from app.modules.community.v2.enum import PostOrderBy
 from app.modules.community.v2.schemas import (
     CategoryResponse,
     CommentCreate,
     CommentListResponse,
     CommentUpdate,
+    FollowRequest,
+    FollowResponse,
     LikeRequest,
     LikeResponse,
     PostCreate,
@@ -24,8 +26,10 @@ from app.modules.community.v2.schemas import (
     ResponsePost,
     TrendingPostResponse,
 )
-from app.modules.community.v2.services import CommunityService, get_community_service
+from app.modules.community.v2.services import CommunityService, get_community_service, get_follow_service
 from app.utils.quantus_auth_utils import get_current_user
+
+from .mock_data import followers, following
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -632,3 +636,74 @@ async def report(
 ):
     report_response = await community_service.report_post(report_request, current_user)
     return BaseResponse(status_code=200, message="신고 기능을 완료하였습니다.", data=report_response)
+
+
+########################
+# 마이 프로필
+########################
+
+# # 자신이 쓴 게시글 조회
+# @router.get("/posts/mine", response_model=BaseResponse[List[PostResponse]], summary="자신이 쓴 글 조회")
+# async def get_my_posts(
+#     community_service: CommunityService = Depends(get_community_service),
+#     current_user: AlphafinderUser = Depends(get_current_user),
+# ):
+#     posts = await community_service.get_my_posts(current_user)
+#     return BaseResponse(status_code=200, message="자신이 쓴 글을 조회하였습니다.", data=posts)
+
+
+# # 자신이 쓴 댓글 조회
+# @router.get("/comments/mine", response_model=BaseResponse[List[CommentResponse]], summary="자신이 쓴 댓글 조회")
+# async def get_my_comments(
+#     community_service: CommunityService = Depends(get_community_service),
+#     current_user: AlphafinderUser = Depends(get_current_user),
+# ):
+#     comments = await community_service.get_my_comments(current_user)
+
+
+########################
+# 팔로우 기능
+########################
+# 팔로우, 언팔로우
+@router.put(
+    "/follow/{user_id}",
+    response_model=BaseResponse[FollowResponse],
+    summary="팔로우, 언팔로우",
+    description="user_id에 해당하는 유저를 팔로우, 언팔로우 합니다.",
+)
+async def update_follow(
+    user_id: int,
+    follow_request: FollowRequest,
+    community_service: CommunityService = Depends(get_follow_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    is_followed = await community_service.update_follow(
+        current_user_id=current_user["uid"], user_id=user_id, is_followed=follow_request.is_followed
+    )
+    return BaseResponse(
+        status_code=200, message="팔로우, 언팔로우를 완료하였습니다.", data=FollowResponse(is_followed=is_followed)
+    )
+
+
+# 팔로워 목록 조회
+@router.get("/follow/{user_id}/followers", response_model=InfiniteScrollResponse, summary="팔로워 목록 조회")
+def get_followers(
+    user_id: int,
+    community_service: CommunityService = Depends(get_follow_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    # followers = community_service.get_followers(user_id=user_id)
+    result = followers
+    return InfiniteScrollResponse(status_code=200, message="팔로워 목록을 조회하였습니다.", has_more=False, data=result)
+
+
+# 팔로잉 목록 조회
+@router.get("/follow/{user_id}/following", response_model=InfiniteScrollResponse, summary="팔로잉 목록 조회")
+def get_following(
+    user_id: int,
+    community_service: CommunityService = Depends(get_follow_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    # following = community_service.get_following(user_id=user_id)
+    result = following
+    return InfiniteScrollResponse(status_code=200, message="팔로잉 목록을 조회하였습니다.", has_more=False, data=result)

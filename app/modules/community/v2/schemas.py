@@ -36,6 +36,10 @@ class UserInfo(BaseModel):
     is_official: bool
 
 
+class UserInfoWithFollow(UserInfo):
+    is_followed: bool
+
+
 class StockInfo(BaseModel):
     ticker: str
     name: Optional[str] = None
@@ -270,3 +274,25 @@ class ReportItemResponse(BaseModel):
 class ReportRequest(BaseModel):
     post_id: int
     report_item_ids: List[int]
+
+
+########################
+# 팔로우 기능
+########################
+
+###
+# Request
+###
+
+
+class FollowRequest(BaseModel):
+    is_followed: bool
+
+
+###
+# Response
+###
+
+
+class FollowResponse(BaseModel):
+    is_followed: bool

@@ -15,6 +15,7 @@ from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from Aws.common.configs import s3_client
 
+from .mock_data import followers, following
 from .schemas import (
     CategoryResponse,
     CommentCreate,
@@ -29,6 +30,7 @@ from .schemas import (
     TaggingPostInfo,
     TrendingPostResponse,
     UserInfo,
+    UserInfoWithFollow,
 )
 
 logger = setup_logger(__name__, level="DEBUG")
@@ -1596,5 +1598,63 @@ class CommunityService:
         return bool(is_reported)
 
 
+class FollowService(CommunityService):
+    def __init__(self):
+        super().__init__()
+        self.db = database_service
+        self.db_data = database_service
+        self.database_user = database_user
+
+    async def update_follow(self, current_user_id: int, user_id: int, is_followed: bool) -> bool:
+        """팔로우 여부 업데이트"""
+
+        if not current_user_id:
+            raise PostException(message="로그인이 필요합니다", status_code=401)
+
+        # 1. 게시글/댓글 확인
+        users = self.database_user._select(
+            table="quantus_user", columns=["id"], id__in=[user_id, current_user_id], limit=2
+        )
+        if len(users) != 2:
+            raise PostException(message="유저를 찾을 수 없습니다", status_code=404)
+
+        # # 2. 현재 좋아요 상태 확인
+        # like_exists = bool(self.db._select(table="", post_id=post_id, user_id=user_id))
+
+        # 3. 상태가 같으면 아무 것도 하지 않음
+        # if like_exists == is_liked:
+        #     return is_liked, current_like_count
+
+        # 4. 상태가 다르면 업데이트
+
+        return is_followed
+
+    def get_followers(self, user_id: int) -> List[UserInfoWithFollow]:
+        """팔로워 조회"""
+        # Convert S3 keys to presigned URLs
+        for follower in followers:
+            if follower["profile_image"]:
+                presigned_url = self.generate_get_presigned_url(follower["profile_image"])
+                follower["profile_image"] = presigned_url["get_url"]
+
+        return [UserInfoWithFollow.model_validate(follower) for follower in followers]
+
+    def get_following(self, user_id: int) -> List[UserInfo]:
+        """팔로잉 조회"""
+        # following = self.db._select(table="quantus_following", columns=["following_id"], user_id=user_id)
+        # return [FollowerResponse(id=following.id, nickname=following.nickname, profile_image=following.profile_image, image_format=following.image_format, is_official=following.is_official) for following in following]
+
+        # Convert S3 keys to presigned URLs
+        for following_user in following:
+            if following_user["profile_image"]:
+                presigned_url = self.generate_get_presigned_url(following_user["profile_image"])
+                following_user["profile_image"] = presigned_url["get_url"]
+        return following
+
+
 def get_community_service() -> CommunityService:
     return CommunityService()
+
+
+def get_follow_service() -> FollowService:
+    return FollowService()
