@@ -12,6 +12,7 @@ from app.modules.community.v2.schemas import (
     CommentCreate,
     CommentListResponse,
     CommentUpdate,
+    FollowListResponse,
     FollowRequest,
     FollowResponse,
     LikeRequest,
@@ -686,24 +687,89 @@ async def update_follow(
 
 
 # 팔로워 목록 조회
-@router.get("/follow/{user_id}/followers", response_model=InfiniteScrollResponse, summary="팔로워 목록 조회")
+@router.get("/follow/{user_id}/followers", response_model=FollowListResponse, summary="팔로워 목록 조회")
 def get_followers(
     user_id: int,
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
     community_service: CommunityService = Depends(get_follow_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
     # followers = community_service.get_followers(user_id=user_id)
     result = followers
-    return InfiniteScrollResponse(status_code=200, message="팔로워 목록을 조회하였습니다.", has_more=False, data=result)
+    return FollowListResponse(
+        status_code=200,
+        message="팔로워 목록을 조회하였습니다.",
+        has_more=False,
+        total_count=result["followers_count"],
+        data=result["followers"],
+    )
 
 
 # 팔로잉 목록 조회
-@router.get("/follow/{user_id}/following", response_model=InfiniteScrollResponse, summary="팔로잉 목록 조회")
+@router.get("/follow/{user_id}/following", response_model=FollowListResponse, summary="팔로잉 목록 조회")
 def get_following(
     user_id: int,
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
     community_service: CommunityService = Depends(get_follow_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
     # following = community_service.get_following(user_id=user_id)
     result = following
-    return InfiniteScrollResponse(status_code=200, message="팔로잉 목록을 조회하였습니다.", has_more=False, data=result)
+    return FollowListResponse(
+        status_code=200,
+        message="팔로잉 목록을 조회하였습니다.",
+        has_more=False,
+        total_count=result["following_count"],
+        data=result["following"],
+    )
+
+
+########################
+# 유저가 작성한 댓글 조회
+########################
+
+
+@router.get("/users/comments", response_model=InfiniteScrollResponse, summary="유저가 작성한 댓글 조회")
+def get_user_comments(
+    user_id: int = None,
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
+    community_service: CommunityService = Depends(get_community_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    if user_id is None:
+        user_id = current_user["uid"]
+    comments, has_more, total_count = community_service.get_user_comments_posts(
+        current_user=current_user, user_id=user_id, offset=offset, limit=limit
+    )
+    return InfiniteScrollResponse(
+        status_code=200,
+        message="유저가 작성한 댓글을 조회하였습니다.",
+        has_more=has_more,
+        data=comments,
+        total_count=total_count,
+    )
+
+
+@router.get("/users/posts", response_model=InfiniteScrollResponse, summary="유저가 작성한 게시글 조회")
+def get_user_posts(
+    user_id: int = None,
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
+    community_service: CommunityService = Depends(get_community_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    if user_id is None:
+        user_id = current_user["uid"]
+    posts, has_more, total_count = community_service.get_user_comments_posts(
+        current_user=current_user, user_id=user_id, offset=offset, limit=limit, is_comment=False
+    )
+    return InfiniteScrollResponse(
+        status_code=200,
+        message="유저가 작성한 게시글을 조회하였습니다.",
+        has_more=has_more,
+        data=posts,
+        total_count=total_count,
+    )
