@@ -1,17 +1,14 @@
-# batch_metric.py
 import logging
 import time
 from functools import wraps
 
 import psutil
-from prometheus_client import Counter, Gauge, Histogram, start_http_server
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, push_to_gateway
 
 logger = logging.getLogger(__name__)
 
 SYSTEM_MEMORY_USAGE = Gauge("batch_system_memory_usage_bytes", "Memory usage in bytes")
-
 SYSTEM_MEMORY_PERCENT = Gauge("batch_system_memory_usage_percent", "Memory usage percentage")
-
 SYSTEM_CPU_PERCENT = Gauge("batch_system_cpu_usage_percent", "CPU usage percentage")
 
 TASK_EXECUTION_TIME = Histogram(
@@ -28,6 +25,12 @@ TASK_COUNT = Counter(
 )
 
 TASKS_IN_PROGRESS = Gauge("batch_tasks_in_progress", "Number of tasks currently in progress", ["task_name"])
+
+# Push Gateway Config
+PUSHGATEWAY_HOST = "pushgateway"  # Docker 네트워크에서의 서비스 이름
+PUSHGATEWAY_PORT = 9091
+PUSHGATEWAY_ADDRESS = f"{PUSHGATEWAY_HOST}:{PUSHGATEWAY_PORT}"
+PUSHGATEWAY_JOB = "batch_metrics"
 
 
 def monitor_task_execution(func):
@@ -50,10 +53,18 @@ def monitor_task_execution(func):
             TASK_COUNT.labels(task_name=task_name, status="success").inc()
 
             logger.info(f"Successfully completed task: {task_name} in {execution_time:.2f} seconds")
+
+            # 태스크 완료 후 메트릭 푸시
+            push_metrics_to_gateway()
+
             return result
         except Exception as e:
             TASK_COUNT.labels(task_name=task_name, status="failed").inc()
             logger.error(f"Error in {task_name}: {str(e)}", exc_info=True)
+
+            # 오류 발생 시에도 메트릭 푸시
+            push_metrics_to_gateway()
+
             raise
         finally:
             TASKS_IN_PROGRESS.labels(task_name=task_name).dec()
@@ -62,6 +73,7 @@ def monitor_task_execution(func):
 
 
 def collect_system_metrics():
+    """시스템 메트릭을 수집하고 푸시 게이트웨이로 전송"""
     try:
         memory = psutil.virtual_memory()
         SYSTEM_MEMORY_USAGE.set(memory.used)
@@ -70,14 +82,35 @@ def collect_system_metrics():
         cpu_percent = psutil.cpu_percent(interval=1)
         SYSTEM_CPU_PERCENT.set(cpu_percent)
 
-        logger.debug(f"System metrics - Memory: {memory.percent}%, CPU: {cpu_percent}%")
+        logger.debug(f"System metrics collected - Memory: {memory.percent}%, CPU: {cpu_percent}%")
+
+        # 메트릭을 푸시 게이트웨이로 전송
+        push_metrics_to_gateway()
+
     except Exception as e:
-        logger.error(f"Error collecting system metrics: {str(e)}")
+        logger.error(f"Error collecting system metrics: {str(e)}", exc_info=True)
 
 
-def start_metrics_server(port=8000):
+def push_metrics_to_gateway():
+    """현재 모든 메트릭을 푸시 게이트웨이로 전송"""
     try:
-        start_http_server(port)
-        logger.info(f"Started metrics server on port {port}")
+        push_to_gateway(PUSHGATEWAY_ADDRESS, job=PUSHGATEWAY_JOB, registry=REGISTRY)
+        logger.debug(f"Metrics pushed to gateway at {PUSHGATEWAY_ADDRESS}")
+        return True
     except Exception as e:
-        logger.error(f"Failed to start metrics server: {str(e)}")
+        logger.error(f"Failed to push metrics to gateway: {str(e)}")
+        return False
+
+
+def configure_pushgateway(host=None, port=None):
+    """푸시 게이트웨이 설정 변경 (필요한 경우)"""
+    global PUSHGATEWAY_HOST, PUSHGATEWAY_PORT, PUSHGATEWAY_ADDRESS
+
+    if host:
+        PUSHGATEWAY_HOST = host
+
+    if port:
+        PUSHGATEWAY_PORT = port
+
+    PUSHGATEWAY_ADDRESS = f"{PUSHGATEWAY_HOST}:{PUSHGATEWAY_PORT}"
+    logger.info(f"Pushgateway configured at {PUSHGATEWAY_ADDRESS}")

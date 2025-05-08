@@ -1881,8 +1881,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "API 성능 모니터링 대시보드",
-  "uid": "api-performance-monitoring",
+  "title": "Starlette API 모니터링 대시보드",
+  "uid": "starlette-api-monitoring",
   "version": 2,
   "weekStart": ""
 }
