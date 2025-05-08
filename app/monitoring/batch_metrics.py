@@ -1,33 +1,47 @@
-# batch_metric.py
 import logging
+import os
+import tempfile
 import time
 from functools import wraps
 
 import psutil
-from prometheus_client import Counter, Gauge, Histogram, start_http_server
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, multiprocess, start_http_server
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_MEMORY_USAGE = Gauge("batch_system_memory_usage_bytes", "Memory usage in bytes")
+# Multi Proccess Mode
+if not os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
+    temp_dir = tempfile.mkdtemp()
+    os.environ["PROMETHEUS_MULTIPROC_DIR"] = temp_dir
+    logger.info(f"Created multiprocess directory: {temp_dir}")
 
-SYSTEM_MEMORY_PERCENT = Gauge("batch_system_memory_usage_percent", "Memory usage percentage")
+registry = CollectorRegistry()
+multiprocess.MultiProcessCollector(registry)
 
-SYSTEM_CPU_PERCENT = Gauge("batch_system_cpu_usage_percent", "CPU usage percentage")
+SYSTEM_MEMORY_USAGE = Gauge("batch_system_memory_usage_bytes", "Memory usage in bytes", registry=registry)
+
+SYSTEM_MEMORY_PERCENT = Gauge("batch_system_memory_usage_percent", "Memory usage percentage", registry=registry)
+
+SYSTEM_CPU_PERCENT = Gauge("batch_system_cpu_usage_percent", "CPU usage percentage", registry=registry)
 
 TASK_EXECUTION_TIME = Histogram(
     "batch_task_execution_time_seconds",
     "Task execution time in seconds",
     ["task_name"],
     buckets=(0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0),
+    registry=registry,
 )
 
 TASK_COUNT = Counter(
     "batch_tasks_total",
     "Total number of tasks",
     ["task_name", "status"],  # status: started, success, failed
+    registry=registry,
 )
 
-TASKS_IN_PROGRESS = Gauge("batch_tasks_in_progress", "Number of tasks currently in progress", ["task_name"])
+TASKS_IN_PROGRESS = Gauge(
+    "batch_tasks_in_progress", "Number of tasks currently in progress", ["task_name"], registry=registry
+)
 
 
 def monitor_task_execution(func):
@@ -77,7 +91,7 @@ def collect_system_metrics():
 
 def start_metrics_server(port=8000):
     try:
-        start_http_server(port)
-        logger.info(f"Started metrics server on port {port}")
+        start_http_server(port, registry=registry)
+        logger.info(f"Started metrics server on port {port} with multiprocess support")
     except Exception as e:
         logger.error(f"Failed to start metrics server: {str(e)}")
