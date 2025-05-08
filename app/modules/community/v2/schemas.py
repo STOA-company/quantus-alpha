@@ -3,6 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.modules.common.schemas import InfiniteScrollResponse
+
 ### 게시글 스키마 ###
 
 
@@ -296,3 +298,7 @@ class FollowRequest(BaseModel):
 
 class FollowResponse(BaseModel):
     is_followed: bool
+
+
+class FollowListResponse(InfiniteScrollResponse):
+    total_count: int

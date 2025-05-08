@@ -12,6 +12,7 @@ from app.modules.community.v2.schemas import (
     CommentCreate,
     CommentListResponse,
     CommentUpdate,
+    FollowListResponse,
     FollowRequest,
     FollowResponse,
     LikeRequest,
@@ -686,7 +687,7 @@ async def update_follow(
 
 
 # 팔로워 목록 조회
-@router.get("/follow/{user_id}/followers", response_model=InfiniteScrollResponse, summary="팔로워 목록 조회")
+@router.get("/follow/{user_id}/followers", response_model=FollowListResponse, summary="팔로워 목록 조회")
 def get_followers(
     user_id: int,
     offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
@@ -696,11 +697,17 @@ def get_followers(
 ):
     # followers = community_service.get_followers(user_id=user_id)
     result = followers
-    return InfiniteScrollResponse(status_code=200, message="팔로워 목록을 조회하였습니다.", has_more=False, data=result)
+    return FollowListResponse(
+        status_code=200,
+        message="팔로워 목록을 조회하였습니다.",
+        has_more=False,
+        total_count=result["followers_count"],
+        data=result["followers"],
+    )
 
 
 # 팔로잉 목록 조회
-@router.get("/follow/{user_id}/following", response_model=InfiniteScrollResponse, summary="팔로잉 목록 조회")
+@router.get("/follow/{user_id}/following", response_model=FollowListResponse, summary="팔로잉 목록 조회")
 def get_following(
     user_id: int,
     offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
@@ -710,7 +717,13 @@ def get_following(
 ):
     # following = community_service.get_following(user_id=user_id)
     result = following
-    return InfiniteScrollResponse(status_code=200, message="팔로잉 목록을 조회하였습니다.", has_more=False, data=result)
+    return FollowListResponse(
+        status_code=200,
+        message="팔로잉 목록을 조회하였습니다.",
+        has_more=False,
+        total_count=result["following_count"],
+        data=result["following"],
+    )
 
 
 ########################
