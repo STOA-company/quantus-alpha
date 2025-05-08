@@ -1597,6 +1597,253 @@ class CommunityService:
         is_reported = result.scalar()
         return bool(is_reported)
 
+    def get_user_comments_posts(
+        self,
+        current_user: Optional[AlphafinderUser],
+        user_id: int,
+        offset: int = 0,
+        limit: int = 20,
+        is_comment: bool = True,
+        lang: TranslateCountry = TranslateCountry.KO,
+    ) -> Tuple[List[CommentItem], bool]:
+        """댓글 목록 조회"""
+        current_user_id = current_user["uid"] if current_user else None
+        is_my_profile = current_user_id == user_id if current_user_id else False
+
+        # 사용자가 신고한 게시글 id 조회
+        user_reported_post_ids = set()
+        if current_user_id:
+            reported_posts = self.db._select(
+                table="af_post_reports",
+                columns=["post_id"],
+                user_id=current_user_id,
+                distinct=True,
+            )
+            user_reported_post_ids = {row[0] for row in reported_posts}
+
+        # 댓글/게시글의 총 갯수 조회
+        total_count = self.count_total_posts(
+            user_id=user_id,
+            is_comment=is_comment,
+            is_my_profile=is_my_profile,
+            user_reported_post_ids=user_reported_post_ids,
+        )
+
+        # 1. 댓글 조회 (limit + 1개)
+        query = """
+            SELECT
+                p.id, p.content, p.like_count, p.comment_count, p.depth, p.parent_id, p.created_at, p.updated_at,
+                p.user_id, p.image_url, p.tagging_post_id, p.is_reported,
+                CASE WHEN :current_user_id IS NOT NULL THEN
+                    EXISTS(
+                        SELECT 1 FROM post_likes pl
+                        WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
+                    )
+                ELSE false END as is_liked
+            FROM af_posts p
+            WHERE p.user_id = :user_id
+            {depth_condition}
+            {reported_posts_condition}
+            {is_my_profile_condition}
+            ORDER BY p.created_at ASC
+            LIMIT :limit OFFSET :offset
+        """
+
+        params = {"user_id": user_id, "limit": limit + 1, "offset": offset, "current_user_id": current_user_id}
+
+        # 신고된 게시글 제외 조건 추가
+        if user_reported_post_ids:
+            reported_posts_condition = "AND p.id NOT IN :user_reported_post_ids"
+            params["user_reported_post_ids"] = tuple(user_reported_post_ids)
+        else:
+            reported_posts_condition = ""
+
+        if is_comment:
+            depth_condition = "AND p.depth > 0"
+        else:
+            depth_condition = "AND p.depth = 0"
+
+        if is_my_profile:
+            is_my_profile_condition = ""
+        else:
+            is_my_profile_condition = "AND p.is_reported = 0"
+
+        query = query.format(
+            reported_posts_condition=reported_posts_condition,
+            is_my_profile_condition=is_my_profile_condition,
+            depth_condition=depth_condition,
+        )
+
+        result = self.db._execute(text(query), params)
+        comments = result.mappings().all()
+
+        has_more = len(comments) > limit
+        if has_more:
+            comments = comments[:-1]
+
+        if not comments:
+            return [], has_more
+
+        # 2. 종목 정보 조회
+        comment_ids = [comment["id"] for comment in comments]
+        stock_query = """
+            SELECT post_id, GROUP_CONCAT(stock_ticker) as stock_tickers
+            FROM af_post_stock_tags
+            WHERE post_id IN :comment_ids
+            GROUP BY post_id
+        """
+        stock_result = self.db._execute(text(stock_query), {"comment_ids": tuple(comment_ids)})
+        stock_map = {row[0]: row[1].split(",") if row[1] else [] for row in stock_result}
+
+        # 종목 상세 정보 조회
+        all_tickers = set()
+        for tickers in stock_map.values():
+            all_tickers.update(tickers)
+        stock_info_map = self._get_stock_info_map(all_tickers, lang)
+
+        # 3. 사용자 정보 조회
+        user_ids = {comment["user_id"] for comment in comments if comment["user_id"]}
+        user_info_map = self._get_user_info_map(user_ids)
+
+        # 4. 태깅된 게시글 정보 조회
+        tagging_post_ids = {comment["tagging_post_id"] for comment in comments if comment["tagging_post_id"]}
+        tagging_posts = self._get_tagging_posts(tagging_post_ids)
+
+        # 태깅된 게시글의 작성자 정보 조회
+        tagging_user_ids = {post["user_id"] for post in tagging_posts.values() if post["user_id"]}
+        tagging_users = self._get_user_info_map(tagging_user_ids)
+
+        # 5. 공식 계정 여부 일괄 조회
+        all_user_ids = set(user_ids | tagging_user_ids)
+        official_user_ids = self._get_official_users(list(all_user_ids))
+
+        # 6. 최종 응답 구성
+        comment_list = []
+        for comment in comments:
+            # 이미지 URL 처리
+            image_urls = []
+            if comment["image_url"]:
+                try:
+                    image_urls = json.loads(comment["image_url"])
+                    for i, url in enumerate(image_urls):
+                        presigned_url = self.generate_get_presigned_url(url)
+                        image_urls[i] = presigned_url["get_url"]
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse image_url JSON for comment {comment['id']}")
+
+            # 태깅된 게시글의 이미지 URL 처리
+            tagging_image_urls = []
+            if comment["tagging_post_id"] and comment["tagging_post_id"] in tagging_posts:
+                tagging_post = tagging_posts[comment["tagging_post_id"]]
+                if tagging_post["image_url"]:
+                    try:
+                        logger.info(f"tagging_post['image_url']: {tagging_post['image_url']}")
+                        tagging_image_urls = json.loads(tagging_post["image_url"])
+                        for i, url in enumerate(tagging_image_urls):
+                            presigned_url = self.generate_get_presigned_url(url)
+                            logger.info(f"presigned_url: {presigned_url}")
+                            tagging_image_urls[i] = presigned_url["get_url"]
+                        tagging_post["processed_image_urls"] = tagging_image_urls
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to parse image_url JSON for tagging post {comment['tagging_post_id']}")
+
+            if comment["is_reported"]:
+                comment_list.append(
+                    CommentItem(
+                        id=comment["id"],
+                        content="해당 게시글은 신고가 접수되어 비공개 처리되었습니다.",
+                        image_url=image_urls,
+                        like_count=comment["like_count"],
+                        comment_count=comment["comment_count"],
+                        depth=comment["depth"],
+                        parent_id=comment["parent_id"],
+                        created_at=comment["created_at"].astimezone(KST),
+                        is_changed=comment["created_at"] != comment["updated_at"],
+                        is_liked=comment["is_liked"],
+                        is_mine=comment["user_id"] == current_user_id if current_user_id else False,
+                        user_info=user_info_map.get(
+                            comment["user_id"],
+                            UserInfo(
+                                id=0,
+                                nickname=self._get_unknown_user_nickname(lang),
+                                profile_image=None,
+                                image_format=None,
+                                is_official=False,
+                            ),
+                        ),
+                        sub_comments=[],
+                        stock_tickers=[
+                            stock_info_map[ticker]
+                            for ticker in stock_map.get(comment["id"], [])
+                            if ticker in stock_info_map
+                        ],
+                        tagging_post_info=self._create_tagging_post_info(
+                            comment, tagging_posts, tagging_users, lang, official_user_ids, user_reported_post_ids
+                        ),
+                    )
+                )
+            else:
+                comment_list.append(
+                    CommentItem(
+                        id=comment["id"],
+                        content=comment["content"],
+                        image_url=image_urls,
+                        like_count=comment["like_count"],
+                        comment_count=comment["comment_count"],
+                        depth=comment["depth"],
+                        parent_id=comment["parent_id"],
+                        created_at=comment["created_at"].astimezone(KST),
+                        is_changed=comment["created_at"] != comment["updated_at"],
+                        is_liked=comment["is_liked"],
+                        is_mine=is_my_profile,
+                        user_info=user_info_map.get(
+                            comment["user_id"],
+                            UserInfo(
+                                id=0,
+                                nickname=self._get_unknown_user_nickname(lang),
+                                profile_image=None,
+                                image_format=None,
+                                is_official=False,
+                            ),
+                        ),
+                        sub_comments=[],
+                        stock_tickers=[
+                            stock_info_map[ticker]
+                            for ticker in stock_map.get(comment["id"], [])
+                            if ticker in stock_info_map
+                        ],
+                        tagging_post_info=self._create_tagging_post_info(
+                            comment, tagging_posts, tagging_users, lang, official_user_ids, user_reported_post_ids
+                        ),
+                    )
+                )
+
+        return comment_list, has_more, total_count
+
+    def count_total_posts(
+        self, user_id: int, is_comment: bool, is_my_profile: bool, user_reported_post_ids: Set[int]
+    ) -> int:
+        """댓글/게시글의 총 갯수 조회"""
+        # 댓글/게시글의 총 갯수 조회 조건
+        total_count_condition = {
+            "user_id": user_id,
+        }
+        if is_comment:
+            total_count_condition["depth__gte"] = 1
+        else:
+            total_count_condition["depth"] = 0
+
+        if not is_my_profile:
+            total_count_condition["is_reported"] = 0
+
+        if user_reported_post_ids:
+            total_count_condition["id__notin"] = user_reported_post_ids
+
+        return self.db._count(
+            table="af_posts",
+            **total_count_condition,
+        )
+
 
 class FollowService(CommunityService):
     def __init__(self):
