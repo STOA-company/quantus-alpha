@@ -689,6 +689,8 @@ async def update_follow(
 @router.get("/follow/{user_id}/followers", response_model=InfiniteScrollResponse, summary="팔로워 목록 조회")
 def get_followers(
     user_id: int,
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
     community_service: CommunityService = Depends(get_follow_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
@@ -701,6 +703,8 @@ def get_followers(
 @router.get("/follow/{user_id}/following", response_model=InfiniteScrollResponse, summary="팔로잉 목록 조회")
 def get_following(
     user_id: int,
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
     community_service: CommunityService = Depends(get_follow_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
