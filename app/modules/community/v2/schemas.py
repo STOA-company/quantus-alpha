@@ -300,5 +300,5 @@ class FollowResponse(BaseModel):
     is_followed: bool
 
 
-class FollowListResponse(InfiniteScrollResponse):
+class InfiniteScrollResponseWithTotalCount(InfiniteScrollResponse):
     total_count: int
