@@ -682,14 +682,15 @@ def update_krx_etf_data():
 @CELERY_APP.task(name="collect_system_metrics", ignore_result=True)
 @log_task_execution
 def collect_system_metrics_task():
+    notifier.notify_info("collect_system_metrics_task started")
+    logger.info("메트릭 수집 시작")
     collect_system_metrics()
+    notifier.notify_success("collect_system_metrics_task completed")
+    logger.info("메트릭 수집 완료")
 
 
 # Worker 시작점
 if __name__ == "__main__":
-    # 메트릭 서버 시작
-    logger.info("Started Prometheus metrics server on port 8000")
-
     CONCURRENCY = getattr(settings, "CELERY_CONCURRENCY", 7)
     CELERY_APP.worker_main(
         argv=[
