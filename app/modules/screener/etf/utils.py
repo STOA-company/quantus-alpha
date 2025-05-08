@@ -2468,7 +2468,7 @@ class ETFDataMerger:
                 df_merged = df_info if df_merged is None else pd.merge(df_merged, df_info, on="ticker", how="left")
         if krx:
             # 데이터 가져오기
-            df_krx = self.loader.load_krx(base=True, detail=True, price=True)
+            df_krx = self.loader.load_krx(base=True, detail=True, price=False)
             # 데이터 전처리
             df_krx = self.preprocessor.krx_data_preprocess(df_krx)
             # 데이터 합치기
