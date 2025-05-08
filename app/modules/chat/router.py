@@ -5,22 +5,21 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from prometheus_client import Counter, Histogram
 
 from app.modules.chat.infrastructure.constants import LLM_MODEL
 from app.modules.chat.infrastructure.rate import check_rate_limit, decrement_rate_limit, increment_rate_limit
 from app.modules.chat.service import chat_service
-from app.monitoring.metrics import STREAMING_CONNECTIONS, STREAMING_ERRORS, STREAMING_MESSAGES_COUNT
+from app.monitoring.web_metrics import (
+    CHAT_REQUEST_COUNT,
+    STREAMING_CONNECTIONS,
+    STREAMING_ERRORS,
+    STREAMING_MESSAGES_COUNT,
+)
 from app.utils.oauth_utils import get_current_user, is_staff
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# 프로메테우스 메트릭
-CHAT_REQUEST_COUNT = Counter("chat_requests_total", "Total number of chat requests", ["model", "status"])
-
-CHAT_RESPONSE_TIME = Histogram("chat_response_time_seconds", "Chat response time in seconds", ["model"])
 
 
 @router.post("/conversation")

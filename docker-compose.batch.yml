@@ -14,6 +14,8 @@ services:
             - redis
         volumes:
             - .:/app
+        ports:
+            - "8000:8000"
 
     rabbitmq:
         image: rabbitmq:3.11.1-management
@@ -28,3 +30,9 @@ services:
         image: redis:6.0.6
         expose:
             - 6379
+
+    pushgateway:
+        image: prom/pushgateway:latest
+        ports:
+        - "9091:9091"
+        restart: unless-stopped

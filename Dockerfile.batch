@@ -56,9 +56,12 @@ RUN curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /us
 COPY --from=builder /app /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 
-RUN pip install --no-cache-dir gunicorn uvicorn
+RUN pip install --no-cache-dir gunicorn uvicorn psutil prometheus_client
 
 # 환경 변수로 PORT 설정 가능하도록 수정
 ENV PORT=8000
 
-CMD ["sh", "-c", "gunicorn --worker-class uvicorn.workers.UvicornWorker --workers 4 --bind 0.0.0.0:${PORT} app.main:app"]
+# 메트릭 서버 포트 노출
+EXPOSE 8000
+
+CMD ["python", "-m", "app.celery_worker"]
