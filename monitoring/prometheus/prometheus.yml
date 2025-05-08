@@ -36,4 +36,4 @@ scrape_configs:
     scrape_interval: 15s
     honor_labels: true  # 중요: 원본 레이블 유지
     static_configs:
-      - targets: ['pushgateway:9091']
+      - targets: ['43.202.58.152:9091']
