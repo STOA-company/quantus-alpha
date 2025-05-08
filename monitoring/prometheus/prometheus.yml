@@ -32,7 +32,8 @@ scrape_configs:
         regex: 'web-(blue|green)'
         replacement: '$1'
 
-  - job_name: 'batch_server'
+  - job_name: 'pushgateway'
     scrape_interval: 15s
+    honor_labels: true  # 중요: 원본 레이블 유지
     static_configs:
-      - targets: ['43.202.58.152:8000']
+      - targets: ['pushgateway:9091']
