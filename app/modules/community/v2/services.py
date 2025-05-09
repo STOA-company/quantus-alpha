@@ -1858,21 +1858,36 @@ class FollowService(CommunityService):
         if not current_user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
-        # 1. 게시글/댓글 확인
+        # 1. 유저 확인
         users = self.database_user._select(
             table="quantus_user", columns=["id"], id__in=[user_id, current_user_id], limit=2
         )
         if len(users) != 2:
             raise PostException(message="유저를 찾을 수 없습니다", status_code=404)
 
-        # # 2. 현재 좋아요 상태 확인
-        # like_exists = bool(self.db._select(table="", post_id=post_id, user_id=user_id))
+        # 2. 현재 팔로우 상태 확인
+        follow_exists = bool(
+            self.database_user._select(
+                table="quantus_user_follow",
+                columns=["follower_id", "following_id"],
+                follower_id=current_user_id,  # 현재 사용자가 follower
+                following_id=user_id,  # 대상 사용자가 following
+            )
+        )
 
         # 3. 상태가 같으면 아무 것도 하지 않음
-        # if like_exists == is_liked:
-        #     return is_liked, current_like_count
+        if follow_exists == is_followed:
+            return is_followed
 
         # 4. 상태가 다르면 업데이트
+        if is_followed:
+            # 팔로우 추가
+            self.database_user._insert(
+                table="quantus_user_follow", sets={"follower_id": current_user_id, "following_id": user_id}
+            )
+        else:
+            # 팔로우 삭제
+            self.database_user._delete(table="quantus_user_follow", follower_id=current_user_id, following_id=user_id)
 
         return is_followed
 
