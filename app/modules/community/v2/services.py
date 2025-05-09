@@ -264,7 +264,7 @@ class CommunityService:
                         logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
 
                 tagging_user = database_user._select(
-                    table="quantus_user", columns=["id", "nickname"], id=tagging_post[0][3]
+                    table="quantus_user", columns=["id", "nickname", "image_url"], id=tagging_post[0][3]
                 )
                 if tagging_user:
                     tagging_post_info = TaggingPostInfo(
@@ -274,8 +274,10 @@ class CommunityService:
                         user_info=UserInfo(
                             id=tagging_user[0][0],
                             nickname=tagging_user[0][1],
-                            profile_image=None,
-                            image_format=None,
+                            profile_image=self.generate_get_presigned_url(tagging_user[0][2])["get_url"]
+                            if tagging_user[0][2]
+                            else None,
+                            image_format=self._get_image_format(tagging_user[0][2]) if tagging_user[0][2] else None,
                             is_official=self._is_official_user(tagging_user[0][0]),
                         ),
                         image_url=tagging_image_urls,
@@ -316,14 +318,16 @@ class CommunityService:
         # 4. UserInfo 조회 (user DB에서)
         user_info = None
         if post["user_id"]:
-            user_result = database_user._select(table="quantus_user", columns=["id", "nickname"], id=post["user_id"])
+            user_result = database_user._select(
+                table="quantus_user", columns=["id", "nickname", "image_url"], id=post["user_id"]
+            )
             if user_result:
                 user = user_result[0]
                 user_info = UserInfo(
                     id=user.id,
                     nickname=user.nickname,
-                    profile_image=None,
-                    image_format=None,
+                    profile_image=self.generate_get_presigned_url(user.image_url)["get_url"] if user.image_url else None,
+                    image_format=self._get_image_format(user.image_url) if user.image_url else None,
                     is_official=self._is_official_user(user.id),
                 )
 
@@ -541,14 +545,14 @@ class CommunityService:
         tagging_users = {}
         if tagging_user_ids:
             user_results = database_user._select(
-                table="quantus_user", columns=["id", "nickname"], id__in=list(tagging_user_ids)
+                table="quantus_user", columns=["id", "nickname", "image_url"], id__in=list(tagging_user_ids)
             )
             for user in user_results:
                 tagging_users[user.id] = UserInfo(
                     id=user.id,
                     nickname=user.nickname,
-                    profile_image=None,
-                    image_format=None,
+                    profile_image=self.generate_get_presigned_url(user.image_url)["get_url"] if user.image_url else None,
+                    image_format=self._get_image_format(user.image_url) if user.image_url else None,
                     is_official=self._is_official_user(user.id),
                 )
 
@@ -606,8 +610,8 @@ class CommunityService:
                                 user_info=UserInfo(
                                     id=user.id,
                                     nickname=user.nickname,
-                                    profile_image=None,
-                                    image_format=None,
+                                    profile_image=user.profile_image,
+                                    image_format=user.image_format,
                                     is_official=user.is_official,
                                 ),
                                 image_url=tagging_image_urls,
@@ -882,17 +886,16 @@ class CommunityService:
         if not user_ids:
             return {}
 
-        # 공식 계정 여부 일괄 조회
-        official_user_ids = self._get_official_users(list(user_ids))
-
-        user_results = database_user._select(table="quantus_user", columns=["id", "nickname"], id__in=list(user_ids))
+        user_results = database_user._select(
+            table="quantus_user", columns=["id", "nickname", "image_url", "is_official"], id__in=list(user_ids)
+        )
         return {
             user.id: UserInfo(
                 id=user.id,
                 nickname=user.nickname,
-                profile_image=None,
-                image_format=None,
-                is_official=user.id in official_user_ids,
+                profile_image=self.generate_get_presigned_url(user.image_url)["get_url"] if user.image_url else None,
+                image_format=self._get_image_format(user.image_url) if user.image_url else None,
+                is_official=user.is_official,
             )
             for user in user_results
         }
@@ -926,7 +929,6 @@ class CommunityService:
         tagging_posts: Dict[int, Dict],
         tagging_users: Dict[int, UserInfo],
         lang: TranslateCountry,
-        official_user_ids: Set[int],
         user_reported_post_ids: Optional[Set[int]] = None,
     ) -> Optional[TaggingPostInfo]:
         """태깅된 게시글 정보 생성"""
@@ -988,7 +990,7 @@ class CommunityService:
                 nickname=user_info.nickname,
                 profile_image=user_info.profile_image,
                 image_format=user_info.image_format,
-                is_official=user_info.id in official_user_ids,
+                is_official=user_info.is_official,
             ),
             image_url=tagging_post.get("processed_image_urls", []),  # 이미 처리된 presigned URLs 사용
             image_format=None,
@@ -1083,10 +1085,6 @@ class CommunityService:
         tagging_user_ids = {post["user_id"] for post in tagging_posts.values() if post["user_id"]}
         tagging_users = self._get_user_info_map(tagging_user_ids)
 
-        # 5. 공식 계정 여부 일괄 조회
-        all_user_ids = set(user_ids | tagging_user_ids)
-        official_user_ids = self._get_official_users(list(all_user_ids))
-
         # 6. 최종 응답 구성
         comment_list = []
         for comment in comments:
@@ -1145,7 +1143,7 @@ class CommunityService:
                         stock_info_map[ticker] for ticker in stock_map.get(comment["id"], []) if ticker in stock_info_map
                     ],
                     tagging_post_info=self._create_tagging_post_info(
-                        comment, tagging_posts, tagging_users, lang, official_user_ids, user_reported_post_ids
+                        comment, tagging_posts, tagging_users, lang, user_reported_post_ids
                     ),
                 )
             )
@@ -1712,9 +1710,8 @@ class CommunityService:
         tagging_user_ids = {post["user_id"] for post in tagging_posts.values() if post["user_id"]}
         tagging_users = self._get_user_info_map(tagging_user_ids)
 
-        # 5. 공식 계정 여부 일괄 조회
-        all_user_ids = set(user_ids | tagging_user_ids)
-        official_user_ids = self._get_official_users(list(all_user_ids))
+        # # 5. 공식 계정 여부 일괄 조회
+        # all_user_ids = set(user_ids | tagging_user_ids)
 
         # 6. 최종 응답 구성
         comment_list = []
@@ -1777,7 +1774,7 @@ class CommunityService:
                             if ticker in stock_info_map
                         ],
                         tagging_post_info=self._create_tagging_post_info(
-                            comment, tagging_posts, tagging_users, lang, official_user_ids, user_reported_post_ids
+                            comment, tagging_posts, tagging_users, lang, user_reported_post_ids
                         ),
                     )
                 )
@@ -1812,7 +1809,7 @@ class CommunityService:
                             if ticker in stock_info_map
                         ],
                         tagging_post_info=self._create_tagging_post_info(
-                            comment, tagging_posts, tagging_users, lang, official_user_ids, user_reported_post_ids
+                            comment, tagging_posts, tagging_users, lang, user_reported_post_ids
                         ),
                     )
                 )
