@@ -10,12 +10,12 @@ from app.core.exception.custom import PostException, TooManyStockTickersExceptio
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.core.logger.logger.base import setup_logger
 from app.core.redis import redis_client
-from app.database.crud import database, database_service, database_user
+from app.database.crud import JoinInfo, database, database_service, database_user
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from Aws.common.configs import s3_client
 
-from .mock_data import followers, following
+from .mock_data import following
 from .schemas import (
     CategoryResponse,
     CommentCreate,
@@ -1891,15 +1891,53 @@ class FollowService(CommunityService):
 
         return is_followed
 
-    def get_followers(self, user_id: int) -> List[UserInfoWithFollow]:
+    def get_followers(self, user_id: int, offset: int, limit: int) -> Tuple[List[UserInfoWithFollow], int]:
         """팔로워 조회"""
-        # Convert S3 keys to presigned URLs
-        for follower in followers:
-            if follower["profile_image"]:
-                presigned_url = self.generate_get_presigned_url(follower["profile_image"])
-                follower["profile_image"] = presigned_url["get_url"]
+        total_count = self.database_user._count(
+            table="quantus_user_follow",
+            following_id=user_id,
+        )
 
-        return [UserInfoWithFollow.model_validate(follower) for follower in followers]
+        join_info = JoinInfo(
+            primary_table="quantus_user_follow",
+            secondary_table="quantus_user",
+            primary_column="follower_id",
+            secondary_column="id",
+            columns=["id", "nickname", "image_url", "is_official"],
+        )
+
+        followers = self.database_user._select(
+            table="quantus_user_follow",
+            columns=["id", "nickname", "image_url", "is_official"],
+            following_id=user_id,
+            limit=limit,
+            offset=offset,
+            join_info=join_info,
+        )
+        follower_users_id = [follower.id for follower in followers]
+        following_users = self.database_user._select(
+            table="quantus_user_follow",
+            columns=["following_id"],
+            follower_id=user_id,
+            following_id__in=follower_users_id,
+        )
+        following_users_id = [following.following_id for following in following_users]
+        result = []
+        for follower in followers:
+            result.append(
+                UserInfoWithFollow(
+                    id=follower.id,
+                    nickname=follower.nickname,
+                    profile_image=self.generate_get_presigned_url(follower.image_url)["get_url"]
+                    if follower.image_url
+                    else None,
+                    image_format=self._get_image_format(follower.image_url) if follower.image_url else None,
+                    is_official=follower.is_official,
+                    is_followed=follower.id in following_users_id,
+                )
+            )
+
+        return result, total_count
 
     def get_following(self, user_id: int) -> List[UserInfo]:
         """팔로잉 조회"""

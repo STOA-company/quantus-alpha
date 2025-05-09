@@ -26,11 +26,11 @@ from app.modules.community.v2.schemas import (
     ReportRequest,
     ResponsePost,
     TrendingPostResponse,
+    UserInfo,
+    UserInfoWithFollow,
 )
 from app.modules.community.v2.services import CommunityService, get_community_service, get_follow_service
 from app.utils.quantus_auth_utils import get_current_user
-
-from .mock_data import followers, following
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -688,7 +688,9 @@ async def update_follow(
 
 # 팔로워 목록 조회
 @router.get(
-    "/follow/{user_id}/followers", response_model=InfiniteScrollResponseWithTotalCount, summary="팔로워 목록 조회"
+    "/follow/{user_id}/followers",
+    response_model=InfiniteScrollResponseWithTotalCount[UserInfoWithFollow],
+    summary="팔로워 목록 조회",
 )
 def get_followers(
     user_id: int,
@@ -697,20 +699,21 @@ def get_followers(
     community_service: CommunityService = Depends(get_follow_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
-    # followers = community_service.get_followers(user_id=user_id)
-    result = followers
+    followers, total_count = community_service.get_followers(user_id=user_id, offset=offset, limit=limit)
     return InfiniteScrollResponseWithTotalCount(
         status_code=200,
         message="팔로워 목록을 조회하였습니다.",
         has_more=False,
-        total_count=result["followers_count"],
-        data=result["followers"],
+        total_count=total_count,
+        data=followers,
     )
 
 
 # 팔로잉 목록 조회
 @router.get(
-    "/follow/{user_id}/following", response_model=InfiniteScrollResponseWithTotalCount, summary="팔로잉 목록 조회"
+    "/follow/{user_id}/following",
+    response_model=InfiniteScrollResponseWithTotalCount[UserInfo],
+    summary="팔로잉 목록 조회",
 )
 def get_following(
     user_id: int,
@@ -719,14 +722,13 @@ def get_following(
     community_service: CommunityService = Depends(get_follow_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
-    # following = community_service.get_following(user_id=user_id)
-    result = following
+    following, total_count = community_service.get_following(user_id=user_id, offset=offset, limit=limit)
     return InfiniteScrollResponseWithTotalCount(
         status_code=200,
         message="팔로잉 목록을 조회하였습니다.",
         has_more=False,
-        total_count=result["following_count"],
-        data=result["following"],
+        total_count=total_count,
+        data=following,
     )
 
 
