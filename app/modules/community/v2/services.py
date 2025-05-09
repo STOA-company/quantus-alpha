@@ -15,7 +15,6 @@ from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from Aws.common.configs import s3_client
 
-from .mock_data import following
 from .schemas import (
     CategoryResponse,
     CommentCreate,
@@ -1939,17 +1938,43 @@ class FollowService(CommunityService):
 
         return result, total_count
 
-    def get_following(self, user_id: int) -> List[UserInfo]:
+    def get_following(self, user_id: int, offset: int = 0, limit: int = 10) -> Tuple[List[UserInfo], int]:
         """팔로잉 조회"""
-        # following = self.db._select(table="quantus_following", columns=["following_id"], user_id=user_id)
-        # return [FollowerResponse(id=following.id, nickname=following.nickname, profile_image=following.profile_image, image_format=following.image_format, is_official=following.is_official) for following in following]
+        total_count = self.database_user._count(
+            table="quantus_user_follow",
+            follower_id=user_id,
+        )
 
-        # Convert S3 keys to presigned URLs
-        for following_user in following:
-            if following_user["profile_image"]:
-                presigned_url = self.generate_get_presigned_url(following_user["profile_image"])
-                following_user["profile_image"] = presigned_url["get_url"]
-        return following
+        join_info = JoinInfo(
+            primary_table="quantus_user_follow",
+            secondary_table="quantus_user",
+            primary_column="following_id",
+            secondary_column="id",
+            columns=["id", "nickname", "image_url", "is_official"],
+        )
+
+        following = self.database_user._select(
+            table="quantus_user_follow",
+            columns=["id", "nickname", "image_url", "is_official"],
+            follower_id=user_id,
+            limit=limit,
+            offset=offset,
+            join_info=join_info,
+        )
+
+        result = []
+        for user in following:
+            result.append(
+                UserInfo(
+                    id=user.id,
+                    nickname=user.nickname,
+                    profile_image=self.generate_get_presigned_url(user.image_url)["get_url"] if user.image_url else None,
+                    image_format=self._get_image_format(user.image_url) if user.image_url else None,
+                    is_official=user.is_official,
+                )
+            )
+
+        return result, total_count
 
 
 def get_community_service() -> CommunityService:
