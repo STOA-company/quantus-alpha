@@ -589,7 +589,7 @@ async def update_like(
 ### 실시간 인기 게시글 조회 ###
 @router.get("/trending/posts", response_model=BaseResponse[List[TrendingPostResponse]], summary="실시간 인기 게시글 조회")
 async def get_trending_posts(
-    limit: int = Query(5, description="조회할 게시글 수 / default: 5", ge=1, le=50),
+    limit: int = Query(10, description="조회할 게시글 수 / default: 10", ge=1, le=50),
     community_service: CommunityService = Depends(get_community_service),
     current_user: Optional[AlphafinderUser] = Depends(get_current_user),
 ):
