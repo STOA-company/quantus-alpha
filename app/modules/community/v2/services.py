@@ -10,12 +10,11 @@ from app.core.exception.custom import PostException, TooManyStockTickersExceptio
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.core.logger.logger.base import setup_logger
 from app.core.redis import redis_client
-from app.database.crud import database, database_service, database_user
+from app.database.crud import JoinInfo, database, database_service, database_user
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from Aws.common.configs import s3_client
 
-from .mock_data import followers, following
 from .schemas import (
     CategoryResponse,
     CommentCreate,
@@ -1858,45 +1857,124 @@ class FollowService(CommunityService):
         if not current_user_id:
             raise PostException(message="로그인이 필요합니다", status_code=401)
 
-        # 1. 게시글/댓글 확인
+        # 1. 유저 확인
         users = self.database_user._select(
             table="quantus_user", columns=["id"], id__in=[user_id, current_user_id], limit=2
         )
         if len(users) != 2:
             raise PostException(message="유저를 찾을 수 없습니다", status_code=404)
 
-        # # 2. 현재 좋아요 상태 확인
-        # like_exists = bool(self.db._select(table="", post_id=post_id, user_id=user_id))
+        # 2. 현재 팔로우 상태 확인
+        follow_exists = bool(
+            self.database_user._select(
+                table="quantus_user_follow",
+                columns=["follower_id", "following_id"],
+                follower_id=current_user_id,  # 현재 사용자가 follower
+                following_id=user_id,  # 대상 사용자가 following
+            )
+        )
 
         # 3. 상태가 같으면 아무 것도 하지 않음
-        # if like_exists == is_liked:
-        #     return is_liked, current_like_count
+        if follow_exists == is_followed:
+            return is_followed
 
         # 4. 상태가 다르면 업데이트
+        if is_followed:
+            # 팔로우 추가
+            self.database_user._insert(
+                table="quantus_user_follow", sets={"follower_id": current_user_id, "following_id": user_id}
+            )
+        else:
+            # 팔로우 삭제
+            self.database_user._delete(table="quantus_user_follow", follower_id=current_user_id, following_id=user_id)
 
         return is_followed
 
-    def get_followers(self, user_id: int) -> List[UserInfoWithFollow]:
+    def get_followers(self, user_id: int, offset: int, limit: int) -> Tuple[List[UserInfoWithFollow], int]:
         """팔로워 조회"""
-        # Convert S3 keys to presigned URLs
+        total_count = self.database_user._count(
+            table="quantus_user_follow",
+            following_id=user_id,
+        )
+
+        join_info = JoinInfo(
+            primary_table="quantus_user_follow",
+            secondary_table="quantus_user",
+            primary_column="follower_id",
+            secondary_column="id",
+            columns=["id", "nickname", "image_url", "is_official"],
+        )
+
+        followers = self.database_user._select(
+            table="quantus_user_follow",
+            columns=["id", "nickname", "image_url", "is_official"],
+            following_id=user_id,
+            limit=limit,
+            offset=offset,
+            join_info=join_info,
+        )
+        follower_users_id = [follower.id for follower in followers]
+        following_users = self.database_user._select(
+            table="quantus_user_follow",
+            columns=["following_id"],
+            follower_id=user_id,
+            following_id__in=follower_users_id,
+        )
+        following_users_id = [following.following_id for following in following_users]
+        result = []
         for follower in followers:
-            if follower["profile_image"]:
-                presigned_url = self.generate_get_presigned_url(follower["profile_image"])
-                follower["profile_image"] = presigned_url["get_url"]
+            result.append(
+                UserInfoWithFollow(
+                    id=follower.id,
+                    nickname=follower.nickname,
+                    profile_image=self.generate_get_presigned_url(follower.image_url)["get_url"]
+                    if follower.image_url
+                    else None,
+                    image_format=self._get_image_format(follower.image_url) if follower.image_url else None,
+                    is_official=follower.is_official,
+                    is_followed=follower.id in following_users_id,
+                )
+            )
 
-        return [UserInfoWithFollow.model_validate(follower) for follower in followers]
+        return result, total_count
 
-    def get_following(self, user_id: int) -> List[UserInfo]:
+    def get_following(self, user_id: int, offset: int = 0, limit: int = 10) -> Tuple[List[UserInfo], int]:
         """팔로잉 조회"""
-        # following = self.db._select(table="quantus_following", columns=["following_id"], user_id=user_id)
-        # return [FollowerResponse(id=following.id, nickname=following.nickname, profile_image=following.profile_image, image_format=following.image_format, is_official=following.is_official) for following in following]
+        total_count = self.database_user._count(
+            table="quantus_user_follow",
+            follower_id=user_id,
+        )
 
-        # Convert S3 keys to presigned URLs
-        for following_user in following:
-            if following_user["profile_image"]:
-                presigned_url = self.generate_get_presigned_url(following_user["profile_image"])
-                following_user["profile_image"] = presigned_url["get_url"]
-        return following
+        join_info = JoinInfo(
+            primary_table="quantus_user_follow",
+            secondary_table="quantus_user",
+            primary_column="following_id",
+            secondary_column="id",
+            columns=["id", "nickname", "image_url", "is_official"],
+        )
+
+        following = self.database_user._select(
+            table="quantus_user_follow",
+            columns=["id", "nickname", "image_url", "is_official"],
+            follower_id=user_id,
+            limit=limit,
+            offset=offset,
+            join_info=join_info,
+        )
+
+        result = []
+        for user in following:
+            result.append(
+                UserInfo(
+                    id=user.id,
+                    nickname=user.nickname,
+                    profile_image=self.generate_get_presigned_url(user.image_url)["get_url"] if user.image_url else None,
+                    image_format=self._get_image_format(user.image_url) if user.image_url else None,
+                    is_official=user.is_official,
+                )
+            )
+
+        return result, total_count
 
 
 def get_community_service() -> CommunityService:
