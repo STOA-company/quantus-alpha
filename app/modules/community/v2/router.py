@@ -338,7 +338,7 @@ async def get_posts(
     offset: int = Query(0, description="검색 시작 위치"),
     limit: int = Query(10, description="검색 결과 수"),
     category_id: Optional[int] = Query(None, description="카테고리 ID"),
-    stock_ticker: Optional[str] = Query(None, description="종목 코드"),
+    ticker: Optional[str] = Query(None, description="종목 코드"),
     lang: Optional[TranslateCountry] = Query(TranslateCountry.KO, description="언어 설정 (ko/en)"),
     order_by: Optional[PostOrderBy] = Query(PostOrderBy.created_at, description="정렬 기준 (created_at, like_count)"),
     community_service: CommunityService = Depends(get_community_service),
@@ -350,7 +350,7 @@ async def get_posts(
         offset=offset,
         limit=limit + 1,
         category_id=category_id,
-        stock_ticker=stock_ticker,
+        stock_ticker=ticker,
         order_by=order_by,
         lang=lang,
     )
