@@ -13,6 +13,7 @@ from app.core.redis import redis_client
 from app.database.crud import JoinInfo, database, database_service, database_user
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
+from app.utils.notion_utils import NotionUtils
 from Aws.common.configs import s3_client
 
 from .schemas import (
@@ -20,6 +21,7 @@ from .schemas import (
     CommentCreate,
     CommentItem,
     CommentUpdate,
+    NoticeResponse,
     PostCreate,
     PostUpdate,
     ReportItemResponse,
@@ -1620,14 +1622,6 @@ class CommunityService:
             )
             user_reported_post_ids = {row[0] for row in reported_posts}
 
-        # 댓글/게시글의 총 갯수 조회
-        total_count = self.count_total_posts(
-            user_id=user_id,
-            is_comment=is_comment,
-            is_my_profile=is_my_profile,
-            user_reported_post_ids=user_reported_post_ids,
-        )
-
         # 1. 댓글 조회 (limit + 1개)
         query = """
             SELECT
@@ -1681,7 +1675,15 @@ class CommunityService:
             comments = comments[:-1]
 
         if not comments:
-            return [], has_more
+            return [], has_more, 0
+
+        # 댓글/게시글의 총 갯수 조회
+        total_count = self.count_total_posts(
+            user_id=user_id,
+            is_comment=is_comment,
+            is_my_profile=is_my_profile,
+            user_reported_post_ids=user_reported_post_ids,
+        )
 
         # 2. 종목 정보 조회
         comment_ids = [comment["id"] for comment in comments]
@@ -1980,9 +1982,98 @@ class FollowService(CommunityService):
         return result, total_count, has_more
 
 
+class NoticeService(CommunityService):
+    def __init__(self):
+        self.db = database_service
+        self.db_data = database_service
+        self.database_user = database_user
+        self.notion_util = NotionUtils()
+
+    @staticmethod
+    def _change_page_type(page_type: str) -> str:
+        """페이지 타입 변경"""
+        if page_type == "event":
+            return "이벤트"
+        elif page_type == "notification":
+            return "공지"
+        elif page_type == "normal":
+            return "일반"
+        return "알림"
+
+    @staticmethod
+    def _change_id_to_page_type(catogory_id: str) -> int:
+        """페이지 타입 변경"""
+        if catogory_id == 1:
+            return "notification"
+        elif catogory_id == 2:
+            return "normal"
+        elif catogory_id == 3:
+            return "event"
+        return None
+
+    def get_notice_info(self, notice_id: int) -> str:
+        """공지사항 링크 조회"""
+        return self.database_user._select(
+            table="quantus_notion",
+            columns=["link", "page_type", "created_at"],
+            id=notice_id,
+        )[0]
+
+    def get_notices(self, offset: int, limit: int, category_id: int = None) -> Tuple[List[NoticeResponse], bool]:
+        """공지사항 리스트 조회"""
+        condition = {
+            "limit": limit + 1,
+            "offset": offset,
+        }
+        if category_id is not None:
+            condition["page_type"] = self._change_id_to_page_type(category_id)
+        notices = self.database_user._select(
+            table="quantus_notion",
+            columns=["id", "page_type", "created_at"],
+            **condition,
+        )
+        print(f"notices : {notices}")
+        has_more = len(notices) > limit
+        notices = notices[:limit]
+        result = []
+        for notice in notices:
+            result.append(
+                NoticeResponse(
+                    id=notice.id,
+                    title=notice.title,
+                    page_type=self._change_page_type(notice.page_type),
+                    created_at=notice.created_at,
+                )
+            )
+        print(f"result : {result}")
+        return result, has_more
+
+    def get_notice_detail(self, notice_id: int) -> NoticeResponse:
+        """공지사항 상세 조회"""
+
+        # 공지 사항 링크 조회
+        notice_info = self.get_notice_info(notice_id)
+        link = notice_info.link
+
+        # 공지사항 상세 조회
+        title, content = self.notion_util.get_notion_content(link)
+
+        return NoticeResponse(
+            id=notice_id,
+            title=title,
+            page_type=self._change_page_type(notice_info.page_type),
+            created_at=notice_info.created_at,
+            content=content,
+        )
+
+
 def get_community_service() -> CommunityService:
     return CommunityService()
 
 
 def get_follow_service() -> FollowService:
     return FollowService()
+
+
+def get_notice_service() -> NoticeService:
+    return NoticeService()
