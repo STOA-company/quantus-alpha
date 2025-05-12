@@ -962,13 +962,13 @@ class FinancialService:
             interest_coverage_ratios = [
                 float(self._to_decimal(q.operating_income) / self._to_decimal(q.fin_cost))
                 if self._to_decimal(q.fin_cost) != 0
-                else 0.0
+                else None
                 for q in quarters
             ]
 
             average_ratio = self._round_and_clean(sum(interest_coverage_ratios) / len(interest_coverage_ratios))
         except TypeError:
-            average_ratio = 0.0  # TODO:: FE에서 None 받을 수 있는지 확인 후 'None' 반환 필요
+            average_ratio = None  # TODO:: FE에서 None 받을 수 있는지 확인 후 'None' 반환 필요
 
         industry_avg = self._round_and_clean(
             self.get_interest_coverage_industry_avg(country=country, ticker=ticker, db=db)

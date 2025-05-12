@@ -197,7 +197,7 @@ class LiquidityRatioResponse(BaseModel):
 
 
 class InterestCoverageRatioResponse(BaseModel):
-    ratio: float
+    ratio: float | None
     industry_avg: Optional[float] = None
 
 
