@@ -302,3 +302,16 @@ class FollowResponse(BaseModel):
 
 class InfiniteScrollResponseWithTotalCount(InfiniteScrollResponse):
     total_count: int
+
+
+class NoticeResponse(BaseModel):
+    id: int
+    title: str
+    content: str | None = None
+    type: str
+    created_at: datetime
+
+
+class NoticeCategoryResponse(BaseModel):
+    id: int
+    name: str
