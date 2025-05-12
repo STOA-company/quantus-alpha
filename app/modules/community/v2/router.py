@@ -699,11 +699,11 @@ def get_followers(
     community_service: CommunityService = Depends(get_follow_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
-    followers, total_count = community_service.get_followers(user_id=user_id, offset=offset, limit=limit)
+    followers, total_count, has_more = community_service.get_followers(user_id=user_id, offset=offset, limit=limit)
     return InfiniteScrollResponseWithTotalCount(
         status_code=200,
         message="팔로워 목록을 조회하였습니다.",
-        has_more=False,
+        has_more=has_more,
         total_count=total_count,
         data=followers,
     )
@@ -722,11 +722,11 @@ def get_following(
     community_service: CommunityService = Depends(get_follow_service),
     current_user: AlphafinderUser = Depends(get_current_user),
 ):
-    following, total_count = community_service.get_following(user_id=user_id, offset=offset, limit=limit)
+    following, total_count, has_more = community_service.get_following(user_id=user_id, offset=offset, limit=limit)
     return InfiniteScrollResponseWithTotalCount(
         status_code=200,
         message="팔로잉 목록을 조회하였습니다.",
-        has_more=False,
+        has_more=has_more,
         total_count=total_count,
         data=following,
     )

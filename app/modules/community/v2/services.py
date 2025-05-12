@@ -1908,7 +1908,7 @@ class FollowService(CommunityService):
             table="quantus_user_follow",
             columns=["id", "nickname", "image_url", "is_official"],
             following_id=user_id,
-            limit=limit,
+            limit=limit + 1,
             offset=offset,
             join_info=join_info,
         )
@@ -1921,6 +1921,8 @@ class FollowService(CommunityService):
         )
         following_users_id = [following.following_id for following in following_users]
         result = []
+        has_more = len(followers) > limit
+        followers = followers[:limit]
         for follower in followers:
             result.append(
                 UserInfoWithFollow(
@@ -1935,7 +1937,7 @@ class FollowService(CommunityService):
                 )
             )
 
-        return result, total_count
+        return result, total_count, has_more
 
     def get_following(self, user_id: int, offset: int = 0, limit: int = 10) -> Tuple[List[UserInfo], int]:
         """팔로잉 조회"""
@@ -1956,10 +1958,12 @@ class FollowService(CommunityService):
             table="quantus_user_follow",
             columns=["id", "nickname", "image_url", "is_official"],
             follower_id=user_id,
-            limit=limit,
+            limit=limit + 1,
             offset=offset,
             join_info=join_info,
         )
+        has_more = len(following) > limit
+        following = following[:limit]
 
         result = []
         for user in following:
@@ -1973,7 +1977,7 @@ class FollowService(CommunityService):
                 )
             )
 
-        return result, total_count
+        return result, total_count, has_more
 
 
 def get_community_service() -> CommunityService:
