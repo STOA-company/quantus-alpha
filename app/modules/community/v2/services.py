@@ -264,7 +264,7 @@ class CommunityService:
                         logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
 
                 tagging_user = database_user._select(
-                    table="quantus_user", columns=["id", "nickname", "image_url"], id=tagging_post[0][3]
+                    table="quantus_user", columns=["id", "nickname", "image_url", "is_official"], id=tagging_post[0][3]
                 )
                 if tagging_user:
                     tagging_post_info = TaggingPostInfo(
@@ -278,7 +278,7 @@ class CommunityService:
                             if tagging_user[0][2]
                             else None,
                             image_format=self._get_image_format(tagging_user[0][2]) if tagging_user[0][2] else None,
-                            is_official=self._is_official_user(tagging_user[0][0]),
+                            is_official=tagging_user[0][3],
                         ),
                         image_url=tagging_image_urls,
                         image_format=tagging_image_format,
@@ -545,7 +545,9 @@ class CommunityService:
         tagging_users = {}
         if tagging_user_ids:
             user_results = database_user._select(
-                table="quantus_user", columns=["id", "nickname", "image_url"], id__in=list(tagging_user_ids)
+                table="quantus_user",
+                columns=["id", "nickname", "image_url", "is_official"],
+                id__in=list(tagging_user_ids),
             )
             for user in user_results:
                 tagging_users[user.id] = UserInfo(
@@ -553,7 +555,7 @@ class CommunityService:
                     nickname=user.nickname,
                     profile_image=self.generate_get_presigned_url(user.image_url)["get_url"] if user.image_url else None,
                     image_format=self._get_image_format(user.image_url) if user.image_url else None,
-                    is_official=self._is_official_user(user.id),
+                    is_official=user.is_official,
                 )
 
         # 사용자 정보 조회 (user DB에서)
@@ -1906,7 +1908,7 @@ class FollowService(CommunityService):
             table="quantus_user_follow",
             columns=["id", "nickname", "image_url", "is_official"],
             following_id=user_id,
-            limit=limit,
+            limit=limit + 1,
             offset=offset,
             join_info=join_info,
         )
@@ -1919,6 +1921,8 @@ class FollowService(CommunityService):
         )
         following_users_id = [following.following_id for following in following_users]
         result = []
+        has_more = len(followers) > limit
+        followers = followers[:limit]
         for follower in followers:
             result.append(
                 UserInfoWithFollow(
@@ -1933,7 +1937,7 @@ class FollowService(CommunityService):
                 )
             )
 
-        return result, total_count
+        return result, total_count, has_more
 
     def get_following(self, user_id: int, offset: int = 0, limit: int = 10) -> Tuple[List[UserInfo], int]:
         """팔로잉 조회"""
@@ -1954,10 +1958,12 @@ class FollowService(CommunityService):
             table="quantus_user_follow",
             columns=["id", "nickname", "image_url", "is_official"],
             follower_id=user_id,
-            limit=limit,
+            limit=limit + 1,
             offset=offset,
             join_info=join_info,
         )
+        has_more = len(following) > limit
+        following = following[:limit]
 
         result = []
         for user in following:
@@ -1971,7 +1977,7 @@ class FollowService(CommunityService):
                 )
             )
 
-        return result, total_count
+        return result, total_count, has_more
 
 
 def get_community_service() -> CommunityService:

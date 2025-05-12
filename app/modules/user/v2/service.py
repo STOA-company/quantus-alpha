@@ -37,9 +37,9 @@ class UserService:
         user_id: int,
         image_url: str,
     ):
-        self.db._update(
+        self.db_user._update(
             table="quantus_user",
-            sets={"profile_image": image_url},
+            sets={"image_url": image_url},
             id=user_id,
         )
         return True

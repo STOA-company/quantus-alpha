@@ -23,7 +23,6 @@ router = APIRouter()
 )
 def generate_presigned_url(
     request: PresignedUrlRequest,
-    current_user: AlphafinderUser = Depends(get_current_user),
     service: UserService = Depends(get_user_service),
 ):
     """
@@ -93,7 +92,7 @@ def generate_presigned_url(
 
     # 기본 이미지 키 값
     개구리 : default_image/Frog.png
-    독수리 : default_image/Eagle.png
+    독수리 : default_image/Vulture.png
     알파카 : default_image/Alpaca.png
     고양이 : default_image/Cat.png
     돼지 : default_image/Pig.png
@@ -107,7 +106,7 @@ def update_profile_image(
     current_user: AlphafinderUser = Depends(get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    # service.update_profile_image(user_id=current_user["uid"], image_url=image_url)
+    service.update_profile_image(user_id=current_user["uid"], image_url=image_url.image_url)
 
     return BaseResponse(status_code=200, message="Profile image updated successfully")
 
