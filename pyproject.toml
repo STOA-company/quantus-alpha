@@ -49,6 +49,7 @@ pyodbc = "^5.2.0"
 prometheus-client = "^0.21.1"
 psutil = "^5.9.8"
 aio-pika = "^9.4.0"
+notion-client = "^2.3.0"
 
 [build-system]
 requires = ["poetry-core"]
