@@ -1065,6 +1065,9 @@ class ETFDataLoader:
             "NETASST_TOTAMT": "순자산총액",
             "NAV": "순자산가치(NAV)",
             "MKTCAP": "시가총액",
+            "TRACE_ERR_RT": "추적오차",
+            "DIVRG_RT": "괴리율",
+            "VOLT": "변동성",
         }
         if base:
             df_base = pd.read_parquet(os.path.join(self.krx_dir, "data_base.parquet"))
@@ -1576,36 +1579,52 @@ class ETFDataPreprocessor:
         select_columns_base = [
             "단축코드",
             "한글종목약명",
+            "한글종목약명_y",
             # "영문종목명",
             "상장일_y",
             "기초지수명",
+            "기초지수명_y",
             "추적배수",
             "복제방법_y",
             "기초자산분류",
+            "기초자산분류_y",
             "운용사_y",
             "총보수_y",
             "과세유형_y",
+            "추적오차",
+            "추적오차_y",
+            "괴리율_y",
+            "변동성_y",
+            "괴리율",
+            "변동성",
         ]
-        select_columns_detail = ["추적오차", "괴리율", "변동성"]
-        df_select = df[select_columns_base + select_columns_detail]
+        exist_columns = [col for col in select_columns_base if col in df.columns]
+        df_select = df[exist_columns]
 
         # 컬럼명 변경
         df_select.rename(
             columns={
                 "단축코드": "ticker",
                 "한글종목약명": "kr_name",
+                "한글종목약명_y": "kr_name",
                 # "영문종목명": "en_name",
                 "상장일_y": "listing_date",
                 "기초지수명": "base_index_name",
+                "기초지수명_y": "base_index_name",
                 "추적배수": "tracking_multiplier",
+                "추적배수_y": "tracking_multiplier",
                 "복제방법_y": "replication_method",
                 "기초자산분류": "base_asset_classification",
+                "기초자산분류_y": "base_asset_classification",
                 "운용사_y": "manager",
                 "총보수_y": "total_fee",
                 "과세유형_y": "tax_type",
                 "추적오차": "tracking_error",
+                "추적오차_y": "tracking_error",
                 "괴리율": "disparity",
+                "괴리율_y": "disparity",
                 "변동성": "risk_rating",
+                "변동성_y": "risk_rating",
             },
             inplace=True,
         )
