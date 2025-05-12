@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.logger.logger import get_logger
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
-from app.modules.common.schemas import BaseResponse
+from app.modules.common.schemas import BaseResponse, InfiniteScrollResponse
 from app.modules.community.v2.enum import PostOrderBy
 from app.modules.community.v2.schemas import (
     CategoryResponse,
@@ -17,6 +17,8 @@ from app.modules.community.v2.schemas import (
     InfiniteScrollResponseWithTotalCount,
     LikeRequest,
     LikeResponse,
+    NoticeCategoryResponse,
+    NoticeResponse,
     PostCreate,
     PostListResponse,
     PostUpdate,
@@ -29,7 +31,13 @@ from app.modules.community.v2.schemas import (
     UserInfo,
     UserInfoWithFollow,
 )
-from app.modules.community.v2.services import CommunityService, get_community_service, get_follow_service
+from app.modules.community.v2.services import (
+    CommunityService,
+    NoticeService,
+    get_community_service,
+    get_follow_service,
+    get_notice_service,
+)
 from app.utils.quantus_auth_utils import get_current_user
 
 router = APIRouter()
@@ -779,3 +787,51 @@ def get_user_posts(
         data=posts,
         total_count=total_count,
     )
+
+
+# 공지사항 카테고리 api
+@router.get(
+    "/notice/categories", response_model=BaseResponse[List[NoticeCategoryResponse]], summary="공지사항 카테고리 조회"
+)
+async def get_notice_categories(
+    notice_service: NoticeService = Depends(get_notice_service),
+):
+    categories = [
+        NoticeCategoryResponse(
+            id=1,
+            name="공지",
+        ),
+        NoticeCategoryResponse(
+            id=2,
+            name="일반",
+        ),
+        NoticeCategoryResponse(
+            id=3,
+            name="이벤트",
+        ),
+    ]
+    return BaseResponse(status_code=200, message="공지사항 카테고리를 조회하였습니다.", data=categories)
+
+
+# 공지사항 리스트 api
+@router.get("/notice", response_model=InfiniteScrollResponse[NoticeResponse], summary="공지사항 리스트 조회")
+async def get_notices(
+    category_id: int = Query(None, description="카테고리 ID"),
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
+    notice_service: NoticeService = Depends(get_notice_service),
+):
+    notices, has_more = notice_service.get_notices(category_id=category_id, offset=offset, limit=limit)
+    return InfiniteScrollResponse(
+        status_code=200, message="공지사항 리스트를 조회하였습니다.", data=notices, has_more=has_more
+    )
+
+
+# 공지사항 상세 조회 api
+@router.get("/notice/{notice_id}", response_model=BaseResponse[NoticeResponse], summary="공지사항 상세 조회")
+async def get_notice(
+    notice_id: int,
+    notice_service: NoticeService = Depends(get_notice_service),
+):
+    notice = notice_service.get_notice_detail(notice_id)
+    return BaseResponse(status_code=200, message="공지사항 상세 조회를 완료하였습니다.", data=notice)
