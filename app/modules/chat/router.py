@@ -1,24 +1,25 @@
 import json
 import logging
 from datetime import timedelta
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from prometheus_client import Counter, Histogram
 
 from app.modules.chat.infrastructure.constants import LLM_MODEL
-from app.modules.chat.infrastructure.metrics import STREAMING_CONNECTIONS, STREAMING_ERRORS, STREAMING_MESSAGES_COUNT
+from app.modules.chat.infrastructure.rate import check_rate_limit, decrement_rate_limit, increment_rate_limit
 from app.modules.chat.service import chat_service
-from app.utils.oauth_utils import get_current_user
+from app.monitoring.web_metrics import (
+    CHAT_REQUEST_COUNT,
+    STREAMING_CONNECTIONS,
+    STREAMING_ERRORS,
+    STREAMING_MESSAGES_COUNT,
+)
+from app.utils.oauth_utils import get_current_user, is_staff
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# 프로메테우스 메트릭
-CHAT_REQUEST_COUNT = Counter("chat_requests_total", "Total number of chat requests", ["model", "status"])
-
-CHAT_RESPONSE_TIME = Histogram("chat_response_time_seconds", "Chat response time in seconds", ["model"])
 
 
 @router.post("/conversation")
@@ -26,6 +27,13 @@ def create_conversation(first_message: str, current_user: str = Depends(get_curr
     """대화 생성"""
     if not current_user:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+    # 사용자가 스태프인지 확인
+    user_is_staff = is_staff(current_user)
+
+    # 요청 제한 확인 (스태프가 아닌 경우)
+    if not user_is_staff and not check_rate_limit(current_user.id, user_is_staff):
+        raise HTTPException(status_code=429, detail="일일 사용 한도를 초과했습니다. 하루에 3번만 요청할 수 있습니다.")
 
     conversation = chat_service.create_conversation(first_message, current_user.id)
     return {"conversation_id": conversation.id, "title": conversation.title}
@@ -65,7 +73,11 @@ def get_conversation(conversation_id: int, current_user: str = Depends(get_curre
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
 
     messages = [
-        {**message.dict(), "created_at": message.created_at + timedelta(hours=9) if message.created_at else None}
+        {
+            **message.dict(),
+            "created_at": message.created_at + timedelta(hours=9) if message.created_at else None,
+            "is_liked": chat_service.get_feedback(message.id).is_liked if chat_service.get_feedback(message.id) else None,
+        }
         for message in conversation.messages
     ]
 
@@ -123,6 +135,13 @@ async def stream_chat(
     if not current_user:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
+    # 사용자가 스태프인지 확인
+    user_is_staff = is_staff(current_user)
+
+    # 요청 제한 확인 (스태프가 아닌 경우)
+    if not user_is_staff and not check_rate_limit(current_user.id, user_is_staff):
+        raise HTTPException(status_code=429, detail="일일 사용 한도를 초과했습니다. 하루에 3번만 요청할 수 있습니다.")
+
     status = chat_service.get_status(conversation_id)
     if status == "pending":
         raise HTTPException(status_code=429, detail="대기 중입니다.")
@@ -132,6 +151,8 @@ async def stream_chat(
     conversation = chat_service.get_conversation(conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="존재하지 않는 대화입니다.")
+
+    increment_rate_limit(current_user.id, user_is_staff)
 
     if len(conversation.messages) == 0:
         title = query
@@ -155,7 +176,7 @@ async def stream_chat(
                 message_count += 1
                 # 올바른 SSE 형식으로 응답 생성 (각 행이 data: 로 시작하고 빈 줄로 끝나야 함)
                 if isinstance(chunk, str):
-                    STREAMING_MESSAGES_COUNT.labels(model=model, conversation_id=str(conversation_id)).inc()
+                    STREAMING_MESSAGES_COUNT.labels(conversation_id=str(conversation_id)).inc()
 
                     try:
                         chunk_data = json.loads(chunk)
@@ -185,7 +206,8 @@ async def stream_chat(
         except Exception as e:
             logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
             # TODO: ROLLBACK
-            STREAMING_ERRORS.labels(model=model, error_type="streaming_error", conversation_id=str(conversation_id)).inc()
+            STREAMING_ERRORS.labels(error_type="streaming_error", conversation_id=str(conversation_id)).inc()
+            decrement_rate_limit(current_user.id)
             yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
         finally:
             STREAMING_CONNECTIONS.dec()
@@ -217,3 +239,23 @@ def get_status(conversation_id: int, current_user: str = Depends(get_current_use
 
     status = chat_service.get_status(conversation_id)
     return {"status": status}
+
+
+@router.post("/feedback")
+def feedback_response(
+    message_id: int, is_liked: bool, feedback: Optional[str] = None, current_user: str = Depends(get_current_user)
+):
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+        created_feedback = chat_service.feedback_response(message_id, current_user.id, is_liked, feedback)
+        return {
+            "message_id": created_feedback.response_id,
+            "is_liked": created_feedback.is_liked,
+            "feedback": created_feedback.feedback,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

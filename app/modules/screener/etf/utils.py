@@ -1076,7 +1076,7 @@ class ETFDataLoader:
             df_price = pd.read_parquet(os.path.join(self.krx_dir, "data_price.parquet"))
             df_price = df_price.rename(columns=rename_columns)
         if base and detail:
-            df_krx = pd.merge(df_base, df_detail, left_on="단축코드", right_on="종목코드", how="left")
+            df_krx = pd.merge(df_base, df_detail, left_on="단축코드", right_on="단축코드", how="left")
         elif base:
             df_krx = df_base
         else:
@@ -2468,7 +2468,7 @@ class ETFDataMerger:
                 df_merged = df_info if df_merged is None else pd.merge(df_merged, df_info, on="ticker", how="left")
         if krx:
             # 데이터 가져오기
-            df_krx = self.loader.load_krx(base=True, detail=True, price=True)
+            df_krx = self.loader.load_krx(base=True, detail=True, price=False)
             # 데이터 전처리
             df_krx = self.preprocessor.krx_data_preprocess(df_krx)
             # 데이터 합치기

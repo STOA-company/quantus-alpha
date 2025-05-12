@@ -3,6 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.modules.common.schemas import InfiniteScrollResponse
+
 ### 게시글 스키마 ###
 
 
@@ -34,6 +36,10 @@ class UserInfo(BaseModel):
     profile_image: Optional[str] = None
     image_format: Optional[str] = None
     is_official: bool
+
+
+class UserInfoWithFollow(UserInfo):
+    is_followed: bool
 
 
 class StockInfo(BaseModel):
@@ -270,3 +276,42 @@ class ReportItemResponse(BaseModel):
 class ReportRequest(BaseModel):
     post_id: int
     report_item_ids: List[int]
+
+
+########################
+# 팔로우 기능
+########################
+
+###
+# Request
+###
+
+
+class FollowRequest(BaseModel):
+    is_followed: bool
+
+
+###
+# Response
+###
+
+
+class FollowResponse(BaseModel):
+    is_followed: bool
+
+
+class InfiniteScrollResponseWithTotalCount(InfiniteScrollResponse):
+    total_count: int
+
+
+class NoticeResponse(BaseModel):
+    id: int
+    title: str
+    content: str | None = None
+    type: str
+    created_at: datetime
+
+
+class NoticeCategoryResponse(BaseModel):
+    id: int
+    name: str

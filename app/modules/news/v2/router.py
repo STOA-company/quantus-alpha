@@ -16,7 +16,7 @@ router = APIRouter()
 def news_detail_v2(
     ticker: Annotated[str, Query(..., description="종목 코드, 예시: AAPL, A110090")],
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
-    type: Annotated[str, Query(description="타입, 예시: stock, etf")] = None,
+    type: Annotated[str, Query(description="타입, 예시: stock, etf")] = "stock",
     date: Annotated[str, Query(description="시작 날짜, YYYYMMDD")] = None,
     end_date: Annotated[str, Query(description="종료 날짜, YYYYMMDD")] = None,
     page: Annotated[int, Query(description="페이지 번호, 기본값: 1")] = 1,
@@ -37,6 +37,7 @@ def news_detail_v2(
         raise HTTPException(status_code=400, detail="Invalid type")
 
     return NewsResponse(
+        type=type,
         status_code=200,
         message="Successfully retrieved news data",
         data=data,

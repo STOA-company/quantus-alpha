@@ -75,6 +75,8 @@ class Settings(BaseSettings):
 
     TOSS_SECRET_KEY: str = os.getenv("TOSS_SECRET_KEY", "")
 
+    NOTION_SECRET_KEY: str = os.getenv("NOTION_SECRET_KEY", "")
+
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
     else:

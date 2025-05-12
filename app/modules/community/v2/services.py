@@ -10,9 +10,10 @@ from app.core.exception.custom import PostException, TooManyStockTickersExceptio
 from app.core.extra.SlackNotifier import SlackNotifier
 from app.core.logger.logger.base import setup_logger
 from app.core.redis import redis_client
-from app.database.crud import database, database_service, database_user
+from app.database.crud import JoinInfo, database, database_service, database_user
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
+from app.utils.notion_utils import NotionUtils
 from Aws.common.configs import s3_client
 
 from .schemas import (
@@ -20,6 +21,7 @@ from .schemas import (
     CommentCreate,
     CommentItem,
     CommentUpdate,
+    NoticeResponse,
     PostCreate,
     PostUpdate,
     ReportItemResponse,
@@ -29,6 +31,7 @@ from .schemas import (
     TaggingPostInfo,
     TrendingPostResponse,
     UserInfo,
+    UserInfoWithFollow,
 )
 
 logger = setup_logger(__name__, level="DEBUG")
@@ -263,7 +266,7 @@ class CommunityService:
                         logger.error(f"Failed to parse image_url JSON for tagging post {post['tagging_post_id']}")
 
                 tagging_user = database_user._select(
-                    table="quantus_user", columns=["id", "nickname"], id=tagging_post[0][3]
+                    table="quantus_user", columns=["id", "nickname", "image_url", "is_official"], id=tagging_post[0][3]
                 )
                 if tagging_user:
                     tagging_post_info = TaggingPostInfo(
@@ -273,9 +276,11 @@ class CommunityService:
                         user_info=UserInfo(
                             id=tagging_user[0][0],
                             nickname=tagging_user[0][1],
-                            profile_image=None,
-                            image_format=None,
-                            is_official=self._is_official_user(tagging_user[0][0]),
+                            profile_image=self.generate_get_presigned_url(tagging_user[0][2])["get_url"]
+                            if tagging_user[0][2]
+                            else None,
+                            image_format=self._get_image_format(tagging_user[0][2]) if tagging_user[0][2] else None,
+                            is_official=tagging_user[0][3],
                         ),
                         image_url=tagging_image_urls,
                         image_format=tagging_image_format,
@@ -315,14 +320,16 @@ class CommunityService:
         # 4. UserInfo 조회 (user DB에서)
         user_info = None
         if post["user_id"]:
-            user_result = database_user._select(table="quantus_user", columns=["id", "nickname"], id=post["user_id"])
+            user_result = database_user._select(
+                table="quantus_user", columns=["id", "nickname", "image_url"], id=post["user_id"]
+            )
             if user_result:
                 user = user_result[0]
                 user_info = UserInfo(
                     id=user.id,
                     nickname=user.nickname,
-                    profile_image=None,
-                    image_format=None,
+                    profile_image=self.generate_get_presigned_url(user.image_url)["get_url"] if user.image_url else None,
+                    image_format=self._get_image_format(user.image_url) if user.image_url else None,
                     is_official=self._is_official_user(user.id),
                 )
 
@@ -540,15 +547,17 @@ class CommunityService:
         tagging_users = {}
         if tagging_user_ids:
             user_results = database_user._select(
-                table="quantus_user", columns=["id", "nickname"], id__in=list(tagging_user_ids)
+                table="quantus_user",
+                columns=["id", "nickname", "image_url", "is_official"],
+                id__in=list(tagging_user_ids),
             )
             for user in user_results:
                 tagging_users[user.id] = UserInfo(
                     id=user.id,
                     nickname=user.nickname,
-                    profile_image=None,
-                    image_format=None,
-                    is_official=self._is_official_user(user.id),
+                    profile_image=self.generate_get_presigned_url(user.image_url)["get_url"] if user.image_url else None,
+                    image_format=self._get_image_format(user.image_url) if user.image_url else None,
+                    is_official=user.is_official,
                 )
 
         # 사용자 정보 조회 (user DB에서)
@@ -605,8 +614,8 @@ class CommunityService:
                                 user_info=UserInfo(
                                     id=user.id,
                                     nickname=user.nickname,
-                                    profile_image=None,
-                                    image_format=None,
+                                    profile_image=user.profile_image,
+                                    image_format=user.image_format,
                                     is_official=user.is_official,
                                 ),
                                 image_url=tagging_image_urls,
@@ -881,17 +890,16 @@ class CommunityService:
         if not user_ids:
             return {}
 
-        # 공식 계정 여부 일괄 조회
-        official_user_ids = self._get_official_users(list(user_ids))
-
-        user_results = database_user._select(table="quantus_user", columns=["id", "nickname"], id__in=list(user_ids))
+        user_results = database_user._select(
+            table="quantus_user", columns=["id", "nickname", "image_url", "is_official"], id__in=list(user_ids)
+        )
         return {
             user.id: UserInfo(
                 id=user.id,
                 nickname=user.nickname,
-                profile_image=None,
-                image_format=None,
-                is_official=user.id in official_user_ids,
+                profile_image=self.generate_get_presigned_url(user.image_url)["get_url"] if user.image_url else None,
+                image_format=self._get_image_format(user.image_url) if user.image_url else None,
+                is_official=user.is_official,
             )
             for user in user_results
         }
@@ -925,7 +933,6 @@ class CommunityService:
         tagging_posts: Dict[int, Dict],
         tagging_users: Dict[int, UserInfo],
         lang: TranslateCountry,
-        official_user_ids: Set[int],
         user_reported_post_ids: Optional[Set[int]] = None,
     ) -> Optional[TaggingPostInfo]:
         """태깅된 게시글 정보 생성"""
@@ -987,7 +994,7 @@ class CommunityService:
                 nickname=user_info.nickname,
                 profile_image=user_info.profile_image,
                 image_format=user_info.image_format,
-                is_official=user_info.id in official_user_ids,
+                is_official=user_info.is_official,
             ),
             image_url=tagging_post.get("processed_image_urls", []),  # 이미 처리된 presigned URLs 사용
             image_format=None,
@@ -1082,10 +1089,6 @@ class CommunityService:
         tagging_user_ids = {post["user_id"] for post in tagging_posts.values() if post["user_id"]}
         tagging_users = self._get_user_info_map(tagging_user_ids)
 
-        # 5. 공식 계정 여부 일괄 조회
-        all_user_ids = set(user_ids | tagging_user_ids)
-        official_user_ids = self._get_official_users(list(all_user_ids))
-
         # 6. 최종 응답 구성
         comment_list = []
         for comment in comments:
@@ -1144,7 +1147,7 @@ class CommunityService:
                         stock_info_map[ticker] for ticker in stock_map.get(comment["id"], []) if ticker in stock_info_map
                     ],
                     tagging_post_info=self._create_tagging_post_info(
-                        comment, tagging_posts, tagging_users, lang, official_user_ids, user_reported_post_ids
+                        comment, tagging_posts, tagging_users, lang, user_reported_post_ids
                     ),
                 )
             )
@@ -1595,6 +1598,482 @@ class CommunityService:
         is_reported = result.scalar()
         return bool(is_reported)
 
+    def get_user_comments_posts(
+        self,
+        current_user: Optional[AlphafinderUser],
+        user_id: int,
+        offset: int = 0,
+        limit: int = 20,
+        is_comment: bool = True,
+        lang: TranslateCountry = TranslateCountry.KO,
+    ) -> Tuple[List[CommentItem], bool]:
+        """댓글 목록 조회"""
+        current_user_id = current_user["uid"] if current_user else None
+        is_my_profile = current_user_id == user_id if current_user_id else False
+
+        # 사용자가 신고한 게시글 id 조회
+        user_reported_post_ids = set()
+        if current_user_id:
+            reported_posts = self.db._select(
+                table="af_post_reports",
+                columns=["post_id"],
+                user_id=current_user_id,
+                distinct=True,
+            )
+            user_reported_post_ids = {row[0] for row in reported_posts}
+
+        # 1. 댓글 조회 (limit + 1개)
+        query = """
+            SELECT
+                p.id, p.content, p.like_count, p.comment_count, p.depth, p.parent_id, p.created_at, p.updated_at,
+                p.user_id, p.image_url, p.tagging_post_id, p.is_reported,
+                CASE WHEN :current_user_id IS NOT NULL THEN
+                    EXISTS(
+                        SELECT 1 FROM post_likes pl
+                        WHERE pl.post_id = p.id AND pl.user_id = :current_user_id
+                    )
+                ELSE false END as is_liked
+            FROM af_posts p
+            WHERE p.user_id = :user_id
+            {depth_condition}
+            {reported_posts_condition}
+            {is_my_profile_condition}
+            ORDER BY p.created_at ASC
+            LIMIT :limit OFFSET :offset
+        """
+
+        params = {"user_id": user_id, "limit": limit + 1, "offset": offset, "current_user_id": current_user_id}
+
+        # 신고된 게시글 제외 조건 추가
+        if user_reported_post_ids:
+            reported_posts_condition = "AND p.id NOT IN :user_reported_post_ids"
+            params["user_reported_post_ids"] = tuple(user_reported_post_ids)
+        else:
+            reported_posts_condition = ""
+
+        if is_comment:
+            depth_condition = "AND p.depth > 0"
+        else:
+            depth_condition = "AND p.depth = 0"
+
+        if is_my_profile:
+            is_my_profile_condition = ""
+        else:
+            is_my_profile_condition = "AND p.is_reported = 0"
+
+        query = query.format(
+            reported_posts_condition=reported_posts_condition,
+            is_my_profile_condition=is_my_profile_condition,
+            depth_condition=depth_condition,
+        )
+
+        result = self.db._execute(text(query), params)
+        comments = result.mappings().all()
+
+        has_more = len(comments) > limit
+        if has_more:
+            comments = comments[:-1]
+
+        if not comments:
+            return [], has_more, 0
+
+        # 댓글/게시글의 총 갯수 조회
+        total_count = self.count_total_posts(
+            user_id=user_id,
+            is_comment=is_comment,
+            is_my_profile=is_my_profile,
+            user_reported_post_ids=user_reported_post_ids,
+        )
+
+        # 2. 종목 정보 조회
+        comment_ids = [comment["id"] for comment in comments]
+        stock_query = """
+            SELECT post_id, GROUP_CONCAT(stock_ticker) as stock_tickers
+            FROM af_post_stock_tags
+            WHERE post_id IN :comment_ids
+            GROUP BY post_id
+        """
+        stock_result = self.db._execute(text(stock_query), {"comment_ids": tuple(comment_ids)})
+        stock_map = {row[0]: row[1].split(",") if row[1] else [] for row in stock_result}
+
+        # 종목 상세 정보 조회
+        all_tickers = set()
+        for tickers in stock_map.values():
+            all_tickers.update(tickers)
+        stock_info_map = self._get_stock_info_map(all_tickers, lang)
+
+        # 3. 사용자 정보 조회
+        user_ids = {comment["user_id"] for comment in comments if comment["user_id"]}
+        user_info_map = self._get_user_info_map(user_ids)
+
+        # 4. 태깅된 게시글 정보 조회
+        tagging_post_ids = {comment["tagging_post_id"] for comment in comments if comment["tagging_post_id"]}
+        tagging_posts = self._get_tagging_posts(tagging_post_ids)
+
+        # 태깅된 게시글의 작성자 정보 조회
+        tagging_user_ids = {post["user_id"] for post in tagging_posts.values() if post["user_id"]}
+        tagging_users = self._get_user_info_map(tagging_user_ids)
+
+        # # 5. 공식 계정 여부 일괄 조회
+        # all_user_ids = set(user_ids | tagging_user_ids)
+
+        # 6. 최종 응답 구성
+        comment_list = []
+        for comment in comments:
+            # 이미지 URL 처리
+            image_urls = []
+            if comment["image_url"]:
+                try:
+                    image_urls = json.loads(comment["image_url"])
+                    for i, url in enumerate(image_urls):
+                        presigned_url = self.generate_get_presigned_url(url)
+                        image_urls[i] = presigned_url["get_url"]
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse image_url JSON for comment {comment['id']}")
+
+            # 태깅된 게시글의 이미지 URL 처리
+            tagging_image_urls = []
+            if comment["tagging_post_id"] and comment["tagging_post_id"] in tagging_posts:
+                tagging_post = tagging_posts[comment["tagging_post_id"]]
+                if tagging_post["image_url"]:
+                    try:
+                        logger.info(f"tagging_post['image_url']: {tagging_post['image_url']}")
+                        tagging_image_urls = json.loads(tagging_post["image_url"])
+                        for i, url in enumerate(tagging_image_urls):
+                            presigned_url = self.generate_get_presigned_url(url)
+                            logger.info(f"presigned_url: {presigned_url}")
+                            tagging_image_urls[i] = presigned_url["get_url"]
+                        tagging_post["processed_image_urls"] = tagging_image_urls
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to parse image_url JSON for tagging post {comment['tagging_post_id']}")
+
+            if comment["is_reported"]:
+                comment_list.append(
+                    CommentItem(
+                        id=comment["id"],
+                        content="해당 게시글은 신고가 접수되어 비공개 처리되었습니다.",
+                        image_url=image_urls,
+                        like_count=comment["like_count"],
+                        comment_count=comment["comment_count"],
+                        depth=comment["depth"],
+                        parent_id=comment["parent_id"],
+                        created_at=comment["created_at"].astimezone(KST),
+                        is_changed=comment["created_at"] != comment["updated_at"],
+                        is_liked=comment["is_liked"],
+                        is_mine=comment["user_id"] == current_user_id if current_user_id else False,
+                        user_info=user_info_map.get(
+                            comment["user_id"],
+                            UserInfo(
+                                id=0,
+                                nickname=self._get_unknown_user_nickname(lang),
+                                profile_image=None,
+                                image_format=None,
+                                is_official=False,
+                            ),
+                        ),
+                        sub_comments=[],
+                        stock_tickers=[
+                            stock_info_map[ticker]
+                            for ticker in stock_map.get(comment["id"], [])
+                            if ticker in stock_info_map
+                        ],
+                        tagging_post_info=self._create_tagging_post_info(
+                            comment, tagging_posts, tagging_users, lang, user_reported_post_ids
+                        ),
+                    )
+                )
+            else:
+                comment_list.append(
+                    CommentItem(
+                        id=comment["id"],
+                        content=comment["content"],
+                        image_url=image_urls,
+                        like_count=comment["like_count"],
+                        comment_count=comment["comment_count"],
+                        depth=comment["depth"],
+                        parent_id=comment["parent_id"],
+                        created_at=comment["created_at"].astimezone(KST),
+                        is_changed=comment["created_at"] != comment["updated_at"],
+                        is_liked=comment["is_liked"],
+                        is_mine=is_my_profile,
+                        user_info=user_info_map.get(
+                            comment["user_id"],
+                            UserInfo(
+                                id=0,
+                                nickname=self._get_unknown_user_nickname(lang),
+                                profile_image=None,
+                                image_format=None,
+                                is_official=False,
+                            ),
+                        ),
+                        sub_comments=[],
+                        stock_tickers=[
+                            stock_info_map[ticker]
+                            for ticker in stock_map.get(comment["id"], [])
+                            if ticker in stock_info_map
+                        ],
+                        tagging_post_info=self._create_tagging_post_info(
+                            comment, tagging_posts, tagging_users, lang, user_reported_post_ids
+                        ),
+                    )
+                )
+
+        return comment_list, has_more, total_count
+
+    def count_total_posts(
+        self, user_id: int, is_comment: bool, is_my_profile: bool, user_reported_post_ids: Set[int]
+    ) -> int:
+        """댓글/게시글의 총 갯수 조회"""
+        # 댓글/게시글의 총 갯수 조회 조건
+        total_count_condition = {
+            "user_id": user_id,
+        }
+        if is_comment:
+            total_count_condition["depth__gte"] = 1
+        else:
+            total_count_condition["depth"] = 0
+
+        if not is_my_profile:
+            total_count_condition["is_reported"] = 0
+
+        if user_reported_post_ids:
+            total_count_condition["id__notin"] = user_reported_post_ids
+
+        return self.db._count(
+            table="af_posts",
+            **total_count_condition,
+        )
+
+
+class FollowService(CommunityService):
+    def __init__(self):
+        super().__init__()
+        self.db = database_service
+        self.db_data = database_service
+        self.database_user = database_user
+
+    async def update_follow(self, current_user_id: int, user_id: int, is_followed: bool) -> bool:
+        """팔로우 여부 업데이트"""
+
+        if not current_user_id:
+            raise PostException(message="로그인이 필요합니다", status_code=401)
+
+        # 1. 유저 확인
+        users = self.database_user._select(
+            table="quantus_user", columns=["id"], id__in=[user_id, current_user_id], limit=2
+        )
+        if len(users) != 2:
+            raise PostException(message="유저를 찾을 수 없습니다", status_code=404)
+
+        # 2. 현재 팔로우 상태 확인
+        follow_exists = bool(
+            self.database_user._select(
+                table="quantus_user_follow",
+                columns=["follower_id", "following_id"],
+                follower_id=current_user_id,  # 현재 사용자가 follower
+                following_id=user_id,  # 대상 사용자가 following
+            )
+        )
+
+        # 3. 상태가 같으면 아무 것도 하지 않음
+        if follow_exists == is_followed:
+            return is_followed
+
+        # 4. 상태가 다르면 업데이트
+        if is_followed:
+            # 팔로우 추가
+            self.database_user._insert(
+                table="quantus_user_follow", sets={"follower_id": current_user_id, "following_id": user_id}
+            )
+        else:
+            # 팔로우 삭제
+            self.database_user._delete(table="quantus_user_follow", follower_id=current_user_id, following_id=user_id)
+
+        return is_followed
+
+    def get_followers(self, user_id: int, offset: int, limit: int) -> Tuple[List[UserInfoWithFollow], int]:
+        """팔로워 조회"""
+        total_count = self.database_user._count(
+            table="quantus_user_follow",
+            following_id=user_id,
+        )
+
+        join_info = JoinInfo(
+            primary_table="quantus_user_follow",
+            secondary_table="quantus_user",
+            primary_column="follower_id",
+            secondary_column="id",
+            columns=["id", "nickname", "image_url", "is_official"],
+        )
+
+        followers = self.database_user._select(
+            table="quantus_user_follow",
+            columns=["id", "nickname", "image_url", "is_official"],
+            following_id=user_id,
+            limit=limit + 1,
+            offset=offset,
+            join_info=join_info,
+        )
+        follower_users_id = [follower.id for follower in followers]
+        following_users = self.database_user._select(
+            table="quantus_user_follow",
+            columns=["following_id"],
+            follower_id=user_id,
+            following_id__in=follower_users_id,
+        )
+        following_users_id = [following.following_id for following in following_users]
+        result = []
+        has_more = len(followers) > limit
+        followers = followers[:limit]
+        for follower in followers:
+            result.append(
+                UserInfoWithFollow(
+                    id=follower.id,
+                    nickname=follower.nickname,
+                    profile_image=self.generate_get_presigned_url(follower.image_url)["get_url"]
+                    if follower.image_url
+                    else None,
+                    image_format=self._get_image_format(follower.image_url) if follower.image_url else None,
+                    is_official=follower.is_official,
+                    is_followed=follower.id in following_users_id,
+                )
+            )
+
+        return result, total_count, has_more
+
+    def get_following(self, user_id: int, offset: int = 0, limit: int = 10) -> Tuple[List[UserInfo], int]:
+        """팔로잉 조회"""
+        total_count = self.database_user._count(
+            table="quantus_user_follow",
+            follower_id=user_id,
+        )
+
+        join_info = JoinInfo(
+            primary_table="quantus_user_follow",
+            secondary_table="quantus_user",
+            primary_column="following_id",
+            secondary_column="id",
+            columns=["id", "nickname", "image_url", "is_official"],
+        )
+
+        following = self.database_user._select(
+            table="quantus_user_follow",
+            columns=["id", "nickname", "image_url", "is_official"],
+            follower_id=user_id,
+            limit=limit + 1,
+            offset=offset,
+            join_info=join_info,
+        )
+        has_more = len(following) > limit
+        following = following[:limit]
+
+        result = []
+        for user in following:
+            result.append(
+                UserInfo(
+                    id=user.id,
+                    nickname=user.nickname,
+                    profile_image=self.generate_get_presigned_url(user.image_url)["get_url"] if user.image_url else None,
+                    image_format=self._get_image_format(user.image_url) if user.image_url else None,
+                    is_official=user.is_official,
+                )
+            )
+
+        return result, total_count, has_more
+
+
+class NoticeService(CommunityService):
+    def __init__(self):
+        self.db = database_service
+        self.db_data = database_service
+        self.database_user = database_user
+        self.notion_util = NotionUtils()
+
+    @staticmethod
+    def _change_page_type(page_type: str) -> str:
+        """페이지 타입 변경"""
+        if page_type == "event":
+            return "이벤트"
+        elif page_type == "notification":
+            return "공지"
+        elif page_type == "normal":
+            return "일반"
+        return "알림"
+
+    @staticmethod
+    def _change_id_to_page_type(catogory_id: str) -> int:
+        """페이지 타입 변경"""
+        if catogory_id == 1:
+            return "notification"
+        elif catogory_id == 2:
+            return "normal"
+        elif catogory_id == 3:
+            return "event"
+        return None
+
+    def get_notice_info(self, notice_id: int) -> str:
+        """공지사항 링크 조회"""
+        return self.database_user._select(
+            table="quantus_notion",
+            columns=["link", "page_type", "created_at"],
+            id=notice_id,
+        )[0]
+
+    def get_notices(self, offset: int, limit: int, category_id: int = None) -> Tuple[List[NoticeResponse], bool]:
+        """공지사항 리스트 조회"""
+        condition = {
+            "limit": limit + 1,
+            "offset": offset,
+        }
+        if category_id is not None:
+            condition["page_type"] = self._change_id_to_page_type(category_id)
+        notices = self.database_user._select(
+            table="quantus_notion",
+            columns=["id", "page_type", "created_at"],
+            **condition,
+        )
+        print(f"notices : {notices}")
+        has_more = len(notices) > limit
+        notices = notices[:limit]
+        result = []
+        for notice in notices:
+            result.append(
+                NoticeResponse(
+                    id=notice.id,
+                    title=notice.title,
+                    page_type=self._change_page_type(notice.page_type),
+                    created_at=notice.created_at,
+                )
+            )
+        print(f"result : {result}")
+        return result, has_more
+
+    def get_notice_detail(self, notice_id: int) -> NoticeResponse:
+        """공지사항 상세 조회"""
+
+        # 공지 사항 링크 조회
+        notice_info = self.get_notice_info(notice_id)
+        link = notice_info.link
+
+        # 공지사항 상세 조회
+        title, content = self.notion_util.get_notion_content(link)
+
+        return NoticeResponse(
+            id=notice_id,
+            title=title,
+            page_type=self._change_page_type(notice_info.page_type),
+            created_at=notice_info.created_at,
+            content=content,
+        )
+
 
 def get_community_service() -> CommunityService:
     return CommunityService()
+
+
+def get_follow_service() -> FollowService:
+    return FollowService()
+
+
+def get_notice_service() -> NoticeService:
+    return NoticeService()
