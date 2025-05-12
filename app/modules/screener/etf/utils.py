@@ -1076,7 +1076,7 @@ class ETFDataLoader:
             df_price = pd.read_parquet(os.path.join(self.krx_dir, "data_price.parquet"))
             df_price = df_price.rename(columns=rename_columns)
         if base and detail:
-            df_krx = pd.merge(df_base, df_detail, left_on="단축코드", right_on="종목코드", how="left")
+            df_krx = pd.merge(df_base, df_detail, left_on="단축코드", right_on="단축코드", how="left")
         elif base:
             df_krx = df_base
         else:
