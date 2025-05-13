@@ -2024,12 +2024,14 @@ class NoticeService(CommunityService):
         condition = {
             "limit": limit + 1,
             "offset": offset,
+            "order": "created_at",
+            "ascending": False,
         }
         if category_id is not None:
             condition["page_type"] = self._change_id_to_page_type(category_id)
         notices = self.database_user._select(
             table="quantus_notion",
-            columns=["id", "page_type", "created_at"],
+            columns=["id", "title", "page_type", "created_at"],
             **condition,
         )
         print(f"notices : {notices}")
@@ -2041,7 +2043,7 @@ class NoticeService(CommunityService):
                 NoticeResponse(
                     id=notice.id,
                     title=notice.title,
-                    page_type=self._change_page_type(notice.page_type),
+                    type=self._change_page_type(notice.page_type),
                     created_at=notice.created_at,
                 )
             )
@@ -2061,7 +2063,7 @@ class NoticeService(CommunityService):
         return NoticeResponse(
             id=notice_id,
             title=title,
-            page_type=self._change_page_type(notice_info.page_type),
+            type=self._change_page_type(notice_info.page_type),
             created_at=notice_info.created_at,
             content=content,
         )
