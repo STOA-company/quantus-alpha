@@ -31,10 +31,7 @@ class NotionUtils:
 
         # 제목 추출
         title = ""
-        for prop in page.get("properties", {}).values():
-            if prop.get("type") == "title":
-                title = self.rich_text_to_md(prop.get("title", []))
-                break
+        title = self.notion_2_md_title(json_notion=page)
 
         # 블록 조회
         blocks = []
@@ -46,209 +43,397 @@ class NotionUtils:
             blocks.extend(response.get("results", []))
             has_more = response.get("has_more", False)
             start_cursor = response.get("next_cursor")
-        print(f"blocks: \n{blocks}")
-        # 마크다운으로 변환
-        content = self.notion_blocks_to_markdown(blocks)
+
+        # 중첩된 블록 처리
+        processed_blocks = []
+        for block in blocks:
+            if block.get("has_children", False):
+                # 자식 블록 가져오기
+                child_response = self.notion.blocks.children.list(block_id=block["id"])
+                child_blocks = child_response.get("results", [])
+                # 부모 블록의 내용과 자식 블록들을 함께 처리
+                block["children"] = child_blocks
+            processed_blocks.append(block)
+
+        print(f"blocks: \n{processed_blocks}")
+        content = self.notion_blocks_to_markdown(processed_blocks)
         print(f"content: \n{content}")
         return title, content
 
-    def rich_text_to_md(self, rich_text_list):
-        """Rich text를 마크다운으로 변환"""
-        md = ""
-        for rt in rich_text_list:
-            text = rt.get("plain_text", "")
-            ann = rt.get("annotations", {})
+    def apply_text_formatting(self, item):
+        """
+        Apply text formatting (annotations and href links) to a Notion text item
+        """
+        # Get plain text content
+        text = item.get("plain_text", "")
 
-            # Apply text decorations
-            if ann.get("code"):
-                text = f"`{text}`"
-            if ann.get("bold"):
-                text = f"**{text}**"
-            if ann.get("italic"):
-                text = f"*{text}*"
-            if ann.get("strikethrough"):
-                text = f"~~{text}~~"
-            if ann.get("underline"):
-                text = f"<u>{text}</u>"
+        # Skip processing if text is empty or just whitespace
+        if not text.strip():
+            return text
 
-            # Handle links
-            if rt.get("href"):
-                text = f"[{text}]({rt['href']})"
+        # Get annotations
+        annotations = item.get("annotations", {})
 
-            # Handle color (if needed)
-            if ann.get("color") != "default":
-                text = f"<span style='color:{ann['color']}'>{text}</span>"
+        # Fix spaces in text if needed for proper formatting
+        # Trim leading space if it will interfere with bold/italic formatting
+        if annotations.get("bold") or annotations.get("italic"):
+            text = text.strip()
 
-            md += text
-        return md
+        # Apply text formatting based on annotations
+        if annotations.get("bold"):
+            text = f"**{text}**"
+        if annotations.get("italic"):
+            text = f"*{text}*"
+        if annotations.get("strikethrough"):
+            text = f"~~{text}~~"
+        if annotations.get("underline"):
+            text = f"__{text}__"
+        if annotations.get("code"):
+            text = f"`{text}`"
 
-    def block_to_md(self, block):
-        """Notion 블록을 마크다운으로 변환"""
-        block_type = block["type"]
-        content = block[block_type]
+        # Add link if href exists
+        href = item.get("href")
+        if href:
+            text = f"[{text}]({href})"
 
-        if block_type == "paragraph":
-            text = self.rich_text_to_md(content.get("rich_text", []))
-            return f"{text}\n\n" if text else "\n"
+        return text
 
-        elif block_type.startswith("heading_"):
-            level = int(block_type[-1])
-            text = self.rich_text_to_md(content.get("rich_text", []))
-            return f"{'#' * level} {text}\n\n"
+    def notion_2_md_title(self, json_notion):
+        json_property = json_notion.get("properties")
 
-        elif block_type == "bulleted_list_item":
-            text = self.rich_text_to_md(content.get("rich_text", []))
-            return f"- {text}\n"
+        # Title extraction from 'title' property
+        title_items = json_property.get("title", {}).get("title", [])
+        result = ""
 
-        elif block_type == "numbered_list_item":
-            text = self.rich_text_to_md(content.get("rich_text", []))
-            return f"1. {text}\n"
+        for item in title_items:
+            result += self.apply_text_formatting(item)
 
-        elif block_type == "to_do":
-            checked = content.get("checked", False)
-            text = self.rich_text_to_md(content.get("rich_text", []))
-            return f"- [{'x' if checked else ' '}] {text}\n"
+        return result
 
-        elif block_type == "toggle":
-            text = self.rich_text_to_md(content.get("rich_text", []))
-            return f"<details>\n<summary>{text}</summary>\n\n"
-
-        elif block_type == "code":
-            language = content.get("language", "")
-            text = content.get("rich_text", [])[0].get("plain_text", "") if content.get("rich_text") else ""
-            return f"```{language}\n{text}\n```\n\n"
-
-        elif block_type == "image":
-            image_type = content.get("type")
-            if image_type == "external":
-                url = content.get("external", {}).get("url", "")
-            else:
-                url = content.get("file", {}).get("url", "")
-                # S3 URL에서 파일명만 추출
-                if "?" in url:
-                    url = url.split("?")[0]
-                if "/" in url:
-                    url = url.split("/")[-1]
-            caption = self.rich_text_to_md(content.get("caption", []))
-            return f"![{caption}]({url})\n\n"
-
-        elif block_type == "divider":
-            return "---\n\n"
-
-        elif block_type == "quote":
-            text = self.rich_text_to_md(content.get("rich_text", []))
-            return f"> {text}\n"
-
-        elif block_type == "callout":
-            icon = content.get("icon", {}).get("emoji", "💡")
-            text = self.rich_text_to_md(content.get("rich_text", []))
-            return f"{icon} {text}\n\n"
-
-        elif block_type == "equation":
-            expression = content.get("expression", "")
-            return f"$$\n{expression}\n$$\n\n"
-
-        elif block_type == "table":
-            # Table handling is complex and requires processing multiple blocks
-            return "[Table content]\n\n"
-
-        elif block_type == "column_list":
-            return "\n"
-
-        elif block_type == "column":
-            return ""
-
-        else:
-            return f"[Unsupported block type: {block_type}]\n\n"
-
-    def notion_blocks_to_markdown(self, blocks: list) -> str:
-        """Notion 블록 리스트를 마크다운으로 변환"""
-        markdown = ""
-        in_toggle = False
-        in_quote = False
-        quote_content = []
-
+    def notion_blocks_to_markdown(self, blocks):
+        markdown_content = ""
         for block in blocks:
-            block_type = block["type"]
+            # Process the current block
+            markdown_content += self.notion_block_to_markdown(block)
+        return markdown_content
 
-            # Handle toggle block closing
-            if in_toggle and block_type != "toggle":
-                markdown += "</details>\n\n"
-                in_toggle = False
+    def notion_block_to_markdown(self, block):
+        block_type = block.get("type")
+        if block_type == "paragraph":
+            return self.notion_paragraph_to_markdown(block)
+        elif block_type == "heading_1":
+            return self.notion_heading_1_to_markdown(block)
+        elif block_type == "heading_2":
+            return self.notion_heading_2_to_markdown(block)
+        elif block_type == "heading_3":
+            return self.notion_heading_3_to_markdown(block)
+        elif block_type == "bulleted_list_item":
+            return self.notion_bulleted_list_item_to_markdown(block)
+        elif block_type == "numbered_list_item":
+            return self.notion_numbered_list_item_to_markdown(block)
+        elif block_type == "to_do":
+            return self.notion_to_do_to_markdown(block)
+        elif block_type == "toggle":
+            return self.notion_toggle_to_markdown(block)
+        elif block_type == "quote":
+            return self.notion_quote_to_markdown(block)
+        elif block_type == "divider":
+            return self.notion_divider_to_markdown(block)
+        elif block_type == "callout":
+            return self.notion_callout_to_markdown(block)
+        elif block_type == "code":
+            return self.notion_code_to_markdown(block)
+        elif block_type == "image":
+            return self.notion_image_to_markdown(block)
+        elif block_type == "bookmark":
+            return self.notion_bookmark_to_markdown(block)
+        elif block_type == "link_preview":
+            return self.notion_link_preview_to_markdown(block)
+        elif block_type == "table":
+            return self.notion_table_to_markdown(block)
+        else:
+            return self.notion_default_to_markdown(block)
 
-            # Handle toggle block opening
-            if block_type == "toggle":
-                in_toggle = True
+    def notion_heading_1_to_markdown(self, block):
+        rich_text_items = block.get("heading_1", {}).get("rich_text", [])
+        markdown_text = "# "
+        for item in rich_text_items:
+            markdown_text += self.apply_text_formatting(item)
+        # markdown_text = self.ensure_line_breaks(markdown_text)
+        return markdown_text + "  \n\n"
 
-            # Handle quote block formatting
-            if block_type == "quote":
-                if not in_quote:
-                    in_quote = True
-                    quote_content = []
-                quote_content.append(self.block_to_md(block).strip())
-            else:
-                if in_quote:
-                    # Process accumulated quote content
-                    if quote_content:
-                        # Add quote markers to each line
-                        quoted_lines = []
-                        for line in "\n".join(quote_content).split("\n"):
-                            if line.strip():
-                                if line.startswith("- "):  # Handle bullet points in quotes
-                                    quoted_lines.append(f"> {line}")
-                                else:
-                                    quoted_lines.append(f"> {line}")
-                            else:
-                                quoted_lines.append(">")
-                        markdown += "\n".join(quoted_lines) + "\n\n"
-                    in_quote = False
-                    quote_content = []
-                markdown += self.block_to_md(block)
+    def notion_heading_2_to_markdown(self, block):
+        rich_text_items = block.get("heading_2", {}).get("rich_text", [])
+        markdown_text = "## "
+        for item in rich_text_items:
+            markdown_text += self.apply_text_formatting(item)
+        # markdown_text = self.ensure_line_breaks(markdown_text)
+        return markdown_text + "  \n\n"
 
-        # Close any open blocks
-        if in_toggle:
-            markdown += "</details>\n\n"
+    def notion_heading_3_to_markdown(self, block):
+        rich_text_items = block.get("heading_3", {}).get("rich_text", [])
+        markdown_text = "### "
+        for item in rich_text_items:
+            markdown_text += self.apply_text_formatting(item)
+        # markdown_text = self.ensure_line_breaks(markdown_text)
+        return markdown_text + "  \n\n"
 
-        if in_quote and quote_content:
-            # Process any remaining quote content
-            quoted_lines = []
-            for line in "\n".join(quote_content).split("\n"):
-                if line.strip():
-                    if line.startswith("- "):  # Handle bullet points in quotes
-                        quoted_lines.append(f"> {line}")
+    # def ensure_line_breaks(self, text):
+    # """
+    # Add two spaces after periods, question marks, and exclamation marks
+    # to ensure proper line breaks in Markdown.
+    # """
+    # if not text:
+    #     return text
+
+    # processed = text.replace(". ", ".  ")
+    # processed = processed.replace("? ", "?  ")
+    # processed = processed.replace("! ", "!  ")
+    # return processed
+
+    def notion_paragraph_to_markdown(self, block):
+        rich_text_items = block.get("paragraph", {}).get("rich_text", [])
+        markdown_text = ""
+        for item in rich_text_items:
+            markdown_text += self.apply_text_formatting(item)
+
+        # Ensure proper line breaks
+        # markdown_text = self.ensure_line_breaks(markdown_text)
+
+        return markdown_text + "  \n" if markdown_text else "\n"
+
+    def notion_bulleted_list_item_to_markdown(self, block):
+        rich_text_items = block.get("bulleted_list_item", {}).get("rich_text", [])
+        markdown_text = "* "
+
+        # Process the text content
+        for item in rich_text_items:
+            markdown_text += self.apply_text_formatting(item)
+
+        # Ensure proper line breaks
+        # markdown_text = self.ensure_line_breaks(markdown_text)
+
+        # Handle nested children if any
+        if block.get("has_children") and "children" in block:
+            markdown_text += "  \n"
+            indented_content = ""
+
+            for child_block in block.get("children", []):
+                child_content = self.notion_block_to_markdown(child_block)
+                # Indent nested content
+                for line in child_content.split("\n"):
+                    if line.strip():
+                        # line = self.ensure_line_breaks(line)
+                        indented_content += "  " + line + "  \n"  # 2-space indent for nested content
+
+            markdown_text += indented_content
+
+        return markdown_text + "  \n"
+
+    def notion_numbered_list_item_to_markdown(self, block):
+        rich_text_items = block.get("numbered_list_item", {}).get("rich_text", [])
+        markdown_text = "1. "  # The actual numbering will be handled by Markdown
+
+        # Process the text content
+        for item in rich_text_items:
+            markdown_text += self.apply_text_formatting(item)
+
+        # Ensure proper line breaks
+        # markdown_text = self.ensure_line_breaks(markdown_text)
+
+        # Handle nested children if any
+        if block.get("has_children") and "children" in block:
+            markdown_text += "  \n"
+            indented_content = ""
+
+            for child_block in block.get("children", []):
+                child_content = self.notion_block_to_markdown(child_block)
+                # Indent nested content
+                for line in child_content.split("\n"):
+                    if line.strip():
+                        # line = self.ensure_line_breaks(line)
+                        indented_content += "   " + line + "  \n"  # 3-space indent for nested content
+
+            markdown_text += indented_content
+
+        return markdown_text + "  \n"
+
+    def notion_to_do_to_markdown(self, block):
+        todo_data = block.get("to_do", {})
+        rich_text_items = todo_data.get("rich_text", [])
+        checked = todo_data.get("checked", False)
+
+        markdown_text = "- [" + ("x" if checked else " ") + "] "
+        for item in rich_text_items:
+            markdown_text += self.apply_text_formatting(item)
+
+        # markdown_text = self.ensure_line_breaks(markdown_text)
+        return markdown_text + "  \n"
+
+    def notion_toggle_to_markdown(self, block):
+        toggle_data = block.get("toggle", {})
+        rich_text_items = toggle_data.get("rich_text", [])
+
+        markdown_text = "<details>\n<summary>"
+        for item in rich_text_items:
+            markdown_text += self.apply_text_formatting(item)
+        markdown_text += "</summary>\n\n"
+
+        # If the toggle has children, add their content
+        if block.get("has_children") and "children" in block:
+            for child_block in block.get("children", []):
+                markdown_text += self.notion_block_to_markdown(child_block)
+
+        markdown_text += "</details>\n\n"
+        return markdown_text
+
+    def notion_quote_to_markdown(self, block):
+        rich_text_items = block.get("quote", {}).get("rich_text", [])
+        markdown_text = "> "
+
+        # Process the quote text
+        for item in rich_text_items:
+            markdown_text += self.apply_text_formatting(item)
+        markdown_text += "  \n"
+
+        # If the quote has children, add them with proper indentation
+        if block.get("has_children") and "children" in block:
+            for child_block in block.get("children", []):
+                # Process each child block and add it with proper indentation
+                child_content = self.notion_block_to_markdown(child_block)
+
+                # Add '> ' prefix to each line of the child content to maintain the quote formatting
+                indented_content = ""
+                for line in child_content.split("\n"):
+                    if line.strip():
+                        indented_content += "> " + line + "  \n"
                     else:
-                        quoted_lines.append(f"> {line}")
-                else:
-                    quoted_lines.append(">")
-            markdown += "\n".join(quoted_lines) + "\n\n"
+                        indented_content += ""
 
-        # Remove excessive newlines while preserving paragraph structure
-        lines = markdown.split("\n")
-        cleaned_lines = []
-        prev_empty = False
+                markdown_text += indented_content
 
-        for line in lines:
-            is_empty = not line.strip()
-            if not (is_empty and prev_empty):  # Don't add consecutive empty lines
-                cleaned_lines.append(line)
-            prev_empty = is_empty
+        # Add an extra line break after the quote
+        markdown_text += "\n"
+        return markdown_text
 
-        return "\n".join(cleaned_lines).strip()
+    def notion_divider_to_markdown(self, block):
+        return "---\n\n"
 
-    def get_notion_title_and_content(self, link: str):
-        """노션 링크에서 제목과 마크다운 변환된 본문을 반환"""
-        # 링크 파싱
-        page_id = self.link_parser(link)
-        # 페이지 메타데이터
-        page = self.notion.pages.retrieve(page_id=page_id)
-        # 제목 추출
-        title = ""
-        # Notion DB 구조에 따라 title property가 다를 수 있음
-        for prop in page.get("properties", {}).values():
-            if prop.get("type") == "title":
-                title = self.rich_text_to_md(prop.get("title", []))
-                break
-        # 블록(본문) 추출
-        blocks = self.notion.blocks.children.list(block_id=page_id)
-        content = self.notion_blocks_to_markdown(blocks.get("results", []))
-        return title, content
+    def notion_callout_to_markdown(self, block):
+        callout_data = block.get("callout", {})
+        rich_text_items = callout_data.get("rich_text", [])
+        icon = callout_data.get("icon", {})
+
+        # Handle emoji icon if present
+        icon_prefix = ""
+        if icon.get("type") == "emoji":
+            icon_prefix = icon.get("emoji", "") + " "
+
+        markdown_text = "> **" + icon_prefix + "**"
+        for item in rich_text_items:
+            markdown_text += self.apply_text_formatting(item)
+
+        # markdown_text = self.ensure_line_breaks(markdown_text)
+        return markdown_text + "  \n\n"
+
+    def notion_code_to_markdown(self, block):
+        code_data = block.get("code", {})
+        rich_text_items = code_data.get("rich_text", [])
+        language = code_data.get("language", "")
+
+        # Get the code content
+        code_content = ""
+        for item in rich_text_items:
+            code_content += item.get("plain_text", "")
+
+        return f"```{language}\n{code_content}\n```\n\n"
+
+    def notion_image_to_markdown(self, block):
+        image_data = block.get("image", {})
+        caption_items = image_data.get("caption", [])
+
+        # Get the image URL based on type
+        image_url = ""
+        if image_data.get("type") == "file":
+            image_url = image_data.get("file", {}).get("url", "")
+        elif image_data.get("type") == "external":
+            image_url = image_data.get("external", {}).get("url", "")
+
+        # Get the caption if any
+        caption = ""
+        for item in caption_items:
+            caption += item.get("plain_text", "")
+
+        return f"![{caption}]({image_url})\n\n"
+
+    def notion_bookmark_to_markdown(self, block):
+        bookmark_data = block.get("bookmark", {})
+        url = bookmark_data.get("url", "")
+        caption_items = bookmark_data.get("caption", [])
+
+        # Get the caption if any
+        caption = ""
+        for item in caption_items:
+            caption += self.apply_text_formatting(item)
+
+        markdown = f"[{url}]({url})"
+        if caption:
+            markdown += f" - {caption}"
+        return markdown + "\n\n"
+
+    def notion_link_preview_to_markdown(self, block):
+        link_preview_data = block.get("link_preview", {})
+        url = link_preview_data.get("url", "")
+        return f"[Preview]({url})\n\n"
+
+    def notion_table_to_markdown(self, block):
+        table_data = block.get("table", {})
+        has_column_header = table_data.get("has_column_header", False)
+
+        # If the table has children (rows), process them
+        markdown_text = ""
+        if block.get("has_children") and "children" in block:
+            rows = block.get("children", [])
+            if not rows:
+                return markdown_text
+
+            # Get the number of columns from the first row
+            first_row = rows[0] if rows else {}
+            first_row_data = first_row.get("table_row", {})
+            cells = first_row_data.get("cells", [])
+            num_columns = len(cells)
+
+            # Create table header
+            for i in range(num_columns):
+                markdown_text += "| Column " + str(i + 1) + " "
+            markdown_text += "|\n"
+
+            # Create separator row
+            for _ in range(num_columns):
+                markdown_text += "| --- "
+            markdown_text += "|\n"
+
+            # Process each row
+            for i, row in enumerate(rows):
+                # Skip the first row if it's used as a header
+                if i == 0 and has_column_header:
+                    continue
+
+                row_data = row.get("table_row", {})
+                cells = row_data.get("cells", [])
+
+                for cell in cells:
+                    cell_text = ""
+                    for item in cell:
+                        cell_text += self.apply_text_formatting(item)
+                    markdown_text += "| " + cell_text + " "
+                markdown_text += "|\n"
+
+            markdown_text += "\n"
+
+        return markdown_text
+
+    def notion_default_to_markdown(self, block):
+        # For unsupported block types, return an empty string
+        block_type = block.get("type", "unknown")
+        return f"<!-- Unsupported block type: {block_type} -->\n\n"
