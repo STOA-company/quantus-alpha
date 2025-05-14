@@ -232,6 +232,9 @@ class SearchService:
         limit: int = 10,
     ) -> List[CommunitySearchItem]:
         """커뮤니티 종목 검색 기능"""
+        if query is not None:
+            query = query.strip()
+
         if not query:
             community_service = get_community_service()
             trending_stocks = community_service.get_trending_stocks()
@@ -320,6 +323,9 @@ class SearchService:
             columns=["ticker", "kr_name", "en_name", "ctry"],
             or__=or_conditions,
             is_activate=1,
+            kr_name__not=None,
+            en_name__not=None,
+            ctry__not=None,
         )
 
         if not search_result:
@@ -466,6 +472,9 @@ class SearchService:
             or__=or_conditions,
             is_activate=1,
             is_delisted=0,
+            kr_name__not=None,
+            en_name__not=None,
+            ctry__not=None,
         )
 
         logger.warning(f"Search query: '{original_query}', Normalized: '{normalized_query}'")

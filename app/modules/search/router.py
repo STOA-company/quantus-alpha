@@ -66,6 +66,9 @@ def search_interest(
     community_service: CommunityService = Depends(get_community_service),
     user: AlphafinderUser = Depends(get_current_user),
 ) -> InfiniteScrollResponse[InterestSearchItem]:
+    if query is not None:
+        query = query.strip()
+
     if query is None:
         # Get trending stocks
         trending_stocks = community_service.get_trending_stocks()
