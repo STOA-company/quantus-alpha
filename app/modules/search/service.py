@@ -232,30 +232,36 @@ class SearchService:
         limit: int = 10,
     ) -> List[CommunitySearchItem]:
         """커뮤니티 종목 검색 기능"""
-        if query is not None:
-            query = query.strip()
-
         if not query:
             community_service = get_community_service()
-            trending_stocks = community_service.get_trending_stocks()
-
+            # trending_stocks = community_service.get_trending_stocks()
+            trending_stocks = community_service.get_top_10_stocks(offset, limit, lang)
             # 페이지네이션 적용
-            paginated_stocks = trending_stocks[offset : offset + limit]
-
+            # paginated_stocks = trending_stocks[offset : offset + limit]
+            paginated_stocks = trending_stocks
             if lang == TranslateCountry.KO:
                 name_column = "kr_name"
             else:
                 name_column = "en_name"
 
+            stock_info_condition = {
+                # "ticker__in": [ticker for ticker, _ in paginated_stocks],
+                "ticker__in": paginated_stocks,
+            }
+            if lang == TranslateCountry.KO:
+                stock_info_condition["kr_name__not"] = None
+            else:
+                stock_info_condition["en_name__not"] = None
+
             stock_info = self.db._select(
                 table="stock_information",
                 columns=["ticker", name_column, "ctry"],
-                ticker__in=[ticker for ticker, _ in paginated_stocks],
+                **stock_info_condition,
             )
             # trending_stocks에 맞춰서 정렬
-            stock_info = [
-                item for item in stock_info if item._mapping["ticker"] in [ticker for ticker, _ in paginated_stocks]
-            ]
+            # stock_info = [
+            #     item for item in stock_info if item._mapping["ticker"] in [ticker for ticker, _ in paginated_stocks]
+            # ]
             return [
                 CommunitySearchItem(
                     ticker=ticker,
@@ -264,7 +270,7 @@ class SearchService:
                 )
                 for ticker, name, ctry in stock_info
             ]
-        return await self._search_result(query, lang, offset, limit)
+        return await self._search_result(query, lang, offset, limit + 1)
 
     async def _search_result(
         self, query: str, lang: TranslateCountry, offset: int, limit: int

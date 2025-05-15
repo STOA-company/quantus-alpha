@@ -46,10 +46,16 @@ async def search_community(
     limit: int = Query(20, description="검색 결과 수"),
     service: SearchService = Depends(get_search_service),
 ) -> InfiniteScrollResponse[CommunitySearchItem]:
-    search_result = await service.search_community(query, lang, offset, limit + 1)
-    has_more = len(search_result) > limit
-    if has_more:
-        search_result = search_result[:-1]  # 마지막 항목 제거
+    if query is not None:
+        query = query.strip()
+
+    search_result = await service.search_community(query, lang, offset, limit)
+    if query:
+        has_more = len(search_result) > limit
+        if has_more:
+            search_result = search_result[:-1]  # 마지막 항목 제거
+    else:
+        has_more = True if offset <= 20 else False
 
     return InfiniteScrollResponse(
         status_code=200, message="검색이 완료되었습니다.", data=search_result, has_more=has_more
@@ -62,6 +68,7 @@ def search_interest(
     ctry: TranslateCountry = TranslateCountry.KO,
     offset: int = 0,
     limit: int = 10,
+    lang: TranslateCountry = TranslateCountry.KO,
     service: SearchService = Depends(get_search_service),
     community_service: CommunityService = Depends(get_community_service),
     user: AlphafinderUser = Depends(get_current_user),
@@ -71,23 +78,32 @@ def search_interest(
 
     if query is None:
         # Get trending stocks
-        trending_stocks = community_service.get_trending_stocks()
+        # trending_stocks = community_service.get_trending_stocks()
+        trending_stocks = community_service.get_top_10_stocks(offset, limit, lang)
         # Get interest stocks for the group
-        query = """
+        _query = """
             SELECT DISTINCT ticker
             FROM alphafinder_interest_stock
             WHERE group_id IN (SELECT group_id FROM alphafinder_interest_group WHERE user_id = :user_id)
         """
-        interest_tickers = service.db._execute(text(query), {"user_id": user["uid"]})
+        interest_tickers = service.service_db._execute(text(_query), {"user_id": user["uid"]})
         interest_tickers = [ticker[0] for ticker in interest_tickers.fetchall()]
 
         # Get stock information for trending stocks
+        stock_info_condition = {
+            "is_activate": 1,
+            "is_delisted": 0,
+            # "ticker__in": [ticker for ticker, _ in trending_stocks],
+            "ticker__in": trending_stocks,
+        }
+        if lang == TranslateCountry.KO:
+            stock_info_condition["kr_name__not"] = None
+        else:
+            stock_info_condition["en_name__not"] = None
         stock_info = service.db._select(
             table="stock_information",
             columns=["ticker", "kr_name", "en_name", "ctry"],
-            ticker__in=[ticker for ticker, _ in trending_stocks],
-            is_activate=1,
-            is_delisted=0,
+            **stock_info_condition,
         )
 
         # Convert to InterestSearchItem format
@@ -103,10 +119,12 @@ def search_interest(
             )
     else:
         search_result = service.search_interest(query, user["uid"], ctry, offset, limit + 1)
-
-    has_more = len(search_result) > limit
-    if has_more:
-        search_result = search_result[:-1]  # 마지막 항목 제거
+    if query is None or query == "":
+        has_more = True if offset <= 20 else False
+    else:
+        has_more = len(search_result) > limit
+        if has_more:
+            search_result = search_result[:-1]  # 마지막 항목 제거
 
     return InfiniteScrollResponse(
         status_code=200, message="검색이 완료되었습니다.", data=search_result, has_more=has_more
