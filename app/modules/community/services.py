@@ -1015,6 +1015,31 @@ class CommunityService:
 
         return sorted_tickers
 
+    def get_top_10_stocks(self, offset: int, limit: int, lang: TranslateCountry):
+        half_limit = limit // 2
+        half_offset = offset // 2
+        condition = {
+            "order": "market_cap",
+            "offset": half_offset,
+            "limit": half_limit,
+        }
+
+        kr_sorted_tickers = self.db_data._select(
+            table="KOR_stock_factors",
+            columns=["ticker"],
+            **condition,
+        )
+        us_sorted_tickers = self.db_data._select(
+            table="USA_stock_factors",
+            columns=["ticker"],
+            **condition,
+        )
+
+        us_ticker = [ticker.ticker[:-3] for ticker in us_sorted_tickers if ticker.ticker.endswith("-US")]
+        tickers = [ticker.ticker for ticker in kr_sorted_tickers] + us_ticker
+
+        return tickers
+
 
 def get_community_service() -> CommunityService:
     return CommunityService()
