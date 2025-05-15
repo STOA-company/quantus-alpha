@@ -2031,23 +2031,23 @@ class NoticeService(CommunityService):
             condition["page_type"] = self._change_id_to_page_type(category_id)
         notices = self.database_user._select(
             table="quantus_notion",
-            columns=["id", "title", "page_type", "created_at"],
+            columns=["id", "title", "page_type", "created_at", "link"],
             **condition,
         )
-        print(f"notices : {notices}")
         has_more = len(notices) > limit
         notices = notices[:limit]
         result = []
         for notice in notices:
+            content = self.is_notion_notice(notice.link)
             result.append(
                 NoticeResponse(
                     id=notice.id,
                     title=notice.title,
+                    content=content,
                     type=self._change_page_type(notice.page_type),
                     created_at=notice.created_at,
                 )
             )
-        print(f"result : {result}")
         return result, has_more
 
     def get_notice_detail(self, notice_id: int) -> NoticeResponse:
@@ -2067,6 +2067,14 @@ class NoticeService(CommunityService):
             created_at=notice_info.created_at,
             content=content,
         )
+
+    def is_notion_notice(self, link: str) -> Optional[str]:
+        """공지사항 링크 확인"""
+        notion_url = ["https://www.notion.so/stoa-investment", "https://stoa-investment.notion.site"]
+        for url in notion_url:
+            if link.startswith(url):
+                return None
+        return link
 
 
 def get_community_service() -> CommunityService:
