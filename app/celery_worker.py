@@ -691,7 +691,7 @@ def collect_system_metrics_task():
 
 # Worker 시작점
 if __name__ == "__main__":
-    CONCURRENCY = getattr(settings, "CELERY_CONCURRENCY", 7)
+    CONCURRENCY = getattr(settings, "CELERY_CONCURRENCY", 3)
     CELERY_APP.worker_main(
         argv=[
             "worker",
@@ -700,6 +700,7 @@ if __name__ == "__main__":
             "-n",
             "worker@%h",
             f"--concurrency={CONCURRENCY}",
-            "--max-tasks-per-child=1000",
+            "--max-tasks-per-child=20",
+            "--max-memory-per-child=400000",
         ]
     )
