@@ -48,6 +48,7 @@ class NewsDetailItem(BaseModel):
 class NewsDetailItemV2(BaseModel):
     id: int
     ctry: str | None
+    name: str | None
     date: datetime
     title: str
     summary: str | None

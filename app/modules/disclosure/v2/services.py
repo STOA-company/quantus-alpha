@@ -290,6 +290,8 @@ class DisclosureService:
             data.append(
                 {
                     "id": row["id"],
+                    "name": res_name,
+                    "ctry": row["ctry"],
                     "title": f"{res_name} {form_type} {category_type}".strip(),
                     "date": row["date"],
                     "emotion": row["emotion"],
