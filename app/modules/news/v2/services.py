@@ -212,6 +212,7 @@ class NewsService:
                     id=row["id"],
                     ctry=row["ctry"].lower(),
                     name=row["kr_name"],
+                    ticker=row["ticker"],
                     date=row["date"],
                     title=row["title"],
                     summary=row["summary"],
