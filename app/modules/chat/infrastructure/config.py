@@ -6,7 +6,7 @@ from pydantic import BaseModel
 class LLMConfig(BaseModel):
     """LLM API 설정"""
 
-    base_url: str = os.getenv("LLM_API_BASE_URL", "https://devback.alphafinder.dev/ai/research")
+    base_url: str = os.getenv("LLM_API_BASE_URL", "https://ai.quantus.kr/ai/research")
     api_key: str = os.getenv("LLM_API_KEY", "")
     timeout: int = int(os.getenv("LLM_API_TIMEOUT", "1800"))
     mock_enabled: bool = False  # 모의 응답 비활성화

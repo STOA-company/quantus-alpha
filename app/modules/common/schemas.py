@@ -21,6 +21,14 @@ class BaseResponse(BaseModel, Generic[T]):
     data: Optional[T] = None
 
 
+class NewsDisclosureResponse(BaseResponse):
+    total_count: int
+    total_pages: int
+    current_page: int
+    offset: int
+    size: int
+
+
 class PandasStatistics(BaseModel, Generic[T]):
     status_code: int
     message: str
