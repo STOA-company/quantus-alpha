@@ -373,6 +373,10 @@ def interest_news(
     total_pages = math.ceil(total_count / size)
     current_page = page
 
+    total_count = len(total_news_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
     response_data = InterestNewsResponse(news=news_data, has_next=has_next)
     return NewsDisclosureResponse(
         status_code=200,
@@ -424,6 +428,10 @@ def interest_disclosure(
     total_pages = math.ceil(total_count / size)
     current_page = page
 
+    total_count = len(total_disclosure_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
     response_data = InterestDisclosureResponse(disclosure=disclosure_data, has_next=has_next)
 
     return NewsDisclosureResponse(
@@ -434,5 +442,5 @@ def interest_disclosure(
         total_pages=total_pages,
         current_page=current_page,
         offset=offset,
-        size=size,
+        size=size
     )
