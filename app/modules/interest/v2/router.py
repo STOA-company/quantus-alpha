@@ -361,13 +361,17 @@ def interest_news(
     #     total_news_data = news_service.mask_news_items(total_news_data)
 
     offset = (page - 1) * size
-    news_data = total_news_data[offset * size : offset * size + size]
+    news_data = total_news_data[offset : offset + size]
 
     # if user.subscription_level >= 3: # TODO :: 유저 테이블 통합 후 주석 해제
     has_next = len(total_news_data) > page * size
     # else:
     #     current_position = offset * limit + len(news_data)
     #     has_next = current_position < len(total_news_data)
+
+    total_count = len(total_news_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
 
     total_count = len(total_news_data)
     total_pages = math.ceil(total_count / size)
@@ -412,13 +416,17 @@ def interest_disclosure(
     #     total_disclosure_data = news_service.mask_disclosure_items(total_disclosure_data)
 
     offset = (page - 1) * size
-    disclosure_data = total_disclosure_data[offset * size : offset * size + size]
+    disclosure_data = total_disclosure_data[offset : offset + size]
 
     # if user.subscription_level >= 3:
     has_next = len(total_disclosure_data) > page * size
     # else:
     #     current_position = offset * limit + len(disclosure_data)
     #     has_next = current_position < len(total_disclosure_data)
+
+    total_count = len(total_disclosure_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
 
     total_count = len(total_disclosure_data)
     total_pages = math.ceil(total_count / size)
@@ -434,5 +442,5 @@ def interest_disclosure(
         total_pages=total_pages,
         current_page=current_page,
         offset=offset,
-        size=size,
+        size=size
     )
