@@ -24,6 +24,8 @@ CELERY_APP.conf.accept_content = ["json"]
 CELERY_APP.conf.task_track_started = True
 CELERY_APP.conf.task_time_limit = 1800  # 30분
 CELERY_APP.conf.worker_prefetch_multiplier = 1  # 작업 분배 최적화
+CELERY_APP.conf.worker_max_tasks_per_child = 20
+CELERY_APP.conf.worker_max_memory_per_child = 400000  # 400MB
 
 # Celery Beat Schedule
 CELERY_APP.conf.beat_schedule = {

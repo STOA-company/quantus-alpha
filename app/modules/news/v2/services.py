@@ -166,6 +166,7 @@ class NewsService:
                 columns=[
                     "id",
                     "ticker",
+                    "kr_name",
                     "ctry",
                     "date",
                     "title",
@@ -210,6 +211,8 @@ class NewsService:
                 NewsDetailItemV2(
                     id=row["id"],
                     ctry=row["ctry"].lower(),
+                    name=row["kr_name"],
+                    ticker=row["ticker"],
                     date=row["date"],
                     title=row["title"],
                     summary=row["summary"],

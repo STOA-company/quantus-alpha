@@ -1,3 +1,4 @@
+import math
 from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -6,7 +7,7 @@ from app.core.exception.base import DuplicateException, NotFoundException
 from app.core.logger import setup_logger
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
-from app.modules.common.schemas import BaseResponse
+from app.modules.common.schemas import BaseResponse, NewsDisclosureResponse
 from app.modules.interest.v2.request import (
     AddInterestRequest,
     DeleteInterestRequest,
@@ -337,12 +338,12 @@ def get_interest_price(
 
 # 관심 종목 뉴스
 ## v1과 response가 다름!!!
-@router.get("/news/{group_id}", summary="관심 종목 뉴스", response_model=BaseResponse[InterestNewsResponse])
+@router.get("/news/{group_id}", summary="관심 종목 뉴스")
 def interest_news(
     group_id: int,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
-    offset: Annotated[int, Query(description="페이지 번호, 기본값: 0")] = 0,
-    limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
+    page: Annotated[int, Query(description="페이지 번호, 기본값: 1")] = 1,
+    size: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 10,
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
@@ -359,30 +360,44 @@ def interest_news(
     # if user.subscription_level < 3:
     #     total_news_data = news_service.mask_news_items(total_news_data)
 
-    news_data = total_news_data[offset * limit : offset * limit + limit]
+    offset = (page - 1) * size
+    news_data = total_news_data[offset : offset + size]
 
     # if user.subscription_level >= 3: # TODO :: 유저 테이블 통합 후 주석 해제
-    has_next = len(total_news_data) > offset * limit + limit
+    has_next = len(total_news_data) > page * size
     # else:
     #     current_position = offset * limit + len(news_data)
     #     has_next = current_position < len(total_news_data)
 
+    total_count = len(total_news_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
+    total_count = len(total_news_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
     response_data = InterestNewsResponse(news=news_data, has_next=has_next)
-    return BaseResponse(
+    return NewsDisclosureResponse(
         status_code=200,
         message="Successfully retrieved news data",
         data=response_data,
+        total_count=total_count,
+        total_pages=total_pages,
+        current_page=current_page,
+        offset=offset,
+        size=size,
     )
 
 
 # 관심 종목 공시
 ## v1과 response가 다름!!!
-@router.get("/disclosure/{group_id}", summary="관심 종목 공시", response_model=BaseResponse[InterestDisclosureResponse])
+@router.get("/disclosure/{group_id}", summary="관심 종목 공시")
 def interest_disclosure(
     group_id: int,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
-    offset: Annotated[int, Query(description="페이지 번호, 기본값: 0")] = 0,
-    limit: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 20,
+    page: Annotated[int, Query(description="페이지 번호, 기본값: 1")] = 1,
+    size: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 10,
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
@@ -400,18 +415,32 @@ def interest_disclosure(
     # if user.subscription_level < 3:
     #     total_disclosure_data = news_service.mask_disclosure_items(total_disclosure_data)
 
-    disclosure_data = total_disclosure_data[offset * limit : offset * limit + limit]
+    offset = (page - 1) * size
+    disclosure_data = total_disclosure_data[offset : offset + size]
 
     # if user.subscription_level >= 3:
-    has_next = len(total_disclosure_data) > offset * limit + limit
+    has_next = len(total_disclosure_data) > page * size
     # else:
     #     current_position = offset * limit + len(disclosure_data)
     #     has_next = current_position < len(total_disclosure_data)
 
+    total_count = len(total_disclosure_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
+    total_count = len(total_disclosure_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
     response_data = InterestDisclosureResponse(disclosure=disclosure_data, has_next=has_next)
 
-    return BaseResponse(
+    return NewsDisclosureResponse(
         status_code=200,
         message="Successfully retrieved disclosure data",
         data=response_data,
+        total_count=total_count,
+        total_pages=total_pages,
+        current_page=current_page,
+        offset=offset,
+        size=size
     )

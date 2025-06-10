@@ -35,13 +35,13 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-echo "Changing to project directory..."
-cd ~/quantus-alpha || exit 1
+# echo "Changing to project directory..."
+# cd ~/quantus-alpha || exit 1
 
-echo "Fetching latest changes..."
-git fetch origin || exit 1
-git checkout $BRANCH || exit 1
-git pull origin $BRANCH || exit 1
+# echo "Fetching latest changes..."
+# git fetch origin || exit 1
+# git checkout $BRANCH || exit 1
+# git pull origin $BRANCH || exit 1
 
 echo "Updating git submodules..."
 git submodule update --init --recursive || exit 1
@@ -208,7 +208,7 @@ if [ $attempt -gt $max_attempts ]; then
 fi
 
 update_nginx_upstream $target_service
-update_prometheus_config $target_service $idle_service
+# update_prometheus_config $target_service $idle_service
 
 echo "Traffic switched to $target_service. Waiting 10 seconds to ensure stability..."
 sleep 10

@@ -4,6 +4,9 @@ services:
             context: .
             dockerfile: Dockerfile.batch
         command: python -m app.celery_worker
+        mem_limit: 3g
+        memswap_limit: 3g
+        restart: unless-stopped
         env_file:
             - .env.${ENV:-dev}
         environment:

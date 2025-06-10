@@ -5,15 +5,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.logger.logger import get_logger
 from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
-from app.modules.common.schemas import BaseResponse
+from app.modules.common.schemas import BaseResponse, InfiniteScrollResponse
 from app.modules.community.v2.enum import PostOrderBy
 from app.modules.community.v2.schemas import (
     CategoryResponse,
     CommentCreate,
     CommentListResponse,
     CommentUpdate,
+    FollowRequest,
+    FollowResponse,
+    InfiniteScrollResponseWithTotalCount,
     LikeRequest,
     LikeResponse,
+    NoticeCategoryResponse,
+    NoticeResponse,
     PostCreate,
     PostListResponse,
     PostUpdate,
@@ -23,8 +28,16 @@ from app.modules.community.v2.schemas import (
     ReportRequest,
     ResponsePost,
     TrendingPostResponse,
+    UserInfo,
+    UserInfoWithFollow,
 )
-from app.modules.community.v2.services import CommunityService, get_community_service
+from app.modules.community.v2.services import (
+    CommunityService,
+    NoticeService,
+    get_community_service,
+    get_follow_service,
+    get_notice_service,
+)
 from app.utils.quantus_auth_utils import get_current_user
 
 router = APIRouter()
@@ -333,7 +346,7 @@ async def get_posts(
     offset: int = Query(0, description="검색 시작 위치"),
     limit: int = Query(10, description="검색 결과 수"),
     category_id: Optional[int] = Query(None, description="카테고리 ID"),
-    stock_ticker: Optional[str] = Query(None, description="종목 코드"),
+    ticker: Optional[str] = Query(None, description="종목 코드"),
     lang: Optional[TranslateCountry] = Query(TranslateCountry.KO, description="언어 설정 (ko/en)"),
     order_by: Optional[PostOrderBy] = Query(PostOrderBy.created_at, description="정렬 기준 (created_at, like_count)"),
     community_service: CommunityService = Depends(get_community_service),
@@ -345,7 +358,7 @@ async def get_posts(
         offset=offset,
         limit=limit + 1,
         category_id=category_id,
-        stock_ticker=stock_ticker,
+        stock_ticker=ticker,
         order_by=order_by,
         lang=lang,
     )
@@ -584,7 +597,7 @@ async def update_like(
 ### 실시간 인기 게시글 조회 ###
 @router.get("/trending/posts", response_model=BaseResponse[List[TrendingPostResponse]], summary="실시간 인기 게시글 조회")
 async def get_trending_posts(
-    limit: int = Query(5, description="조회할 게시글 수 / default: 5", ge=1, le=50),
+    limit: int = Query(10, description="조회할 게시글 수 / default: 10", ge=1, le=50),
     community_service: CommunityService = Depends(get_community_service),
     current_user: Optional[AlphafinderUser] = Depends(get_current_user),
 ):
@@ -632,3 +645,193 @@ async def report(
 ):
     report_response = await community_service.report_post(report_request, current_user)
     return BaseResponse(status_code=200, message="신고 기능을 완료하였습니다.", data=report_response)
+
+
+########################
+# 마이 프로필
+########################
+
+# # 자신이 쓴 게시글 조회
+# @router.get("/posts/mine", response_model=BaseResponse[List[PostResponse]], summary="자신이 쓴 글 조회")
+# async def get_my_posts(
+#     community_service: CommunityService = Depends(get_community_service),
+#     current_user: AlphafinderUser = Depends(get_current_user),
+# ):
+#     posts = await community_service.get_my_posts(current_user)
+#     return BaseResponse(status_code=200, message="자신이 쓴 글을 조회하였습니다.", data=posts)
+
+
+# # 자신이 쓴 댓글 조회
+# @router.get("/comments/mine", response_model=BaseResponse[List[CommentResponse]], summary="자신이 쓴 댓글 조회")
+# async def get_my_comments(
+#     community_service: CommunityService = Depends(get_community_service),
+#     current_user: AlphafinderUser = Depends(get_current_user),
+# ):
+#     comments = await community_service.get_my_comments(current_user)
+
+
+########################
+# 팔로우 기능
+########################
+# 팔로우, 언팔로우
+@router.put(
+    "/follow/{user_id}",
+    response_model=BaseResponse[FollowResponse],
+    summary="팔로우, 언팔로우",
+    description="user_id에 해당하는 유저를 팔로우, 언팔로우 합니다.",
+)
+async def update_follow(
+    user_id: int,
+    follow_request: FollowRequest,
+    community_service: CommunityService = Depends(get_follow_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    is_followed = await community_service.update_follow(
+        current_user_id=current_user["uid"], user_id=user_id, is_followed=follow_request.is_followed
+    )
+    return BaseResponse(
+        status_code=200, message="팔로우, 언팔로우를 완료하였습니다.", data=FollowResponse(is_followed=is_followed)
+    )
+
+
+# 팔로워 목록 조회
+@router.get(
+    "/follow/{user_id}/followers",
+    response_model=InfiniteScrollResponseWithTotalCount[UserInfoWithFollow],
+    summary="팔로워 목록 조회",
+)
+def get_followers(
+    user_id: int,
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
+    community_service: CommunityService = Depends(get_follow_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    followers, total_count, has_more = community_service.get_followers(user_id=user_id, offset=offset, limit=limit)
+    return InfiniteScrollResponseWithTotalCount(
+        status_code=200,
+        message="팔로워 목록을 조회하였습니다.",
+        has_more=has_more,
+        total_count=total_count,
+        data=followers,
+    )
+
+
+# 팔로잉 목록 조회
+@router.get(
+    "/follow/{user_id}/following",
+    response_model=InfiniteScrollResponseWithTotalCount[UserInfo],
+    summary="팔로잉 목록 조회",
+)
+def get_following(
+    user_id: int,
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
+    community_service: CommunityService = Depends(get_follow_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    following, total_count, has_more = community_service.get_following(user_id=user_id, offset=offset, limit=limit)
+    return InfiniteScrollResponseWithTotalCount(
+        status_code=200,
+        message="팔로잉 목록을 조회하였습니다.",
+        has_more=has_more,
+        total_count=total_count,
+        data=following,
+    )
+
+
+########################
+# 유저가 작성한 댓글 조회
+########################
+
+
+@router.get("/users/comments", response_model=InfiniteScrollResponseWithTotalCount, summary="유저가 작성한 댓글 조회")
+def get_user_comments(
+    user_id: int = None,
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
+    community_service: CommunityService = Depends(get_community_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    if user_id is None:
+        user_id = current_user["uid"]
+    comments, has_more, total_count = community_service.get_user_comments_posts(
+        current_user=current_user, user_id=user_id, offset=offset, limit=limit
+    )
+    return InfiniteScrollResponseWithTotalCount(
+        status_code=200,
+        message="유저가 작성한 댓글을 조회하였습니다.",
+        has_more=has_more,
+        data=comments,
+        total_count=total_count,
+    )
+
+
+@router.get("/users/posts", response_model=InfiniteScrollResponseWithTotalCount, summary="유저가 작성한 게시글 조회")
+def get_user_posts(
+    user_id: int = None,
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
+    community_service: CommunityService = Depends(get_community_service),
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    if user_id is None:
+        user_id = current_user["uid"]
+    posts, has_more, total_count = community_service.get_user_comments_posts(
+        current_user=current_user, user_id=user_id, offset=offset, limit=limit, is_comment=False
+    )
+    return InfiniteScrollResponseWithTotalCount(
+        status_code=200,
+        message="유저가 작성한 게시글을 조회하였습니다.",
+        has_more=has_more,
+        data=posts,
+        total_count=total_count,
+    )
+
+
+# 공지사항 카테고리 api
+@router.get(
+    "/notice/categories", response_model=BaseResponse[List[NoticeCategoryResponse]], summary="공지사항 카테고리 조회"
+)
+async def get_notice_categories(
+    notice_service: NoticeService = Depends(get_notice_service),
+):
+    categories = [
+        NoticeCategoryResponse(
+            id=1,
+            name="공지",
+        ),
+        NoticeCategoryResponse(
+            id=2,
+            name="일반",
+        ),
+        NoticeCategoryResponse(
+            id=3,
+            name="이벤트",
+        ),
+    ]
+    return BaseResponse(status_code=200, message="공지사항 카테고리를 조회하였습니다.", data=categories)
+
+
+# 공지사항 리스트 api
+@router.get("/notice", response_model=InfiniteScrollResponse[NoticeResponse], summary="공지사항 리스트 조회")
+async def get_notices(
+    category_id: int = Query(None, description="카테고리 ID"),
+    offset: int = Query(0, description="검색 시작 위치 / 기본값: 0"),
+    limit: int = Query(10, description="검색 결과 수 / 기본값: 10"),
+    notice_service: NoticeService = Depends(get_notice_service),
+):
+    notices, has_more = notice_service.get_notices(category_id=category_id, offset=offset, limit=limit)
+    return InfiniteScrollResponse(
+        status_code=200, message="공지사항 리스트를 조회하였습니다.", data=notices, has_more=has_more
+    )
+
+
+# 공지사항 상세 조회 api
+@router.get("/notice/{notice_id}", response_model=BaseResponse[NoticeResponse], summary="공지사항 상세 조회")
+async def get_notice(
+    notice_id: int,
+    notice_service: NoticeService = Depends(get_notice_service),
+):
+    notice = notice_service.get_notice_detail(notice_id)
+    return BaseResponse(status_code=200, message="공지사항 상세 조회를 완료하였습니다.", data=notice)
