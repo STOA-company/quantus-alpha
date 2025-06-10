@@ -279,7 +279,10 @@ class NewsService:
                 df_news = df_news[df_news["title"].str.strip() != ""]
                 df_news = NewsService._convert_to_kst(df_news)
 
-        news_data = [] if df_news.empty else self._process_price_data(df=df_news, lang=lang)
+        if not df_news.empty:
+            news_data = self._process_price_data(df=df_news, lang=lang)
+        else:
+            raise DataNotFoundException(ticker=tickers[0], data_type="news")
 
         return news_data
 
