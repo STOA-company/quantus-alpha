@@ -82,6 +82,8 @@ origins = [
     "https://www.alphafinder.dev",
     "https://alphafinder-l2xhjep9g-quantus-68c7517d.vercel.app",
     "https://supper-app-dev.quantus.kr",
+    "https://superapp-live.quantus.kr",
+    "https://superapp-dev.quantus.kr",
 ]
 
 if settings.ENV == "dev":
