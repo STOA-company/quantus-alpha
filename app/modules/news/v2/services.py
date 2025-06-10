@@ -270,7 +270,11 @@ class NewsService:
                 **news_condition,
             )
         )
-        df_news = df_news.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+        if "emotion" in df_news.columns:
+            df_news = df_news.dropna(subset=["emotion"])
+        if not df_news.empty:
+            df_news = df_news.sort_values(by=["date"], ascending=[False])
+
         df_news = df_news[df_news["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
         df_news = NewsService._convert_to_kst(df_news)
 
