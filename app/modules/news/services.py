@@ -712,7 +712,6 @@ class NewsService:
         # 결과 생성
         result = []
         for ticker in unique_tickers:
-            print(f"ticker: {ticker}")
             ticker_news = total_df[total_df["ticker"] == ticker]
             if ticker_news.empty:
                 continue
@@ -758,6 +757,9 @@ class NewsService:
                 )
             )
             print(f"news_items: {len(news_items)}")
+
+        ticker_news = ticker_news.sort_values(by="date", ascending=True)
+
         # Update the viewed status using Redis
         result = self.check_stories_viewed_status(result, request, user)
 
