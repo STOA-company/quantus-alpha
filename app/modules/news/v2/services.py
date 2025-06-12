@@ -270,6 +270,11 @@ class NewsService:
                 **news_condition,
             )
         )
+
+        if df_news.empty:
+            ticker = ",".join(tickers) if tickers else None
+            raise DataNotFoundException(ticker=ticker, data_type="news")
+
         df_news = df_news.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
         df_news = df_news[df_news["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
         df_news = NewsService._convert_to_kst(df_news)
