@@ -93,15 +93,42 @@ fi
 
 echo "Current active service: $current_service"
 echo "Target service for deployment: $target_service"
-
 update_nginx_upstream() {
     local service=$1
 
     echo "Updating NGINX upstream to point to $service..."
 
+    # nginx/conf.d 디렉토리가 없으면 생성
+    mkdir -p ./nginx/conf.d
+
     cat > ./nginx/conf.d/default.conf << EOF
+# HTTP to HTTPS 리다이렉트
 server {
     listen 80;
+    server_name quantus.kr *.quantus.kr;
+    return 301 https://\$host\$request_uri;
+}
+
+# HTTPS 서버 설정
+server {
+    listen 443 ssl http2;
+    server_name quantus.kr *.quantus.kr;
+
+    ssl_certificate /etc/nginx/ssl/quantus.kr.crt;
+    ssl_certificate_key /etc/nginx/ssl/STAR.quantus.kr_key.txt;
+
+    # SSL 설정 최적화
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    # 보안 헤더
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options DENY always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-XSS-Protection "1; mode=block" always;
 
     # 타임아웃 설정 증가
     proxy_connect_timeout 1800s;
@@ -124,6 +151,7 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$server_name;
     }
 
     # 채팅 스트리밍 엔드포인트 설정
@@ -132,6 +160,7 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header Connection '';
         proxy_http_version 1.1;
         chunked_transfer_encoding off;
@@ -144,6 +173,7 @@ server {
         proxy_pass http://${service}:8000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
 EOF
