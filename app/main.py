@@ -85,6 +85,7 @@ origins = [
     "https://superapp-live.quantus.kr",
     "https://superapp-dev.quantus.kr",
     "https://supper-app-dev.vercel.app",
+    "https://quantus.kr/",
 ]
 
 if settings.ENV == "dev":
