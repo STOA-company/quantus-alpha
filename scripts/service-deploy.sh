@@ -35,13 +35,13 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# echo "Changing to project directory..."
-# cd ~/quantus-alpha || exit 1
+echo "Changing to project directory..."
+cd ~/quantus-alpha || exit 1
 
-# echo "Fetching latest changes..."
-# git fetch origin || exit 1
-# git checkout $BRANCH || exit 1
-# git pull origin $BRANCH || exit 1
+echo "Fetching latest changes..."
+git fetch origin || exit 1
+git checkout $BRANCH || exit 1
+git pull origin $BRANCH || exit 1
 
 echo "Updating git submodules..."
 git submodule update --init --recursive || exit 1
@@ -71,7 +71,7 @@ if [ "$CLEAN_CACHE" = "true" ]; then
     docker volume create poetry-cache
 fi
 
-current_service=$(docker-compose -f docker-compose.yml ps | grep -E 'web-(blue|green)' | grep "Up" | awk '{print $1}' | head -n1)
+current_service=$(docker compose -f docker-compose.yml ps | grep -E 'web-(blue|green)' | grep "Up" | awk '{print $1}' | head -n1)
 
 if [ -z "$current_service" ]; then
     if grep -q "web-blue" /etc/nginx/conf.d/default.conf 2>/dev/null; then
@@ -93,15 +93,42 @@ fi
 
 echo "Current active service: $current_service"
 echo "Target service for deployment: $target_service"
-
 update_nginx_upstream() {
     local service=$1
 
     echo "Updating NGINX upstream to point to $service..."
 
+    # nginx/conf.d 디렉토리가 없으면 생성
+    mkdir -p ./nginx/conf.d
+
     cat > ./nginx/conf.d/default.conf << EOF
+# HTTP to HTTPS 리다이렉트
 server {
     listen 80;
+    server_name quantus.kr *.quantus.kr;
+    return 301 https://\$host\$request_uri;
+}
+
+# HTTPS 서버 설정
+server {
+    listen 443 ssl http2;
+    server_name quantus.kr *.quantus.kr;
+
+    ssl_certificate /etc/nginx/ssl/quantus.kr.crt;
+    ssl_certificate_key /etc/nginx/ssl/STAR.quantus.kr_key.txt;
+
+    # SSL 설정 최적화
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    # 보안 헤더
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options DENY always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-XSS-Protection "1; mode=block" always;
 
     # 타임아웃 설정 증가
     proxy_connect_timeout 1800s;
@@ -124,6 +151,7 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$server_name;
     }
 
     # 채팅 스트리밍 엔드포인트 설정
@@ -132,6 +160,7 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header Connection '';
         proxy_http_version 1.1;
         chunked_transfer_encoding off;
@@ -144,13 +173,14 @@ server {
         proxy_pass http://${service}:8000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
 EOF
 
-    docker-compose exec -T nginx nginx -s reload || {
+    docker compose exec -T nginx nginx -s reload || {
         echo "Failed to reload NGINX. Attempting to restart..."
-        docker-compose restart nginx
+        docker compose restart nginx
     }
 }
 
@@ -168,16 +198,16 @@ update_prometheus_config() {
 
 echo "Preparing deployment for $target_service..."
 
-if docker-compose ps $target_service | grep -q $target_service; then
+if docker compose ps $target_service | grep -q $target_service; then
     echo "Removing existing container for $target_service..."
-    docker-compose rm -f $target_service
+    docker compose rm -f $target_service
 fi
 
 echo "Building $target_service container..."
-docker-compose -f docker-compose.yml build $target_service
+docker compose -f docker-compose.yml build $target_service
 
 echo "Starting $target_service container..."
-docker-compose -f docker-compose.yml up -d --no-deps $target_service
+docker compose -f docker-compose.yml up -d --no-deps $target_service
 
 echo "Waiting for container to initialize..."
 sleep 10
@@ -189,7 +219,7 @@ attempt=1
 while [ $attempt -le $max_attempts ]; do
     echo "Health check attempt $attempt of $max_attempts..."
 
-    health_status=$(docker-compose exec -T $target_service curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/health-check" 2>/dev/null || echo "000")
+    health_status=$(docker compose exec -T $target_service curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/health-check" 2>/dev/null || echo "000")
 
     if [ "$health_status" = "200" ]; then
         echo "$target_service is healthy and ready!"
@@ -203,7 +233,7 @@ done
 
 if [ $attempt -gt $max_attempts ]; then
     echo "Health check failed after $max_attempts attempts. Reverting to previous setup."
-    echo "Check logs with: docker-compose logs $target_service"
+    echo "Check logs with: docker compose logs $target_service"
     exit 1
 fi
 
@@ -214,7 +244,7 @@ echo "Traffic switched to $target_service. Waiting 10 seconds to ensure stabilit
 sleep 10
 
 echo "Stopping old $idle_service container..."
-docker-compose stop $idle_service
+docker compose stop $idle_service
 
 echo "Blue-Green deployment completed successfully!"
 echo "Active service is now: $target_service"

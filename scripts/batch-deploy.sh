@@ -27,8 +27,8 @@ git pull origin $BRANCH || exit 1
 echo "Installing dependencies with Poetry..."
 poetry install || { echo "Poetry installation failed!"; exit 1; }
 
-echo "Stopping containers with docker-compose down..."
-ENV=$ENV docker-compose -f $COMPOSE_FILE --env-file $ENV_FILE down || true
+echo "Stopping containers with docker compose down..."
+ENV=$ENV docker compose -f $COMPOSE_FILE --env-file $ENV_FILE down || true
 
 echo "Cleaning up Docker images..."
 docker images | grep 'quantus-backend' | awk '{print $3}' | xargs docker rmi -f || true
@@ -43,7 +43,7 @@ echo "Cleaning up Docker builder cache..."
 docker builder prune -f || true
 
 echo "Building and starting new batch containers..."
-ENV=$ENV docker-compose -f $COMPOSE_FILE --env-file $ENV_FILE up --build -d
+ENV=$ENV docker compose -f $COMPOSE_FILE --env-file $ENV_FILE up --build -d
 
 echo "Waiting for containers to start..."
 sleep 10
@@ -55,9 +55,9 @@ attempt=1
 while [ $attempt -le $max_attempts ]; do
     echo "Health check attempt $attempt of $max_attempts..."
 
-    celery_status=$(docker-compose -f $COMPOSE_FILE exec -T celery_worker celery -A app.celery_worker status 2>/dev/null | grep "OK" || echo "")
-    rabbitmq_status=$(docker-compose -f $COMPOSE_FILE exec -T rabbitmq rabbitmq-diagnostics -q ping 2>/dev/null || echo "")
-    redis_status=$(docker-compose -f $COMPOSE_FILE exec -T redis redis-cli ping 2>/dev/null || echo "")
+    celery_status=$(docker compose -f $COMPOSE_FILE exec -T celery_worker celery -A app.celery_worker status 2>/dev/null | grep "OK" || echo "")
+    rabbitmq_status=$(docker compose -f $COMPOSE_FILE exec -T rabbitmq rabbitmq-diagnostics -q ping 2>/dev/null || echo "")
+    redis_status=$(docker compose -f $COMPOSE_FILE exec -T redis redis-cli ping 2>/dev/null || echo "")
 
     if [ ! -z "$celery_status" ] && [ ! -z "$rabbitmq_status" ] && [ "$redis_status" = "PONG" ]; then
         echo "Deployment successful! All batch services are running."
