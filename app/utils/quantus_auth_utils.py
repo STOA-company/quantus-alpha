@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 PRIVATE_PASSWORD = os.getenv("PRIVATE_PASSWORD")
 
 ######################################### LOGIC ###########################################
-BASE_URL = "https://devbackfast.quantus.kr"
+BASE_URL = os.getenv("QUANTUS_BASE_URL")
 
 security = HTTPBearer(auto_error=False)
 
