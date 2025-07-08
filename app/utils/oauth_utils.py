@@ -121,70 +121,89 @@ def decode_jwt_token(token: str):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
 ) -> Optional[AlphafinderUser]:
-    """현재 인증된 사용자 정보 조회"""
-    if not credentials:
-        return None
+    # NOTE :: 일시적으로 로그인 제거
+    return dict(
+        id=7,
+        provider="google",
+        email="",
+        nickname="",
+        profile_image="",
+        is_subscribed=True,
+        subscription_end=datetime(2100, 12, 31),
+        subscription_start=datetime(2025, 1, 1),
+        subscription_level=9,
+        subscription_name="PRO 1년권",
+        using_history_id=5,
+        created_at=datetime(2025, 1, 1),
+        updated_at=datetime(2025, 1, 1),
+    )
 
-    try:
-        hashed_token = credentials.credentials
+# def get_current_user(
+#     credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
+# ) -> Optional[AlphafinderUser]:
+#     """현재 인증된 사용자 정보 조회"""
+#     if not credentials:
+#         return None
 
-        try:
-            token_record = database_service._select(table="alphafinder_oauth_token", access_token_hash=hashed_token)
-        except Exception as e:
-            logger.error(f"Database error: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail="Internal server error",
-            )
+#     try:
+#         hashed_token = credentials.credentials
 
-        if not token_record:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+#         try:
+#             token_record = database_service._select(table="alphafinder_oauth_token", access_token_hash=hashed_token)
+#         except Exception as e:
+#             logger.error(f"Database error: {str(e)}")
+#             raise HTTPException(
+#                 status_code=500,
+#                 detail="Internal server error",
+#             )
 
-        token_data = token_record[0]
-        try:
-            payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-            user_id = int(payload.get("sub"))
-        except JWTError:
-            print("JWTError")
-            raise HTTPException(
-                status_code=401,
-                detail="Access Token Expired",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+#         if not token_record:
+#             raise HTTPException(
+#                 status_code=401,
+#                 detail="Invalid token",
+#                 headers={"WWW-Authenticate": "Bearer"},
+#             )
 
-        try:
-            user = database_service._select(table="alphafinder_user", id=user_id)
-        except Exception as e:
-            logger.error(f"Database error: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail="Internal server error",
-            )
+#         token_data = token_record[0]
+#         try:
+#             payload = jwt.decode(token_data.access_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+#             user_id = int(payload.get("sub"))
+#         except JWTError:
+#             print("JWTError")
+#             raise HTTPException(
+#                 status_code=401,
+#                 detail="Access Token Expired",
+#                 headers={"WWW-Authenticate": "Bearer"},
+#             )
 
-        if not user:
-            raise HTTPException(
-                status_code=401,
-                detail="User not found",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+#         try:
+#             user = database_service._select(table="alphafinder_user", id=user_id)
+#         except Exception as e:
+#             logger.error(f"Database error: {str(e)}")
+#             raise HTTPException(
+#                 status_code=500,
+#                 detail="Internal server error",
+#             )
 
-        return user[0]
+#         if not user:
+#             raise HTTPException(
+#                 status_code=401,
+#                 detail="User not found",
+#                 headers={"WWW-Authenticate": "Bearer"},
+#             )
 
-    except JWTError as e:
-        logger.error(f"JWT verification failed: {str(e)}")
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token format",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+#         return user[0]
+
+#     except JWTError as e:
+#         logger.error(f"JWT verification failed: {str(e)}")
+#         raise HTTPException(
+#             status_code=401,
+#             detail="Invalid token format",
+#             headers={"WWW-Authenticate": "Bearer"},
+#         )
 
 
 def is_staff(user: AlphafinderUser):
