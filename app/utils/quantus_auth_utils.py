@@ -8,6 +8,9 @@ import requests
 from fastapi import HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from opentelemetry import trace
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
+
 PRIVATE_PASSWORD = os.getenv("PRIVATE_PASSWORD")
 
 ######################################### LOGIC ###########################################
@@ -16,51 +19,87 @@ BASE_URL = os.getenv("QUANTUS_BASE_URL")
 security = HTTPBearer(auto_error=False)
 
 
+def validate_token(
+    token,
+    sns_type,
+    client_type,
+):
+    tracer = trace.get_tracer(__name__)
+    
+    with tracer.start_as_current_span("validate_token_external") as span:
+        # span에 메타데이터 추가
+        span.set_attribute("http.url", urljoin(BASE_URL, "user_info"))
+        span.set_attribute("http.method", "POST")
+        span.set_attribute("http.target", "/user_info")
+        span.set_attribute("service.name", "quantus-alpha")
+        span.set_attribute("operation", "token_validation")
+        
+        ## headers
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Sns-Type": sns_type,
+            "Client-Type": client_type,
+        }
+        
+        with requests.Session() as session:
+            response_data = session.post(
+                urljoin(BASE_URL, "user_info"),
+                headers=headers,
+                timeout=(5.0, 15),
+            )
+            
+            # 응답 정보도 span에 추가
+            span.set_attribute("http.status_code", response_data.status_code)
+            
+            return response_data
+
 # @retry(
 #     stop=stop_after_attempt(2),
 #     wait=wait_exponential(multiplier=1, min=3, max=20),
 #     # before_sleep=lambda retry_state: asyncio.create_task(slack_sender("coin_error", f"retry count : {retry_state.attempt_number}")), # NOTE :: slack_sender 함수는 코루틴 함수가 아님 -> asyncio.create_task 사용 불가
 #     reraise=True
 # )
-def validate_token(
-    token,
-    sns_type,
-    client_type,
-):
-    ## headers
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Sns-Type": sns_type,
-        "Client-Type": client_type,
-    }
-    ## httpx
-    # async with httpx.AsyncClient() as client:
-    #     response_data = await client.post(
-    #         urljoin(BASE_URL, "user_info"),
-    #         headers=headers,
-    #         json={ #temporary legacy : latest code includes auth information headers only inside headers
-    #             "token": token,
-    #             "sns_type": sns_type,
-    #             "client_type": client_type,
-    #         },
-    #         timeout=httpx.Timeout(
-    #             connect=10.0,   # connection timeout
-    #             read=30,        # read timeout
-    #             write=10.0,     # write timeout
-    #             pool=None       # pool timeout
-    #         )
-    #     )
-    with requests.Session() as session:
-        response_data = session.post(
-            urljoin(BASE_URL, "user_info"),
-            headers=headers,
-            timeout=(5.0, 15),  # (connect_timeout, read_timeout)
-        )
 
-        # 응답 반환 (status_code와 JSON 응답 확인 필요할 수 있음)
-        return response_data
 
-    return response_data
+# def validate_token(
+#     token,
+#     sns_type,
+#     client_type,
+# ):
+#     ## headers
+#     headers = {
+#         "Authorization": f"Bearer {token}",
+#         "Sns-Type": sns_type,
+#         "Client-Type": client_type,
+#     }
+#     ## httpx
+#     # async with httpx.AsyncClient() as client:
+#     #     response_data = await client.post(
+#     #         urljoin(BASE_URL, "user_info"),
+#     #         headers=headers,
+#     #         json={ #temporary legacy : latest code includes auth information headers only inside headers
+#     #             "token": token,
+#     #             "sns_type": sns_type,
+#     #             "client_type": client_type,
+#     #         },
+#     #         timeout=httpx.Timeout(
+#     #             connect=10.0,   # connection timeout
+#     #             read=30,        # read timeout
+#     #             write=10.0,     # write timeout
+#     #             pool=None       # pool timeout
+#     #         )
+#     #     )
+#     with requests.Session() as session:
+#         response_data = session.post(
+#             urljoin(BASE_URL, "user_info"),
+#             headers=headers,
+#             timeout=(5.0, 15),  # (connect_timeout, read_timeout)
+#         )
+
+#         # 응답 반환 (status_code와 JSON 응답 확인 필요할 수 있음)
+#         return response_data
+
+#     return response_data
 
 
 # def get_private_key():
