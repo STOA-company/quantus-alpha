@@ -1,0 +1,214 @@
+name: Deploy Demo Service
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - staging
+      - dev
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+      clean_cache:
+        description: 'Clean pip/poetry cache'
+        required: false
+        default: false
+        type: boolean
+jobs:
+  notify-start:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify deployment start
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              text: ":rocket: 배포 시작",
+              attachments: [{
+                color: "warning",
+                fields: [{
+                  title: "환경",
+                  value: "${{ github.event.inputs.environment || 'dev' }}",
+                  short: true
+                }, {
+                  title: "브랜치",
+                  value: "${{ github.ref_name }}",
+                  short: true
+                }, {
+                  title: "커밋",
+                  value: "${{ github.sha }}",
+                  short: true
+                }, {
+                  title: "시작자",
+                  value: "${{ github.actor }}",
+                  short: true
+                }]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  makeTagAndRelease:
+    runs-on: ubuntu-latest
+    needs: notify-start
+    outputs:
+      tag_name: ${{ steps.create_tag.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create Tag
+        id: create_tag
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.create_tag.outputs.new_tag }}
+          release_name: Release ${{ steps.create_tag.outputs.new_tag }}
+          body: ${{ steps.create_tag.outputs.changelog }}
+          draft: false
+          prerelease: false
+  buildImageAndPush:
+    name: 도커 이미지 빌드와 푸시
+    needs: makeTagAndRelease
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker Buildx 설치
+        uses: docker/setup-buildx-action@v2
+      - name: 레지스트리 로그인
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: set lower case owner name
+        run: |
+          echo "OWNER_LC=${OWNER,,}" >> ${GITHUB_ENV}
+        env:
+          OWNER: "${{ github.repository_owner }}"
+      - name: .env 파일 생성
+        env:
+          ENV_CONTENT: ${{ secrets.ENV_DEV }}
+        run: |
+          echo "$ENV_CONTENT" > .env
+      - name: 빌드 앤 푸시
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER_LC }}/quantus-price-collector:${{ needs.makeTagAndRelease.outputs.tag_name }}
+            ghcr.io/${{ env.OWNER_LC }}/quantus-price-collector:latest
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [ buildImageAndPush ]
+    steps:
+      - name: SSH to Azure server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AZURE_HOST_DEV }}
+          username: ${{ secrets.AZURE_USERNAME }}
+          key: ${{ secrets.AZURE_SSH_PRIVATE_KEY }}
+          script: |
+            sudo mkdir -p /dockerProjects/quantus-price-collector
+            
+            # 설정 파일들 다운로드
+            sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o /dockerProjects/quantus-price-collector/docker-compose.yml https://raw.githubusercontent.com/${{ github.repository }}/dev/docker-compose.yml
+            sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o /dockerProjects/quantus-price-collector/deploy.sh https://raw.githubusercontent.com/${{ github.repository }}/dev/deploy.sh
+            sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o /dockerProjects/quantus-price-collector/nginx.conf https://raw.githubusercontent.com/${{ github.repository }}/dev/nginx.conf
+            sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o /dockerProjects/quantus-price-collector/redis.conf https://raw.githubusercontent.com/${{ github.repository }}/dev/redis-master.conf
+            sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o /dockerProjects/quantus-price-collector/redis-slave.conf https://raw.githubusercontent.com/${{ github.repository }}/dev/redis-slave.conf
+            sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o /dockerProjects/quantus-price-collector/sentinel.conf https://raw.githubusercontent.com/${{ github.repository }}/dev/sentinel.conf
+
+            # 실행 권한 부여
+            sudo chmod +x /dockerProjects/quantus-price-collector/deploy.sh
+            
+            # 소문자 변환
+            OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+            
+            # 블루-그린 배포 실행
+            cd /dockerProjects/quantus-price-collector
+            sudo GITHUB_REPOSITORY_OWNER=${OWNER_LC} IMAGE_TAG=${{ needs.makeTagAndRelease.outputs.tag_name }} ./deploy.sh ${{ needs.makeTagAndRelease.outputs.tag_name }}
+
+  notify-success:
+    runs-on: ubuntu-latest
+    needs: [ makeTagAndRelease, deploy ]
+    if: success()
+    steps:
+      - name: Notify deployment success
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              text: ":white_check_mark: 배포 성공",
+              attachments: [{
+                color: "good",
+                fields: [{
+                  title: "환경",
+                  value: "${{ github.event.inputs.environment || 'dev' }}",
+                  short: true
+                }, {
+                  title: "태그",
+                  value: "${{ needs.makeTagAndRelease.outputs.tag_name }}",
+                  short: true
+                }, {
+                  title: "브랜치",
+                  value: "${{ github.ref_name }}",
+                  short: true
+                }, {
+                  title: "배포자",
+                  value: "${{ github.actor }}",
+                  short: true
+                }]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  notify-failure:
+    runs-on: ubuntu-latest
+    needs: [ makeTagAndRelease, buildImageAndPush, deploy ]
+    if: failure()
+    steps:
+      - name: Notify deployment failure
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              text: ":x: 배포 실패",
+              attachments: [{
+                color: "danger",
+                fields: [{
+                  title: "환경",
+                  value: "${{ github.event.inputs.environment || 'dev' }}",
+                  short: true
+                }, {
+                  title: "브랜치",
+                  value: "${{ github.ref_name }}",
+                  short: true
+                }, {
+                  title: "실패자",
+                  value: "${{ github.actor }}",
+                  short: true
+                }, {
+                  title: "로그 확인",
+                  value: "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>",
+                  short: false
+                }]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
