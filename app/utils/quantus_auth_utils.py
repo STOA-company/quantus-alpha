@@ -12,7 +12,7 @@ from fastapi import HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from opentelemetry import trace
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
+# from opentelemetry.instrumentation.requests import RequestsInstrumentor
 
 from app.core.redis import redis_client
 

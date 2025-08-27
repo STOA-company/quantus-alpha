@@ -61,6 +61,9 @@ opentelemetry-instrumentation-mysql = "^0.48b0"        # MySQL 추적
 opentelemetry-instrumentation-pymysql = "^0.48b0"      # PyMySQL 추적
 opentelemetry-instrumentation-requests = "0.48b0"
 
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.12.10"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

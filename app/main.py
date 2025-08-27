@@ -23,7 +23,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 # from opentelemetry.instrumentation.mysql import MySQLInstrumentor
 from opentelemetry.instrumentation.pymysql import PyMySQLInstrumentor
-from app.middlewares.tracing import TracingMiddleware
+# from app.middlewares.tracing import TracingMiddleware
 
 # 여기로 로거 설정 이동
 stage_webhook_url = "https://hooks.slack.com/services/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"
@@ -163,7 +163,7 @@ else:
     webhook_url = dev_webhook_url
 
 # Add Prometheus middleware first to monitor all requests
-# app.add_middleware(PrometheusMiddleware)
+app.add_middleware(PrometheusMiddleware)
 
 # Slack 오류 알림 미들웨어 설정
 add_slack_middleware(
