@@ -15,14 +15,14 @@ from app.monitoring.endpoints import router as metrics_router
 from app.monitoring.middleware import PrometheusMiddleware
 
 # zipkin 설정
-from opentelemetry import trace
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.exporter.zipkin.json import ZipkinExporter
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-# from opentelemetry.instrumentation.mysql import MySQLInstrumentor
-from opentelemetry.instrumentation.pymysql import PyMySQLInstrumentor
+# from opentelemetry import trace
+# from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+# from opentelemetry.exporter.zipkin.json import ZipkinExporter
+# from opentelemetry.sdk.trace import TracerProvider
+# from opentelemetry.sdk.trace.export import BatchSpanProcessor
+# from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
+# from opentelemetry.instrumentation.pymysql import PyMySQLInstrumentor
 # from app.middlewares.tracing import TracingMiddleware
 
 # 여기로 로거 설정 이동
@@ -76,39 +76,39 @@ app.include_router(metrics_router)  # Add metrics endpoints
 db_config = get_database_config()
 db.init_app(app, **db_config.__dict__)
 
-# Zipkin 설정 (한 번만)
-zipkin_exporter = ZipkinExporter(endpoint="http://localhost:9411/api/v2/spans")
-processor = BatchSpanProcessor(zipkin_exporter)
+# # Zipkin 설정 (한 번만)
+# zipkin_exporter = ZipkinExporter(endpoint="http://localhost:9411/api/v2/spans")
+# processor = BatchSpanProcessor(zipkin_exporter)
 
-# 서비스 이름 설정 (중요!)
-from opentelemetry.sdk.resources import Resource
-resource = Resource.create({
-    "service.name": f"alphafinder-{settings.ENV}",
-    "service.version": "1.0.0",
-    "deployment.environment": settings.ENV,
-    "host.name": "alphafinder-api"
-})
-provider = TracerProvider(resource=resource)
+# # 서비스 이름 설정 (중요!)
+# from opentelemetry.sdk.resources import Resource
+# resource = Resource.create({
+#     "service.name": f"alphafinder-{settings.ENV}",
+#     "service.version": "1.0.0",
+#     "deployment.environment": settings.ENV,
+#     "host.name": "alphafinder-api"
+# })
+# provider = TracerProvider(resource=resource)
 
-provider.add_span_processor(processor)
-trace.set_tracer_provider(provider)
+# provider.add_span_processor(processor)
+# trace.set_tracer_provider(provider)
 
-# FastAPI instrumentor 활성화 (기본 추적을 위해)
-FastAPIInstrumentor.instrument_app(
-    app,
-    tracer_provider=provider
-)
+# # FastAPI instrumentor 활성화 (기본 추적을 위해)
+# FastAPIInstrumentor.instrument_app(
+#     app,
+#     tracer_provider=provider
+# )
 
-# SQLAlchemy instrumentor 활성화
-SQLAlchemyInstrumentor().instrument(
-    enable_commenter=True,      # SQL 주석 추가
-    commenter_options={},        # 쿼리 정보 포함
-    trace_parent_span=True,     # 부모 스팬과 연결
-    span_details=True           # 상세 정보 포함
-)
+# # SQLAlchemy instrumentor 활성화
+# SQLAlchemyInstrumentor().instrument(
+#     enable_commenter=True,      # SQL 주석 추가
+#     commenter_options={},        # 쿼리 정보 포함
+#     trace_parent_span=True,     # 부모 스팬과 연결
+#     span_details=True           # 상세 정보 포함
+# )
 
-# PyMySQL instrumentor 활성화
-PyMySQLInstrumentor().instrument()
+# # PyMySQL instrumentor 활성화
+# PyMySQLInstrumentor().instrument()
 
 
 @app.get("/")
