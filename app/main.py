@@ -118,6 +118,7 @@ def root():
 
 origins = [
     "https://alpha-dev.quantus.kr",
+    "https://insight-dev.quantus.kr",
     "https://develop.alphafinder.dev",
     "https://develop.alphafinder.dev/ko",
     "https://develop.alphafinder.dev/en",
