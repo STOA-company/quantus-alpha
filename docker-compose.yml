@@ -87,7 +87,7 @@ services:
         healthcheck:
             test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
             interval: 5s
-            timeout: 10sㅇ
+            timeout: 10s
             retries: 10
             start_period: 5s
         networks:
