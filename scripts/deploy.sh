@@ -8,6 +8,9 @@ COMPOSE_FILE="$PROJECT_DIR/docker-compose.yml"
 NGINX_CONF="$PROJECT_DIR/nginx.conf"
 IMAGE_TAG="${1:-latest}"
 
+# Redis 패스워드 설정
+export REDIS_PASSWORD="1230948123dsffdsfs8409"
+
 echo "🚀 Starting Blue-Green deployment with image tag: $IMAGE_TAG"
 
 # 이미 프로젝트 디렉토리에 있음
