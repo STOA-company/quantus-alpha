@@ -93,7 +93,7 @@ jobs:
         env:
           ENV_CONTENT: ${{ secrets.ENV_DEV }}
         run: |
-          echo "$ENV_CONTENT" > .env.${{ github.ref_name }}
+          echo "$ENV_CONTENT" > .env
       - name: 빌드 앤 푸시
         uses: docker/build-push-action@v5
         with:
