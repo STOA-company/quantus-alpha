@@ -1,3 +1,4 @@
 [submodule "Aws"]
 	path = Aws
-	url = https://github.com/STOA-company/quantus-aws.git
+	# url = https://github.com/STOA-company/quantus-aws.git
+	url = git@github.com:STOA-company/quantus-aws.git

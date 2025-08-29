@@ -187,19 +187,19 @@ jobs:
                 color: "danger",
                 fields: [{
                   title: "환경",
-                  value: "${{ github.event.inputs.environment || 'dev' }}",
+                  # value: "${{ github.event.inputs.environment || 'dev' }}",
                   short: true
                 }, {
                   title: "브랜치",
-                  value: "${{ github.ref_name }}",
+                  # value: "${{ github.ref_name }}",
                   short: true
                 }, {
                   title: "실패자",
-                  value: "${{ github.actor }}",
+                  # value: "${{ github.actor }}",
                   short: true
                 }, {
                   title: "로그 확인",
-                  value: "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>",
+                  # value: "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>",
                   short: false
                 }]
               }]
