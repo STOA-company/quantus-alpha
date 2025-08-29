@@ -104,8 +104,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ env.OWNER_LC }}/quantus-alphafinder-dev:${{ needs.makeTagAndRelease.outputs.tag_name }}
-            ghcr.io/${{ env.OWNER_LC }}/quantus-alphafinder-dev:latest
+            ghcr.io/${{ env.OWNER_LC }}/quantus-alpha-dev:${{ needs.makeTagAndRelease.outputs.tag_name }}
+            ghcr.io/${{ env.OWNER_LC }}/quantus-alpha-dev:latest
   deploy:
     runs-on: ubuntu-latest
     needs: [ buildImageAndPush ]
