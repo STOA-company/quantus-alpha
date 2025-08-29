@@ -24,7 +24,6 @@ services:
         environment:
             APP_NAME: blue
         volumes:
-            - .:/app
             - pip-cache:/root/.cache/pip
             - poetry-cache:/var/cache/poetry
         depends_on:
@@ -49,7 +48,6 @@ services:
             APP_NAME: green
             LLM_MOCK_ENABLED: "true"
         volumes:
-            - .:/app
             - pip-cache:/root/.cache/pip
             - poetry-cache:/var/cache/poetry
         depends_on:
