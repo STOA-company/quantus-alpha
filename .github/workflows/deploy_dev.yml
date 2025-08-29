@@ -132,7 +132,7 @@ jobs:
             OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
             
             # 블루-그린 배포 실행
-            cd /dockerProjects/quantus-price-collector
+            cd ./quantus-alpha
             sudo GITHUB_REPOSITORY_OWNER=${OWNER_LC} IMAGE_TAG=${{ needs.makeTagAndRelease.outputs.tag_name }} ./deploy.sh ${{ needs.makeTagAndRelease.outputs.tag_name }}
 
   notify-success:
@@ -205,4 +205,4 @@ jobs:
               }]
             }
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}ㅁ
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
