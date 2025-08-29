@@ -35,10 +35,6 @@ jobs:
                   value: "${{ github.ref_name }}",
                   short: true
                 }, {
-                  title: "커밋",
-                  value: "${{ github.sha }}",
-                  short: true
-                }, {
                   title: "시작자",
                   value: "${{ github.actor }}",
                   short: true
@@ -97,7 +93,7 @@ jobs:
         env:
           ENV_CONTENT: ${{ secrets.ENV_DEV }}
         run: |
-          echo "$ENV_CONTENT" > .env
+          echo "$ENV_CONTENT" > .env.${{ github.ref_name }}
       - name: 빌드 앤 푸시
         uses: docker/build-push-action@v5
         with:
@@ -192,10 +188,6 @@ jobs:
                 }, {
                   title: "브랜치",
                   value: "${{ github.ref_name }}",
-                  short: true
-                }, {
-                  title: "실패자",
-                  value: "${{ github.actor }}",
                   short: true
                 }, {
                   title: "로그 확인",
