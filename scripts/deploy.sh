@@ -3,15 +3,15 @@
 set -e
 
 # 환경 변수 설정
-PROJECT_DIR="./quantus-alpha"
+PROJECT_DIR="."
 COMPOSE_FILE="$PROJECT_DIR/docker-compose.yml"
 NGINX_CONF="$PROJECT_DIR/nginx.conf"
 IMAGE_TAG="${1:-latest}"
 
 echo "🚀 Starting Blue-Green deployment with image tag: $IMAGE_TAG"
 
-# 프로젝트 디렉토리로 이동
-cd $PROJECT_DIR
+# 이미 프로젝트 디렉토리에 있음
+# cd $PROJECT_DIR
 
 # 최신 이미지 강제 pull
 echo "📥 Pulling latest image with tag: $IMAGE_TAG"
