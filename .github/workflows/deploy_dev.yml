@@ -23,7 +23,7 @@ jobs:
           status: custom
           custom_payload: |
             {
-              text: ":rocket: 배포 시작",
+              text: ":rocket: Notify deployment start - ${{ github.repository }}-${{ github.ref_name }}",
               attachments: [{
                 color: "warning",
                 fields: [{
@@ -146,7 +146,7 @@ jobs:
           status: custom
           custom_payload: |
             {
-              text: "Notify deployment success - ${{ github.repository }}-${{ github.ref_name }}",
+              text: ":white_check_mark: Notify deployment success - ${{ github.repository }}-${{ github.ref_name }}",
               attachments: [{
                 color: "good",
                 fields: [{
@@ -182,7 +182,7 @@ jobs:
           status: custom
           custom_payload: |
             {
-              text: "Notify deployment failure - ${{ github.repository }}-${{ github.ref_name }}",
+              text: ":x: Notify deployment failure - ${{ github.repository }}-${{ github.ref_name }}",
               attachments: [{
                 color: "danger",
                 fields: [{

@@ -11,7 +11,7 @@ services:
             - ./nginx/conf.d:/etc/nginx/conf.d:ro
             - ./ssl:/etc/nginx/ssl:ro
         depends_on:
-            - web-blue
+            - quantus-alpha-blue
         networks:
             - alpha-network
         restart: unless-stopped
