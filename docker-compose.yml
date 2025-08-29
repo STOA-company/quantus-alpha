@@ -23,6 +23,7 @@ services:
             - "8000"
         environment:
             APP_NAME: blue
+            PORT: 8000
         volumes:
             - pip-cache:/root/.cache/pip
             - poetry-cache:/var/cache/poetry
@@ -47,6 +48,7 @@ services:
         environment:
             APP_NAME: green
             LLM_MOCK_ENABLED: "true"
+            PORT: 8001
         volumes:
             - pip-cache:/root/.cache/pip
             - poetry-cache:/var/cache/poetry
