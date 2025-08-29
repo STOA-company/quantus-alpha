@@ -16,13 +16,21 @@ services:
             - alpha-network
         restart: unless-stopped
 
-    quantus-alpha-blue:
-        image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/quantus-alpha-dev:${IMAGE_TAG:-latest}
-        container_name: quantus-alpha-blue
+    web-blue:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: web-blue
         expose:
             - "8000"
         environment:
+            ENV: ${ENV:-dev}
+            REDIS_HOST: redis
+            REDIS_PORT: 6379
+            REDIS_PASSWORD: ${REDIS_PASSWORD}
             APP_NAME: blue
+        env_file:
+            - .env
         volumes:
             - .:/app
             - pip-cache:/root/.cache/pip
@@ -40,14 +48,22 @@ services:
             start_period: 5s
         restart: unless-stopped
 
-    quantus-alpha-green:
-        image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/quantus-alpha-dev:${IMAGE_TAG:-latest}
-        container_name: quantus-alpha-green
+    web-green:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: web-green
         expose:
-            - "8001"
+            - "8000"
         environment:
+            ENV: ${ENV:-dev}
+            REDIS_HOST: redis
+            REDIS_PORT: 6379
+            REDIS_PASSWORD: ${REDIS_PASSWORD}
             APP_NAME: green
             LLM_MOCK_ENABLED: "true"
+        env_file:
+            - .env
         volumes:
             - .:/app
             - pip-cache:/root/.cache/pip
@@ -58,7 +74,7 @@ services:
         networks:
             - alpha-network
         healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:8001/health-check"]
+            test: ["CMD", "curl", "-f", "http://localhost:8000/health-check"]
             interval: 10s
             timeout: 5s
             retries: 3
