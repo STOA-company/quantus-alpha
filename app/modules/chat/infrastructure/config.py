@@ -1,10 +1,14 @@
 import os
 
+from dotenv import load_dotenv
 from pydantic import BaseModel
 
+ENV = os.getenv("ENV", "dev")  # Default
+load_dotenv(f".env.{ENV}")
 
 class LLMConfig(BaseModel):
     """LLM API 설정"""
+
 
     base_url: str = os.getenv("LLM_API_BASE_URL", "https://ai.quantus.kr/ai/research")
     api_key: str = os.getenv("LLM_API_KEY", "")
