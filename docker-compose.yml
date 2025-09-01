@@ -27,6 +27,7 @@ services:
         volumes:
             - pip-cache:/root/.cache/pip
             - poetry-cache:/var/cache/poetry
+            - ./parquet:/app/parquet
         depends_on:
             redis:
                 condition: service_healthy
@@ -52,6 +53,7 @@ services:
         volumes:
             - pip-cache:/root/.cache/pip
             - poetry-cache:/var/cache/poetry
+            - ./parquet:/app/parquet
         depends_on:
             redis:
                 condition: service_healthy
