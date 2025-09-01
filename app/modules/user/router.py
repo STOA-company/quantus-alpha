@@ -51,7 +51,7 @@ async def signup(
     refresh_token = create_refresh_token(user.id)
     access_token_hash = service.store_token(access_token, refresh_token)
 
-    await service.screener_init(user_id=user.id)
+    # await service.screener_init(user_id=user.id)
     await service.interest_init(user_id=user.id)
 
     return {
