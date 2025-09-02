@@ -431,5 +431,5 @@ def _get_cached_token_validation(token: str, sns_type: str, client_type: str) ->
         return None
 
 def is_staff(user: AlphafinderUser):
-    email = user.email
+    email = user.get("email")
     return email.split("@")[1] in ["stoa-investment.com"]

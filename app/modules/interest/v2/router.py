@@ -178,7 +178,7 @@ def update_group_name(
 ########################################################
 # 관심 종목 추가
 @router.post("/", summary="관심 종목 추가")
-def add_interest(
+async def add_interest(
     request: AddInterestRequest,
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
@@ -198,7 +198,7 @@ def add_interest(
 
 # 관심 종목 삭제
 @router.delete("/", summary="관심 종목 삭제")
-def delete_interest(
+async def delete_interest(
     request: DeleteInterestRequest,
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
@@ -218,7 +218,7 @@ def delete_interest(
 
 # 관심 종목 수정
 @router.put("/", summary="관심 종목 수정")
-def update_interest(
+async def update_interest(
     request: UpdateInterestRequest,
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
@@ -239,7 +239,7 @@ def update_interest(
 ########################################################
 # 관심 그룹 / 종목 리스트
 @router.get("/list", summary="관심 그룹 / 종목 리스트", response_model=BaseResponse[List[InterestGroupResponse]])
-def get_interest_list(
+async def get_interest_list(
     lang: Annotated[
         TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)
     ] = TranslateCountry.KO,
@@ -261,7 +261,7 @@ def get_interest_list(
 
 # 관심 그룹 / 종목 순서 변경
 @router.put("/order", summary="그룹/종목 순서 변경")
-def update_order(
+async def update_order(
     request: UpdateInterestOrderRequest,
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
@@ -283,7 +283,7 @@ def update_order(
 
 # 관심 종목 그룹 이동
 @router.post("/move", summary="관심 종목 그룹 이동")
-def move_interest(
+async def move_interest(
     request: MoveInterestRequest,
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
@@ -305,7 +305,7 @@ def move_interest(
     summary="관심 종목 주요소식 모아보기 / 스토리",
     response_model=BaseResponse[List[TopStoriesResponse]],
 )
-def top_stories(
+async def top_stories(
     group_id: int,
     request: Request,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
@@ -326,7 +326,7 @@ def top_stories(
 
 # 관심 종목 가격 조회
 @router.get("/{group_id}/price", summary="관심 종목 가격 조회", response_model=BaseResponse[List[InterestPriceResponse]])
-def get_interest_price(
+async def get_interest_price(
     group_id: int,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
     service: InterestService = Depends(get_interest_service),
@@ -339,7 +339,7 @@ def get_interest_price(
 # 관심 종목 뉴스
 ## v1과 response가 다름!!!
 @router.get("/news/{group_id}", summary="관심 종목 뉴스")
-def interest_news(
+async def interest_news(
     group_id: int,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
     page: Annotated[int, Query(description="페이지 번호, 기본값: 1")] = 1,
@@ -393,7 +393,7 @@ def interest_news(
 # 관심 종목 공시
 ## v1과 response가 다름!!!
 @router.get("/disclosure/{group_id}", summary="관심 종목 공시")
-def interest_disclosure(
+async def interest_disclosure(
     group_id: int,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
     page: Annotated[int, Query(description="페이지 번호, 기본값: 1")] = 1,

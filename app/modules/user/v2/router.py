@@ -115,3 +115,10 @@ def update_profile_image(
 # def check_nickname_duplicate(nickname: str, service: UserService = Depends(get_user_service)):
 #     is_available = service.check_nickname_available(nickname)
 #     return {"is_available": is_available}
+
+
+@router.get("/user-info")
+async def get_user_info(
+    current_user: AlphafinderUser = Depends(get_current_user),
+):
+    return current_user
