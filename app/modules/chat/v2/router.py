@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from app.models.models_users import AlphafinderUser
 from app.modules.chat.infrastructure.constants import LLM_MODEL
 from app.modules.chat.infrastructure.rate import check_rate_limit, decrement_rate_limit, increment_rate_limit
-from app.modules.chat.service import chat_service
+from app.modules.chat.v2.service import chat_service
 from app.monitoring.web_metrics import (
     CHAT_REQUEST_COUNT,
     STREAMING_CONNECTIONS,

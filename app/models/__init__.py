@@ -37,6 +37,7 @@ from app.models.models_users import (
     TossPaymentHistory,
     UserStockInterest,
 )
+from app.models.models_quantus_chat import QuantusChatMessage, QuantusChatConversation, QuantusChatFeedback
 
 __all__ = [
     "Base",
@@ -82,6 +83,9 @@ __all__ = [
     "AlphafinderPostLike",
     "AlphafinderBookmark",
     "AlphafinderPostStockTag",
+    "QuantusChatMessage",
+    "QuantusChatConversation", 
+    "QuantusChatFeedback",
 ]
 
 # Category relationships
