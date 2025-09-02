@@ -15,6 +15,7 @@ from opentelemetry import trace
 # from opentelemetry.instrumentation.requests import RequestsInstrumentor
 
 from app.core.redis import redis_client
+from app.models.models_users import AlphafinderUser
 
 PRIVATE_PASSWORD = os.getenv("PRIVATE_PASSWORD")
 
@@ -310,7 +311,6 @@ async def get_current_user_async(
         status_code = res.status_code
         if status_code != 200:
             raise HTTPException(status_code=status_code)
-
         return res.json()["userInfo"]
 
     except HTTPException as e:
@@ -429,3 +429,7 @@ def _get_cached_token_validation(token: str, sns_type: str, client_type: str) ->
     except Exception as e:
         print(f"캐시된 토큰 조회 실패: {e}")
         return None
+
+def is_staff(user: AlphafinderUser):
+    email = user.email
+    return email.split("@")[1] in ["stoa-investment.com"]

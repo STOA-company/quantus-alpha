@@ -6,7 +6,8 @@ import pytz
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
-ENV = os.getenv("ENV", "dev")  # Default
+ENV = os.getenv("ENV", "")  # Default
+ENV = "local"
 load_dotenv(f".env.{ENV}")
 
 # Time Zone
