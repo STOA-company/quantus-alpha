@@ -6,8 +6,7 @@ import pytz
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
-ENV = os.getenv("ENV", "")  # Default
-ENV = "local"
+ENV = os.getenv("ENV", "dev")  # Default
 load_dotenv(f".env.{ENV}")
 
 # Time Zone
@@ -129,7 +128,7 @@ class DevConfig(DatabaseConfig):
             DB_SERVICE_URL=f"mysql://{settings.RDS_USER}:{settings.RDS_PASSWORD}@{settings.RDS_HOST}:{settings.RDS_PORT}/{settings.RDS_SERVICE_DB}",
             DB_USER_URL=f"mysql://{settings.USER_DB_USER}:{settings.USER_DB_PASSWORD}@{settings.USER_DB_HOST}:{settings.USER_DB_PORT}/{settings.USER_DB_NAME}",
             DB_POOL_RECYCLE=3600,
-            DB_ECHO=True,
+            DB_ECHO=False,
         )
 
 
