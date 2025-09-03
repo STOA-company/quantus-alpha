@@ -28,7 +28,7 @@ router = APIRouter()
 
 # 관심 그룹 조회
 @router.get("/groups", summary="관심 그룹 조회")
-def get_groups(
+async def get_groups(
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
 ):
@@ -50,24 +50,24 @@ def get_groups(
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    return service.get_interest_group(current_user["uid"])
+    return await service.get_interest_group(current_user["uid"])
 
 
 # 관심 그룹 조회
 @router.get("/groups/{ticker}", summary="관심 그룹 조회")
-def get_groups_by_ticker(
+async def get_groups_by_ticker(
     ticker: str,
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    return service.get_interest_group_by_ticker(current_user["uid"], ticker)
+    return await service.get_interest_group_by_ticker(current_user["uid"], ticker)
 
 
 # 관심 그룹 생성
 @router.post("/groups", summary="관심 그룹 생성")
-def create_group(
+async def create_group(
     name: str,
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
@@ -90,7 +90,7 @@ def create_group(
     try:
         if not current_user:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        group_id = service.create_interest_group(current_user["uid"], name)
+        group_id = await service.create_interest_group(current_user["uid"], name)
         return {"message": "관심 그룹이 생성되었습니다.", "group_id": group_id}
     except DuplicateException as e:
         logger.exception(e)
@@ -102,7 +102,7 @@ def create_group(
 
 # 관심 그룹 삭제
 @router.delete("/groups", summary="관심 그룹 삭제")
-def delete_group(
+async def delete_group(
     group_id: int,
     current_user: AlphafinderUser = Depends(get_current_user),
     service: InterestService = Depends(get_interest_service),
@@ -126,7 +126,7 @@ def delete_group(
     try:
         if not current_user:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        service.delete_interest_group(group_id, current_user["uid"])
+        await service.delete_interest_group(group_id, current_user["uid"])
         return {"message": "관심 그룹이 삭제되었습니다.", "group_id": group_id}
     except Exception as e:
         logger.exception(e)
@@ -135,7 +135,7 @@ def delete_group(
 
 # 관심 그룹 이름 수정
 @router.put("/groups", summary="관심 그룹 이름 수정")
-def update_group_name(
+async def update_group_name(
     group_id: int,
     name: str,
     current_user: AlphafinderUser = Depends(get_current_user),
@@ -162,7 +162,7 @@ def update_group_name(
     try:
         if not current_user:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        service.update_interest_group_name(group_id, name, current_user["uid"])
+        await service.update_interest_group_name(group_id, name, current_user["uid"])
         return {"message": f"관심 그룹 이름이 {name}으로 수정되었습니다.", "group_id": group_id}
     except NotFoundException as e:
         logger.exception(e)
@@ -187,7 +187,7 @@ async def add_interest(
         if not current_user:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        interest_id = service.add_interest(request.group_id, request.ticker, current_user["uid"])
+        interest_id = await service.add_interest(request.group_id, request.ticker, current_user["uid"])
         return {"message": f"관심 종목에 {request.ticker}가 추가되었습니다.", "interest_id": interest_id}
     except HTTPException as e:
         raise e
@@ -207,7 +207,7 @@ async def delete_interest(
         if not current_user:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        service.delete_interest(request.group_id, request.tickers, current_user["uid"])
+        await service.delete_interest(request.group_id, request.tickers, current_user["uid"])
         return {"message": f"관심 종목에서 {', '.join(request.tickers)}가 삭제되었습니다."}
     except HTTPException as e:
         raise e
@@ -227,7 +227,7 @@ async def update_interest(
         if not current_user:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        service.update_interest(user_id=current_user["uid"], group_ids=request.group_ids, ticker=request.ticker)
+        await service.update_interest(user_id=current_user["uid"], group_ids=request.group_ids, ticker=request.ticker)
         return {"message": f"{request.ticker}가 {', '.join(map(str, request.group_ids))} 그룹에 추가되었습니다."}
     except HTTPException as e:
         raise e
@@ -250,7 +250,7 @@ async def get_interest_list(
         if not current_user:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        data = service.get_interest_list(current_user["uid"], lang)
+        data = await service.get_interest_list(current_user["uid"], lang)
         return BaseResponse(status_code=200, message="Successfully retrieved interest list", data=data)
     except HTTPException as e:
         raise e
@@ -270,7 +270,7 @@ async def update_order(
         if not current_user:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        service.update_order(user_id=current_user["uid"], group_id=request.group_id, order_list=request.order)
+        await service.update_order(user_id=current_user["uid"], group_id=request.group_id, order_list=request.order)
 
         message = "그룹 순서가 변경되었습니다." if request.group_id is None else "종목 순서가 변경되었습니다."
         return BaseResponse(status_code=200, message=message, data=None)
@@ -292,7 +292,7 @@ async def move_interest(
         if not current_user:
             raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
-        service.move_interest(request.from_group_id, request.to_group_id, request.tickers, current_user["uid"])
+        await service.move_interest(request.from_group_id, request.to_group_id, request.tickers, current_user["uid"])
         return {"message": "관심 종목 그룹 이동이 완료되었습니다."}
     except HTTPException as e:
         raise e
@@ -313,7 +313,7 @@ async def top_stories(
     service: InterestService = Depends(get_interest_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
 ):
-    tickers = service.get_interest_tickers(group_id)
+    tickers = await service.get_interest_tickers(group_id)
     if len(tickers) == 0:
         return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
     # subscription_level = user.subscription_level if user else 1 # TODO :: 유저 테이블 통합 후 주석 해제
@@ -331,8 +331,8 @@ async def get_interest_price(
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
     service: InterestService = Depends(get_interest_service),
 ):
-    tickers = service.get_interest_tickers(group_id)
-    ticker_price_data = service.get_interest_price(tickers=tickers, group_id=group_id, lang=lang)
+    tickers = await service.get_interest_tickers(group_id)
+    ticker_price_data = await service.get_interest_price(tickers=tickers, group_id=group_id, lang=lang)
     return BaseResponse(status_code=200, message="Successfully retrieved interest price data", data=ticker_price_data)
 
 
@@ -348,7 +348,7 @@ async def interest_news(
     service: InterestService = Depends(get_interest_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
 ):
-    tickers = service.get_interest_tickers(group_id)
+    tickers = await service.get_interest_tickers(group_id)
     if len(tickers) == 0:
         return BaseResponse(
             status_code=200,
@@ -402,7 +402,7 @@ async def interest_disclosure(
     service: InterestService = Depends(get_interest_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
 ):
-    tickers = service.get_interest_tickers(group_id)
+    tickers = await service.get_interest_tickers(group_id)
     if len(tickers) == 0:
         return BaseResponse(
             status_code=200,

@@ -36,8 +36,8 @@ class InterestService:
         """
         return row.kr_name if lang == TranslateCountry.KO else row.en_name
 
-    def get_interest_tickers(self, group_id: int):
-        group = self.db._select(table="alphafinder_interest_group", columns=["name"], id=group_id)
+    async def get_interest_tickers(self, group_id: int):
+        group = await self.db._select_async(table="alphafinder_interest_group", columns=["name"], id=group_id)
         if not group:
             raise NotFoundException(message="관심 종목 그룹이 존재하지 않습니다.")
 
@@ -60,7 +60,7 @@ class InterestService:
                 ORDER BY st.volume_change_rt DESC
                 LIMIT 6
             """
-            top_stories_data_us = self.db._execute(text(query_us))
+            top_stories_data_us = await self.db._execute_async(text(query_us))
             query_kr = f"""
                 SELECT st.ticker
                 FROM quantus.stock_trend st
@@ -76,7 +76,7 @@ class InterestService:
                 ORDER BY st.volume_change_rt DESC
                 LIMIT 5
             """
-            top_stories_data_kr = self.db._execute(text(query_kr))
+            top_stories_data_kr = await self.db._execute_async(text(query_kr))
 
             top_stories_tickers = set()
 
@@ -91,17 +91,17 @@ class InterestService:
             interests = list(top_stories_tickers)
 
         else:
-            interests = self.db._select(table="alphafinder_interest_stock", columns=["ticker"], group_id=group_id)
+            interests = await self.db._select_async(table="alphafinder_interest_stock", columns=["ticker"], group_id=group_id)
             if not interests:
                 return []
             interests = [interest.ticker for interest in interests]
 
         return interests
 
-    def add_interest(self, group_id: int, ticker: str, user_id: int):
+    async def add_interest(self, group_id: int, ticker: str, user_id: int):
         try:
             # Check group ownership and editability
-            group = self.db._select(
+            group = await self.db._select_async(
                 table="alphafinder_interest_group", columns=["user_id", "is_editable"], id=group_id, limit=1
             )
             if not group:
@@ -112,14 +112,14 @@ class InterestService:
                 raise HTTPException(status_code=400, detail="수정 불가능한 그룹입니다.")
 
             # Check if ticker already exists in the group
-            existing_interest = self.db._select(
+            existing_interest = await self.db._select_async(
                 table="alphafinder_interest_stock", columns=["ticker"], group_id=group_id, ticker=ticker, limit=1
             )
             if existing_interest:
                 raise DuplicateException(message="이미 관심 종목에 추가되어 있습니다.")
 
             # Get the maximum order value for the group's interests
-            max_order = self.db._execute(
+            max_order = await self.db._execute_async(
                 text("SELECT MAX(`order`) as max_order FROM alphafinder_interest_stock WHERE group_id = :group_id"),
                 {"group_id": group_id},
             )
@@ -127,7 +127,7 @@ class InterestService:
             next_order = (max_order_row[0] if max_order_row and max_order_row[0] is not None else 0) + 1
 
             # Add the interest with order
-            result = self.db._insert(
+            result = await self.db._insert_async(
                 table="alphafinder_interest_stock", sets={"group_id": group_id, "ticker": ticker, "order": next_order}
             )
 
@@ -141,10 +141,10 @@ class InterestService:
             logger.exception(e)
             raise HTTPException(status_code=500, detail=str(e))
 
-    def delete_interest(self, group_id: int, tickers: List[str], user_id: int):
+    async def delete_interest(self, group_id: int, tickers: List[str], user_id: int):
         try:
             # Check group ownership and editability
-            group = self.db._select(
+            group = await self.db._select_async(
                 table="alphafinder_interest_group", columns=["user_id", "is_editable"], id=group_id, limit=1
             )
             if not group:
@@ -156,14 +156,14 @@ class InterestService:
 
             # Check if all tickers exist in the group
             for ticker in tickers:
-                existing_interest = self.db._select(
+                existing_interest = await self.db._select_async(
                     table="alphafinder_interest_stock", group_id=group_id, ticker=ticker, limit=1
                 )
                 if not existing_interest:
                     raise NotFoundException(message=f"관심 종목 {ticker}이(가) 그룹에 존재하지 않습니다.")
 
             # Delete all tickers in a single query
-            self.db._delete(table="alphafinder_interest_stock", group_id=group_id, ticker__in=tickers)
+            await self.db._delete_async(table="alphafinder_interest_stock", group_id=group_id, ticker__in=tickers)
 
             return True
 
@@ -173,7 +173,7 @@ class InterestService:
             logger.exception(e)
             raise HTTPException(status_code=500, detail=str(e))
 
-    def update_interest(self, user_id: int, group_ids: List[int], ticker: str):
+    async def update_interest(self, user_id: int, group_ids: List[int], ticker: str):
         # 빈 배열이 들어오면 모든 그룹에서 해당 티커 삭제
         if not group_ids:
             # 1. 사용자의 모든 그룹에서 해당 티커가 있는지 확인
@@ -187,12 +187,12 @@ class InterestService:
                     WHERE user_id = :user_id
                 )
             """
-            result = self.db._execute(text(query), {"ticker": ticker, "user_id": user_id})
+            result = await self.db._execute_async(text(query), {"ticker": ticker, "user_id": user_id})
             groups_to_remove = [row[0] for row in result.fetchall()]
 
             # 2. 해당 티커가 있는 모든 그룹에서 삭제
             if groups_to_remove:
-                self.db._delete(table="alphafinder_interest_stock", ticker=ticker, group_id__in=groups_to_remove)
+                await self.db._delete_async(table="alphafinder_interest_stock", ticker=ticker, group_id__in=groups_to_remove)
 
             return True
 
@@ -231,7 +231,7 @@ class InterestService:
             WHERE r.group_id IS NULL
         """
 
-        result = self.db._execute(text(query), {"ticker": ticker, "user_id": user_id, "group_ids": tuple(group_ids)})
+        result = await self.db._execute_async(text(query), {"ticker": ticker, "user_id": user_id, "group_ids": tuple(group_ids)})
 
         # 2. Process results
         groups_to_remove = set()
@@ -252,23 +252,23 @@ class InterestService:
                 WHERE group_id IN :group_ids
                 GROUP BY group_id
             """
-            result = self.db._execute(text(query), {"group_ids": tuple(groups_to_add)})
+            result = await self.db._execute_async(text(query), {"group_ids": tuple(groups_to_add)})
             max_orders = {row[0]: (row[1] or 0) for row in result.fetchall()}
 
         # 4. Execute updates
         if groups_to_remove:
-            self.db._delete(table="alphafinder_interest_stock", ticker=ticker, group_id__in=list(groups_to_remove))
+            await self.db._delete_async(table="alphafinder_interest_stock", ticker=ticker, group_id__in=list(groups_to_remove))
 
         if groups_to_add:
             insert_data = [
                 {"group_id": group_id, "ticker": ticker, "order": max_orders.get(group_id, 0) + 1}
                 for group_id in groups_to_add
             ]
-            self.db._insert(table="alphafinder_interest_stock", sets=insert_data)
+            await self.db._insert_async(table="alphafinder_interest_stock", sets=insert_data)
 
         return True
 
-    def get_interest_list(self, user_id: int, lang: TranslateCountry):
+    async def get_interest_list(self, user_id: int, lang: TranslateCountry):
         # 1. Get interest groups and their tickers from db
         query = """
             SELECT
@@ -288,7 +288,7 @@ class InterestService:
                 g.order ASC, i.order ASC
         """
 
-        result = self.db._execute(text(query), {"user_id": user_id})
+        result = await self.db._execute_async(text(query), {"user_id": user_id})
         rows = result.fetchall()
 
         # 2. Extract all unique tickers
@@ -306,7 +306,7 @@ class InterestService:
                 FROM stock_information
                 WHERE ticker IN :tickers
             """
-            stock_info_result = self.data_db._execute(text(stock_info_query), {"tickers": tuple(tickers)})
+            stock_info_result = await self.data_db._execute_async(text(stock_info_query), {"tickers": tuple(tickers)})
             stock_info = {
                 row.ticker: {
                     "name": getattr(row, name_column) or row.ticker,  # If name is None, use ticker as fallback
@@ -351,7 +351,7 @@ class InterestService:
 
         return groups_list
 
-    def get_interest_group(self, user_id: int):
+    async def get_interest_group(self, user_id: int):
         """
         사용자의 관심 그룹 목록을 조회합니다.
 
@@ -367,20 +367,20 @@ class InterestService:
             - 사용자가 처음 접속하는 경우, 기본 그룹("실시간 인기")이 자동으로 생성됨
             - "실시간 인기" 그룹은 필수 그룹으로, 삭제할 수 없음
         """
-        groups = self.db._select(table="alphafinder_interest_group", user_id=user_id, order="order", ascending=True)
+        groups = await self.db._select_async(table="alphafinder_interest_group", user_id=user_id, order="order", ascending=True)
         if not groups or not any(group.name in ["실시간 인기"] for group in groups):
-            return self.init_interest_group(user_id)
-        result = [
-            {
+            return await self.init_interest_group(user_id)
+        result = []
+        for group in groups:
+            count = 11 if group.name == "실시간 인기" else await self.get_interest_count(group.id)
+            result.append({
                 "id": group.id,
                 "name": group.name,
-                "count": 11 if group.name == "실시간 인기" else self.get_interest_count(group.id),
-            }
-            for group in groups
-        ]
+                "count": count,
+            })
         return result
 
-    def get_interest_group_by_ticker(self, user_id: int, ticker: str):
+    async def get_interest_group_by_ticker(self, user_id: int, ticker: str):
         query = """
             SELECT
                 g.id,
@@ -396,7 +396,7 @@ class InterestService:
             ORDER BY g.order ASC
         """
 
-        result = self.db._execute(text(query), {"user_id": user_id, "ticker": ticker})
+        result = await self.db._execute_async(text(query), {"user_id": user_id, "ticker": ticker})
         rows = result.fetchall()
 
         if not rows:
@@ -408,7 +408,7 @@ class InterestService:
             if row.name != "실시간 인기"
         ]
 
-    def init_interest_group(self, user_id: int):
+    async def init_interest_group(self, user_id: int):
         """
         사용자의 기본 관심 그룹을 초기화합니다.
 
@@ -423,23 +423,23 @@ class InterestService:
             - 생성된 그룹은 order=0, is_editable=False로 설정됨
         """
         # Check existing groups
-        existing_groups = self.db._select(
+        existing_groups = await self.db._select_async(
             table="alphafinder_interest_group", user_id=user_id, name__in=["실시간 인기", "기본"]
         )
         existing_names = {group.name for group in existing_groups}
 
         # Insert missing groups
         if "실시간 인기" not in existing_names:
-            self.db._insert(
+            await self.db._insert_async(
                 table="alphafinder_interest_group",
                 sets={"name": "실시간 인기", "user_id": user_id, "order": 0, "is_editable": False},
             )
 
         # Return all groups
-        groups = self.db._select(table="alphafinder_interest_group", user_id=user_id, order="order", ascending=True)
+        groups = await self.db._select_async(table="alphafinder_interest_group", user_id=user_id, order="order", ascending=True)
         return [{"id": group.id, "name": group.name} for group in groups]
 
-    def create_interest_group(self, user_id: int, name: str):
+    async def create_interest_group(self, user_id: int, name: str):
         """
         새로운 관심 그룹을 생성합니다.
 
@@ -455,17 +455,17 @@ class InterestService:
             HTTPException: 데이터베이스 오류가 발생한 경우
         """
         try:
-            group = self.db._select(table="alphafinder_interest_group", user_id=user_id, name=name, limit=1)
+            group = await self.db._select_async(table="alphafinder_interest_group", user_id=user_id, name=name, limit=1)
             if group:
                 raise DuplicateException(message="이미 존재하는 관심 그룹입니다.")
 
             # Get max order using raw SQL query
             query = "SELECT MAX(`order`) as max_order FROM alphafinder_interest_group WHERE user_id = :user_id"
-            result = self.db._execute(text(query), {"user_id": user_id})
+            result = await self.db._execute_async(text(query), {"user_id": user_id})
             max_order_row = result.fetchone()
             next_order = (max_order_row[0] if max_order_row and max_order_row[0] is not None else 0) + 1
 
-            result = self.db._insert(
+            result = await self.db._insert_async(
                 table="alphafinder_interest_group",
                 sets={"user_id": user_id, "name": name, "order": next_order, "is_editable": 1},
             )
@@ -477,7 +477,7 @@ class InterestService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    def delete_interest_group(self, group_id: int, user_id: int):
+    async def delete_interest_group(self, group_id: int, user_id: int):
         """
         기존 관심 그룹을 삭제합니다.
 
@@ -496,19 +496,19 @@ class InterestService:
                 - 데이터베이스 오류가 발생한 경우 (500)
         """
         try:
-            group = self.db._select(
+            group = await self.db._select_async(
                 table="alphafinder_interest_group", columns=["user_id", "is_editable"], id=group_id, limit=1
             )
             if group[0].user_id != user_id:
                 raise HTTPException(status_code=400, detail="관심 그룹 삭제 권한이 없습니다.")
             if group[0].is_editable == 0:
                 raise HTTPException(status_code=400, detail="수정 불가능한 그룹입니다.")
-            self.db._delete(table="alphafinder_interest_group", id=group_id)
+            await self.db._delete_async(table="alphafinder_interest_group", id=group_id)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
         return True
 
-    def update_interest_group_name(self, group_id: int, name: str, user_id: int):
+    async def update_interest_group_name(self, group_id: int, name: str, user_id: int):
         """
         관심 그룹의 이름을 수정합니다.
 
@@ -591,8 +591,8 @@ class InterestService:
         else:
             return (float(number / 1000000000000), "T$")
 
-    def get_interest_count(self, group_id: int):
-        count = self.db._count(table="alphafinder_interest_stock", group_id=group_id)
+    async def get_interest_count(self, group_id: int):
+        count = await self.db._count_async(table="alphafinder_interest_stock", group_id=group_id)
         return count
 
     def get_interest_news_leaderboard(
@@ -667,7 +667,7 @@ class InterestService:
 
         return {"is_interested": False, "groups": total_groups}
 
-    def update_order(self, user_id: int, group_id: int | None, order_list: List[int] | List[str]):
+    async def update_order(self, user_id: int, group_id: int | None, order_list: List[int] | List[str]):
         try:
             if group_id is None or group_id == 0:
                 # 그룹 순서 변경
@@ -705,7 +705,7 @@ class InterestService:
             logger.exception(e)
             raise HTTPException(status_code=500, detail=str(e))
 
-    def move_interest(self, from_group_id: int, to_group_id: int, tickers: List[str], user_id: int):
+    async def move_interest(self, from_group_id: int, to_group_id: int, tickers: List[str], user_id: int):
         # 유저 권한 체크
         from_group = self.db._select(table="alphafinder_interest_group", columns=["user_id"], id=from_group_id, limit=1)
         if not from_group:
@@ -746,7 +746,7 @@ class InterestService:
         self.db._insert(table="alphafinder_interest_stock", sets=insert_data)
         return True
 
-    def get_interest_price(self, tickers: List[str], group_id: int, lang: TranslateCountry = TranslateCountry.KO):
+    async def get_interest_price(self, tickers: List[str], group_id: int, lang: TranslateCountry = TranslateCountry.KO):
         if lang == TranslateCountry.KO:
             name_column = "kr_name"
         else:

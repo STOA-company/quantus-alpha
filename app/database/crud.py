@@ -1,5 +1,5 @@
 import time
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import asdict, dataclass, field
 
 from sqlalchemy import MetaData, and_, asc, bindparam, delete, desc, func, insert, or_, select, update
@@ -52,6 +52,12 @@ class BaseDatabase:
     def init_meta(self):
         self.meta_data = MetaData()
         self.meta_data.reflect(bind=self.conn)
+        
+    async def init_async_meta(self):
+        """비동기 메타데이터 초기화 (필요시)"""
+        # 비동기 엔진에서는 메타데이터를 동기적으로 초기화해도 문제없음
+        # 필요하면 별도 구현 가능
+        pass
 
     @contextmanager
     def get_connection(self):
@@ -62,6 +68,16 @@ class BaseDatabase:
                 connection.commit()
             except Exception as e:
                 connection.rollback()
+                raise e
+
+    @asynccontextmanager
+    async def get_async_connection(self):
+        """비동기 컨텍스트 매니저로 connection 관리"""
+        async with self.db.async_engine.begin() as connection:
+            try:
+                yield connection
+            except Exception as e:
+                await connection.rollback()
                 raise e
 
     def check_connection(self) -> bool:
@@ -85,6 +101,19 @@ class BaseDatabase:
                 raise
             except Exception as e:
                 logger.error(f"Error in query execution: {str(e)}")
+                raise
+
+    async def _execute_async(self, query, *args):
+        """비동기 쿼리 실행을 위한 메서드"""
+        async with self.get_async_connection() as connection:
+            try:
+                result = await connection.execute(query, *args)
+                return result
+            except IntegrityError as e:
+                logger.error(f"Integrity Error in async query execution: {str(e)}")
+                raise
+            except Exception as e:
+                logger.error(f"Error in async query execution: {str(e)}")
                 raise
 
     def get_condition(self, obj: object, **kwargs) -> list:
@@ -301,6 +330,98 @@ class BaseDatabase:
             logger.error(f"Error in select operation: {str(e)}")
             raise
 
+    async def _select_async(
+        self,
+        table: str,
+        columns: list | None = None,
+        order: str | None = None,
+        ascending: bool = False,
+        join_info: JoinInfo | None = None,
+        distinct: bool = False,
+        group_by: list | None = None,
+        aggregates: dict | None = None,
+        limit: int = 0,
+        offset: int = 0,
+        **kwargs,
+    ):
+        try:
+            obj = self.meta_data.tables[table]
+
+            if columns is None:
+                cols = [obj]
+            else:
+                primary_cols = []
+                if join_info:
+                    for col in columns:
+                        if col not in join_info.columns:
+                            try:
+                                primary_cols.append(getattr(obj.columns, col))
+                            except AttributeError:
+                                continue
+                else:
+                    primary_cols = [getattr(obj.columns, col) for col in columns]
+                cols = primary_cols
+
+            if join_info:
+                join_table_obj = self.meta_data.tables[join_info.secondary_table]
+                join_cols = []
+                for col in join_info.columns:
+                    if col in columns:
+                        join_cols.append(getattr(join_table_obj.columns, col))
+                cols.extend(join_cols)
+
+            if aggregates:
+                for alias, (col_name, func_name) in aggregates.items():
+                    if func_name not in ALLOWED_AGGREGATE_FUNCTIONS:
+                        raise ValueError(
+                            f"Invalid aggregate function: {func_name}. "
+                            f"Allowed functions are: {', '.join(ALLOWED_AGGREGATE_FUNCTIONS.keys())}"
+                        )
+
+                    if not hasattr(obj.columns, col_name):
+                        raise ValueError(f"Invalid column for aggregation: {col_name}")
+
+                    column = getattr(obj.columns, col_name)
+                    agg_func = ALLOWED_AGGREGATE_FUNCTIONS[func_name]
+                    cols.append(agg_func(column).label(alias))
+
+            cond = self.get_condition(obj, **kwargs)
+            stmt = select(*cols)
+
+            if distinct:
+                stmt = stmt.distinct()
+
+            stmt = stmt.where(*cond)
+
+            if join_info:
+                join_condition = self._join(join_info)
+                stmt = stmt.select_from(join_condition)
+
+            if group_by:
+                group_cols = [getattr(obj.columns, col) for col in group_by]
+                stmt = stmt.group_by(*group_cols)
+
+            if order:
+                order_col = getattr(obj.columns, order)
+                if ascending:
+                    stmt = stmt.order_by(asc(order_col))
+                else:
+                    stmt = stmt.order_by(desc(order_col))
+
+            if limit:
+                stmt = stmt.limit(limit)
+
+            if offset:
+                stmt = stmt.offset(offset)
+
+            async with self.get_async_connection() as connection:
+                result = await connection.execute(stmt)
+                return result.fetchall()
+
+        except Exception as e:
+            logger.error(f"Error in async select operation: {str(e)}")
+            raise
+
     def _join(self, join_info: JoinInfo):
         """JOIN 조건 생성"""
         try:
@@ -385,10 +506,85 @@ class BaseDatabase:
             logger.error(f"Error in bulk update operation: {str(e)}")
             raise
 
-    async def insert_wrapper(self, table: str, sets: dict | list):
-        """INSERT 쿼리 실행"""
+    async def _insert_async(self, table: str, sets: dict | list):
+        """비동기 INSERT 쿼리 실행"""
         try:
-            return self._insert(table, sets)
+            obj = self.meta_data.tables[table]
+            if isinstance(sets, dict):
+                _sets = self.get_sets(obj, sets)
+            elif isinstance(sets, list):
+                _sets = [self.get_sets(obj, _set) for _set in sets]
+            else:
+                raise ValueError("Invalid sets parameter type")
+
+            stmt = insert(obj).values(_sets)
+
+            async with self.get_async_connection() as connection:
+                result = await connection.execute(stmt)
+                return result
+        except Exception as e:
+            logger.error(f"Error in async insert operation: {str(e)}")
+            raise
+
+    async def _update_async(self, table: str, sets: dict, **kwargs):
+        """비동기 UPDATE 쿼리 실행"""
+        if not kwargs:
+            raise ValueError("Conditional statements (kwargs) are required in update queries.")
+
+        try:
+            obj = self.meta_data.tables[table]
+            cond = self.get_condition(obj, **kwargs)
+            _sets = self.get_sets(obj, sets)
+            stmt = update(obj).where(*cond).values(_sets)
+
+            async with self.get_async_connection() as connection:
+                result = await connection.execute(stmt)
+                return result
+        except Exception as e:
+            logger.error(f"Error in async update operation: {str(e)}")
+            raise
+
+    async def _delete_async(self, table: str, **kwargs):
+        """비동기 DELETE 쿼리 실행"""
+        if not kwargs:
+            raise ValueError("Conditional statements (kwargs) are required in delete queries.")
+
+        try:
+            obj = self.meta_data.tables[table]
+            cond = self.get_condition(obj, **kwargs)
+            stmt = delete(obj).where(*cond)
+
+            async with self.get_async_connection() as connection:
+                result = await connection.execute(stmt)
+                return result
+        except Exception as e:
+            logger.error(f"Error in async delete operation: {str(e)}")
+            raise
+
+    async def _count_async(self, table: str, join_info: JoinInfo | None = None, **kwargs) -> int:
+        """비동기 COUNT 쿼리 실행"""
+        try:
+            obj = self.meta_data.tables[table]
+            cond = self.get_condition(obj, **kwargs)
+
+            stmt = select(func.count()).select_from(obj).where(*cond)
+
+            if join_info:
+                join_condition = self._join(join_info)
+                stmt = stmt.select_from(join_condition)
+
+            async with self.get_async_connection() as connection:
+                result = await connection.execute(stmt)
+                return result.scalar() or 0
+
+        except Exception as e:
+            logger.error(f"Error in async count operation: {str(e)}")
+            raise
+
+    async def insert_wrapper(self, table: str, sets: dict | list):
+        """INSERT 쿼리 실행 (호환성 유지용)"""
+        try:
+            return await self._insert_async(table, sets)
         except Exception as e:
             logger.error(f"Error in insert operation: {str(e)}")
             raise
