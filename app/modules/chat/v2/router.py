@@ -16,10 +16,12 @@ from app.monitoring.web_metrics import (
     STREAMING_ERRORS,
     STREAMING_MESSAGES_COUNT,
 )
+from app.modules.chat.schemas import SendToEmailRequest
 from app.utils.quantus_auth_utils import get_current_user_redis as get_current_user, is_staff
+from app.core.logger import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -204,6 +206,24 @@ async def stream_chat(
                         preview=conversation.preview,
                     )
                 logger.info(f"성공 응답 저장 완료: {assistant_response[:50]}...")
+                
+                # 스트리밍 완료 후 대기 중인 이메일 요청들 처리
+                logger.info(f"이메일 큐 처리 시작: conversation_id={conversation_id}")
+                try:
+                    await chat_service.process_pending_email_requests(conversation_id)
+                    logger.info(f"이메일 큐 처리 완료: conversation_id={conversation_id}")
+                except Exception as email_error:
+                    logger.error(f"이메일 큐 처리 중 오류: {str(email_error)}")
+            else:
+                logger.warning(f"assistant_response가 없어서 큐 처리를 건너뜀: conversation_id={conversation_id}")
+                
+                # assistant_response가 없어도 큐 처리는 시도해보자
+                logger.info(f"assistant_response 없이도 이메일 큐 처리 시도: conversation_id={conversation_id}")
+                try:
+                    await chat_service.process_pending_email_requests(conversation_id)
+                    logger.info(f"이메일 큐 처리 완료 (응답 없음): conversation_id={conversation_id}")
+                except Exception as email_error:
+                    logger.error(f"이메일 큐 처리 중 오류 (응답 없음): {str(email_error)}")
 
         except Exception as e:
             logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
@@ -259,5 +279,45 @@ def feedback_response(
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/send_to_email")
+async def send_to_email(
+    request: SendToEmailRequest,
+    current_user: AlphafinderUser = Depends(get_current_user)
+    ):
+    try: 
+        if not current_user:
+            raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+        status = chat_service.get_status(request.conversation_id)
+        logger.info(f"status: {status}")
+        logger.info(f"request: {request}")
+        
+        if status == "success":
+            # AI 답변이 완료된 상태 - 즉시 이메일 전송
+            await chat_service.send_to_email(request.conversation_id, request.email)
+            return {
+                "message": "이메일이 전송되었습니다.",
+                "email": request.email,
+                "status": "sent"
+            }
+        elif status in ["pending", "progress"]:
+            # AI 답변이 진행 중 - 큐에 추가하고 대기
+            queue_id = await chat_service.queue_email_request(
+                request.conversation_id, 
+                request.email, 
+                current_user["uid"]
+            )
+            return {
+                "message": "AI 답변이 완료되면 자동으로 이메일이 전송됩니다.",
+                "email": request.email,
+                "status": "queued",
+                "queue_id": queue_id
+            }
+        else:
+            raise HTTPException(status_code=400, detail="알 수 없는 상태입니다.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

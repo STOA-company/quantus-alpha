@@ -1,7 +1,16 @@
-from sqlalchemy import BigInteger, Boolean, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Boolean, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+import enum
 
 from app.models.models_base import BaseMixin, ServiceBase
+
+
+class EmailQueueStatus(enum.Enum):
+    """이메일 큐 상태"""
+    PENDING = "pending"
+    PROCESSING = "processing"
+    SENT = "sent"
+    FAILED = "failed"
 
 
 class QuantusChatMessage(BaseMixin, ServiceBase):

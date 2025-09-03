@@ -25,7 +25,7 @@ BASE_URL = os.getenv("QUANTUS_BASE_URL")
 security = HTTPBearer(auto_error=False)
 
 TOKEN_CACHE_PREFIX = "auth_token:"
-TOKEN_CACHE_TTL = 30  # 1시간 (초 단위)
+TOKEN_CACHE_TTL = 3600  # 1시간 (초 단위)
 
 async def validate_token_async(token, sns_type, client_type):
     try:
@@ -57,7 +57,7 @@ async def validate_token_async(token, sns_type, client_type):
             response_data = await client.post(
                 urljoin(BASE_URL, "user_info"),
                 headers=headers,
-                timeout=30.0 
+                timeout=15.0 
                 # timeout=httpx.Timeout(
                 #     connect=5.0,    # 연결 타임아웃
                 #     read=15.0,      # 읽기 타임아웃

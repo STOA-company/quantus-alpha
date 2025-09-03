@@ -46,3 +46,10 @@ class MessageQueueItem(BaseModel):
     query: str
     model: str = "gpt4mi"
     client_id: Optional[str] = None
+
+
+class SendToEmailRequest(BaseModel):
+    """이메일 전송 요청 스키마"""
+
+    conversation_id: str
+    email: str
