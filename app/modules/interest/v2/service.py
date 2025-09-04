@@ -529,7 +529,7 @@ class InterestService:
                 - 데이터베이스 오류가 발생한 경우 (500)
         """
         try:
-            group = self.db._select(
+            group = await self.db._select_async(
                 table="alphafinder_interest_group", columns=["name", "user_id", "is_editable"], id=group_id, limit=1
             )
             if group[0].is_editable == 0:
@@ -541,7 +541,7 @@ class InterestService:
             if name == group[0].name:
                 raise DuplicateException(message="기존 이름과 동일합니다.")
             update_time = now_utc()
-            self.db._update(
+            await self.db._update_async(
                 table="alphafinder_interest_group", id=group_id, sets={"name": name, "updated_at": update_time}
             )
             return True
@@ -646,7 +646,7 @@ class InterestService:
         return disclosure_items
 
     def get_interest_info(self, user_id: int, ticker: str):
-        query = self.db._select(table="interest_group", user_id=user_id)
+        query = await self.db._select_async(table="interest_group", user_id=user_id)
         if not query:
             return {"is_interested": False, "groups": []}
 
@@ -655,7 +655,7 @@ class InterestService:
                 "id": group.id,
                 "name": group.name,
                 "included": True
-                if self.db._select(table="user_stock_interest", group_id=group.id, ticker=ticker)
+                if await self.db._select_async(table="user_stock_interest", group_id=group.id, ticker=ticker)
                 else False,
             }
             for group in query
@@ -672,28 +672,28 @@ class InterestService:
             if group_id is None or group_id == 0:
                 # 그룹 순서 변경
                 # 모든 그룹이 사용자의 것인지 확인
-                groups = self.db._select(table="alphafinder_interest_group", user_id=user_id, id__in=order_list)
+                groups = await self.db._select_async(table="alphafinder_interest_group", user_id=user_id, id__in=order_list)
                 if len(groups) != len(order_list):
                     raise HTTPException(status_code=400, detail="잘못된 그룹 ID가 포함되어 있습니다.")
 
                 # 그룹 순서 업데이트
                 for idx, group_id in enumerate(order_list, 1):
-                    self.db._update(table="alphafinder_interest_group", id=group_id, sets={"order": idx})
+                    await self.db._update_async(table="alphafinder_interest_group", id=group_id, sets={"order": idx})
             else:
                 # 종목 순서 변경
                 # 그룹 소유권 확인
-                group = self.db._select(table="alphafinder_interest_group", id=group_id, user_id=user_id, limit=1)
+                group = await self.db._select_async(table="alphafinder_interest_group", id=group_id, user_id=user_id, limit=1)
                 if not group:
                     raise HTTPException(status_code=400, detail="관심 그룹이 존재하지 않습니다.")
 
                 # 모든 종목이 그룹에 속한 것인지 확인
-                interests = self.db._select(table="alphafinder_interest_stock", group_id=group_id, ticker__in=order_list)
+                interests = await self.db._select_async(table="alphafinder_interest_stock", group_id=group_id, ticker__in=order_list)
                 if len(interests) != len(order_list):
                     raise HTTPException(status_code=400, detail="기록된 종목의 갯수와 맞지 않습니다.")
 
                 # 종목 순서 업데이트
                 for idx, ticker in enumerate(order_list, 1):
-                    self.db._update(
+                    await self.db._update_async(
                         table="alphafinder_interest_stock", group_id=group_id, ticker=ticker, sets={"order": idx}
                     )
 
@@ -707,21 +707,21 @@ class InterestService:
 
     async def move_interest(self, from_group_id: int, to_group_id: int, tickers: List[str], user_id: int):
         # 유저 권한 체크
-        from_group = self.db._select(table="alphafinder_interest_group", columns=["user_id"], id=from_group_id, limit=1)
+        from_group = await self.db._select_async(table="alphafinder_interest_group", columns=["user_id"], id=from_group_id, limit=1)
         if not from_group:
             raise HTTPException(status_code=400, detail="관심 그룹이 존재하지 않습니다.")
         if from_group[0].user_id != user_id:
             raise HTTPException(status_code=403, detail="관심 그룹 편집 권한이 없습니다.")
 
         # 1. 티커들이 해당 종목에 있는지 확인
-        from_group_tickers = self.db._select(
+        from_group_tickers = await self.db._select_async(
             table="alphafinder_interest_stock", group_id=from_group_id, ticker__in=tickers
         )
         if len(from_group_tickers) != len(tickers):
             raise HTTPException(status_code=400, detail="관심 그룹에 존재하지 않는 종목이 포함되어 있습니다.")
 
         # 2. 해당 종목이 이동하는 그룹에 있는지 확인
-        to_group_tickers = self.db._select(table="alphafinder_interest_stock", group_id=to_group_id, ticker__in=tickers)
+        to_group_tickers = await self.db._select_async(table="alphafinder_interest_stock", group_id=to_group_id, ticker__in=tickers)
 
         # 3. 해당 종목이 이동하는 그룹에 있으면 예외 처리
         # 3-1. 해당 종목이 이동하는 그룹에 있으면 제외
@@ -736,14 +736,14 @@ class InterestService:
         next_order = (max_order_row[0] if max_order_row and max_order_row[0] is not None else 0) + 1
 
         # 5. 이동하려는 종목들을 From 그룹에서 제거
-        self.db._delete(table="alphafinder_interest_stock", group_id=from_group_id, ticker__in=tickers)
+        await self.db._delete_async(table="alphafinder_interest_stock", group_id=from_group_id, ticker__in=tickers)
 
         # 6. 이동하려는 종목들을 To 그룹에 추가 (order 값 설정)
         insert_data = [
             {"group_id": to_group_id, "ticker": ticker, "order": next_order + idx}
             for idx, ticker in enumerate(move_tickers)
         ]
-        self.db._insert(table="alphafinder_interest_stock", sets=insert_data)
+        await self.db._insert_async(table="alphafinder_interest_stock", sets=insert_data)
         return True
 
     async def get_interest_price(self, tickers: List[str], group_id: int, lang: TranslateCountry = TranslateCountry.KO):
@@ -752,7 +752,7 @@ class InterestService:
         else:
             name_column = "en_name"
 
-        ticker_price_data = self.data_db._select(
+        ticker_price_data = await self.data_db._select_async(
             table="stock_trend",
             columns=["ctry", "ticker", name_column, "current_price", "change_rt"],
             ticker__in=tickers,
@@ -768,7 +768,7 @@ class InterestService:
             for row in ticker_price_data
         ]
         # 순서 정렬
-        interest_order_data = self.db._select(
+        interest_order_data = await self.db._select_async(
             table="alphafinder_interest_stock", columns=["ticker", "order"], group_id=group_id, ticker__in=tickers
         )
         interest_order_data = {row.ticker: row.order for row in interest_order_data}
