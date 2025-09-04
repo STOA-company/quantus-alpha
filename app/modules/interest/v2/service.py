@@ -595,7 +595,7 @@ class InterestService:
         count = await self.db._count_async(table="alphafinder_interest_stock", group_id=group_id)
         return count
 
-    def get_interest_news_leaderboard(
+    async def get_interest_news_leaderboard(
         self,
         group_id: int,
         lang: Literal["ko", "en"] = "ko",
@@ -603,7 +603,7 @@ class InterestService:
     ) -> List[NewsRenewalItem]:
         redis = NewsLeaderboard()
         news_service = get_news_service()
-        ticker_infos = self.get_interest_tickers(group_id)
+        ticker_infos = await self.get_interest_tickers(group_id)
         if len(ticker_infos) == 0:
             return []
         tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
@@ -622,7 +622,7 @@ class InterestService:
             news_items = news_service.mask_news_items_by_id(news_items, recent_news_ids)
         return news_items
 
-    def get_interest_disclosure_leaderboard(
+    async def get_interest_disclosure_leaderboard(
         self,
         group_id: int,
         lang: Literal["ko", "en"] = "ko",
@@ -630,7 +630,7 @@ class InterestService:
     ) -> List[DisclosureRenewalItem]:
         redis = DisclosureLeaderboard()
         news_service = get_news_service()
-        ticker_infos = self.get_interest_tickers(group_id)
+        ticker_infos = await self.get_interest_tickers(group_id)
         if len(ticker_infos) == 0:
             return []
         tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
@@ -645,7 +645,7 @@ class InterestService:
 
         return disclosure_items
 
-    def get_interest_info(self, user_id: int, ticker: str):
+    async def get_interest_info(self, user_id: int, ticker: str):
         query = await self.db._select_async(table="interest_group", user_id=user_id)
         if not query:
             return {"is_interested": False, "groups": []}
@@ -731,7 +731,7 @@ class InterestService:
 
         # 4. 이동할 그룹의 현재 최대 order 값 조회
         query = "SELECT MAX(`order`) as max_order FROM alphafinder_interest_stock WHERE group_id = :group_id"
-        result = self.db._execute(text(query), {"group_id": to_group_id})
+        result = await self.db._execute_async(text(query), {"group_id": to_group_id})
         max_order_row = result.fetchone()
         next_order = (max_order_row[0] if max_order_row and max_order_row[0] is not None else 0) + 1
 
