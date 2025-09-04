@@ -418,8 +418,16 @@ def _get_cached_token_validation(token: str, sns_type: str, client_type: str) ->
             # 만료 시간 확인
             expires_at = datetime.fromisoformat(data["expires_at"])
             if datetime.utcnow() < expires_at:
+                user_info = data["user_info"]
+                # 캐시된 사용자 정보의 email 필드 유효성 검사
+                if not user_info.get("email") or "@" not in user_info.get("email", ""):
+                    print(f"캐시된 사용자 정보에 유효하지 않은 email: {user_info.get('email')}")
+                    redis_conn.delete(cache_key)
+                    print(f"유효하지 않은 캐시 삭제: {cache_key}")
+                    return None
+                
                 print(f"캐시된 토큰 사용: {cache_key}")
-                return data["user_info"]
+                return user_info
             else:
                 # 만료된 캐시 삭제
                 redis_conn.delete(cache_key)
@@ -432,4 +440,7 @@ def _get_cached_token_validation(token: str, sns_type: str, client_type: str) ->
 
 def is_staff(user: AlphafinderUser):
     email = user.get("email")
-    return email.split("@")[1] in ["stoa-investment.com"]
+    if not email or "@" not in email:
+        return False
+    domain = email.split("@")[1] if len(email.split("@")) > 1 else ""
+    return domain in ["stoa-investment.com"]
