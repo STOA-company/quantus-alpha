@@ -1,3 +1,4 @@
+import asyncio
 import math
 import re
 from datetime import datetime, time, timedelta
@@ -477,7 +478,7 @@ class NewsService:
         # 최신 아이템과 마스킹된 오래된 아이템 결합
         return recent_items + masked_older_items
 
-    def top_stories(
+    async def top_stories(
         self,
         request: Request,
         tickers: Optional[List[str]] = None,
@@ -494,8 +495,8 @@ class NewsService:
 
         top_stories_tickers = tickers
 
-        # 해당 티커의 가격 데이터 조회
-        price_data = self.db._select(
+        # 해당 티커의 가격 데이터 조회 (비동기)
+        price_data = await self.db._select_async(
             table="stock_trend", columns=["ticker", "current_price", "change_rt", "ctry"], ticker__in=tickers
         )
 
@@ -533,28 +534,27 @@ class NewsService:
             news_name = "en_name"
             disclosure_name = "en_name"
 
-        # 뉴스 데이터 수집
-        df_news = pd.DataFrame(
-            self.db._select(
-                table="news_analysis",
-                columns=[
-                    "id",
-                    "ticker",
-                    news_name,
-                    "ctry",
-                    "date",
-                    "title",
-                    "summary",
-                    "impact_reason",
-                    "key_points",
-                    "emotion",
-                    "that_time_price",
-                ],
-                order="date",
-                ascending=False,
-                **news_condition,
-            )
+        # 뉴스 데이터 수집 (비동기)
+        news_data = await self.db._select_async(
+            table="news_analysis",
+            columns=[
+                "id",
+                "ticker",
+                news_name,
+                "ctry",
+                "date",
+                "title",
+                "summary",
+                "impact_reason",
+                "key_points",
+                "emotion",
+                "that_time_price",
+            ],
+            order="date",
+            ascending=False,
+            **news_condition,
         )
+        df_news = pd.DataFrame(news_data)
         if not df_news.empty:
             df_news = df_news.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
             df_news = df_news[df_news["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
@@ -563,28 +563,27 @@ class NewsService:
             if lang == TranslateCountry.KO:
                 df_news = df_news.rename(columns={"kr_name": "ko_name"})
 
-        # 공시 데이터 수집
-        df_disclosure = pd.DataFrame(
-            self.db._select(
-                table="disclosure_information",
-                columns=[
-                    "id",
-                    "ticker",
-                    disclosure_name,
-                    "ctry",
-                    "date",
-                    "summary",
-                    "impact_reason",
-                    "key_points",
-                    "emotion",
-                    "form_type",
-                    "that_time_price",
-                ],
-                order="date",
-                ascending=False,
-                **disclosure_condition,
-            )
+        # 공시 데이터 수집 (비동기)
+        disclosure_data = await self.db._select_async(
+            table="disclosure_information",
+            columns=[
+                "id",
+                "ticker",
+                disclosure_name,
+                "ctry",
+                "date",
+                "summary",
+                "impact_reason",
+                "key_points",
+                "emotion",
+                "form_type",
+                "that_time_price",
+            ],
+            order="date",
+            ascending=False,
+            **disclosure_condition,
         )
+        df_disclosure = pd.DataFrame(disclosure_data)
         if not df_disclosure.empty:
             if lang != TranslateCountry.KO:
                 df_disclosure = df_disclosure.rename(

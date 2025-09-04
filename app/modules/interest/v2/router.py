@@ -318,7 +318,7 @@ async def top_stories(
         return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
     # subscription_level = user.subscription_level if user else 1 # TODO :: 유저 테이블 통합 후 주석 해제
     # stories_count = 30 if subscription_level >= 3 else 10
-    data = news_service.top_stories(
+    data = await news_service.top_stories(
         request=request, tickers=tickers, lang=lang, stories_count=30, user=user
     )  # TODO :: stories_count 변경 필요
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
