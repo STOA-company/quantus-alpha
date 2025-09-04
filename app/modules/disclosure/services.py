@@ -283,9 +283,9 @@ class DisclosureService:
         )
 
         # 권한에 따른 데이터 마스킹
-        user_level = user.subscription_level if user else 1
-        if user_level == 1:
-            df_disclosure = self.mask_fields_disclosure(df_disclosure)
+        # user_level = user.subscription_level if user else 1
+        # if user_level == 1:
+        #     df_disclosure = self.mask_fields_disclosure(df_disclosure)
 
         data = []
         for _, row in df_disclosure.iterrows():

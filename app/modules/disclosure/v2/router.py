@@ -25,6 +25,10 @@ async def renewal_disclosure(
         ticker=ticker, date=date, page=page, size=size, lang=lang, user=user
     )
 
+    # data, total_count, total_pages, offset, emotion_counts = await service.renewal_disclosure_v1(
+    #     ticker=ticker, date=date, page=page, size=size, lang=lang, user=user
+    # )
+
     return DisclosureResponse(
         status_code=200,
         message="Successfully retrieved disclosure data",

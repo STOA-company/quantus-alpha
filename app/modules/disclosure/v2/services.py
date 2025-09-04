@@ -302,6 +302,7 @@ class DisclosureService:
                     "document_url": row["url"],
                 }
             )
+            
 
         return data, total_count, total_pages, offset, emotion_counts
 
@@ -346,6 +347,118 @@ class DisclosureService:
             logger.error(f"Error in filter_sensitive_fields_by_user_level: {str(e)}")
 
         return df
+    
+    async def renewal_disclosure_v1(
+        self, ticker: str, date: str, page: int, size: int, lang: TranslateCountry, user: AlphafinderUser
+    ):
+        if not date:
+            year = datetime.now().strftime("%Y")
+        elif len(date) == 8:
+            year = date[:4]
+        else:
+            year = date
+
+        ctry = check_ticker_country_len_2(ticker)
+
+        if lang == TranslateCountry.KO:
+            name = "ko_name"
+            lang = "ko-KR"
+            document_type_mapping = DOCUMENT_TYPE_MAPPING
+
+            def category_type_mapping(x):
+                return x
+        elif lang == TranslateCountry.EN:
+            name = "en_name"
+            document_type_mapping = FORM_TYPE_MAPPING if ctry == "kr" else DOCUMENT_TYPE_MAPPING_EN
+            lang = "en-US"
+
+            def category_type_mapping(x):
+                return CATEGORY_TYPE_MAPPING_EN.get(x, x)
+        else:
+            raise ValueError("Invalid language")
+
+        df_disclosure = pd.DataFrame(
+            self.db._select(
+                table="disclosure_information",
+                columns=[
+                    "id",
+                    "ticker",
+                    name,
+                    "ctry",
+                    "date",
+                    "url",
+                    "summary",
+                    "impact_reason",
+                    "key_points",
+                    "emotion",
+                    "form_type",
+                    "category_type",
+                    "that_time_price",
+                ],
+                **{"ticker": ticker, "date__like": f"{year}%", "lang": lang, "is_exist": 1},
+            )
+        )
+
+        if df_disclosure.empty:
+            raise DataNotFoundException(ticker=ticker, data_type="disclosure")
+
+        df_disclosure = self._process_dataframe_disclosure(df_disclosure)
+        df_disclosure["date"] = pd.to_datetime(df_disclosure["date"]).dt.tz_localize("UTC").dt.tz_convert("Asia/Seoul")
+
+        # current_price = self.db._select(table="stock_trend", columns=["ticker", "current_price"], **{"ticker": ticker})
+        df_disclosure["price_impact"] = 0.00
+        # if current_price:
+        #     df_disclosure["price_impact"] = round(
+        #         (df_disclosure["that_time_price"] - current_price[0][1]) / current_price[0][1] * 100, 2
+        #     )
+
+        total_count = len(df_disclosure)
+        total_pages = (total_count + size - 1) // size
+        offset = (page - 1) * size
+        emotion_counts = self._count_emotions(df_disclosure)
+        df_disclosure = df_disclosure[offset : offset + size]
+
+        if offset >= total_count:
+            page = total_pages
+            offset = (page - 1) * size
+            df_disclosure = df_disclosure[offset : offset + size]
+
+        # key_points 파싱
+        df_disclosure["key_points"] = df_disclosure["key_points"].apply(
+            lambda x: json.loads(x) if isinstance(x, str) else x
+        )
+
+        # 권한에 따른 데이터 마스킹
+        user_level = user.subscription_level if user else 1
+        if user_level == 1:
+            df_disclosure = self.mask_fields_disclosure(df_disclosure)
+
+        data = []
+        for _, row in df_disclosure.iterrows():
+            form_type = document_type_mapping.get(row["form_type"], row["form_type"])
+            res_name = row.get(name, "") or ""
+            category_type = (
+                "[" + category_type_mapping(row["category_type"]) + "]" if row.get("category_type", "") else ""
+            )
+            data.append(
+                {
+                    "id": row["id"],
+                    "title": f"{res_name} {form_type} {category_type}".strip(),
+                    "date": row["date"],
+                    "emotion": row["emotion"],
+                    "impact_reason": row["impact_reason"],
+                    "key_points_1": row["key_points"][0] if row["key_points"] else "",
+                    "key_points_2": row["key_points"][1] if row["key_points"] else "",
+                    "key_points_3": row["key_points"][2] if row["key_points"] else "",
+                    "key_points_4": row["key_points"][3] if row["key_points"] else "",
+                    "key_points_5": row["key_points"][4] if row["key_points"] else "",
+                    "summary": row["summary"],
+                    "document_url": row["url"],
+                    "price_impact": row["price_impact"],
+                }
+            )
+
+        return data, total_count, total_pages, offset, emotion_counts
 
 
 def get_disclosure_service() -> DisclosureService:
