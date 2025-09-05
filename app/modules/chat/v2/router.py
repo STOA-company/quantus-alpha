@@ -184,8 +184,22 @@ async def stream_chat(
 
                     try:
                         chunk_data = json.loads(chunk)
-                        if chunk_data.get("status") == "success":
+                        status = chunk_data.get("status")
+                        
+                        if status == "success":
                             assistant_response = chunk_data.get("content", "")
+                        elif status == "progress":
+                            # progress 상태일 때도 DB에 저장
+                            progress_content = chunk_data.get("content", "")
+                            progress_title = chunk_data.get("title", "")
+                            if progress_content:
+                                # progress 메시지를 system role로 저장
+                                chat_service.add_message(
+                                    conversation_id=conversation_id,
+                                    content=f"[{progress_title}] {progress_content}" if progress_title else progress_content,
+                                    role="system",
+                                    root_message_id=root_message.id
+                                )
 
                     except json.JSONDecodeError:
                         # JSON 파싱 실패시 그대로 전달

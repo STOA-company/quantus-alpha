@@ -59,6 +59,7 @@ class LLMClient:
 
                     initial_msg = {
                         "status": "submitted",
+                        "title" : "연구 시작",
                         "content": "주요 뉴스, 공시, 기업 이슈 등을 종합 분석하여 질문에 대한 답변을 준비하고 있습니다.",
                         "job_id": job_id,
                     }
@@ -106,10 +107,14 @@ class LLMClient:
                         # 진행 중인 경우 부분 결과 확인
                         step_info = status_data.get("step_info", {})
                         if step_info and isinstance(step_info, dict):
+                            step_title = step_info.get("title", "")
                             step_message = step_info.get("message", "")
                             if step_message and step_message != previous_result:
                                 previous_result = step_message
-                                progress_msg = {"status": "progress", "content": step_message}
+                                progress_msg = {
+                                    "status": "progress", 
+                                    "title": step_title,
+                                    "content": step_message}
                                 yield json.dumps(progress_msg, ensure_ascii=False)
 
                         # 완료 체크

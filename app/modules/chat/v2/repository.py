@@ -111,7 +111,7 @@ class ConversationRepository:
 
         if role == "user":
             database_service._update(
-                "chat_message",
+                "quantus_chat_message",
                 {"root_message_id": created_message.id},
                 id=created_message.id,
             )
