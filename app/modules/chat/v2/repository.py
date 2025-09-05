@@ -195,7 +195,7 @@ class MessageRepository:
             order="created_at",
             ascending=True,
             conversation_id=conversation_id,
-            role__in=["user", "assistant"],
+            role__in=["user", "assistant", "system", "history"],
         )
 
         messages = []

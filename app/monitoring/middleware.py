@@ -118,7 +118,12 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         """스트리밍 요청인지 확인"""
         path = request.url.path
         # 스트리밍 API 경로 패턴 확인 (실제 앱에 맞게 수정 필요)
-        is_stream_path = path.startswith("/api/v1/chat/stream") or "stream" in path
+        is_stream_path = (
+            path.startswith("/api/v1/chat/stream") or
+            path.startswith("/api/v2/chat/stream") or
+            path.startswith("/api/v2/chat/conversation") or
+            "stream" in path
+        )
         # 헤더에서 스트리밍 관련 정보 확인
         accept_header = request.headers.get("accept", "")
         is_stream_header = "text/event-stream" in accept_header

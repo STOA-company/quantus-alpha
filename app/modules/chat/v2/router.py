@@ -1,9 +1,10 @@
+import asyncio
 import json
 import logging
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.models.models_users import AlphafinderUser
@@ -131,133 +132,133 @@ def delete_conversation(conversation_id: int, current_user: AlphafinderUser = De
     return {"conversation_id": conversation_id, "message": "대화가 삭제되었습니다."}
 
 
-@router.get("/stream")
-async def stream_chat(
-    query: str, conversation_id: int, model: str = LLM_MODEL, current_user: AlphafinderUser = Depends(get_current_user)
-):
-    """채팅 스트리밍 응답"""
-    if not current_user:
-        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+# @router.get("/stream")
+# async def stream_chat(
+#     query: str, conversation_id: int, model: str = LLM_MODEL, current_user: AlphafinderUser = Depends(get_current_user)
+# ):
+#     """채팅 스트리밍 응답"""
+#     if not current_user:
+#         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
-    # 사용자가 스태프인지 확인
-    user_is_staff = is_staff(current_user)
+#     # 사용자가 스태프인지 확인
+#     user_is_staff = is_staff(current_user)
 
-    # 요청 제한 확인 (스태프가 아닌 경우)
-    if not user_is_staff and not check_rate_limit(current_user["uid"], user_is_staff):
-        raise HTTPException(status_code=429, detail="일일 사용 한도를 초과했습니다. 하루에 3번만 요청할 수 있습니다.")
+#     # 요청 제한 확인 (스태프가 아닌 경우)
+#     if not user_is_staff and not check_rate_limit(current_user["uid"], user_is_staff):
+#         raise HTTPException(status_code=429, detail="일일 사용 한도를 초과했습니다. 하루에 3번만 요청할 수 있습니다.")
 
-    status = chat_service.get_status(conversation_id)
-    if status == "pending":
-        raise HTTPException(status_code=429, detail="대기 중입니다.")
-    elif status == "progress":
-        raise HTTPException(status_code=429, detail="답변이 생성 중입니다.")
+#     status = chat_service.get_status(conversation_id)
+#     if status == "pending":
+#         raise HTTPException(status_code=429, detail="대기 중입니다.")
+#     elif status == "progress":
+#         raise HTTPException(status_code=429, detail="답변이 생성 중입니다.")
 
-    conversation = chat_service.get_conversation(conversation_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail="존재하지 않는 대화입니다.")
+#     conversation = chat_service.get_conversation(conversation_id)
+#     if not conversation:
+#         raise HTTPException(status_code=404, detail="존재하지 않는 대화입니다.")
 
-    increment_rate_limit(current_user["uid"], user_is_staff)
+#     increment_rate_limit(current_user["uid"], user_is_staff)
 
-    if len(conversation.messages) == 0:
-        title = query
-        chat_service.update_conversation(conversation_id, title)
+#     if len(conversation.messages) == 0:
+#         title = query
+#         chat_service.update_conversation(conversation_id, title)
 
-    if conversation.messages and conversation.messages[-1].role == "user" and conversation.messages[-1].content == query:
-        root_message = conversation.messages[-1]
-    else:
-        root_message = chat_service.add_message(conversation_id, query, "user")
+#     if conversation.messages and conversation.messages[-1].role == "user" and conversation.messages[-1].content == query:
+#         root_message = conversation.messages[-1]
+#     else:
+#         root_message = chat_service.add_message(conversation_id, query, "user")
 
-    logger.info(f"스트리밍 채팅 요청 수신: query={query[:30]}..., model={model}")
-    CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
-    STREAMING_CONNECTIONS.inc()
+#     logger.info(f"스트리밍 채팅 요청 수신: query={query[:30]}..., model={model}")
+#     CHAT_REQUEST_COUNT.labels(model=model, status="streaming").inc()
+#     STREAMING_CONNECTIONS.inc()
 
-    async def event_generator():
-        """표준 SSE 형식의 이벤트 생성기"""
-        assistant_response = None
-        try:
-            message_count = 0
-            async for chunk in chat_service.process_query(query, conversation_id, model):
-                message_count += 1
-                # 올바른 SSE 형식으로 응답 생성 (각 행이 data: 로 시작하고 빈 줄로 끝나야 함)
-                if isinstance(chunk, str):
-                    STREAMING_MESSAGES_COUNT.labels(conversation_id=str(conversation_id)).inc()
+#     async def event_generator():
+#         """표준 SSE 형식의 이벤트 생성기"""
+#         assistant_response = None
+#         try:
+#             message_count = 0
+#             async for chunk in chat_service.process_query(query, conversation_id, model):
+#                 message_count += 1
+#                 # 올바른 SSE 형식으로 응답 생성 (각 행이 data: 로 시작하고 빈 줄로 끝나야 함)
+#                 if isinstance(chunk, str):
+#                     STREAMING_MESSAGES_COUNT.labels(conversation_id=str(conversation_id)).inc()
 
-                    try:
-                        chunk_data = json.loads(chunk)
-                        status = chunk_data.get("status")
+#                     try:
+#                         chunk_data = json.loads(chunk)
+#                         status = chunk_data.get("status")
                         
-                        if status == "success":
-                            assistant_response = chunk_data.get("content", "")
-                        elif status == "progress":
-                            # progress 상태일 때도 DB에 저장
-                            progress_content = chunk_data.get("content", "")
-                            progress_title = chunk_data.get("title", "")
-                            if progress_content:
-                                # progress 메시지를 system role로 저장
-                                chat_service.add_message(
-                                    conversation_id=conversation_id,
-                                    content=f"[{progress_title}] {progress_content}" if progress_title else progress_content,
-                                    role="system",
-                                    root_message_id=root_message.id
-                                )
+#                         if status == "success":
+#                             assistant_response = chunk_data.get("content", "")
+#                         elif status == "progress":
+#                             # progress 상태일 때도 DB에 저장
+#                             progress_content = chunk_data.get("content", "")
+#                             progress_title = chunk_data.get("title", "")
+#                             if progress_content:
+#                                 # progress 메시지를 system role로 저장
+#                                 chat_service.add_message(
+#                                     conversation_id=conversation_id,
+#                                     content=f"[{progress_title}] {progress_content}" if progress_title else progress_content,
+#                                     role="system",
+#                                     root_message_id=root_message.id
+#                                 )
 
-                    except json.JSONDecodeError:
-                        # JSON 파싱 실패시 그대로 전달
-                        pass
+#                     except json.JSONDecodeError:
+#                         # JSON 파싱 실패시 그대로 전달
+#                         pass
 
-                    yield f"data: {chunk}\n\n"
+#                     yield f"data: {chunk}\n\n"
 
-            logger.info(f"스트리밍 응답 완료: 총 {message_count}개 메시지 전송됨")
+#             logger.info(f"스트리밍 응답 완료: 총 {message_count}개 메시지 전송됨")
 
-            if assistant_response:
-                chat_service.store_final_response(conversation_id, root_message.id)
-                chat_service.store_analysis_history(conversation_id, root_message.id)
+#             if assistant_response:
+#                 chat_service.store_final_response(conversation_id, root_message.id)
+#                 chat_service.store_analysis_history(conversation_id, root_message.id)
 
-                if conversation.preview is None:
-                    conversation.preview = assistant_response[:100]
-                    chat_service.update_conversation(
-                        conversation_id=conversation_id,
-                        preview=conversation.preview,
-                    )
-                logger.info(f"성공 응답 저장 완료: {assistant_response[:50]}...")
+#                 if conversation.preview is None:
+#                     conversation.preview = assistant_response[:100]
+#                     chat_service.update_conversation(
+#                         conversation_id=conversation_id,
+#                         preview=conversation.preview,
+#                     )
+#                 logger.info(f"성공 응답 저장 완료: {assistant_response[:50]}...")
                 
-                # 스트리밍 완료 후 대기 중인 이메일 요청들 처리
-                logger.info(f"이메일 큐 처리 시작: conversation_id={conversation_id}")
-                try:
-                    await chat_service.process_pending_email_requests(conversation_id)
-                    logger.info(f"이메일 큐 처리 완료: conversation_id={conversation_id}")
-                except Exception as email_error:
-                    logger.error(f"이메일 큐 처리 중 오류: {str(email_error)}")
-            else:
-                logger.warning(f"assistant_response가 없어서 큐 처리를 건너뜀: conversation_id={conversation_id}")
+#                 # 스트리밍 완료 후 대기 중인 이메일 요청들 처리
+#                 logger.info(f"이메일 큐 처리 시작: conversation_id={conversation_id}")
+#                 try:
+#                     await chat_service.process_pending_email_requests(conversation_id)
+#                     logger.info(f"이메일 큐 처리 완료: conversation_id={conversation_id}")
+#                 except Exception as email_error:
+#                     logger.error(f"이메일 큐 처리 중 오류: {str(email_error)}")
+#             else:
+#                 logger.warning(f"assistant_response가 없어서 큐 처리를 건너뜀: conversation_id={conversation_id}")
                 
-                # assistant_response가 없어도 큐 처리는 시도해보자
-                logger.info(f"assistant_response 없이도 이메일 큐 처리 시도: conversation_id={conversation_id}")
-                try:
-                    await chat_service.process_pending_email_requests(conversation_id)
-                    logger.info(f"이메일 큐 처리 완료 (응답 없음): conversation_id={conversation_id}")
-                except Exception as email_error:
-                    logger.error(f"이메일 큐 처리 중 오류 (응답 없음): {str(email_error)}")
+#                 # assistant_response가 없어도 큐 처리는 시도해보자
+#                 logger.info(f"assistant_response 없이도 이메일 큐 처리 시도: conversation_id={conversation_id}")
+#                 try:
+#                     await chat_service.process_pending_email_requests(conversation_id)
+#                     logger.info(f"이메일 큐 처리 완료 (응답 없음): conversation_id={conversation_id}")
+#                 except Exception as email_error:
+#                     logger.error(f"이메일 큐 처리 중 오류 (응답 없음): {str(email_error)}")
 
-        except Exception as e:
-            logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
-            # TODO: ROLLBACK
-            STREAMING_ERRORS.labels(error_type="streaming_error", conversation_id=str(conversation_id)).inc()
-            decrement_rate_limit(current_user["uid"])
-            yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
-        finally:
-            STREAMING_CONNECTIONS.dec()
+#         except Exception as e:
+#             logger.error(f"스트리밍 응답 생성 중 오류: {str(e)}")
+#             # TODO: ROLLBACK
+#             STREAMING_ERRORS.labels(error_type="streaming_error", conversation_id=str(conversation_id)).inc()
+#             decrement_rate_limit(current_user["uid"])
+#             yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
+#         finally:
+#             STREAMING_CONNECTIONS.dec()
 
-    # 올바른 SSE 응답을 위한 헤더 설정
-    headers = {
-        "Content-Type": "text/event-stream",  # 명시적으로 SSE 콘텐츠 타입 지정
-        "Cache-Control": "no-cache, no-transform",
-        "Connection": "keep-alive",
-        "X-Accel-Buffering": "no",  # NGINX 버퍼링 비활성화
-        "Transfer-Encoding": "chunked",
-    }
+#     # 올바른 SSE 응답을 위한 헤더 설정
+#     headers = {
+#         "Content-Type": "text/event-stream",  # 명시적으로 SSE 콘텐츠 타입 지정
+#         "Cache-Control": "no-cache, no-transform",
+#         "Connection": "keep-alive",
+#         "X-Accel-Buffering": "no",  # NGINX 버퍼링 비활성화
+#         "Transfer-Encoding": "chunked",
+#     }
 
-    return StreamingResponse(event_generator(), headers=headers)
+#     return StreamingResponse(event_generator(), headers=headers)
 
 
 @router.get("/status/{conversation_id}")
@@ -335,3 +336,141 @@ async def send_to_email(
             raise HTTPException(status_code=400, detail="알 수 없는 상태입니다.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/conversation/{conversation_id}/start")
+async def start_chat_processing(
+    conversation_id: int,
+    model: str = LLM_MODEL, 
+    current_user: AlphafinderUser = Depends(get_current_user)
+):
+    """채팅 처리 백그라운드 작업 시작"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+    user_is_staff = is_staff(current_user)
+    if not user_is_staff and not check_rate_limit(current_user["uid"], user_is_staff):
+        raise HTTPException(status_code=429, detail="일일 사용 한도를 초과했습니다.")
+
+    conversation = chat_service.get_conversation(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="존재하지 않는 대화입니다.")
+
+    if conversation.user_id != current_user["uid"]:
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+
+    # 이미 처리 중이면 에러
+    status = chat_service.get_status(conversation_id)
+    if status in ["pending", "progress"]:
+        raise HTTPException(status_code=429, detail="이미 처리 중입니다.")
+
+    increment_rate_limit(current_user["uid"], user_is_staff)
+
+    # 백그라운드 작업 시작 (asyncio.create_task 사용)
+    asyncio.create_task(
+        chat_service.process_query_background(
+            conversation.title,
+            conversation_id,
+            model,
+            current_user["uid"]
+        )
+    )
+
+    return {
+        "conversation_id": conversation_id,
+        "status": "started",
+        "message": "처리가 시작되었습니다."
+    }
+
+
+@router.get("/stream/{conversation_id}/detail")
+async def stream_chat_detail(
+    conversation_id: int, 
+    current_user: AlphafinderUser = Depends(get_current_user)
+):
+    """채팅 처리 상태 스트리밍 조회"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+    conversation = chat_service.get_conversation(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="존재하지 않는 대화입니다.")
+
+    if conversation.user_id != current_user["uid"]:
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+
+    logger.info(f"SSE 상태 스트리밍 시작: conversation_id={conversation_id}")
+    STREAMING_CONNECTIONS.inc()
+
+    async def event_generator():
+        """상태 조회 기반 SSE 이벤트 생성기"""
+        try:
+            last_message_count = 0
+            
+            # 초기 연결 확인 메시지
+            initial_data = {"status": "connected", "content": "SSE 연결 성공", "conversation_id": conversation_id}
+            yield f"data: {json.dumps(initial_data, ensure_ascii=False)}\n\n"
+            logger.info(f"SSE 초기 메시지 전송: {initial_data}")
+            
+            while True:
+                # 현재 상태 조회
+                status = chat_service.get_status(conversation_id)
+                logger.info(f"SSE 상태 확인: conversation_id={conversation_id}, status={status}")
+                
+                # 새로운 메시지 조회
+                messages = chat_service.get_progress_messages(conversation_id, last_message_count)
+                logger.info(f"SSE 메시지 조회: conversation_id={conversation_id}, messages_count={len(messages)}, offset={last_message_count}")
+                
+                # 새 메시지가 있으면 전송
+                for message in messages:
+                    data = {
+                        "status": "progress",
+                        "content": message.content,
+                        "title": message.content.split(']')[0].strip('[') if '[' in message.content else "",
+                        "message_id": message.id
+                    }
+                    logger.info(f"SSE 메시지 전송: {data}")
+                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                    last_message_count += 1
+
+                # 완료 상태면 최종 응답 전송
+                if status == "success":
+                    final_message = chat_service.get_final_response_message(conversation_id)
+                    logger.info(f"SSE 최종 메시지: {final_message}")
+                    if final_message:
+                        data = {
+                            "status": "success",
+                            "content": final_message.content,
+                            "message_id": final_message.id
+                        }
+                        yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                    break
+                elif status == "failed":
+                    data = {"status": "failed", "content": "처리 중 오류가 발생했습니다."}
+                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                    break
+
+                # 하트비트 메시지 (연결 유지용)
+                heartbeat_data = {"status": "heartbeat", "timestamp": str(asyncio.get_event_loop().time())}
+                yield f"data: {json.dumps(heartbeat_data, ensure_ascii=False)}\n\n"
+
+                # 2초마다 상태 확인
+                await asyncio.sleep(2)
+
+        except Exception as e:
+            logger.error(f"SSE 스트리밍 중 오류: {str(e)}")
+            data = {"status": "error", "content": f"스트리밍 오류: {str(e)}"}
+            yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+        finally:
+            STREAMING_CONNECTIONS.dec()
+            logger.info(f"SSE 연결 종료: conversation_id={conversation_id}")
+
+    headers = {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform", 
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+        "Transfer-Encoding": "chunked",
+    }
+
+    return StreamingResponse(event_generator(), headers=headers)

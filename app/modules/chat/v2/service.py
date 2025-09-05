@@ -86,6 +86,99 @@ class ChatService:
 
             yield chunk
 
+    async def process_query_background(
+        self, query: str, conversation_id: int, model: str, user_id: int
+    ):
+        """백그라운드에서 LLM 처리 - SSE 연결과 독립적으로 실행"""
+        try:
+            logger.info(f"백그라운드 LLM 처리 시작: conversation_id={conversation_id}")
+            
+            # 루트 메시지 생성/조회
+            conversation = conversation_repository.get_by_id(conversation_id)
+            if conversation.messages and conversation.messages[-1].role == "user" and conversation.messages[-1].content == query:
+                root_message = conversation.messages[-1]
+            else:
+                root_message = conversation_repository.add_message(conversation_id, query, "user")
+            
+            assistant_response = None
+            
+            async for chunk in llm_client.process_query(query, model):
+                try:
+                    data = json.loads(chunk)
+                    status = data.get("status")
+                    
+                    # job_id 저장
+                    if status == "submitted" and "job_id" in data:
+                        job_id = data.get("job_id")
+                        conversation_repository.update(conversation_id=conversation_id, latest_job_id=job_id)
+                    
+                    # progress 메시지 DB 저장
+                    elif status == "progress":
+                        progress_content = data.get("content", "")
+                        progress_title = data.get("title", "")
+                        if progress_content:
+                            conversation_repository.add_message(
+                                conversation_id=conversation_id,
+                                content=f"[{progress_title}] {progress_content}" if progress_title else progress_content,
+                                role="system",
+                                root_message_id=root_message.id
+                            )
+                    
+                    # 최종 응답 저장
+                    elif status == "success":
+                        assistant_response = data.get("content", "")
+                        
+                except json.JSONDecodeError:
+                    continue
+            
+            # 최종 처리
+            if assistant_response:
+                self.store_final_response(conversation_id, root_message.id)
+                self.store_analysis_history(conversation_id, root_message.id)
+                
+                # 프리뷰 업데이트
+                if conversation.preview is None:
+                    conversation_repository.update(
+                        conversation_id=conversation_id,
+                        preview=assistant_response[:100]
+                    )
+                
+                # 이메일 큐 처리
+                try:
+                    await self.process_pending_email_requests(conversation_id)
+                    logger.info(f"백그라운드 이메일 큐 처리 완료: conversation_id={conversation_id}")
+                except Exception as email_error:
+                    logger.error(f"백그라운드 이메일 큐 처리 오류: {str(email_error)}")
+                
+                logger.info(f"백그라운드 LLM 처리 완료: conversation_id={conversation_id}")
+            else:
+                logger.warning(f"백그라운드 처리에서 응답을 받지 못함: conversation_id={conversation_id}")
+                
+        except Exception as e:
+            logger.error(f"백그라운드 LLM 처리 중 오류: conversation_id={conversation_id}, error={str(e)}")
+            # 실패 상태 저장 (필요시 추가 구현)
+
+    def get_progress_messages(self, conversation_id: int, offset: int = 0) -> List[Message]:
+        """대화의 진행 상황 메시지들을 offset부터 조회"""
+        messages = message_repository.get_by_conversation_id(conversation_id)
+        logger.info(f"get_progress_messages: conversation_id={conversation_id}, total_messages={len(messages)}")
+        
+        system_messages = [msg for msg in messages if msg.role == "system"]
+        logger.info(f"get_progress_messages: system_messages={len(system_messages)}, offset={offset}")
+        
+        for i, msg in enumerate(system_messages):
+            logger.info(f"System message {i}: {msg.content[:50]}...")
+            
+        result = system_messages[offset:] if len(system_messages) > offset else []
+        logger.info(f"get_progress_messages: returning {len(result)} messages")
+        return result
+
+    def get_final_response_message(self, conversation_id: int) -> Optional[Message]:
+        """대화의 최종 assistant 응답 조회"""
+        messages = message_repository.get_by_conversation_id(conversation_id)
+        assistant_messages = [msg for msg in messages if msg.role == "assistant"]
+        return assistant_messages[-1] if assistant_messages else None
+
     def get_status(self, conversation_id: int) -> str:
         latest_job_id = conversation_repository.get_latest_job_id(conversation_id)
 
@@ -121,7 +214,7 @@ class ChatService:
         _, analysis_history = self.get_final_response(conversation_id)
         if analysis_history is not None:
             message = conversation_repository.add_message(
-                conversation_id=conversation_id, content=analysis_history, role="system", root_message_id=root_message_id
+                conversation_id=conversation_id, content=analysis_history, role="history", root_message_id=root_message_id
             )
             return message.id, analysis_history
         return None, None
@@ -251,7 +344,16 @@ class ChatService:
         except Exception as e:
             logger.error(f"대기 중인 이메일 요청 처리 중 오류: conversation_id={conversation_id}, error={str(e)}")
 
-        
+    # async def _background_process(conversation_id: int, model: str = LLM_MODEL):
+    #     async for chunk in llm_client.process_query(model):
+    #         data = json.loads(chunk)
+
+    #         if data.get("status") == "submitted" and "job_id" in data and conversation_id:
+    #             job_id = data.get("job_id")
+    #             conversation_repository.update(conversation_id=conversation_id, latest_job_id=job_id)
+
+    #         yield chunk
+
 
 # 싱글톤 인스턴스 생성
 chat_service = ChatService()
