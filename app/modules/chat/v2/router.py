@@ -18,7 +18,7 @@ from app.monitoring.web_metrics import (
     STREAMING_MESSAGES_COUNT,
 )
 from app.modules.chat.schemas import SendToEmailRequest
-from app.utils.quantus_auth_utils import get_current_user_redis as get_current_user, is_staff
+from app.utils.quantus_auth_utils import get_current_user_async as get_current_user, is_staff
 from app.core.logger import get_logger
 
 
