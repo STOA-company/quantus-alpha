@@ -20,7 +20,7 @@ class TrendingService:
             case TrendingType.AMT:
                 return f"volume_change_{request.period.value}"
 
-    def get_trending_stocks(
+    async def get_trending_stocks(
         self, request: TrendingStockRequest, lang: TranslateCountry | None = None
     ) -> List[TrendingStock]:
         if lang is None:
@@ -29,7 +29,7 @@ class TrendingService:
         order = self._get_trending_type(request)
         ascending = True if request.type == TrendingType.DOWN else False
 
-        activate_tickers_data = self.database._select(
+        activate_tickers_data = await self.database._select_async(
             table="stock_information",
             columns=["ticker"],
             ctry=request.ctry.value,
@@ -45,7 +45,7 @@ class TrendingService:
         else:
             name = "kr_name"  # noqa
 
-        trending_stocks = self.database._select(
+        trending_stocks = await self.database._select_async(
             table="stock_trend",
             columns=[
                 "ticker",

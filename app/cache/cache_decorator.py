@@ -29,7 +29,7 @@ def one_minute_cache(prefix: str = "") -> Callable:
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> T:
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
             # Redis 클라이언트 초기화
             redis = redis_client()
 
@@ -107,7 +107,10 @@ def one_minute_cache(prefix: str = "") -> Callable:
 
             # 캐시된 데이터가 없으면 원본 함수 실행
             start_time = time.time()
-            result = func(*args, **kwargs)
+            if inspect.iscoroutinefunction(func):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
             execution_time = time.time() - start_time
             logger.info(f"[REDIS CACHE] Function execution time: {execution_time:.4f}s")
 
