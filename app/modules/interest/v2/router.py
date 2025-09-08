@@ -19,7 +19,7 @@ from app.modules.interest.v2.response import InterestGroupResponse, InterestPric
 from app.modules.interest.v2.service import InterestService, get_interest_service
 from app.modules.news.v2.schemas import InterestDisclosureResponse, InterestNewsResponse, TopStoriesResponse
 from app.modules.news.v2.services import NewsService, get_news_service
-from app.utils.quantus_auth_utils import get_current_user_redis as get_current_user
+from app.utils.quantus_auth_utils import get_current_user_async as get_current_user
 
 logger = setup_logger(__name__)
 
