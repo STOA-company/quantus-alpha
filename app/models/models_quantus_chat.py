@@ -22,6 +22,7 @@ class QuantusChatMessage(BaseMixin, ServiceBase):
     conversation_id: Mapped[BigInteger] = mapped_column(
         BigInteger, ForeignKey("quantus_chat_conversation.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    title: Mapped[String] = mapped_column(String(length=255), nullable=True)
     content: Mapped[String] = mapped_column(Text, nullable=False)
     role: Mapped[String] = mapped_column(String(length=20), nullable=False)  # 'user', 'assistant', 'system'
     root_message_id: Mapped[BigInteger] = mapped_column(

@@ -74,9 +74,9 @@ class InterestService:
         table["data"] = table["data"][offset * limit : offset * limit + limit]
         return table
 
-    def get_interest_tickers(self, group_id: int, lang: Literal["ko", "en"] = "ko"):
-        interests = self.db._select(table="user_stock_interest", columns=["ticker"], group_id=group_id)
-        stocks = self.data_db._select(
+    async def get_interest_tickers(self, group_id: int, lang: Literal["ko", "en"] = "ko"):
+        interests = await self.db._select_async(table="user_stock_interest", columns=["ticker"], group_id=group_id)
+        stocks = await self.data_db._select_async(
             table="stock_trend",
             columns=["ticker", "kr_name", "en_name", "ctry"],
             ticker__in=[interest[0] for interest in interests],

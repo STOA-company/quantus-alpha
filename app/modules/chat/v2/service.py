@@ -117,12 +117,15 @@ class ChatService:
                         progress_content = data.get("content", "")
                         progress_title = data.get("title", "")
                         if progress_content:
-                            conversation_repository.add_message(
+                            # title과 content 분리 저장
+                            message = Message(
                                 conversation_id=conversation_id,
-                                content=f"[{progress_title}] {progress_content}" if progress_title else progress_content,
+                                content=progress_content,
                                 role="system",
+                                title=progress_title,
                                 root_message_id=root_message.id
                             )
+                            message_repository.create(message)
                     
                     # 최종 응답 저장
                     elif status == "success":
@@ -161,13 +164,13 @@ class ChatService:
     def get_progress_messages(self, conversation_id: int, offset: int = 0) -> List[Message]:
         """대화의 진행 상황 메시지들을 offset부터 조회"""
         messages = message_repository.get_by_conversation_id(conversation_id)
-        logger.info(f"get_progress_messages: conversation_id={conversation_id}, total_messages={len(messages)}")
+        # logger.info(f"get_progress_messages: conversation_id={conversation_id}, total_messages={len(messages)}")
         
         system_messages = [msg for msg in messages if msg.role == "system"]
-        logger.info(f"get_progress_messages: system_messages={len(system_messages)}, offset={offset}")
+        # logger.info(f"get_progress_messages: system_messages={len(system_messages)}, offset={offset}")
         
-        for i, msg in enumerate(system_messages):
-            logger.info(f"System message {i}: {msg.content[:50]}...")
+        # for i, msg in enumerate(system_messages):
+        #     logger.info(f"System message {i}: {msg.content[:50]}...")
             
         result = system_messages[offset:] if len(system_messages) > offset else []
         logger.info(f"get_progress_messages: returning {len(result)} messages")

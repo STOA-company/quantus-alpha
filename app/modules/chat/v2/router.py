@@ -64,29 +64,29 @@ def get_conversation_list(current_user: AlphafinderUser = Depends(get_current_us
     ]
 
 
-@router.get("/conversation/{conversation_id}")
-def get_conversation(conversation_id: int, current_user: AlphafinderUser = Depends(get_current_user)):
-    """대화 조회"""
-    if not current_user:
-        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+# @router.get("/conversation/{conversation_id}")
+# def get_conversation(conversation_id: int, current_user: AlphafinderUser = Depends(get_current_user)):
+#     """대화 조회"""
+#     if not current_user:
+#         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
 
-    conversation = chat_service.get_conversation(conversation_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail="존재하지 않는 대화입니다.")
+#     conversation = chat_service.get_conversation(conversation_id)
+#     if not conversation:
+#         raise HTTPException(status_code=404, detail="존재하지 않는 대화입니다.")
 
-    if conversation.user_id != current_user["uid"]:
-        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+#     if conversation.user_id != current_user["uid"]:
+#         raise HTTPException(status_code=403, detail="권한이 없습니다.")
 
-    messages = [
-        {
-            **message.dict(),
-            "created_at": message.created_at + timedelta(hours=9) if message.created_at else None,
-            "is_liked": chat_service.get_feedback(message.id).is_liked if chat_service.get_feedback(message.id) else None,
-        }
-        for message in conversation.messages
-    ]
+#     messages = [
+#         {
+#             **message.dict(),
+#             "created_at": message.created_at + timedelta(hours=9) if message.created_at else None,
+#             "is_liked": chat_service.get_feedback(message.id).is_liked if chat_service.get_feedback(message.id) else None,
+#         }
+#         for message in conversation.messages
+#     ]
 
-    return {"conversation_id": conversation.id, "title": conversation.title, "messages": messages}
+#     return {"conversation_id": conversation.id, "title": conversation.title, "messages": messages}
 
 
 @router.get("/tasks/{message_id}")
@@ -409,24 +409,24 @@ async def stream_chat_detail(
             
             # 초기 연결 확인 메시지
             initial_data = {"status": "connected", "content": "SSE 연결 성공", "conversation_id": conversation_id}
-            yield f"data: {json.dumps(initial_data, ensure_ascii=False)}\n\n"
-            logger.info(f"SSE 초기 메시지 전송: {initial_data}")
+            # yield f"data: {json.dumps(initial_data, ensure_ascii=False)}\n\n"
+            # logger.info(f"SSE 초기 메시지 전송: {initial_data}")
             
             while True:
                 # 현재 상태 조회
                 status = chat_service.get_status(conversation_id)
-                logger.info(f"SSE 상태 확인: conversation_id={conversation_id}, status={status}")
+                # logger.info(f"SSE 상태 확인: conversation_id={conversation_id}, status={status}")
                 
                 # 새로운 메시지 조회
                 messages = chat_service.get_progress_messages(conversation_id, last_message_count)
-                logger.info(f"SSE 메시지 조회: conversation_id={conversation_id}, messages_count={len(messages)}, offset={last_message_count}")
+                # logger.info(f"SSE 메시지 조회: conversation_id={conversation_id}, messages_count={len(messages)}, offset={last_message_count}")
                 
                 # 새 메시지가 있으면 전송
                 for message in messages:
                     data = {
                         "status": "progress",
                         "content": message.content,
-                        "title": message.content.split(']')[0].strip('[') if '[' in message.content else "",
+                        "title": message.title or "",  # DB에서 직접 title 조회
                         "message_id": message.id
                     }
                     logger.info(f"SSE 메시지 전송: {data}")
@@ -447,12 +447,12 @@ async def stream_chat_detail(
                     break
                 elif status == "failed":
                     data = {"status": "failed", "content": "처리 중 오류가 발생했습니다."}
-                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                    # yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
                     break
 
                 # 하트비트 메시지 (연결 유지용)
                 heartbeat_data = {"status": "heartbeat", "timestamp": str(asyncio.get_event_loop().time())}
-                yield f"data: {json.dumps(heartbeat_data, ensure_ascii=False)}\n\n"
+                # yield f"data: {json.dumps(heartbeat_data, ensure_ascii=False)}\n\n"
 
                 # 2초마다 상태 확인
                 await asyncio.sleep(2)
@@ -463,7 +463,7 @@ async def stream_chat_detail(
             yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
         finally:
             STREAMING_CONNECTIONS.dec()
-            logger.info(f"SSE 연결 종료: conversation_id={conversation_id}")
+            # logger.info(f"SSE 연결 종료: conversation_id={conversation_id}")
 
     headers = {
         "Content-Type": "text/event-stream",

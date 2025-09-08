@@ -165,6 +165,7 @@ class MessageRepository:
                 "conversation_id": db_message.conversation_id,
                 "content": db_message.content,
                 "role": db_message.role,
+                "title": db_message.title,
                 "root_message_id": db_message.root_message_id,
             },
         )
@@ -205,6 +206,7 @@ class MessageRepository:
                 conversation_id=data.conversation_id,
                 content=data.content,
                 role=data.role,
+                title=getattr(data, 'title', None),  # title 필드 추가
                 created_at=data.created_at,
                 updated_at=data.updated_at,
                 root_message_id=data.root_message_id,
@@ -310,6 +312,7 @@ class MessageRepository:
             conversation_id=db_message.conversation_id,
             content=db_message.content,
             role=db_message.role,
+            title=getattr(db_message, 'title', None),  # title 필드 추가
             root_message_id=db_message.root_message_id,
             created_at=db_message.created_at,
         )
@@ -320,6 +323,7 @@ class MessageRepository:
             conversation_id=message.conversation_id,
             content=message.content,
             role=message.role,
+            title=message.title,  # title 필드 추가
             root_message_id=message.root_message_id,
             created_at=message.created_at,
         )

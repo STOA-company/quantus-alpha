@@ -15,12 +15,12 @@ router = APIRouter()
 
 @router.get("/renewal/real_time", summary="실시간 뉴스", response_model=BaseResponse[NewsRenewalResponse])
 @one_minute_cache(prefix="news_real_time")
-def news_main(
+async def news_main(
     ctry: Annotated[str, Query(description="국가 코드, 예시: kr, us")] = None,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
     news_service: NewsService = Depends(get_news_service),
 ):
-    news_data, disclosure_data = news_service.get_renewal_data(ctry=ctry, lang=lang)
+    news_data, disclosure_data = await news_service.get_renewal_data(ctry=ctry, lang=lang)
 
     response_data = NewsRenewalResponse(news=news_data, disclosure=disclosure_data)
 

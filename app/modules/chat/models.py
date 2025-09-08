@@ -11,6 +11,7 @@ class Message(BaseModel):
     conversation_id: int
     content: str
     role: str  # 'user', 'assistant', 'system'
+    title: Optional[str] = None  # progress 메시지용 제목
     root_message_id: Optional[int] = None
     created_at: datetime = Field(default_factory=datetime.now)
 

@@ -117,7 +117,7 @@ class NewsService:
 
         return df
 
-    def get_renewal_data(
+    async def get_renewal_data(
         self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
     ) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
         news_data = self.get_news(ctry=ctry, lang=lang, tickers=tickers)
@@ -125,7 +125,7 @@ class NewsService:
 
         return news_data, disclosure_data
 
-    def get_news(
+    async def get_news(
         self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
     ) -> List[NewsRenewalItem]:
         if lang is None:
@@ -164,7 +164,7 @@ class NewsService:
         )
 
         df_news = pd.DataFrame(
-            self.db._select(
+            await self.db._select_async(
                 table="news_analysis",
                 columns=[
                     "id",
@@ -194,7 +194,7 @@ class NewsService:
 
         return news_data
 
-    def get_disclosure(
+    async def get_disclosure(
         self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
     ) -> List[DisclosureRenewalItem]:
         if lang is None:
@@ -232,7 +232,7 @@ class NewsService:
         )
 
         df_disclosure = pd.DataFrame(
-            self.db._select(
+            await self.db._select_async(
                 table="disclosure_information",
                 columns=[
                     "id",
@@ -482,7 +482,7 @@ class NewsService:
             for _, row in df.iterrows()
         ]
 
-    def top_stories(
+    async def top_stories(
         self,
         request: Request,
         tickers: Optional[List[str]] = None,
@@ -501,7 +501,7 @@ class NewsService:
             top_stories_tickers = tickers
 
             # 해당 티커의 가격 데이터 조회
-            price_data = self.db._select(
+            price_data = await self.db._select_async(
                 table="stock_trend", columns=["ticker", "current_price", "change_rt", "ctry"], ticker__in=tickers
             )
 
@@ -525,7 +525,7 @@ class NewsService:
                 ORDER BY st.volume_change_rt DESC
                 LIMIT 6
             """
-            top_stories_data_us = self.db._execute(text(query_us))
+            top_stories_data_us = await self.db._execute_async(text(query_us))
             query_kr = f"""
                 SELECT st.ticker, st.volume_change_rt, st.current_price, st.change_rt
                 FROM stock_trend st
@@ -541,7 +541,7 @@ class NewsService:
                 ORDER BY st.volume_change_rt DESC
                 LIMIT 5
             """
-            top_stories_data_kr = self.db._execute(text(query_kr))
+            top_stories_data_kr = await self.db._execute_async(text(query_kr))
 
             # 티커 및 관련 데이터 추출
             top_stories_tickers = []
@@ -590,7 +590,7 @@ class NewsService:
 
         # 뉴스 데이터 수집
         df_news = pd.DataFrame(
-            self.db._select(
+            await self.db._select_async(
                 table="news_analysis",
                 columns=[
                     "id",
@@ -618,7 +618,7 @@ class NewsService:
 
         # 공시 데이터 수집
         df_disclosure = pd.DataFrame(
-            self.db._select(
+            await self.db._select_async(
                 table="disclosure_information",
                 columns=[
                     "id",

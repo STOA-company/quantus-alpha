@@ -29,28 +29,28 @@ def get_groups(
     return service.get_interest_group(current_user.id)
 
 
-@router.get("/news-leaderboard/{group_id}")
-def get_news_leaderboard(
-    group_id: int,
-    lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
-    service: InterestService = Depends(get_interest_service),
-    user: AlphafinderUser = Depends(get_current_user),
-):
-    level = user.subscription_level if user else 1
-    data = service.get_interest_news_leaderboard(group_id, lang, level)
-    return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
+# @router.get("/news-leaderboard/{group_id}")
+# def get_news_leaderboard(
+#     group_id: int,
+#     lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
+#     service: InterestService = Depends(get_interest_service),
+#     user: AlphafinderUser = Depends(get_current_user),
+# ):
+#     level = user.subscription_level if user else 1
+#     data = service.get_interest_news_leaderboard(group_id, lang, level)
+#     return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
 
 
-@router.get("/disclosure-leaderboard/{group_id}")
-def get_disclosure_leaderboard(
-    group_id: int,
-    lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
-    service: InterestService = Depends(get_interest_service),
-    user: AlphafinderUser = Depends(get_current_user),
-):
-    level = user.subscription_level if user else 1
-    data = service.get_interest_disclosure_leaderboard(group_id, lang, level)
-    return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
+# @router.get("/disclosure-leaderboard/{group_id}")
+# def get_disclosure_leaderboard(
+#     group_id: int,
+#     lang: TranslateCountry = Query(default=TranslateCountry.KO, description="언어 코드, 예시: ko, en"),
+#     service: InterestService = Depends(get_interest_service),
+#     user: AlphafinderUser = Depends(get_current_user),
+# ):
+#     level = user.subscription_level if user else 1
+#     data = service.get_interest_disclosure_leaderboard(group_id, lang, level)
+#     return BaseResponse(status_code=200, message="Successfully retrieved leaderboard data", data=data)
 
 
 @router.post("/")
@@ -246,7 +246,7 @@ def interest_disclosure(
 
 
 @router.get("/stories/{group_id}", response_model=BaseResponse[List[TopStoriesResponse]])
-def top_stories(
+async def top_stories(
     group_id: int,
     request: Request,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
@@ -254,13 +254,13 @@ def top_stories(
     service: InterestService = Depends(get_interest_service),
     user: AlphafinderUser = Depends(get_current_user),
 ):
-    ticker_infos = service.get_interest_tickers(group_id)
+    ticker_infos = await service.get_interest_tickers(group_id)
     if len(ticker_infos) == 0:
         return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
     tickers = [ticker_info["ticker"] for ticker_info in ticker_infos]
     subscription_level = user.subscription_level if user else 1
     stories_count = 30 if subscription_level >= 3 else 10
-    data = news_service.top_stories(request=request, tickers=tickers, lang=lang, stories_count=stories_count)
+    data = await news_service.top_stories(request=request, tickers=tickers, lang=lang, stories_count=stories_count)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
 
