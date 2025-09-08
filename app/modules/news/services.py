@@ -120,8 +120,8 @@ class NewsService:
     async def get_renewal_data(
         self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
     ) -> Tuple[List[NewsRenewalItem], List[DisclosureRenewalItem]]:
-        news_data = self.get_news(ctry=ctry, lang=lang, tickers=tickers)
-        disclosure_data = self.get_disclosure(ctry=ctry, lang=lang, tickers=tickers)
+        news_data = await self.get_news(ctry=ctry, lang=lang, tickers=tickers)
+        disclosure_data = await self.get_disclosure(ctry=ctry, lang=lang, tickers=tickers)
 
         return news_data, disclosure_data
 
