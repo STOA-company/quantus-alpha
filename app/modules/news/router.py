@@ -29,13 +29,13 @@ async def news_main(
 
 @router.get("/top_stories", summary="주요소식 모아보기", response_model=BaseResponse[List[TopStoriesResponse]])
 # @one_minute_cache(prefix="news_top_stories")
-def top_stories(
+async def top_stories(
     request: Request,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
     news_service: NewsService = Depends(get_news_service),
     user: Optional[AlphafinderUser] = Depends(get_current_user),
 ):
-    data = news_service.top_stories(request=request, lang=lang, user=user)
+    data = await news_service.top_stories(request=request, lang=lang, user=user)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data).dict()
 
 
