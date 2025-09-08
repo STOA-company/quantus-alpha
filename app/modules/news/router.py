@@ -24,7 +24,8 @@ async def news_main(
 
     response_data = NewsRenewalResponse(news=news_data, disclosure=disclosure_data)
 
-    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data).dict()
+    # return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data).dict()
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data)
 
 
 @router.get("/top_stories", summary="주요소식 모아보기", response_model=BaseResponse[List[TopStoriesResponse]])
@@ -36,7 +37,8 @@ async def top_stories(
     user: Optional[AlphafinderUser] = Depends(get_current_user),
 ):
     data = await news_service.top_stories(request=request, lang=lang, user=user)
-    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data).dict()
+    # return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data).dict()
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
 
 @router.post("/api/stories/{ticker}/{type}/{id}", summary="주요소식 조회 여부 업데이트")
