@@ -36,7 +36,7 @@ services:
             - alpha-network
         healthcheck:
             test: ["CMD", "curl", "-f", "http://localhost:8000/health-check"]
-            interval: 10s
+            interval: 30s
             timeout: 5s
             retries: 3
             start_period: 5s
@@ -63,7 +63,7 @@ services:
             - alpha-network
         healthcheck:
             test: ["CMD", "curl", "-f", "http://localhost:8001/health-check"]
-            interval: 10s
+            interval: 30s
             timeout: 5s
             retries: 3
             start_period: 5s

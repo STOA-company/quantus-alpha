@@ -77,6 +77,9 @@ class Settings(BaseSettings):
 
     NOTION_SECRET_KEY: str = os.getenv("NOTION_SECRET_KEY", "")
 
+    # Elasticsearch settings
+    ELASTICSEARCH_URL: str = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
+
     if ENV == "prod":
         CELERY_LOGLEVEL: str = "ERROR"
     else:

@@ -50,21 +50,27 @@ async def validate_token_async(token, sns_type, client_type):
 
         async with httpx.AsyncClient(
             limits=httpx.Limits(
-                max_keepalive_connections=30,      # keep-alive 연결 수만 설정
-                keepalive_expiry=45.0             # 연결 유지 시간
+                max_keepalive_connections=30,
+                keepalive_expiry=45.0
             )
         ) as client:
-            response_data = await client.post(
-                urljoin(BASE_URL, "user_info"),
-                headers=headers,
-                timeout=15.0 
-                # timeout=httpx.Timeout(
-                #     connect=5.0,    # 연결 타임아웃
-                #     read=15.0,      # 읽기 타임아웃
-                #     write=5.0,      # 쓰기 타임아웃
-                #     pool=30.0       # 풀 타임아웃
-                # )
-            )
+            try:
+                response_data = await client.post(
+                    urljoin(BASE_URL, "user_info"),
+                    headers=headers,
+                    timeout=httpx.Timeout(
+                        connect=5.0,    # 연결 타임아웃
+                        read=30.0,      # 읽기 타임아웃 증가
+                        write=5.0,      # 쓰기 타임아웃
+                        pool=30.0       # 풀 타임아웃
+                    )
+                )
+            except httpx.ReadTimeout:
+                print("토큰 검증 서버 응답 타임아웃 - 기본 사용자로 처리")
+                return None
+            except httpx.RequestError as e:
+                print(f"토큰 검증 요청 실패: {e}")
+                return None
                 
                 # span.set_attribute("http.status_code", response_data.status_code)
             return response_data

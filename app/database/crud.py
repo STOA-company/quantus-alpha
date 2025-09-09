@@ -90,6 +90,15 @@ class BaseDatabase:
             logger.error(f"Database connection check failed: {str(e)}")
             return False
 
+    async def check_connection_async(self) -> bool:
+      try:
+          async with self.get_async_connection() as connection:
+              await connection.execute(select(1))
+          return True
+      except Exception as e:
+          logger.error(f"Async database connection check failed: {str(e)}")
+          return False
+
     def _execute(self, query, *args):
         """쿼리 실행을 위한 메서드"""
         with self.get_connection() as connection:

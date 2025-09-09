@@ -13,6 +13,7 @@ from app.middlewares.slack_error import add_slack_middleware
 from app.middlewares.trusted_hosts import get_current_username
 from app.monitoring.endpoints import router as metrics_router
 from app.monitoring.middleware import PrometheusMiddleware
+from app.elasticsearch.elasticsearch import cleanup_elasticsearch
 
 # zipkin 설정
 from app.monitoring.tracing import setup_zipkin_tracing
@@ -162,7 +163,10 @@ class HealthCheckResponse(BaseModel):
 async def health_check():
     try:
         # 데이터베이스 연결 확인
-        if not database.check_connection():
+        # if not database.check_connection():
+        #     raise Exception("Database connection test failed")
+
+        if not await database.check_connection_async():
             raise Exception("Database connection test failed")
 
         # 메타데이터 확인
@@ -234,3 +238,4 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Application shutting down")
+    await cleanup_elasticsearch()

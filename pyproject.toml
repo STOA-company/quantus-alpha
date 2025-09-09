@@ -64,6 +64,10 @@ opentelemetry-instrumentation-mysql = "^0.48b0"        # MySQL 추적
 opentelemetry-instrumentation-pymysql = "^0.48b0"      # PyMySQL 추적
 opentelemetry-instrumentation-requests = "0.48b0"
 
+# Elasticsearch 의존성 추가
+elasticsearch = "^8.11.0"
+aiohttp = ">=3.9.0,<4.0.0"
+
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.12.10"
 

@@ -323,6 +323,31 @@ async def top_stories(
     )  # TODO :: stories_count 변경 필요
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
+########################################################
+# elasticsearch test
+@router.get(
+    "/stories/{group_id}/elasticsearch",
+    summary="관심 종목 주요소식 모아보기 / 스토리",
+    response_model=BaseResponse[List[TopStoriesResponse]],
+)
+async def top_stories_elasticsearch(
+    group_id: int,
+    request: Request,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
+    news_service: NewsService = Depends(get_news_service),
+    service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),  # noqa
+):
+    tickers = await service.get_interest_tickers(group_id)
+    if len(tickers) == 0:
+        return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
+    # subscription_level = user.subscription_level if user else 1 # TODO :: 유저 테이블 통합 후 주석 해제
+    # stories_count = 30 if subscription_level >= 3 else 10
+    data = await news_service.top_stories_elasticsearch(
+        request=request, tickers=tickers, lang=lang, stories_count=30, user=user
+    )  # TODO :: stories_count 변경 필요
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
+########################################################
 
 # 관심 종목 가격 조회
 @router.get("/{group_id}/price", summary="관심 종목 가격 조회", response_model=BaseResponse[List[InterestPriceResponse]])

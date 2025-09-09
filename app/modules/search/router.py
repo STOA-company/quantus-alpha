@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional, Union
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -129,3 +129,102 @@ def search_interest(
     return InfiniteScrollResponse(
         status_code=200, message="검색이 완료되었습니다.", data=search_result, has_more=has_more
     )
+
+
+# @router.get("/elasticsearch", summary="Elasticsearch 통합 주식 검색")
+# async def elasticsearch_search_stocks(
+#     q: Optional[str] = Query(None, description="검색어 (티커, 회사명)"),
+#     market: Optional[str] = Query(None, description="시장 (KOSPI, KOSDAQ 등)"),
+#     ctry: Optional[str] = Query(None, description="국가"),
+#     min_price: Optional[float] = Query(None, description="최소 가격"),
+#     max_price: Optional[float] = Query(None, description="최대 가격"),
+#     size: int = Query(20, ge=1, le=100, description="결과 개수"),
+#     page: int = Query(1, ge=1, description="페이지 번호")
+# ):
+#     """
+#     Elasticsearch를 이용한 주식 통합 검색 API
+#     - 모든 quantus 인덱스에서 동시 검색
+#     - 티커, 회사명으로 검색 가능
+#     - 시장, 국가, 가격대별 필터링 지원
+#     """
+    
+#     # 페이지네이션 계산
+#     from_ = (page - 1) * size
+    
+#     # 필터 구성
+#     filters = {}
+#     if market:
+#         filters["market"] = market
+#     if ctry:
+#         filters["ctry"] = ctry
+#     if min_price is not None or max_price is not None:
+#         filters["price_range"] = {}
+#         if min_price is not None:
+#             filters["price_range"]["min"] = min_price
+#         if max_price is not None:
+#             filters["price_range"]["max"] = max_price
+    
+#     try:
+#         result = await ElasticsearchService.search_stocks(
+#             query_text=q or "",
+#             filters=filters if filters else None,
+#             size=size,
+#             from_=from_
+#         )
+        
+#         return {
+#             "success": True,
+#             "data": result["results"],
+#             "pagination": {
+#                 "total": result["total"],
+#                 "page": page,
+#                 "size": size,
+#                 "total_pages": (result["total"] + size - 1) // size
+#             },
+#             "query_info": result.get("query_info", {})
+#         }
+        
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+
+# @router.get("/elasticsearch/{ticker}", summary="Elasticsearch 티커별 주식 조회")
+# async def elasticsearch_get_stock_detail(ticker: str):
+#     """
+#     Elasticsearch에서 티커로 특정 주식 정보 조회
+#     """
+#     try:
+#         result = await ElasticsearchService.get_stock_by_ticker(ticker)
+        
+#         if not result:
+#             raise HTTPException(status_code=404, detail=f"Stock with ticker '{ticker}' not found")
+        
+#         return {
+#             "success": True,
+#             "data": result
+#         }
+        
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Failed to get stock: {str(e)}")
+
+
+# @router.get("/elasticsearch/trending", summary="Elasticsearch 인기 주식 조회")
+# async def elasticsearch_get_trending_stocks(
+#     limit: int = Query(10, ge=1, le=50, description="조회할 종목 수")
+# ):
+#     """
+#     Elasticsearch에서 거래량 기준 인기 주식 조회
+#     """
+#     try:
+#         result = await ElasticsearchService.get_trending_stocks(limit)
+        
+#         return {
+#             "success": True,
+#             "data": result,
+#             "count": len(result)
+#         }
+        
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Failed to get trending stocks: {str(e)}")

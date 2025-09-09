@@ -478,6 +478,287 @@ class NewsService:
         # 최신 아이템과 마스킹된 오래된 아이템 결합
         return recent_items + masked_older_items
 
+    async def top_stories_elasticsearch(
+        self,
+        request: Request,
+        tickers: Optional[List[str]] = None,
+        lang: TranslateCountry | None = None,
+        stories_count: int = 30,
+        user: Optional[AlphafinderUser] = None,
+    ):
+        import logging
+        from app.elasticsearch.elasticsearch import get_elasticsearch_client
+        
+        logger = logging.getLogger(__name__)
+        
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        current_datetime = now_utc()
+        before_24_hours = current_datetime - timedelta(hours=24)
+        allowed_time = current_datetime + timedelta(minutes=5)
+
+        top_stories_tickers = tickers
+        
+        logger.info(f"Elasticsearch top_stories - tickers: {top_stories_tickers}")
+        logger.info(f"Date range: {before_24_hours} to {allowed_time}")
+
+        if not top_stories_tickers:
+            return []
+
+        # Elasticsearch 클라이언트 가져오기
+        es_client = await get_elasticsearch_client()
+
+        # 주식 가격 데이터 조회 (Elasticsearch)
+        price_query = {
+            "bool": {
+                "must": [
+                    {"terms": {"ticker.keyword": tickers}}
+                ]
+            }
+        }
+        
+        price_response = await es_client.client.search(
+            index="quantus-stock-trend-2025.09",
+            body={
+                "query": price_query,
+                "size": len(tickers) if tickers else 10
+            }
+        )
+        
+        ticker_to_price_data = {}
+        for hit in price_response["hits"]["hits"]:
+            source = hit["_source"]
+            ticker = source["ticker"]
+            ticker_to_price_data[ticker] = {
+                "current_price": source.get("current_price"),
+                "change_rt": source.get("change_rt")
+            }
+
+        # 날짜 범위 필터 설정
+        date_filter = {
+            "range": {
+                "date": {
+                    "gte": before_24_hours.isoformat(),
+                    "lte": allowed_time.isoformat()
+                }
+            }
+        }
+
+        # 뉴스 데이터 조회
+        news_query = {
+            "bool": {
+                "must": [
+                    {"term": {"is_exist": True}},
+                    {"term": {"is_related": True}},
+                    {"terms": {"ticker.keyword": top_stories_tickers}},
+                    date_filter
+                ]
+            }
+        }
+
+        if lang == TranslateCountry.KO:
+            news_query["bool"]["must"].append({"term": {"lang.keyword": "ko-KR"}})
+            news_name = "kr_name"
+        else:
+            news_query["bool"]["must"].append({"term": {"lang.keyword": "en-US"}})
+            news_name = "en_name"
+
+        logger.info(f"News query: {news_query}")
+        news_response = await es_client.client.search(
+            index="quantus-news-analysis-2025.09",
+            body={
+                "query": news_query,
+                "sort": [{"date": {"order": "desc"}}],
+                "size": 1000
+            }
+        )
+        logger.info(f"News response hits: {len(news_response['hits']['hits'])}")
+
+        # 공시 데이터 조회  
+        disclosure_query = {
+            "bool": {
+                "must": [
+                    {"term": {"is_exist": True}},
+                    {"terms": {"ticker.keyword": top_stories_tickers}},
+                    date_filter
+                ]
+            }
+        }
+
+        if lang == TranslateCountry.KO:
+            disclosure_query["bool"]["must"].append({"term": {"lang.keyword": "ko-KR"}})
+            disclosure_name = "ko_name"
+        else:
+            disclosure_query["bool"]["must"].append({"term": {"lang.keyword": "en-US"}})
+            disclosure_name = "en_name"
+
+        logger.info(f"Disclosure query: {disclosure_query}")
+        disclosure_response = await es_client.client.search(
+            index="quantus-disclosure-information-2025.09", 
+            body={
+                "query": disclosure_query,
+                "sort": [{"date": {"order": "desc"}}],
+                "size": 1000
+            }
+        )
+        logger.info(f"Disclosure response hits: {len(disclosure_response['hits']['hits'])}")
+
+        # 뉴스 데이터 처리
+        news_data = []
+        for hit in news_response["hits"]["hits"]:
+            source = hit["_source"]
+            if source.get("emotion") and source.get("title", "").strip():
+                news_data.append({
+                    "id": source["id"],
+                    "ticker": source["ticker"],
+                    news_name: source[news_name],
+                    "ctry": source["ctry"],
+                    "date": source["date"],
+                    "title": source["title"],
+                    "summary": source["summary"],
+                    "impact_reason": source["impact_reason"],
+                    "key_points": source["key_points"],
+                    "emotion": source["emotion"],
+                    "that_time_price": source.get("that_time_price", 0.0),
+                    "type": "news"
+                })
+
+        df_news = pd.DataFrame(news_data)
+        if not df_news.empty:
+            df_news = df_news.sort_values(by=["date"], ascending=[False])
+            df_news = NewsService._convert_to_kst(df_news)
+            if lang == TranslateCountry.KO:
+                df_news = df_news.rename(columns={"kr_name": "ko_name"})
+
+        # 공시 데이터 처리
+        disclosure_data = []
+        for hit in disclosure_response["hits"]["hits"]:
+            source = hit["_source"]
+            if source.get("emotion"):
+                disclosure_item = {
+                    "id": source["id"],
+                    "ticker": source["ticker"],
+                    disclosure_name: source[disclosure_name],
+                    "ctry": source["ctry"],
+                    "date": source["date"],
+                    "summary": source.get("summary", source.get("en_summary", "")),
+                    "impact_reason": source.get("impact_reason", source.get("en_impact_reason", "")),
+                    "key_points": source.get("key_points", source.get("en_key_points", "")),
+                    "emotion": source["emotion"],
+                    "form_type": source.get("form_type", ""),
+                    "that_time_price": source.get("that_time_price", 0.0),
+                    "type": "disclosure"
+                }
+                disclosure_data.append(disclosure_item)
+
+        df_disclosure = pd.DataFrame(disclosure_data)
+        if not df_disclosure.empty:
+            if lang != TranslateCountry.KO:
+                df_disclosure = df_disclosure.rename(
+                    columns={"en_summary": "summary", "en_impact_reason": "impact_reason", "en_key_points": "key_points"}
+                )
+            df_disclosure = self._process_dataframe_disclosure(df_disclosure)
+
+            # form_type 매핑 로직
+            def get_form_type_mapping(row):
+                ctry = row["ctry"]
+                if ctry == "kr":
+                    if lang == TranslateCountry.KO:
+                        return row["form_type"]
+                    else:
+                        return FORM_TYPE_MAPPING.get(row["form_type"].strip().split()[0], row["form_type"])
+                else:  # ctry == "us"
+                    if lang == TranslateCountry.KO:
+                        return DOCUMENT_TYPE_MAPPING.get(row["form_type"], row["form_type"])
+                    else:
+                        return DOCUMENT_TYPE_MAPPING_EN.get(row["form_type"], row["form_type"])
+
+            df_disclosure["mapped_form_type"] = df_disclosure.apply(get_form_type_mapping, axis=1)
+            df_disclosure["title"] = df_disclosure[disclosure_name] + " " + df_disclosure["mapped_form_type"]
+            df_disclosure.drop(columns=["form_type", "mapped_form_type"], inplace=True)
+
+        # 데이터 통합 및 정렬
+        total_df = pd.DataFrame()
+        if not df_news.empty and not df_disclosure.empty:
+            total_df = pd.concat([df_news, df_disclosure], ignore_index=True)
+            total_df = total_df.sort_values(by=["date"], ascending=[False])
+        elif not df_news.empty:
+            total_df = df_news
+        elif not df_disclosure.empty:
+            total_df = df_disclosure
+
+        if total_df.empty:
+            return []
+
+        unique_tickers = total_df["ticker"].unique().tolist()
+        total_df["price_impact"] = 0.0
+
+        if not total_df.empty:
+            # 가격 데이터 추가
+            total_df["current_price"] = total_df["ticker"].map(
+                lambda x: ticker_to_price_data.get(x, {}).get("current_price")
+            )
+            total_df["change_rt"] = total_df["ticker"].map(
+                lambda x: ticker_to_price_data.get(x, {}).get("change_rt")
+            )
+
+            total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"]).fillna(0.0)
+            total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
+            total_df["change_rt"] = total_df["change_rt"].fillna(0.0)
+            total_df["price_impact"] = 0.0
+            total_df = NewsService._convert_to_kst(total_df)
+
+        # 결과 생성
+        result = []
+        for ticker in unique_tickers:
+            ticker_news = total_df[total_df["ticker"] == ticker]
+            if ticker_news.empty:
+                continue
+
+            news_items = []
+            for _, row in ticker_news.iterrows():
+                if len(news_items) >= stories_count:
+                    break
+
+                price_impact = float(row["price_impact"]) if pd.notnull(row["price_impact"]) else 0.0
+                news_items.append(
+                    TopStoriesItem(
+                        id=row["id"],
+                        price_impact=price_impact,
+                        date=row["date"],
+                        title=row["title"],
+                        summary=row["summary"],
+                        emotion=row["emotion"],
+                        type=row["type"],
+                        is_viewed=False,
+                    )
+                )
+
+            if lang == TranslateCountry.KO:
+                name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
+            else:
+                name = self.remove_parentheses(ticker_news.iloc[0]["en_name"])
+
+            result.append(
+                TopStoriesResponse(
+                    name=name,
+                    ticker=ticker,
+                    ctry=ticker_news.iloc[0]["ctry"],
+                    current_price=ticker_news.iloc[0]["current_price"]
+                    if ticker_news.iloc[0].get("current_price")
+                    else 0.0,
+                    change_rate=ticker_news.iloc[0]["change_rt"],
+                    items_count=len(news_items),
+                    news=news_items,
+                    is_viewed=False,
+                )
+            )
+
+        # 조회 상태 업데이트
+        result = self.check_stories_viewed_status(result, request, user)
+        return result
+
     async def top_stories(
         self,
         request: Request,

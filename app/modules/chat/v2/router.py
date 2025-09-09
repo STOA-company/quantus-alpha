@@ -429,7 +429,7 @@ async def stream_chat_detail(
                         "title": message.title or "",  # DB에서 직접 title 조회
                         "message_id": message.id
                     }
-                    logger.info(f"SSE 메시지 전송: {data}")
+                    # logger.info(f"SSE 메시지 전송: {data}")
                     yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
                     last_message_count += 1
 
@@ -447,7 +447,7 @@ async def stream_chat_detail(
                     break
                 elif status == "failed":
                     data = {"status": "failed", "content": "처리 중 오류가 발생했습니다."}
-                    # yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
                     break
 
                 # 하트비트 메시지 (연결 유지용)
