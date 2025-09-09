@@ -21,7 +21,7 @@ from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2, contry_mapping
 from app.modules.price.schemas import PriceDataItem, PriceSummaryItem, RealTimePriceDataItem, ResponsePriceDataItem
 from app.utils.date_utils import check_market_status
-from app.models.models_stock import StockFactor, StockInformation
+from app.models.models_stock import StockInformation
 
 logger = setup_logger(__name__)
 
@@ -809,7 +809,7 @@ class PriceService:
 
     async def get_price_data_summary_v2(
         self, ctry: str, type: str, ticker: str, lang: TranslateCountry, 
-        stock_factors: StockFactor, 
+        stock_factors, 
         stock_info: StockInformation) -> PriceSummaryItem:
         """
         종목 요약 데이터 조회
@@ -822,7 +822,8 @@ class PriceService:
             return PriceSummaryItem(**cached_data)
 
         if type == "stock":
-            df = pd.DataFrame(stock_factors)
+            # Convert SQLAlchemy Row object to dict first, then to DataFrame
+            df = pd.DataFrame([stock_factors._asdict()])
         elif type == "etf":
             df = self._fetch_etf_52week_data(ctry, ticker)
 
@@ -844,7 +845,7 @@ class PriceService:
         if type == "etf" and ctry == "us":
             columns = ["sector_2", "en_name", "market"]
 
-        sector, name, market = stock_info[columns[0]], stock_info[columns[1]], stock_info[columns[2]]
+        sector, name, market = getattr(stock_info, columns[0]), getattr(stock_info, columns[1]), getattr(stock_info, columns[2])
         sector = sector or ""
         name = name or ""
         if market:

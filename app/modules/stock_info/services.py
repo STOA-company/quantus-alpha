@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.cache.leaderboard import StockLeaderboard
 from app.core.logger import setup_logger
 from app.database.crud import JoinInfo, database
-from app.models.models_stock import StockInformation, StockFactor
+from app.models.models_stock import StockInformation
 from app.modules.common.enum import StabilityStatus, StabilityType, TranslateCountry
 from app.modules.common.utils import contry_mapping
 from app.modules.stock_info.mapping import STABILITY_INFO
@@ -27,7 +27,9 @@ class StockInfoService:
         """
         종목 코드에 따른 국가 코드 조회
         """
-        return await self.db._select_async(table="stock_information", columns=["ctry"], **{"ticker": ticker})[0].ctry
+        result = await self.db._select_async(table="stock_information", columns=["ctry"], **{"ticker": ticker})
+        return result[0].ctry
+        # return await self.db._select_async(table="stock_information", columns=["ctry"], **{"ticker": ticker})[0].ctry
 
     def get_name_by_ticker(self, ticker: str) -> Tuple[str, str]:
         """
@@ -323,7 +325,8 @@ class StockInfoService:
         """
         종목 타입 조회
         """
-        return await self.db._select_async(table="stock_information", columns=["type"], **{"ticker": ticker})[0].type
+        result = await self.db._select_async(table="stock_information", columns=["type"], **{"ticker": ticker})
+        return result[0].type
 
     async def get_etf_info(self, ticker: str) -> dict:
         """
@@ -457,7 +460,7 @@ class StockInfoService:
         result = await self.db._select_async(table="stock_information", **{"ticker": ticker})
         return result[0]
 
-    async def get_stock_factors_db(self, ctry: str, ticker: str) -> StockFactor:
+    async def get_stock_factors_db(self, ctry: str, ticker: str):
         
         if ctry == "us":
             ticker = f"{ticker}-US"
@@ -468,7 +471,9 @@ class StockInfoService:
 
         # 현재 종목의 지표 조회
         table_name = f"{ctry_3}_stock_factors"
-        return await self.db._select_async(table=table_name, **{"ticker": ticker})[0]
+        result = await self.db._select_async(table=table_name, **{"ticker": ticker})
+        return result[0]
+        # return await self.db._select_async(table=table_name, **{"ticker": ticker})[0]
 
     async def get_stock_info_v2(self, ctry: str, ticker: str, lang: TranslateCountry, stock_info: StockInformation) -> StockInfo:
         """
@@ -499,8 +504,9 @@ class StockInfoService:
                 "listing_date": stock_info.listing_date
             }
 
+            result = {}
             if db_result:
-                result = db_result[0]._asdict()
+                result = db_result
                 # datetime.date 타입인 경우에만 문자열로 변환
                 if result.get("establishment_date") and hasattr(result["establishment_date"], "strftime"):
                     result["establishment_date"] = result["establishment_date"].strftime("%Y-%m-%d")
@@ -530,7 +536,7 @@ class StockInfoService:
             logger.error(f"Error in get_stock_info for {ticker}: {str(e)}")
             return StockInfo(introduction="", homepage_url="", ceo_name="", establishment_date="", listing_date="")
 
-    async def get_indicators_v2(self, ctry: str, ticker: str, stock_factors: StockFactor) -> Indicators:
+    async def get_indicators_v2(self, ctry: str, ticker: str, stock_factors) -> Indicators:
         """지표 조회"""
 
         if ctry == "us":
@@ -582,17 +588,22 @@ class StockInfoService:
 
         # 안정성 지표 상태 계산
         stability_statuses = {}
+
         for stability_type, info in STABILITY_INFO.items():
-            score = getattr(current_stock[0], info.db_column)
+
+            if info.db_column not in current_stock:
+                logger.error(f"Column {info.db_column} not found in current_stock")
+                continue
+            score = current_stock[info.db_column]
             status = self.get_stability_status(score, stability_type)
             stability_statuses[info.api_field] = status.value
 
         return Indicators(
-            per=self.round_and_clean(current_stock[0].per) if current_stock[0].per is not None else None,
+            per=self.round_and_clean(current_stock["per"]) if current_stock["per"] is not None else None,
             industry_per=sector_metrics["per"] if sector_metrics["per"] is not None else None,
-            pbr=self.round_and_clean(current_stock[0].pbr) if current_stock[0].pbr is not None else None,
+            pbr=self.round_and_clean(current_stock["pbr"]) if current_stock["pbr"] is not None else None,
             industry_pbr=sector_metrics["pbr"] if sector_metrics["pbr"] is not None else None,
-            roe=self.round_and_clean(current_stock[0].roe) if current_stock[0].roe is not None else None,
+            roe=self.round_and_clean(current_stock["roe"]) if current_stock["roe"] is not None else None,
             industry_roe=sector_metrics["roe"] if sector_metrics["roe"] is not None else None,
             **stability_statuses,
         )

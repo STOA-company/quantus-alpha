@@ -521,10 +521,10 @@ class NewsService:
     async def get_latest_news_v2(self, ticker: str, lang: TranslateCountry) -> LatestNewsResponse:
         """최신 뉴스와 공시 데이터 중 최신 데이터 조회"""
         # 1. 공시 데이터 조회
-        disclosure_info = self._get_disclosure_data_v2(ticker, lang)
+        disclosure_info = await self._get_disclosure_data_v2(ticker, lang)
 
         # 2. 뉴스 데이터 조회
-        news_info = self._get_news_data_v2(ticker, lang)
+        news_info = await self._get_news_data_v2(ticker, lang)
 
         # 3. 날짜 비교하여 최신 데이터 선택
         result = self._select_latest_data(disclosure_info, news_info)

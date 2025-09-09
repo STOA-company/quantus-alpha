@@ -173,7 +173,7 @@ async def get_combined_new(
                 logger.info("Successfully fetched etf_info")
 
             if type == "stock":
-                indicators = await stock_service.get_indicators_v2(ctry, ticker, stock_factors, stock_factors)
+                indicators = await stock_service.get_indicators_v2(ctry, ticker, stock_factors)
                 logger.info("Successfully fetched indicators")
 
             summary = await summary_service.get_price_data_summary_v2(ctry, type, ticker, lang, stock_factors, stock_info_db)
