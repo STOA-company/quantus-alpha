@@ -454,7 +454,8 @@ class StockInfoService:
             return {"ticker": ticker, "error": str(e)}
 
     async def get_stock_info_db(self, ticker: str) -> StockInformation:
-        return await self.db._select_async(table="stock_information", **{"ticker": ticker})[0]
+        result = await self.db._select_async(table="stock_information", **{"ticker": ticker})
+        return result[0]
 
     async def get_stock_factors_db(self, ctry: str, ticker: str) -> StockFactor:
         

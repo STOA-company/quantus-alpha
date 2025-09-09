@@ -51,8 +51,8 @@ async def get_combined(
     news_service: NewsService = Depends(get_news_service),
     price_service: PriceService = Depends(get_price_service),
 ):
-    type = stock_service.get_type(ticker)
-    ctry = stock_service.get_ctry_by_ticker(ticker)
+    type = await stock_service.get_type(ticker)
+    ctry = await stock_service.get_ctry_by_ticker(ticker)
     if ctry is None:
         ctry = check_ticker_country_len_2(ticker)
     logger.info(f"Processing combined data for {ticker} ({ctry})")
@@ -133,6 +133,7 @@ async def get_combined(
     return BaseResponse(
         type=type, status_code=200, message="종목 정보, 지표, 기업 정보를 성공적으로 조회했습니다.", data=data
     )
+
 ########################################################################################################################################
 @router.get("/combined_new", summary="종목 정보, 지표, 기업 정보 전체 조회")
 async def get_combined_new(
