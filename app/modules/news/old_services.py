@@ -518,6 +518,112 @@ class NewsService:
             type=type,
         )
 
+    async def get_latest_news_v2(self, ticker: str, lang: TranslateCountry) -> LatestNewsResponse:
+        """최신 뉴스와 공시 데이터 중 최신 데이터 조회"""
+        # 1. 공시 데이터 조회
+        disclosure_info = self._get_disclosure_data_v2(ticker, lang)
+
+        # 2. 뉴스 데이터 조회
+        news_info = self._get_news_data_v2(ticker, lang)
+
+        # 3. 날짜 비교하여 최신 데이터 선택
+        result = self._select_latest_data(disclosure_info, news_info)
+
+        if result is None:
+            raise DataNotFoundException(ticker=ticker, data_type="latest_news")
+
+        date = result.get("date", "")
+        date = date.replace(tzinfo=UTC).astimezone(KST).strftime("%Y-%m-%d %H:%M:%S")
+        content = result.get("content", "")
+        type = result.get("type", "")
+
+        return LatestNewsResponse(
+            date=date,
+            content=content,
+            type=type,
+        )
+
+    async def _get_disclosure_data_v2(self, ticker: str, lang: TranslateCountry) -> Optional[Dict]:
+        """공시 데이터 조회 및 분석 데이터 함께 반환"""
+
+        # 현재 시간 + 5분까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+
+        condition = {"ticker": ticker, "is_exist": True, "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S")}
+        columns = ["date", "summary", "key_points"]
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+        elif lang == TranslateCountry.EN:
+            condition["lang"] = "en-US"
+
+        disclosure_data = await self.db._select_async(
+            table="disclosure_information",
+            columns=columns,
+            order="date",
+            ascending=False,
+            limit=1,
+            **condition,
+        )
+        if disclosure_data:
+            date = disclosure_data[0][0]
+            content = f"{disclosure_data[0][1]} {self._parse_key_points(disclosure_data[0][2])}"
+
+            return {"date": date, "content": content, "type": "disclosure"}
+        else:
+            return None
+
+    async def _get_news_data_v2(self, ticker: str, lang: TranslateCountry) -> Optional[Dict]:
+        """뉴스 데이터 조회"""
+        # ticker_en_name = self.db._select(
+        #     table="stock_information",
+        #     columns=["en_name"],
+        #     **dict(ticker=ticker),
+        # )
+        # if not ticker_en_name:
+        #     return None
+        # duplicate_ticker = self.db._select(
+        #     table="stock_information",
+        #     columns=["ticker"],
+        #     **dict(en_name=ticker_en_name[0][0]),
+        # )
+
+        # tickers = [info[0] for info in duplicate_ticker]
+
+        # 현재 시간 + 5분까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+
+        condition = {"is_exist": True, "is_related": True, "date__lte": allowed_time.strftime("%Y-%m-%d %H:%M:%S")}
+
+        if lang == TranslateCountry.KO:
+            condition["lang"] = "ko-KR"
+        elif lang == TranslateCountry.EN:
+            condition["lang"] = "en-US"
+
+        # if len(tickers) == 2:
+        #     condition["ticker__in"] = tickers
+        # else:
+        #     condition["ticker"] = ticker
+        
+        condition["ticker"] = ticker
+
+        news_data = await self.db._select_async(
+            table="news_analysis",
+            columns=["date", "summary", "impact_reason"],
+            order="date",
+            ascending=False,
+            limit=1,
+            **condition,
+        )
+        if news_data:
+            date = news_data[0][0]
+            content = f"{news_data[0][1]} / {news_data[0][2]}"
+
+            return {"date": date, "content": content, "type": "news"}
+        else:
+            return None
 
 def get_news_service() -> NewsService:
     return NewsService()

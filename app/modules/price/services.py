@@ -21,6 +21,7 @@ from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2, contry_mapping
 from app.modules.price.schemas import PriceDataItem, PriceSummaryItem, RealTimePriceDataItem, ResponsePriceDataItem
 from app.utils.date_utils import check_market_status
+from app.models.models_stock import StockFactor, StockInformation
 
 logger = setup_logger(__name__)
 
@@ -805,6 +806,74 @@ class PriceService:
             "market_cap": market_cap,
         }
         return pd.DataFrame([result_data])
+
+    async def get_price_data_summary_v2(
+        self, ctry: str, type: str, ticker: str, lang: TranslateCountry, 
+        stock_factors: StockFactor, 
+        stock_info: StockInformation) -> PriceSummaryItem:
+        """
+        종목 요약 데이터 조회
+        """
+        cache_key = f"summary_{ctry}_{ticker}"
+
+        cached_data = self._cache.get(cache_key)
+        if cached_data:
+            logger.info(f"Cache hit for {cache_key}")
+            return PriceSummaryItem(**cached_data)
+
+        if type == "stock":
+            df = pd.DataFrame(stock_factors)
+        elif type == "etf":
+            df = self._fetch_etf_52week_data(ctry, ticker)
+
+        if not df.empty:
+            week_52_high = df["week_52_high"].iloc[0] or 0.0
+            week_52_low = df["week_52_low"].iloc[0] or 0.0
+            last_day_close = df["last_close"].iloc[0] or 0.0
+            market_cap = df["market_cap"].iloc[0] or None
+        else:
+            week_52_high = None
+            week_52_low = None
+            last_day_close = None
+            market_cap = None
+
+        if lang == TranslateCountry.KO:
+            columns = ["sector_ko", "kr_name", "market"]
+        elif lang == TranslateCountry.EN:
+            columns = ["sector_2", "en_name", "market"]
+        if type == "etf" and ctry == "us":
+            columns = ["sector_2", "en_name", "market"]
+
+        sector, name, market = stock_info[columns[0]], stock_info[columns[1]], stock_info[columns[2]]
+        sector = sector or ""
+        name = name or ""
+        if market:
+            if type == "stock":
+                market = MARKET_MAP[market] if lang == TranslateCountry.KO else MARKET_MAP_EN[market]
+            elif type == "etf":
+                market = ETF_MARKET_MAP[market] if lang == TranslateCountry.KO else ETF_MARKET_MAP_EN[market]
+        is_market_close = check_market_status(ctry.upper())
+
+        response_data = {
+            "name": name,
+            "ticker": ticker,
+            "ctry": ctry,
+            "logo_url": "https://kr.pinterest.com/eunju011014/%EA%B7%80%EC%97%AC%EC%9A%B4-%EC%A7%A4/",
+            "market": market,
+            "sector": sector if sector else None,
+            "market_cap": market_cap,
+            "last_day_close": last_day_close,
+            "week_52_low": week_52_low,
+            "week_52_high": week_52_high,
+            "is_market_close": is_market_close,
+        }
+
+        try:
+            self._cache.set(cache_key, response_data, self.config.CACHE_TTL["ONE_DAY"])
+        except Exception as e:
+            logger.error(f"Failed to set cache for {cache_key}: {e}")
+
+        return PriceSummaryItem(**response_data)
 
 
 def get_price_service() -> PriceService:

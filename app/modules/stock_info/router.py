@@ -133,7 +133,96 @@ async def get_combined(
     return BaseResponse(
         type=type, status_code=200, message="종목 정보, 지표, 기업 정보를 성공적으로 조회했습니다.", data=data
     )
+########################################################################################################################################
+@router.get("/combined_new", summary="종목 정보, 지표, 기업 정보 전체 조회")
+async def get_combined_new(
+    ticker: str,
+    lang: TranslateCountry = TranslateCountry.KO,
+    stock_service: StockInfoService = Depends(get_stock_info_service),
+    summary_service: PriceService = Depends(get_price_service),
+    news_service: NewsService = Depends(get_news_service),
+    price_service: PriceService = Depends(get_price_service),
+):
+    # 변수 초기화
+    stock_info = None
+    etf_info = None
+    indicators = None
+    summary = None
+    latest = LatestNewsResponse(date="2000-01-01 00:00:00", content="", type="")
+    price = None
+    data = {}
+    
+    try: 
+        stock_info_db = await stock_service.get_stock_info_db(ticker)
+        type, ctry = stock_info_db.type, stock_info_db.ctry
+        stock_factors = await stock_service.get_stock_factors_db(ctry, ticker)
+        
+        logger.info(f"Processing combined data for {ticker} ({ctry})")
 
+        try:
+            if type == "stock":
+                stock_info = await stock_service.get_stock_info_v2(ctry, ticker, lang, stock_info_db)
+                logger.info("Successfully fetched stock_info")
+
+            if type == "etf":
+                if ctry == "us":
+                    etf_info = await stock_service.get_us_etf_info(ticker)
+                else:
+                    etf_info = await stock_service.get_etf_info(ticker)
+                logger.info("Successfully fetched etf_info")
+
+            if type == "stock":
+                indicators = await stock_service.get_indicators_v2(ctry, ticker, stock_factors, stock_factors)
+                logger.info("Successfully fetched indicators")
+
+            summary = await summary_service.get_price_data_summary_v2(ctry, type, ticker, lang, stock_factors, stock_info_db)
+            logger.info("Successfully fetched summary")
+        except Exception as e:
+            logger.error(f"Error fetching stock data: {e}")
+
+        try:
+            if type == "stock":
+                latest = await news_service.get_latest_news_v2(ticker=ticker, lang=lang)
+            elif type == "etf":
+                latest = await news_service.get_etf_latest_news(ticker=ticker, lang=lang)
+            logger.info("Successfully fetched latest news")
+        except Exception as e:
+            logger.error(f"Error fetching latest news: {e}")
+
+        try:
+            price = await price_service.get_real_time_price_data(ticker)
+            logger.info("Successfully fetched price")
+        except Exception as e:
+            logger.error(f"Error fetching price: {e}")
+
+        if type == "stock":
+            data = {
+                "summary": summary,
+                "indicators": indicators,
+                "stock_info": stock_info,
+                "latest": latest,
+                "price": price,
+            }
+        elif type == "etf":
+            data = {
+                "summary": summary,
+                "etf_info": etf_info,
+                "latest": latest,
+                "price": price,
+            }
+    except Exception as e:
+        logger.error(f"Error in combined_new endpoint: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+    # 모든 데이터가 None인 경우에만 404 반환
+    if all(v is None for v in data.values()):
+        raise HTTPException(status_code=404, detail="No data found for the given ticker")
+
+    stock_service.increment_search_score(ticker)
+    return BaseResponse(
+        type=type, status_code=200, message="종목 정보, 지표, 기업 정보를 성공적으로 조회했습니다.", data=data
+    )
+########################################################################################################################################
 
 @router.get("/holdings", summary="ETF 종목 조회")
 async def get_holdings(
@@ -192,3 +281,7 @@ async def get_fear_greed_index(
 async def update_etf_parquet():
     create_etf_integrated_info()
     return BaseResponse(status_code=200, message="ETF 파일을 성공적으로 업데이트했습니다.")
+
+
+
+            
