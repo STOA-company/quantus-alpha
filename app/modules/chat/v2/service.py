@@ -130,14 +130,15 @@ class ChatService:
                     # 최종 응답 저장
                     elif status == "success":
                         assistant_response = data.get("content", "")
-                        
                 except json.JSONDecodeError:
                     continue
             
             # 최종 처리
             if assistant_response:
+                # logger.info(f"최종 응답 저장: {assistant_response}")
                 self.store_final_response(conversation_id, root_message.id)
                 self.store_analysis_history(conversation_id, root_message.id)
+
                 
                 # 프리뷰 업데이트
                 if conversation.preview is None:
@@ -146,12 +147,15 @@ class ChatService:
                         preview=assistant_response[:100]
                     )
                 
-                # 이메일 큐 처리
-                try:
-                    await self.process_pending_email_requests(conversation_id)
-                    logger.info(f"백그라운드 이메일 큐 처리 완료: conversation_id={conversation_id}")
-                except Exception as email_error:
-                    logger.error(f"백그라운드 이메일 큐 처리 오류: {str(email_error)}")
+                # 이메일 큐 처리 (실패한 경우 제외)
+                if assistant_response != "error":
+                    try:
+                        await self.process_pending_email_requests(conversation_id)
+                        logger.info(f"백그라운드 이메일 큐 처리 완료: conversation_id={conversation_id}")
+                    except Exception as email_error:
+                        logger.error(f"백그라운드 이메일 큐 처리 오류: {str(email_error)}")
+                else:
+                    logger.info(f"심층 분석 실패로 인해 이메일 발송 건너뜀: conversation_id={conversation_id}")
                 
                 logger.info(f"백그라운드 LLM 처리 완료: conversation_id={conversation_id}")
             else:
@@ -299,7 +303,7 @@ class ChatService:
                 email=email,
                 subject=f"{title}에 대한 리포트 결과입니다.",
                 attachment_paths=[report_pdf],
-                email_type="insight"
+                email_type="info"
             ))
         except Exception as e:
             raise Exception(f"이메일 전송 중 오류가 발생했습니다: {str(e)}")

@@ -127,6 +127,9 @@ class LLMClient:
                                     f"LLM 응답 완료: job_id={job_id}, 결과 길이={len(final_result) if final_result else 0}"
                                 )
 
+                                if result_obj.get("status") == "error":
+                                    final_result = "error"
+
                                 if not final_result:
                                     logger.warning("완료 상태이지만 결과가 비어있습니다")
                                     final_result = "응답을 생성하는 중 문제가 발생했습니다. 다시 시도해주세요."
@@ -216,6 +219,9 @@ class LLMClient:
         result = data.get("result", {})
 
         final_response = result.get("result", "")
+        if final_response == "" and result.get("status") == "error":
+            final_response = "응답을 생성하는 중 문제가 발생했습니다. 다시 시도해주세요."
+        
         analysis_history = result.get("analysis_history", [])
 
         return final_response, analysis_history
