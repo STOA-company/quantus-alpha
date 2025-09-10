@@ -907,10 +907,10 @@ class PriceService:
 
         last_close = await self.database._select_async(table="stock_trend", columns=["prev_close"], ticker=ticker)
         combined_data = {
-            "week_52_high": result[0][0] if result else week_52_high,
-            "week_52_low": result[0][1] if result else week_52_low,
+            "week_52_high": getattr(result, 'week_52_high', 0.0) if result else week_52_high,
+            "week_52_low": getattr(result, 'week_52_low', 0.0) if result else week_52_low,
             "last_close": last_close[0][0] if last_close else last_close,
-            "market_cap": result[0][2] if result else None,
+            "market_cap": getattr(result, 'market_cap', None) if result else None,
         }
 
         return pd.DataFrame([combined_data])
