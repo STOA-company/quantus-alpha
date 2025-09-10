@@ -23,7 +23,7 @@ from app.core.logger import get_logger
 
 
 logger = get_logger(__name__)
-whitelist_users = [100]
+whitelist_users = [100, 47183, 1000767]
 router = APIRouter()
 
 
