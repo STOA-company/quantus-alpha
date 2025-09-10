@@ -822,8 +822,9 @@ class PriceService:
             return PriceSummaryItem(**cached_data)
 
         if type == "stock":
+            logger.info(f"[get_price_data_summary_v2] Stock factors: {stock_factors}")
             # Convert SQLAlchemy Row object to dict first, then to DataFrame
-            df = pd.DataFrame([stock_factors._asdict()])
+            df = await self._fetch_52week_data_v2(ctry, ticker, stock_factors)
         elif type == "etf":
             df = self._fetch_etf_52week_data(ctry, ticker)
 
@@ -876,6 +877,43 @@ class PriceService:
 
         return PriceSummaryItem(**response_data)
 
+    async def _fetch_52week_data_v2(self, ctry: str, ticker: str, stock_factors) -> pd.DataFrame:
+        """
+        52주 데이터 조회
+        """
+        ctry_3 = contry_mapping[ctry]
+        ticker_with_suffix = ticker
+        if ctry_3 == "USA":
+            ticker_with_suffix = f"{ticker}-US"
+
+        result = stock_factors
+        if not result:
+            kst_now = datetime.now(KST)
+            one_year_ago = kst_now - timedelta(days=365)
+            next_result = pd.DataFrame(
+                await self.database._select_async(
+                    table=f"stock_{ctry}_1d",
+                    columns=["Date", "High", "Low", "Close"],
+                    Ticker=ticker,
+                    Date__gte=one_year_ago,
+                )
+            )
+            week_52_high, week_52_low, last_close = self._process_price_data(next_result)
+            if next_result.empty:
+                week_52_high, week_52_low, last_close = 0.0, 0.0, 0.0
+                return pd.DataFrame(
+                    [{"week_52_high": week_52_high, "week_52_low": week_52_low, "last_close": last_close}]
+                )
+
+        last_close = await self.database._select_async(table="stock_trend", columns=["prev_close"], ticker=ticker)
+        combined_data = {
+            "week_52_high": result[0][0] if result else week_52_high,
+            "week_52_low": result[0][1] if result else week_52_low,
+            "last_close": last_close[0][0] if last_close else last_close,
+            "market_cap": result[0][2] if result else None,
+        }
+
+        return pd.DataFrame([combined_data])
 
 def get_price_service() -> PriceService:
     """PriceService 인스턴스 생성"""

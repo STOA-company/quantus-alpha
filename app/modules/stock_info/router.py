@@ -2,6 +2,7 @@ import random
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timedelta
 
 from app.core.logger import setup_logger
 from app.database.conn import db
@@ -13,6 +14,7 @@ from app.modules.news.schemas import LatestNewsResponse
 from app.modules.price.services import PriceService, get_price_service
 from app.modules.stock_info.schemas import FearGreedIndexItem, FearGreedIndexResponse, Indicators
 from app.utils.krx import create_etf_integrated_info
+from app.common.constants import KST
 
 from .services import StockInfoService, get_stock_info_service
 
@@ -152,7 +154,9 @@ async def get_combined_new(
     latest = LatestNewsResponse(date="2000-01-01 00:00:00", content="", type="")
     price = None
     data = {}
-    
+    kst_now = datetime.now(KST)
+    one_year_ago = kst_now - timedelta(days=365)
+
     try: 
         stock_info_db = await stock_service.get_stock_info_db(ticker)
         type, ctry = stock_info_db.type, stock_info_db.ctry

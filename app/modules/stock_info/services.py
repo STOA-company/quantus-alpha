@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple
 import pandas as pd
 from fastapi import HTTPException
 from sqlalchemy import select
+from datetime import datetime
 
 from app.cache.leaderboard import StockLeaderboard
 from app.core.logger import setup_logger
@@ -136,6 +137,7 @@ class StockInfoService:
 
         # 현재 종목의 지표 조회
         table_name = f"{ctry_3}_stock_factors"
+        logger.info(f"[get_indicators] Querying {table_name} for ticker: {ticker}")
         basic_columns = ["per", "pbr", "roe"]
         stability_columns = [info.db_column for info in STABILITY_INFO.values()]
         columns = basic_columns + stability_columns
@@ -145,6 +147,7 @@ class StockInfoService:
             columns=columns,
             **{"ticker": ticker},
         )
+        logger.info(f"[get_indicators] Query result count: {len(current_stock) if current_stock else 0}")
 
         if not current_stock:
             return Indicators(
@@ -458,6 +461,8 @@ class StockInfoService:
 
     async def get_stock_info_db(self, ticker: str) -> StockInformation:
         result = await self.db._select_async(table="stock_information", **{"ticker": ticker})
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Stock not found: {ticker}")
         return result[0]
 
     async def get_stock_factors_db(self, ctry: str, ticker: str):
@@ -471,9 +476,13 @@ class StockInfoService:
 
         # 현재 종목의 지표 조회
         table_name = f"{ctry_3}_stock_factors"
+        logger.info(f"[get_stock_factors_db] Querying {table_name} for ticker: {ticker}")
         result = await self.db._select_async(table=table_name, **{"ticker": ticker})
+        logger.info(f"[get_stock_factors_db] Query result count: {len(result) if result else 0}")
+        if not result:
+            logger.warning(f"Stock factors not found for ticker: {ticker} in table: {table_name}")
+            return None
         return result[0]
-        # return await self.db._select_async(table=table_name, **{"ticker": ticker})[0]
 
     async def get_stock_info_v2(self, ctry: str, ticker: str, lang: TranslateCountry, stock_info: StockInformation) -> StockInfo:
         """
@@ -557,16 +566,18 @@ class StockInfoService:
         #     columns=columns,
         #     **{"ticker": ticker},
         # )
-
-        current_stock = {
-            "per": stock_factors.per,
-            "pbr": stock_factors.pbr,
-            "roe": stock_factors.roe,
-            "financial_stability_score": stock_factors.financial_stability_score,
-            "price_stability_score": stock_factors.price_stability_score,
-            "market_stability_score": stock_factors.market_stability_score,
-            "sector_stability_score": stock_factors.sector_stability_score,
-        }
+        if stock_factors:
+            current_stock = {
+                "per": stock_factors.per,
+                "pbr": stock_factors.pbr,
+                "roe": stock_factors.roe,
+                "financial_stability_score": stock_factors.financial_stability_score,
+                "price_stability_score": stock_factors.price_stability_score,
+                "market_stability_score": stock_factors.market_stability_score,
+                "sector_stability_score": stock_factors.sector_stability_score,
+            }
+        else:
+            current_stock = None
 
 
         if not current_stock:
@@ -590,7 +601,6 @@ class StockInfoService:
         stability_statuses = {}
 
         for stability_type, info in STABILITY_INFO.items():
-
             if info.db_column not in current_stock:
                 logger.error(f"Column {info.db_column} not found in current_stock")
                 continue
