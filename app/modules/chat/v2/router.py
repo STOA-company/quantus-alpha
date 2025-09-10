@@ -23,7 +23,7 @@ from app.core.logger import get_logger
 
 
 logger = get_logger(__name__)
-
+whitelist_users = [100]
 router = APIRouter()
 
 
@@ -352,12 +352,15 @@ async def start_chat_processing(
     if not user_is_staff and not check_rate_limit(current_user["uid"], user_is_staff):
         raise HTTPException(status_code=429, detail="일일 사용 한도를 초과했습니다.")
 
+    if int(current_user["uid"]) not in whitelist_users and model == "gpt5":
+        raise HTTPException(status_code=401, detail="권한이 없습니다.")
+
     conversation = chat_service.get_conversation(conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="존재하지 않는 대화입니다.")
 
     if conversation.user_id != current_user["uid"]:
-        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+        raise HTTPException(status_code=401, detail="권한이 없습니다.")
 
     # 이미 처리 중이면 에러
     status = chat_service.get_status(conversation_id)
