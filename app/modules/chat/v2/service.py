@@ -299,7 +299,7 @@ class ChatService:
                 email=email,
                 subject=f"{title}에 대한 리포트 결과입니다.",
                 attachment_paths=[report_pdf],
-                email_type="info"
+                email_type="insight"
             ))
         except Exception as e:
             raise Exception(f"이메일 전송 중 오류가 발생했습니다: {str(e)}")

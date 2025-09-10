@@ -175,7 +175,7 @@ async def send_email(
     email: str, 
     subject: str, 
     attachment_paths: Union[str, List[str]] = None,
-    email_type: Literal["info", "adds1", "adds2", "adds3"] = "info",
+    email_type: Literal["insight", "info", "adds1", "adds2", "adds3"] = "insight",
 ) -> bool:
     """
     HTML 템플릿과 첨부 파일을 포함한 이메일을 전송합니다.

@@ -4,6 +4,10 @@ base_dir = path.dirname(path.dirname(path.dirname(path.abspath(__file__))))
 sys.path.append(base_dir)
 
 email_infos = {
+    "insight": {
+        "email": "no-reply-insight@quantus.kr",
+        "password": "%ngmgD6&W>RB7nP=",
+    },
     "info": {
         "email": "no-reply@quantus.kr",
         "password": "ovvflhkxucssrfvd",
