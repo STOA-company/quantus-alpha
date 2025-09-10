@@ -187,7 +187,7 @@ class DividendService:
         }
 
         df1 = pd.DataFrame(
-            self.db._select(
+            await self.db._select_async(
                 table="dividend_information",
                 columns=["ticker", "payment_date", "ex_date", "per_share", "yield_rate"],
                 order="ex_date",
@@ -246,9 +246,9 @@ class DividendService:
         # 배당지급일 기준으로 작년 데이터 필터링
         last_year_data = df1[df1["payment_year"] == last_year]
 
-        last_dividend_ratio = self.calculate_dividend_ratio_renewal(df1, ctry, ticker)
+        last_dividend_ratio = await self.calculate_dividend_ratio_renewal(df1, ctry, ticker)
         last_dividend_ratio = round(last_dividend_ratio, 2) if last_dividend_ratio is not None else None
-        last_dividend_growth_rate = self.calculate_growth_rate_renewal(df2, current_year)
+        last_dividend_growth_rate = await self.calculate_growth_rate_renewal(df2, current_year)
 
         if last_dividend_growth_rate is None:
             last_dividend_growth_rate = None
@@ -279,7 +279,7 @@ class DividendService:
             detail=sorted(yearly_details, key=lambda x: x.year, reverse=True),
         )
 
-    def calculate_dividend_ratio_renewal(self, df, ctry: Country, ticker: str):
+    async def calculate_dividend_ratio_renewal(self, df, ctry: Country, ticker: str):
         """배당성향(Dividend Payout Ratio) 계산"""
         try:
             reverse_mapping = {v: k for k, v in contry_mapping.items()}
@@ -293,9 +293,9 @@ class DividendService:
             if ctry_three == "USA":
                 ticker = f"{ticker}-US"
 
-            shares_data = self.db._select(table=table_name, columns=["shared_outstanding"], limit=1, **{"ticker": ticker})
+            shares_data = await self.db._select_async(table=table_name, columns=["shared_outstanding"], limit=1, **{"ticker": ticker})
 
-            income_data = self.db._select(
+            income_data = await self.db._select_async(
                 table=f"{ctry_three}_income",
                 columns=["net_income"],
                 limit=1,
@@ -331,7 +331,7 @@ class DividendService:
             print(f"Error calculating dividend ratio: {e}")
             return None
 
-    def calculate_growth_rate_renewal(self, df, current_year):
+    async def calculate_growth_rate_renewal(self, df, current_year):
         """배당 성장률 계산 - Compound Annual Growth Rate (CAGR)"""
         try:
             if df.empty or "per_share" not in df.columns or "year" not in df.columns:

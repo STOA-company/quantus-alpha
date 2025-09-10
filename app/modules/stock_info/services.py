@@ -197,7 +197,7 @@ class StockInfoService:
 
         return related_sectors
 
-    def get_similar_stocks(self, ticker: str, lang: TranslateCountry) -> List[SimilarStock]:
+    async def get_similar_stocks(self, ticker: str, lang: TranslateCountry) -> List[SimilarStock]:
         """
         연관 종목 조회
 
@@ -208,12 +208,12 @@ class StockInfoService:
         Returns:
             List[SimilarStock]: 연관 종목 리스트
         """
-        ticker_sector = self.db._select(table="stock_information", columns=["sector_2", "ctry"], **{"ticker": ticker})
+        ticker_sector = await self.db._select_async(table="stock_information", columns=["sector_2", "ctry"], **{"ticker": ticker})
         if not ticker_sector:
             raise HTTPException(status_code=404, detail=f"Stock not found: {ticker}")
         ctry = ticker_sector[0].ctry
 
-        similar_tickers = self.db._select(
+        similar_tickers = await self.db._select_async(
             table="stock_information",
             columns=["ticker"],
             limit=6,
@@ -226,7 +226,7 @@ class StockInfoService:
         elif lang == TranslateCountry.EN:
             columns = ["ticker", "en_name", "ctry", "current_price", "change_rt"]
 
-        similar_stocks_data = self.db._select(
+        similar_stocks_data = await self.db._select_async(
             table="stock_trend",
             columns=columns,
             join_info=JoinInfo(

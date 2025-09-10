@@ -235,14 +235,14 @@ async def get_holdings(
 
 
 @router.get("/similar", summary="연관 종목 조회")
-def get_similar_stocks(
+async def get_similar_stocks(
     ticker: str,
     lang: TranslateCountry = TranslateCountry.KO,
     type: str = "stock",
     service: StockInfoService = Depends(get_stock_info_service),
 ):
     if type == "stock":
-        data = service.get_similar_stocks(ticker, lang)
+        data = await service.get_similar_stocks(ticker, lang)
     elif type == "etf":
         return BaseResponse(status_code=200, message="ETF 종목을 성공적으로 조회했습니다.", data=None)
     else:

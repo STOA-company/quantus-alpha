@@ -137,7 +137,7 @@ def get_finpos_analysis(
     response_model=BaseResponse[RatioResponse],
     summary="재무 api",
 )
-def get_financial_ratio(
+async def get_financial_ratio(
     request: Request,
     ticker: Annotated[str, Query(description="종목 코드", min_length=1)],
     lang: Annotated[TranslateCountry, Query(description="언어, 예시: KO, EN")] = TranslateCountry.KO,
@@ -146,10 +146,10 @@ def get_financial_ratio(
 ) -> BaseResponse[RatioResponse]:
     try:
         ctry = check_ticker_country_len_3(ticker).upper()
-        company_name = financial_service.get_name_by_ticker(ticker=ticker, lang=lang)
-        dept_ratio = financial_service.get_debt_ratio(ctry=ctry, ticker=ticker, db=db)
-        liquidity_ratio = financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker, db=db)
-        interest_coverage_ratio = financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker, db=db)
+        company_name = await financial_service.get_name_by_ticker(ticker=ticker, lang=lang)
+        dept_ratio = await financial_service.get_debt_ratio(ctry=ctry, ticker=ticker, db=db)
+        liquidity_ratio = await financial_service.get_liquidity_ratio(ctry=ctry, ticker=ticker, db=db)
+        interest_coverage_ratio = await financial_service.get_interest_coverage_ratio(ctry=ctry, ticker=ticker, db=db)
         ctry_two = contry_mapping.get(ctry)
 
         return BaseResponse[RatioResponse](

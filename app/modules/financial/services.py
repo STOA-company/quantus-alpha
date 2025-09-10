@@ -356,7 +356,7 @@ class FinancialService:
             logger.error(f"Unexpected error in get_financial_ratio: {str(e)}")
             raise AnalysisException(analysis_type="재무비율 조회", detail=str(e))
 
-    def get_debt_ratio(self, ctry: FinancialCountry, ticker: str, db: Session) -> BaseResponse[DebtRatioResponse]:
+    async def get_debt_ratio(self, ctry: FinancialCountry, ticker: str, db: Session) -> BaseResponse[DebtRatioResponse]:
         """
         부채비율 조회
         """
@@ -365,14 +365,14 @@ class FinancialService:
                 ticker = f"{ticker}-US"
             country = FinancialCountry(ctry)
             # finpos 테이블에서 조회
-            debt_ratio_data = self.get_debt_ratio_data(country, ticker, db)
+            debt_ratio_data = await self.get_debt_ratio_data(country, ticker, db)
             return debt_ratio_data
         except Exception as e:
             logger.error(f"Unexpected error in get_debt_ratio: {str(e)}")
             raise AnalysisException(analysis_type="부채비율 조회", detail=str(e))
 
     # 유동비율
-    def get_liquidity_ratio(
+    async def get_liquidity_ratio(
         self, ctry: FinancialCountry, ticker: str, db: AsyncSession
     ) -> BaseResponse[LiquidityRatioResponse]:
         """
@@ -383,14 +383,14 @@ class FinancialService:
                 ticker = f"{ticker}-US"
             country = FinancialCountry(ctry)
             # finpos 테이블에서 조회
-            liquidity_ratio_data = self.get_liquidity_ratio_data(country, ticker, db)
+            liquidity_ratio_data = await self.get_liquidity_ratio_data(country, ticker, db)
             return liquidity_ratio_data
         except Exception as e:
             logger.error(f"Unexpected error in get_liquidity_ratio: {str(e)}")
             raise AnalysisException(analysis_type="유동비율 조회", detail=str(e))
 
     # 이자보상배율
-    def get_interest_coverage_ratio(
+    async def get_interest_coverage_ratio(
         self, ctry: FinancialCountry, ticker: str, db: Session
     ) -> BaseResponse[InterestCoverageRatioResponse]:
         """
@@ -401,7 +401,7 @@ class FinancialService:
                 ticker = f"{ticker}-US"
             country = FinancialCountry(ctry)
             # finpos 테이블에서 조회
-            interest_coverage_ratio_data = self.get_interest_coverage_ratio_data(country, ticker, db)
+            interest_coverage_ratio_data = await self.get_interest_coverage_ratio_data(country, ticker, db)
             return interest_coverage_ratio_data
         except Exception as e:
             logger.error(f"Unexpected error in get_interest_coverage_ratio: {str(e)}")
@@ -657,7 +657,7 @@ class FinancialService:
             logger.error(f"Error getting latest quarter: {e}")
             raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-    def get_name_by_ticker(self, ticker: str, lang: TranslateCountry) -> Optional[str]:
+    async def get_name_by_ticker(self, ticker: str, lang: TranslateCountry) -> Optional[str]:
         """
         ticker로 StockInformation 테이블에서 한글로 된 기업이름 조회
 
@@ -672,7 +672,7 @@ class FinancialService:
 
         column = "kr_name" if lang == TranslateCountry.KO else "en_name"
 
-        name = self.db._select(table="stock_information", columns=[column], ticker=ticker)
+        name = await self.db._select_async(table="stock_information", columns=[column], ticker=ticker)
 
         return name[0][0]
 
@@ -803,7 +803,7 @@ class FinancialService:
             data=financial_ratio_response,
         )
 
-    def get_debt_ratio_data(self, country: FinancialCountry, ticker: str, db: Session) -> BaseResponse[DebtRatioResponse]:
+    async def get_debt_ratio_data(self, country: FinancialCountry, ticker: str, db: Session) -> BaseResponse[DebtRatioResponse]:
         """
         부채비율 데이터 조회
         """
@@ -813,18 +813,20 @@ class FinancialService:
             raise InvalidCountryException()
 
         quarters = self.financial_crud.get_debt_ratio_quarters(table_name, ticker, db)
+        # quarters = await self.db._select_async(table=table_name, columns=["Name", "total_dept", "total_asset"], ticker=ticker, order="period_q", ascending=False, limit=4)
 
         if not quarters:
             if ticker.endswith("-US"):
                 ticker = ticker[:-3]
-            target_en_name = self.db._select(table="stock_information", columns=["en_name"], ticker=ticker)
-            same_company_tickers = self.db._select(
+            target_en_name = await self.db._select_async(table="stock_information", columns=["en_name"], ticker=ticker)
+            same_company_tickers = await self.db._select_async(
                 table="stock_information", columns=["ticker", "en_name"], en_name=target_en_name[0][0]
             )
             ticker_list = [ticker[0] for ticker in same_company_tickers]
             ticker_list = [f"{t}-US" if country == FinancialCountry.USA else t for t in ticker_list if t != ticker]
             if len(ticker_list) == 1:
                 quarters = self.financial_crud.get_debt_ratio_quarters(table_name, ticker_list[0], db)
+                # quarters = await self.db._select_async(table=table_name, columns=["Name", "total_dept", "total_asset"], ticker=ticker_list[0], order="period_q", ascending=False, limit=4)
             elif not ticker_list and len(ticker_list) > 1:
                 logger.warning(f"No debt ratio data found for ticker: {ticker}")
                 raise DataNotFoundException(ticker=ticker, data_type="부채비율")
@@ -861,7 +863,7 @@ class FinancialService:
         )
 
     # 유동비율 계산
-    def get_liquidity_ratio_data(
+    async def get_liquidity_ratio_data(
         self, country: FinancialCountry, ticker: str, db: AsyncSession
     ) -> BaseResponse[LiquidityRatioResponse]:
         """
@@ -874,18 +876,20 @@ class FinancialService:
             raise InvalidCountryException()
 
         quarters = self.financial_crud.get_liquidity_ratio_quarters(table_name, ticker, db)
+        # quarters = await self.db._select_async(table=table_name, columns=["Name", "current_asset", "current_dept"], ticker=ticker, order="period_q", ascending=False, limit=4)
 
         if not quarters:
             if ticker.endswith("-US"):
                 ticker = ticker[:-3]
-            target_en_name = self.db._select(table="stock_information", columns=["en_name"], ticker=ticker)
-            same_company_tickers = self.db._select(
+            target_en_name = await self.db._select_async(table="stock_information", columns=["en_name"], ticker=ticker)
+            same_company_tickers = await self.db._select_async(
                 table="stock_information", columns=["ticker", "en_name"], en_name=target_en_name[0][0]
             )
             ticker_list = [ticker[0] for ticker in same_company_tickers]
             ticker_list = [f"{t}-US" if country == FinancialCountry.USA else t for t in ticker_list if t != ticker]
             if len(ticker_list) == 1:
                 quarters = self.financial_crud.get_liquidity_ratio_quarters(table_name, ticker_list[0], db)
+                # quarters = await self.db._select_async(table=table_name, columns=["Name", "current_asset", "current_dept"], ticker=ticker_list[0], order="period_q", ascending=False, limit=4)
             elif not ticker_list and len(ticker_list) > 1:
                 logger.warning(f"No liquidity ratio data found for ticker: {ticker}")
                 raise DataNotFoundException(ticker=ticker, data_type="유동비율")
@@ -922,7 +926,7 @@ class FinancialService:
         )
 
     # 이자보상배율 계산
-    def get_interest_coverage_ratio_data(
+    async def get_interest_coverage_ratio_data(
         self, country: FinancialCountry, ticker: str, db: Session
     ) -> BaseResponse[InterestCoverageRatioResponse]:
         """
@@ -935,18 +939,20 @@ class FinancialService:
             raise InvalidCountryException()
 
         quarters = self.financial_crud.get_interest_coverage_ratio_quarters(table_name, ticker, db)
+        # quarters = await self.db._select_async(table=table_name, columns=["Name", "operating_income", "fin_cost"], ticker=ticker, order="period_q", ascending=False, limit=4)
 
         if not quarters:
             if ticker.endswith("-US"):
                 ticker = ticker[:-3]
-            target_en_name = self.db._select(table="stock_information", columns=["en_name"], ticker=ticker)
-            same_company_tickers = self.db._select(
+            target_en_name = await self.db._select_async(table="stock_information", columns=["en_name"], ticker=ticker)
+            same_company_tickers = await self.db._select_async(
                 table="stock_information", columns=["ticker", "en_name"], en_name=target_en_name[0][0]
             )
             ticker_list = [ticker[0] for ticker in same_company_tickers]
             ticker_list = [f"{t}-US" if country == FinancialCountry.USA else t for t in ticker_list if t != ticker]
             if len(ticker_list) == 1:
                 quarters = self.financial_crud.get_interest_coverage_ratio_quarters(table_name, ticker_list[0], db)
+                # quarters = await self.db._select_async(table=table_name, columns=["Name", "operating_income", "fin_cost"], ticker=ticker_list[0], order="period_q", ascending=False, limit=4)
             elif not ticker_list and len(ticker_list) > 1:
                 logger.warning(f"No interest coverage ratio data found for ticker: {ticker}")
                 raise DataNotFoundException(ticker=ticker, data_type="이자보상배율")
