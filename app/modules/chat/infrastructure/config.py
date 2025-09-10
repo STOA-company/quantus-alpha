@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-ENV = os.getenv("ENV", "dev")  # Default
+ENV = os.getenv("ENV", "master")  # Default
 load_dotenv(f".env.{ENV}")
 
 class LLMConfig(BaseModel):
