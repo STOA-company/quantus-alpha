@@ -131,7 +131,7 @@ jobs:
             
             # 블루-그린 배포 실행
             cd ./quantus-alpha
-            sudo GITHUB_REPOSITORY_OWNER=${OWNER_LC} IMAGE_TAG=${{ needs.makeTagAndRelease.outputs.tag_name }} ./deploy.sh ${{ needs.makeTagAndRelease.outputs.tag_name }}
+            sudo GITHUB_REPOSITORY_OWNER=${OWNER_LC} IMAGE_TAG=${{ needs.makeTagAndRelease.outputs.tag_name }} ENV=${{ github.ref_name }} ./deploy.sh ${{ needs.makeTagAndRelease.outputs.tag_name }}
 
   notify-success:
     runs-on: ubuntu-latest
