@@ -1,8 +1,7 @@
 import os
 import signal
+import requests
 from datetime import datetime
-
-from app.core.extra.SlackNotifier import SlackNotifier
 
 # Gunicorn 설정
 bind = f"0.0.0.0:{os.getenv('PORT', '8000')}"
@@ -23,17 +22,50 @@ access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"
 ENV = os.getenv("ENV", "dev")
 webhook_url = "https://hooks.slack.com/services/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"
 
-slack_notifier = SlackNotifier(webhook_url=webhook_url)
-
 # 전역 변수로 현재 처리 중인 요청 추적
 current_requests = {}
+
+
+def send_slack_message(message: str, color: str = None):
+    """Slack에 직접 POST 요청을 보냅니다."""
+    if not webhook_url:
+        print("Slack webhook URL이 설정되지 않았습니다.")
+        return False
+        
+    try:
+        payload = {
+            "text": message,
+            "username": "Gunicorn Server",
+            "icon_emoji": ":rocket:"
+        }
+        
+        if color:
+            payload["attachments"] = [{
+                "color": color,
+                "text": message
+            }]
+        
+        response = requests.post(
+            webhook_url,
+            json=payload,
+            timeout=10
+        )
+        response.raise_for_status()
+        print("Slack 알림이 성공적으로 전송되었습니다.")
+        return True
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Slack 알림 전송 실패: {e}")
+        return False
+    except Exception as e:
+        print(f"Slack 알림 전송 중 예상치 못한 오류: {e}")
+        return False
 
 
 def when_ready(_server):
     """서버가 시작될 때 호출"""
     print(f"🚀 Gunicorn server started with {workers} workers on {bind}")
     try:
-        # notify_error 대신 send_message 사용
         message = (
             f"🚀 **Gunicorn 서버 시작**\n\n"
             f"*환경*: {ENV}\n"
@@ -42,7 +74,7 @@ def when_ready(_server):
             f"*타임아웃*: {timeout}초\n"
             f"*시작 시간*: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
-        result = slack_notifier.send_message(message, color="#36a64f")
+        result = send_slack_message(message, color="#36a64f")
         print(f"Slack notification result: {result}")
     except Exception as e:
         print(f"Failed to send startup notification: {e}")
@@ -67,7 +99,7 @@ def worker_timeout(worker):
             f"🔄 워커가 재시작됩니다."
         )
         
-        result = slack_notifier.send_message(message, color="#ff0000")
+        result = send_slack_message(message, color="#ff0000")
         print(f"✅ Slack notification result: {result} for worker {worker_pid}")
     except Exception as e:
         print(f"❌ Failed to send worker timeout notification: {e}")
@@ -107,7 +139,7 @@ def worker_abort(worker):
             f"💀 워커가 비정상 종료되었습니다."
         )
         
-        slack_notifier.notify_error(message)
+        send_slack_message(message)
     except Exception as e:
         print(f"Failed to send worker abort notification: {e}")
     
@@ -122,11 +154,12 @@ def on_exit(_server):
     print(f"🛑 Gunicorn server shutting down at {current_time}")
     
     try:
-        slack_notifier.notify_error(
+        message = (
             f"🛑 **Gunicorn 서버 종료**\n\n"
             f"*환경*: {ENV}\n"
             f"*종료 시간*: {current_time}"
         )
+        send_slack_message(message)
     except Exception as e:
         print(f"Failed to send shutdown notification: {e}")
 
@@ -150,13 +183,14 @@ def handle_worker_signal(signum, _frame):
     
     if signum == signal.SIGTERM:
         try:
-            slack_notifier.notify_error(
+            message = (
                 f"📡 **Worker Signal 받음**\n\n"
                 f"*환경*: {ENV}\n"
                 f"*워커 PID*: {worker_pid}\n"
                 f"*시그널*: {signal_name}\n"
                 f"*시간*: {current_time}"
             )
+            send_slack_message(message)
         except Exception as e:
             print(f"Failed to send signal notification: {e}")
 

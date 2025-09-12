@@ -1,12 +1,12 @@
 import os
 import time
+import requests
 from typing import Callable
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-from app.core.extra.SlackNotifier import SlackNotifier
 from app.core.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -26,7 +26,7 @@ class WorkerTimeoutTracker(BaseHTTPMiddleware):
     ):
         super().__init__(app)
         self.timeout_threshold = timeout_threshold
-        self.slack_notifier = SlackNotifier(webhook_url=webhook_url)
+        self.webhook_url = "https://hooks.slack.com/services/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"
         self.environment = environment
         self.notify_environments = notify_environments or ["stage", "dev", "prod", "production"]
         
@@ -105,10 +105,36 @@ class WorkerTimeoutTracker(BaseHTTPMiddleware):
             message = "\n".join(message_parts)
             
             # Slack 알림 전송
-            self.slack_notifier.notify_error(message)
+            self._send_slack_message(message)
             
         except Exception as e:
             logger.exception(f"Error in WorkerTimeoutTracker notification: {e}")
+    
+    def _send_slack_message(self, message: str):
+        """Slack에 직접 POST 요청을 보냅니다."""
+        if not self.webhook_url:
+            logger.warning("Slack webhook URL이 설정되지 않았습니다.")
+            return
+            
+        try:
+            payload = {
+                "text": message,
+                "username": "Worker Timeout Tracker",
+                "icon_emoji": ":warning:"
+            }
+            
+            response = requests.post(
+                self.webhook_url,
+                json=payload,
+                timeout=10
+            )
+            response.raise_for_status()
+            logger.info("Slack 알림이 성공적으로 전송되었습니다.")
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Slack 알림 전송 실패: {e}")
+        except Exception as e:
+            logger.error(f"Slack 알림 전송 중 예상치 못한 오류: {e}")
 
 
 def add_worker_timeout_tracker(
