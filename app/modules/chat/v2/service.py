@@ -4,9 +4,11 @@ from typing import AsyncGenerator, List, Optional, Dict, Any
 import asyncio
 
 import httpx
+import redis
 import os
 from app.utils.email_utils import send_email, create_notification_email
 from app.utils.email_queue_utils import email_queue_manager
+from app.core.config import settings
 
 from app.modules.chat.infrastructure.config import llm_config
 from app.modules.chat.infrastructure.constants import LLM_MODEL
@@ -20,6 +22,16 @@ logger = get_logger(__name__)
 
 
 class ChatService:
+    def __init__(self):
+        # Redis 클라이언트 초기화
+        self.redis_client = redis.Redis(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            db=settings.REDIS_DB,
+            password=settings.REDIS_PASSWORD if settings.REDIS_PASSWORD else None,
+            decode_responses=True
+        )
+    
     def create_conversation(self, first_message: str, user_id: int) -> Conversation:
         conversation = conversation_repository.create(first_message, user_id)
 
@@ -90,8 +102,13 @@ class ChatService:
         self, query: str, conversation_id: int, model: str, user_id: int
     ):
         """백그라운드에서 LLM 처리 - SSE 연결과 독립적으로 실행"""
+        heartbeat_key = f"chat_heartbeat:{conversation_id}"
+        
         try:
             logger.info(f"백그라운드 LLM 처리 시작: conversation_id={conversation_id}")
+            
+            # 초기 heartbeat 설정 (30초 TTL)
+            self.redis_client.setex(heartbeat_key, 30, "running")
             
             # 루트 메시지 생성/조회
             conversation = conversation_repository.get_by_id(conversation_id)
@@ -103,6 +120,9 @@ class ChatService:
             assistant_response = None
             
             async for chunk in llm_client.process_query(query, model):
+                # 폴링할 때마다 heartbeat 갱신 (30초 TTL)
+                self.redis_client.setex(heartbeat_key, 30, "running")
+                
                 try:
                     data = json.loads(chunk)
                     status = data.get("status")
@@ -160,6 +180,13 @@ class ChatService:
         except Exception as e:
             logger.error(f"백그라운드 LLM 처리 중 오류: conversation_id={conversation_id}, error={str(e)}")
             # 실패 상태 저장 (필요시 추가 구현)
+        finally:
+            # heartbeat 정리
+            try:
+                self.redis_client.delete(heartbeat_key)
+                logger.info(f"백그라운드 작업 heartbeat 정리: {heartbeat_key}")
+            except Exception as e:
+                logger.error(f"Heartbeat 정리 실패: {str(e)}")
 
     def get_progress_messages(self, conversation_id: int, offset: int = 0) -> List[Message]:
         """대화의 진행 상황 메시지들을 offset부터 조회"""
@@ -188,9 +215,211 @@ class ChatService:
         if not latest_job_id:
             return "success"
 
-        response = httpx.get(f"{llm_config.base_url}/{latest_job_id}", headers={"Access-Key": llm_config.api_key})
-        status = response.json().get("status").lower()
-        return status
+        try:
+            response = httpx.get(f"{llm_config.base_url}/{latest_job_id}", headers={"Access-Key": llm_config.api_key})
+            if response.status_code == 200:
+                status = response.json().get("status").lower()
+                return status
+            else:
+                logger.warning(f"AI 서버 응답 오류: {response.status_code}")
+                return "connection_error"
+        except Exception as e:
+            logger.error(f"AI 서버 연결 실패: {str(e)}")
+            return "connection_error"
+    
+    def check_polling_health(self, conversation_id: int) -> dict:
+        """폴링 연결 상태를 확인하고 진단 정보를 반환"""
+        # Redis heartbeat 확인
+        heartbeat_key = f"chat_heartbeat:{conversation_id}"
+        heartbeat_status = self.redis_client.get(heartbeat_key)
+        is_background_running = heartbeat_status == "running"
+        
+        # AI 서버 상태 확인
+        ai_status = self.get_status(conversation_id)
+        
+        # 백그라운드 태스크가 죽었는지 판단
+        # AI 서버는 정상(progress)인데 백그라운드 태스크가 없으면 복구 필요
+        needs_recovery = (
+            ai_status == "progress" and not is_background_running
+        ) or ai_status == "connection_error"
+        
+        return {
+            "ai_server_status": ai_status,
+            "is_background_running": is_background_running,
+            "heartbeat_key": heartbeat_key,
+            "needs_recovery": needs_recovery
+        }
+    
+    async def recover_polling_connection(self, conversation_id: int) -> dict:
+        """끊어진 폴링 연결을 복구 시도"""
+        try:
+            logger.info(f"폴링 연결 복구 시작: conversation_id={conversation_id}")
+            
+            # 대화 정보 조회
+            conversation = conversation_repository.get_by_id(conversation_id)
+            if not conversation:
+                return {"success": False, "error": "대화를 찾을 수 없습니다."}
+            
+            # 기존 job_id로 AI 서버 상태 재확인
+            latest_job_id = conversation_repository.get_latest_job_id(conversation_id)
+            if not latest_job_id:
+                return {"success": False, "error": "job_id가 없습니다."}
+            
+            # AI 서버와 직접 연결 테스트
+            try:
+                response = httpx.get(
+                    f"{llm_config.base_url}/{latest_job_id}", 
+                    headers={"Access-Key": llm_config.api_key},
+                    timeout=10.0
+                )
+                if response.status_code == 200:
+                    status_data = response.json()
+                    ai_status = status_data.get("status", "").lower()
+                    
+                    if ai_status == "progress":
+                        # AI 서버는 여전히 처리 중이므로 백그라운드 폴링 재시작
+                        logger.info(f"AI 서버는 정상, 백그라운드 폴링 재시작: conversation_id={conversation_id}")
+                        # TODO: 일단 주석처리, 나중에 다시 활성화
+                        # asyncio.create_task(
+                        #     self.process_query_background(
+                        #         conversation.title,
+                        #         conversation_id,
+                        #         "gpt4o",  # 기본 모델로 재시작
+                        #         conversation.user_id
+                        #     )
+                        # )
+                        
+                        # 임시 폴링을 백그라운드 태스크로 실행
+                        asyncio.create_task(self.polling_temp(conversation_id, latest_job_id))
+                        return {"success": True, "message": "폴링 연결을 복구했습니다.", "status": "restarted"}
+                    elif ai_status == "success":
+                        # AI 처리가 완료된 상태
+                        return {"success": True, "message": "AI 처리가 이미 완료되었습니다.", "status": "completed"}
+                    else:
+                        return {"success": False, "error": f"AI 서버 상태 이상: {ai_status}"}
+                else:
+                    logger.error(f"AI 서버 응답 오류: {response.status_code}")
+                    return {"success": False, "error": f"AI 서버 연결 실패: {response.status_code}"}
+                    
+            except Exception as e:
+                logger.error(f"AI 서버 연결 테스트 실패: {str(e)}")
+                return {"success": False, "error": f"AI 서버 연결 불가: {str(e)}"}
+                
+        except Exception as e:
+            logger.error(f"폴링 연결 복구 중 오류: {str(e)}")
+            return {"success": False, "error": f"복구 실패: {str(e)}"}
+    
+    async def polling_temp(self, conversation_id: int, job_id: str) -> dict:
+        """임시 폴링 메서드 - 기존 폴링 로직을 단순화"""
+        import time
+        
+        heartbeat_key = f"chat_heartbeat:{conversation_id}"
+        
+        try:
+            logger.info(f"임시 폴링 시작: conversation_id={conversation_id}, job_id={job_id}")
+            
+            # 임시 폴링 heartbeat 설정
+            self.redis_client.setex(heartbeat_key, 30, "running")
+            
+            polling_interval = 3.0
+            max_timeout = 300  # 5분 타임아웃
+            start_time = time.time()
+            previous_result = ""
+            message_count = 0
+            
+            while (time.time() - start_time) < max_timeout:
+                # 폴링 간격 조정
+                elapsed_time = time.time() - start_time
+                if elapsed_time > 60:
+                    polling_interval = 4.0
+                if elapsed_time > 180:
+                    polling_interval = 5.0
+                
+                await asyncio.sleep(polling_interval)
+                
+                # heartbeat 갱신
+                self.redis_client.setex(heartbeat_key, 30, "running")
+                
+                # AI 서버 상태 확인
+                try:
+                    response = httpx.get(
+                        f"{llm_config.base_url}/{job_id}", 
+                        headers={"Access-Key": llm_config.api_key},
+                        timeout=10.0
+                    )
+                    
+                    if response.status_code != 200:
+                        logger.warning(f"임시 폴링 중 오류: {response.status_code}")
+                        continue
+                        
+                    status_data = response.json()
+                    status = status_data.get("status")
+                    
+                    logger.info(f"임시 폴링 상태: {status}")
+                    
+                    # 오류 체크
+                    if status == "ERROR" or status_data.get("error"):
+                        error_msg = status_data.get("error", "알 수 없는 오류")
+                        logger.error(f"임시 폴링 중 AI 오류: {error_msg}")
+                        return {"success": False, "error": f"AI 서버 오류: {error_msg}"}
+                    
+                    # 진행 상황 저장
+                    step_info = status_data.get("step_info", {})
+                    if step_info and isinstance(step_info, dict):
+                        step_title = step_info.get("title", "")
+                        step_message = step_info.get("message", "")
+                        
+                        if step_message and step_message != previous_result:
+                            previous_result = step_message
+                            
+                            # DB에 progress 메시지 저장
+                            content = f"[{step_title}] {step_message}" if step_title else step_message
+                            message = self.add_message(
+                                conversation_id=conversation_id,
+                                content=content,
+                                role="system"
+                            )
+                            
+                            if message:
+                                message_count += 1
+                                logger.info(f"임시 폴링 메시지 저장: {content[:50]}...")
+                    
+                    # 완료 체크
+                    if status in ["SUCCESS", "COMPLETED"]:
+                        logger.info(f"임시 폴링 완료: conversation_id={conversation_id}, 저장된 메시지: {message_count}개")
+                        return {
+                            "success": True, 
+                            "status": "completed",
+                            "message_count": message_count,
+                            "elapsed_time": time.time() - start_time
+                        }
+                        
+                except httpx.RequestError as e:
+                    logger.error(f"임시 폴링 네트워크 오류: {str(e)}")
+                    continue
+                except Exception as e:
+                    logger.error(f"임시 폴링 중 예외: {str(e)}")
+                    continue
+            
+            # 타임아웃
+            logger.warning(f"임시 폴링 타임아웃: conversation_id={conversation_id}")
+            return {
+                "success": False, 
+                "error": "타임아웃",
+                "message_count": message_count,
+                "elapsed_time": time.time() - start_time
+            }
+            
+        except Exception as e:
+            logger.error(f"임시 폴링 중 오류: {str(e)}")
+            return {"success": False, "error": f"폴링 실패: {str(e)}"}
+        finally:
+            # heartbeat 정리
+            try:
+                self.redis_client.delete(heartbeat_key)
+                logger.info(f"임시 폴링 heartbeat 정리: {heartbeat_key}")
+            except Exception as e:
+                logger.error(f"임시 폴링 heartbeat 정리 실패: {str(e)}")
 
     def get_final_response(self, conversation_id: int) -> tuple[str, str]:
         latest_job_id = conversation_repository.get_latest_job_id(conversation_id)
