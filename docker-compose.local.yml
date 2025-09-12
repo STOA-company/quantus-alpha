@@ -1,13 +1,94 @@
-version: '3'
+version: '3.8'  # BuildKit 활성화 위해 버전 명시
 
 services:
-  redis:
-    image: redis:latest
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    quantus-alpha-green:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: quantus-alpha-green
+        expose:
+            - "8001"
+        environment:
+            APP_NAME: green
+            LLM_MOCK_ENABLED: "true"
+            PORT: 8001
+            ENV: dev
+        volumes:
+            - pip-cache:/root/.cache/pip
+            - poetry-cache:/var/cache/poetry
+            - ./parquet:/app/parquet
+            - ./reports:/app/reports
+        depends_on:
+            redis:
+                condition: service_healthy
+        networks:
+            - alpha-network
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8001/health-check"]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 5s
+        restart: unless-stopped
+
+    redis:
+        image: redis:7-alpine
+        ports:
+            - "127.0.0.1:6379:6379"
+        volumes:
+            - redis_data:/data
+        command: >
+          redis-server
+          --appendonly yes
+          --protected-mode no
+          --replicaof no one
+          --rename-command REPLICAOF ""
+          --rename-command SLAVEOF ""
+          --maxmemory 256mb
+          --maxmemory-policy allkeys-lru
+          --tcp-keepalive 60
+          --timeout 300
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 5s
+            timeout: 10s
+            retries: 10
+            start_period: 5s
+        networks:
+            - alpha-network
+        restart: always
+        deploy:
+            resources:
+                limits:
+                    memory: 300M
+
+    zipkin:
+        image: openzipkin/zipkin:latest
+        container_name: zipkin
+        ports:
+            - "9411:9411"
+        environment:
+            - STORAGE_TYPE=mem
+            - JAVA_OPTS=-Xms128m -Xmx384m -XX:+UseG1GC
+        networks:
+            - alpha-network
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    memory: 512M
+        healthcheck:
+            test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9411/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 10s
 
 volumes:
-  redis_data:
+    redis_data:
+    pip-cache:    # pip 캐시를 위한 볼륨
+    poetry-cache: # poetry 캐시를 위한 볼륨
+
+networks:
+    alpha-network:
+        driver: bridge

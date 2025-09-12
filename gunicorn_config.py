@@ -20,7 +20,7 @@ access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"
 
 # Slack 설정 - 새로운 webhook URL 사용
 ENV = os.getenv("ENV", "dev")
-webhook_url = "https://hooks.slack.com/services/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"
+webhook_url = "https://hooks.slack.com/services/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"
 
 # 전역 변수로 현재 처리 중인 요청 추적
 current_requests = {}
@@ -45,17 +45,35 @@ def send_slack_message(message: str, color: str = None):
                 "text": message
             }]
         
+        # 디버깅을 위한 정보 출력
+        print(f"Slack webhook URL: {webhook_url}")
+        print(f"Payload: {payload}")
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Gunicorn-Server/1.0'
+        }
+        
         response = requests.post(
             webhook_url,
             json=payload,
+            headers=headers,
             timeout=10
         )
+        
+        print(f"Response status: {response.status_code}")
+        print(f"Response headers: {dict(response.headers)}")
+        print(f"Response text: {response.text}")
+        
         response.raise_for_status()
         print("Slack 알림이 성공적으로 전송되었습니다.")
         return True
         
     except requests.exceptions.RequestException as e:
         print(f"Slack 알림 전송 실패: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Response status: {e.response.status_code}")
+            print(f"Response text: {e.response.text}")
         return False
     except Exception as e:
         print(f"Slack 알림 전송 중 예상치 못한 오류: {e}")
