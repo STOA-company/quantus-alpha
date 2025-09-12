@@ -11,6 +11,7 @@ from app.database.crud import database
 from app.middlewares.rate_limiter_admin import router as rate_limiter_admin_router
 from app.middlewares.slack_error import add_slack_middleware
 from app.middlewares.trusted_hosts import get_current_username
+from app.middlewares.worker_timeout_tracker import add_worker_timeout_tracker
 from app.monitoring.endpoints import router as metrics_router
 from app.monitoring.middleware import PrometheusMiddleware
 from app.elasticsearch.elasticsearch import cleanup_elasticsearch
@@ -126,6 +127,15 @@ else:
 
 # Add Prometheus middleware first to monitor all requests
 app.add_middleware(PrometheusMiddleware)
+
+# Worker timeout 추적 미들웨어 추가
+add_worker_timeout_tracker(
+    app=app,
+    timeout_threshold=80.0,  # 80초 이상 걸리는 요청 추적
+    webhook_url=webhook_url,
+    environment=settings.ENV,
+    notify_environments=["stage", "dev", "prod"],
+)
 
 # Slack 오류 알림 미들웨어 설정
 add_slack_middleware(
