@@ -26,7 +26,7 @@ class WorkerTimeoutTracker(BaseHTTPMiddleware):
     ):
         super().__init__(app)
         self.timeout_threshold = timeout_threshold
-        self.webhook_url = "https://hooks.slack.com/services/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"
+        self.webhook_url = "https://hooks.slack.com/services/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"
         self.environment = environment
         self.notify_environments = notify_environments or ["stage", "dev", "prod", "production"]
         

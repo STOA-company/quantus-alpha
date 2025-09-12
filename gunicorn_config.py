@@ -20,7 +20,7 @@ access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"
 
 # Slack 설정 - 새로운 webhook URL 사용
 ENV = os.getenv("ENV", "dev")
-webhook_url = "https://hooks.slack.com/services/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"
+webhook_url = "https://hooks.slack.com/services/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"
 
 # 전역 변수로 현재 처리 중인 요청 추적
 current_requests = {}
