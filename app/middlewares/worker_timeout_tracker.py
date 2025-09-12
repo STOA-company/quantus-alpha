@@ -47,6 +47,7 @@ class WorkerTimeoutTracker(BaseHTTPMiddleware):
             
             # 긴 요청 추적
             if duration >= self.timeout_threshold:
+                logger.info(f"Request Long Timeout: {method} {path} - {response.status_code} - {duration:.2f}s")
                 await self._notify_long_request(request, duration, "COMPLETED")
             
             logger.info(f"Request completed: {method} {path} - {response.status_code} - {duration:.2f}s")
@@ -58,6 +59,7 @@ class WorkerTimeoutTracker(BaseHTTPMiddleware):
             
             # 에러가 발생한 긴 요청도 추적
             if duration >= self.timeout_threshold:
+                logger.info(f"Request Failed Long Timeout: {method} {path} - {response.status_code} - {duration:.2f}s")
                 await self._notify_long_request(request, duration, "ERROR", str(exc))
             
             logger.error(f"Request failed: {method} {path} - {duration:.2f}s - Error: {str(exc)}")
