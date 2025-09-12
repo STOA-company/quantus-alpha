@@ -19,12 +19,9 @@ errorlog = "-"
 loglevel = "info"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
 
-# Slack 설정
+# Slack 설정 - 새로운 webhook URL 사용
 ENV = os.getenv("ENV", "dev")
-if ENV == "stage":
-    webhook_url = "https://hooks.slack.com/services/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"
-else:
-    webhook_url = "https://hooks.slack.com/services/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"
+webhook_url = "https://hooks.slack.com/services/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"
 
 slack_notifier = SlackNotifier(webhook_url=webhook_url)
 
@@ -36,7 +33,8 @@ def when_ready(_server):
     """서버가 시작될 때 호출"""
     print(f"🚀 Gunicorn server started with {workers} workers on {bind}")
     try:
-        slack_notifier.notify_error(
+        # notify_error 대신 send_message 사용
+        message = (
             f"🚀 **Gunicorn 서버 시작**\n\n"
             f"*환경*: {ENV}\n"
             f"*워커 수*: {workers}\n"
@@ -44,8 +42,12 @@ def when_ready(_server):
             f"*타임아웃*: {timeout}초\n"
             f"*시작 시간*: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
+        result = slack_notifier.send_message(message, color="#36a64f")
+        print(f"Slack notification result: {result}")
     except Exception as e:
         print(f"Failed to send startup notification: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def worker_timeout(worker):
@@ -53,25 +55,25 @@ def worker_timeout(worker):
     worker_pid = worker.pid
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    print(f"❌ WORKER TIMEOUT: Worker {worker_pid} timed out at {current_time}")
+    print(f"❌❌❌ WORKER_TIMEOUT CALLBACK CALLED: Worker {worker_pid} timed out at {current_time} ❌❌❌")
     
     try:
-        # 현재 처리 중인 요청 정보 가져오기
-        request_info = current_requests.get(worker_pid, "Unknown request")
-        
         message = (
             f"❌ **WORKER TIMEOUT 발생**\n\n"
             f"*환경*: {ENV}\n"
             f"*워커 PID*: {worker_pid}\n"
             f"*발생 시간*: {current_time}\n"
-            f"*타임아웃*: {timeout}초\n"
-            f"*현재 처리 중인 요청*: {request_info}\n\n"
+            f"*타임아웃*: {timeout}초\n\n"
             f"🔄 워커가 재시작됩니다."
         )
         
-        slack_notifier.notify_error(message)
+        result = slack_notifier.send_message(message, color="#ff0000")
+        print(f"✅ Slack notification result: {result} for worker {worker_pid}")
     except Exception as e:
-        print(f"Failed to send worker timeout notification: {e}")
+        print(f"❌ Failed to send worker timeout notification: {e}")
+        # 예외 상세 정보도 출력
+        import traceback
+        traceback.print_exc()
 
 
 def worker_exit(_server, worker):
@@ -132,6 +134,10 @@ def on_exit(_server):
 # 프로세스 관리 설정
 preload_app = True
 worker_connections = 1000
+
+# 워커 타임아웃 감지를 위한 추가 설정
+graceful_timeout = 30
+worker_tmp_dir = "/dev/shm"  # 메모리 기반 임시 디렉토리
 
 # 신호 처리 개선
 def handle_worker_signal(signum, _frame):

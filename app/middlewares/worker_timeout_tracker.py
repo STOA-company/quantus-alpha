@@ -1,3 +1,4 @@
+import os
 import time
 from typing import Callable
 
@@ -9,6 +10,9 @@ from app.core.extra.SlackNotifier import SlackNotifier
 from app.core.logger import setup_logger
 
 logger = setup_logger(__name__)
+
+# 현재 워커의 활성 요청을 추적하는 전역 변수
+active_requests = {}
 
 
 class WorkerTimeoutTracker(BaseHTTPMiddleware):
