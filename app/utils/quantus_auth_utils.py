@@ -3,6 +3,8 @@ import base64
 import os
 import httpx
 import json
+import uuid
+import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 from urllib.parse import urljoin
@@ -26,6 +28,8 @@ security = HTTPBearer(auto_error=False)
 
 TOKEN_CACHE_PREFIX = "auth_token:"
 TOKEN_CACHE_TTL = 3600  # 1시간 (초 단위)
+LOCK_PREFIX = "auth_lock:"
+LOCK_TTL = 30  # 락 타임아웃 30초
 
 async def validate_token_async(token, sns_type, client_type):
     try:
@@ -328,7 +332,7 @@ async def get_current_user_redis(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
 ) -> Optional[Dict]:
-    """Redis를 사용한 토큰 검증으로 현재 사용자 정보 조회"""
+    """Redis를 사용한 토큰 검증으로 현재 사용자 정보 조회 (분산 락 적용)"""
     if not credentials:
         return None
 
@@ -360,23 +364,56 @@ async def get_current_user_redis(
         if cached_user_info:
             return cached_user_info
 
-        # 2. 캐시에 없으면 외부 API로 검증
-        print(f"캐시 미스, 외부 API 호출: {sns_type}:{client_type}")
-        res = await validate_token_async(token=token, sns_type=sns_type, client_type=client_type)
+        # 2. 분산 락 획득 시도
+        lock_value = await _acquire_distributed_lock(token, sns_type, client_type)
         
-        if res is None:
-            raise HTTPException(status_code=500, detail="Token validation failed")
-            
-        status_code = res.status_code
-        if status_code != 200:
-            raise HTTPException(status_code=status_code)
+        if lock_value:
+            # 락 획득 성공 - 외부 API로 검증 수행
+            try:
+                print(f"락 획득 성공, 외부 API 호출: {sns_type}:{client_type}")
+                res = await validate_token_async(token=token, sns_type=sns_type, client_type=client_type)
+                
+                if res is None:
+                    raise HTTPException(status_code=500, detail="Token validation failed")
+                    
+                status_code = res.status_code
+                if status_code != 200:
+                    raise HTTPException(status_code=status_code)
 
-        user_info = res.json()["userInfo"]
-        
-        # 3. 검증 성공 시 Redis에 캐시
-        _cache_token_validation(token, sns_type, client_type, user_info)
-        
-        return user_info
+                user_info = res.json()["userInfo"]
+                
+                # 3. 검증 성공 시 Redis에 캐시
+                _cache_token_validation(token, sns_type, client_type, user_info)
+                
+                return user_info
+            finally:
+                # 락 해제 (성공/실패 관계없이)
+                await _release_distributed_lock(token, sns_type, client_type, lock_value)
+        else:
+            # 락 획득 실패 - 다른 프로세스가 검증 중이므로 대기
+            print(f"락 획득 실패, 캐시 대기: {sns_type}:{client_type}")
+            cached_user_info = await _wait_for_cache_or_timeout(token, sns_type, client_type)
+            
+            if cached_user_info:
+                return cached_user_info
+            else:
+                # 대기 시간 초과 시 직접 검증 수행
+                print(f"대기 시간 초과, 직접 검증 수행: {sns_type}:{client_type}")
+                res = await validate_token_async(token=token, sns_type=sns_type, client_type=client_type)
+                
+                if res is None:
+                    raise HTTPException(status_code=500, detail="Token validation failed")
+                    
+                status_code = res.status_code
+                if status_code != 200:
+                    raise HTTPException(status_code=status_code)
+
+                user_info = res.json()["userInfo"]
+                
+                # 검증 성공 시 Redis에 캐시
+                _cache_token_validation(token, sns_type, client_type, user_info)
+                
+                return user_info
 
     except HTTPException as e:
         raise e
@@ -389,6 +426,87 @@ async def get_current_user_redis(
 def _get_redis_key(token: str, sns_type: str, client_type: str) -> str:
     """Redis 키 생성"""
     return f"{TOKEN_CACHE_PREFIX}{sns_type}:{client_type}:{token}"
+
+def _get_lock_key(token: str, sns_type: str, client_type: str) -> str:
+    """Redis 락 키 생성"""
+    return f"{LOCK_PREFIX}{sns_type}:{client_type}:{token}"
+
+async def _acquire_distributed_lock(token: str, sns_type: str, client_type: str) -> Optional[str]:
+    """Redis 분산 락 획득"""
+    try:
+        redis_conn = redis_client()
+        lock_key = _get_lock_key(token, sns_type, client_type)
+        lock_value = str(uuid.uuid4())  # 고유한 락 값
+        
+        # SET 명령어로 락 획득 시도 (NX: 키가 없을 때만 설정, EX: 만료 시간 설정)
+        result = redis_conn.set(lock_key, lock_value, nx=True, ex=LOCK_TTL)
+        
+        if result:
+            print(f"분산 락 획득 성공: {lock_key}")
+            return lock_value
+        else:
+            print(f"분산 락 획득 실패 (이미 다른 프로세스가 락 보유): {lock_key}")
+            return None
+    except Exception as e:
+        print(f"분산 락 획득 오류: {e}")
+        return None
+
+async def _release_distributed_lock(token: str, sns_type: str, client_type: str, lock_value: str) -> bool:
+    """Redis 분산 락 해제"""
+    try:
+        redis_conn = redis_client()
+        lock_key = _get_lock_key(token, sns_type, client_type)
+        
+        # Lua 스크립트로 원자적 락 해제 (자신이 획득한 락만 해제)
+        lua_script = """
+        if redis.call("GET", KEYS[1]) == ARGV[1] then
+            return redis.call("DEL", KEYS[1])
+        else
+            return 0
+        end
+        """
+        
+        result = redis_conn.eval(lua_script, 1, lock_key, lock_value)
+        
+        if result:
+            print(f"분산 락 해제 성공: {lock_key}")
+            return True
+        else:
+            print(f"분산 락 해제 실패 (다른 프로세스의 락): {lock_key}")
+            return False
+    except Exception as e:
+        print(f"분산 락 해제 오류: {e}")
+        return False
+
+async def _wait_for_cache_or_timeout(token: str, sns_type: str, client_type: str, max_wait_time: int = 5) -> Optional[Dict]:
+    """다른 프로세스가 토큰 검증을 완료할 때까지 대기"""
+    try:
+        redis_conn = redis_client()
+        cache_key = _get_redis_key(token, sns_type, client_type)
+        
+        # 최대 대기 시간 동안 캐시 확인
+        for _ in range(max_wait_time * 10):  # 0.1초 간격으로 체크
+            await asyncio.sleep(0.1)
+            
+            cached_data = redis_conn.get(cache_key)
+            if cached_data:
+                data = json.loads(cached_data)
+                expires_at = datetime.fromisoformat(data["expires_at"])
+                if datetime.utcnow() < expires_at:
+                    user_info = data["user_info"]
+                    if user_info.get("email") and "@" in user_info.get("email", ""):
+                        print(f"대기 중 캐시 발견: {cache_key}")
+                        return user_info
+                    else:
+                        # 유효하지 않은 캐시 삭제
+                        redis_conn.delete(cache_key)
+                        break
+        
+        print(f"대기 시간 초과, 캐시 없음: {cache_key}")
+        return None
+    except Exception as e:
+        print(f"캐시 대기 오류: {e}")
+        return None
 
 def _cache_token_validation(token: str, sns_type: str, client_type: str, user_info: Dict, ttl: int = None):
     """토큰 검증 결과를 Redis에 캐시"""

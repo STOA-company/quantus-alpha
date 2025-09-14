@@ -19,7 +19,7 @@ from app.modules.interest.v2.response import InterestGroupResponse, InterestPric
 from app.modules.interest.v2.service import InterestService, get_interest_service
 from app.modules.news.v2.schemas import InterestDisclosureResponse, InterestNewsResponse, TopStoriesResponse
 from app.modules.news.v2.services import NewsService, get_news_service
-from app.utils.quantus_auth_utils import get_current_user_async as get_current_user
+from app.utils.quantus_auth_utils import get_current_user_redis as get_current_user
 
 logger = setup_logger(__name__)
 
@@ -323,31 +323,7 @@ async def top_stories(
     )  # TODO :: stories_count 변경 필요
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
-########################################################
-# elasticsearch test
-@router.get(
-    "/stories/{group_id}/elasticsearch",
-    summary="관심 종목 주요소식 모아보기 / 스토리",
-    response_model=BaseResponse[List[TopStoriesResponse]],
-)
-async def top_stories_elasticsearch(
-    group_id: int,
-    request: Request,
-    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
-    news_service: NewsService = Depends(get_news_service),
-    service: InterestService = Depends(get_interest_service),
-    user: AlphafinderUser = Depends(get_current_user),  # noqa
-):
-    tickers = await service.get_interest_tickers(group_id)
-    if len(tickers) == 0:
-        return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
-    # subscription_level = user.subscription_level if user else 1 # TODO :: 유저 테이블 통합 후 주석 해제
-    # stories_count = 30 if subscription_level >= 3 else 10
-    data = await news_service.top_stories_elasticsearch(
-        request=request, tickers=tickers, lang=lang, stories_count=30, user=user
-    )  # TODO :: stories_count 변경 필요
-    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
-########################################################
+
 
 # 관심 종목 가격 조회
 @router.get("/{group_id}/price", summary="관심 종목 가격 조회", response_model=BaseResponse[List[InterestPriceResponse]])
@@ -380,7 +356,7 @@ async def interest_news(
             message="Successfully retrieved news data",
             data=InterestNewsResponse(news=[], has_next=False),
         )
-    total_news_data = news_service.get_news(lang=lang, tickers=tickers)
+    total_news_data = await news_service.get_news(lang=lang, tickers=tickers)
 
     # if user.subscription_level < 3:
     #     total_news_data = news_service.mask_news_items(total_news_data)
@@ -469,3 +445,145 @@ async def interest_disclosure(
         offset=offset,
         size=size
     )
+
+########################################################
+# elasticsearch test
+@router.get(
+    "/stories/{group_id}/elasticsearch",
+    summary="관심 종목 주요소식 모아보기 / 스토리",
+    response_model=BaseResponse[List[TopStoriesResponse]],
+)
+async def top_stories_elasticsearch(
+    group_id: int,
+    request: Request,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
+    news_service: NewsService = Depends(get_news_service),
+    service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),  # noqa
+):
+    tickers = await service.get_interest_tickers(group_id)
+    if len(tickers) == 0:
+        return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
+    # subscription_level = user.subscription_level if user else 1 # TODO :: 유저 테이블 통합 후 주석 해제
+    # stories_count = 30 if subscription_level >= 3 else 10
+    data = await news_service.top_stories_elasticsearch(
+        request=request, tickers=tickers, lang=lang, stories_count=30, user=user
+    )  # TODO :: stories_count 변경 필요
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
+
+# 관심 종목 가격 조회
+@router.get("/{group_id}/price_elasticsearch", summary="관심 종목 가격 조회", response_model=BaseResponse[List[InterestPriceResponse]])
+async def get_interest_price_elasticsearch(
+    group_id: int,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
+    service: InterestService = Depends(get_interest_service),
+):
+    tickers = await service.get_interest_tickers(group_id)
+    ticker_price_data = await service.get_interest_price_elasticsearch(tickers=tickers, group_id=group_id, lang=lang)
+    return BaseResponse(status_code=200, message="Successfully retrieved interest price data", data=ticker_price_data)
+
+@router.get("/news/{group_id}/elasticsearch", summary="관심 종목 뉴스")
+async def interest_news_elasticsearch(
+    group_id: int,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
+    page: Annotated[int, Query(description="페이지 번호, 기본값: 1")] = 1,
+    size: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 10,
+    news_service: NewsService = Depends(get_news_service),
+    service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),  # noqa
+):
+    tickers = await service.get_interest_tickers(group_id)
+    if len(tickers) == 0:
+        return BaseResponse(
+            status_code=200,
+            message="Successfully retrieved news data",
+            data=InterestNewsResponse(news=[], has_next=False),
+        )
+    total_news_data = await news_service.get_news_elasticsearch(lang=lang, tickers=tickers)
+
+    # if user.subscription_level < 3:
+    #     total_news_data = news_service.mask_news_items(total_news_data)
+
+    offset = (page - 1) * size
+    news_data = total_news_data[offset : offset + size]
+
+    # if user.subscription_level >= 3: # TODO :: 유저 테이블 통합 후 주석 해제
+    has_next = len(total_news_data) > page * size
+    # else:
+    #     current_position = offset * limit + len(news_data)
+    #     has_next = current_position < len(total_news_data)
+
+    total_count = len(total_news_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
+    total_count = len(total_news_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
+    response_data = InterestNewsResponse(news=news_data, has_next=has_next)
+    return NewsDisclosureResponse(
+        status_code=200,
+        message="Successfully retrieved news data",
+        data=response_data,
+        total_count=total_count,
+        total_pages=total_pages,
+        current_page=current_page,
+        offset=offset,
+        size=size,
+    )
+
+@router.get("/disclosure/{group_id}/elasticsearch", summary="관심 종목 공시")
+async def interest_disclosure_elasticsearch(
+    group_id: int,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
+    page: Annotated[int, Query(description="페이지 번호, 기본값: 1")] = 1,
+    size: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 10,
+    news_service: NewsService = Depends(get_news_service),
+    service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),  # noqa
+):
+    tickers = await service.get_interest_tickers(group_id)
+    if len(tickers) == 0:
+        return BaseResponse(
+            status_code=200,
+            message="Successfully retrieved disclosure data",
+            data=InterestDisclosureResponse(disclosure=[], has_next=False),
+        )
+    total_disclosure_data = news_service.get_disclosure(lang=lang, tickers=tickers)
+
+    # 레벨 3 미만 사용자의 경우 데이터 마스킹 적용
+    # if user.subscription_level < 3:
+    #     total_disclosure_data = news_service.mask_disclosure_items(total_disclosure_data)
+
+    offset = (page - 1) * size
+    disclosure_data = total_disclosure_data[offset : offset + size]
+
+    # if user.subscription_level >= 3:
+    has_next = len(total_disclosure_data) > page * size
+    # else:
+    #     current_position = offset * limit + len(disclosure_data)
+    #     has_next = current_position < len(total_disclosure_data)
+
+    total_count = len(total_disclosure_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
+    total_count = len(total_disclosure_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
+    response_data = InterestDisclosureResponse(disclosure=disclosure_data, has_next=has_next)
+
+    return NewsDisclosureResponse(
+        status_code=200,
+        message="Successfully retrieved disclosure data",
+        data=response_data,
+        total_count=total_count,
+        total_pages=total_pages,
+        current_page=current_page,
+        offset=offset,
+        size=size
+    )
+
+########################################################

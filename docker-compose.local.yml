@@ -6,6 +6,8 @@ services:
             context: .
             dockerfile: Dockerfile
         container_name: quantus-alpha-green
+        ports:
+            - "8001:8001"
         expose:
             - "8001"
         environment:
@@ -30,15 +32,16 @@ services:
             retries: 3
             start_period: 5s
         restart: unless-stopped
-
     redis:
         image: redis:7-alpine
         ports:
+        
             - "127.0.0.1:6379:6379"
         volumes:
             - redis_data:/data
         command: >
           redis-server
+          --requirepass ${REDIS_PASSWORD}
           --appendonly yes
           --protected-mode no
           --replicaof no one
@@ -49,7 +52,7 @@ services:
           --tcp-keepalive 60
           --timeout 300
         healthcheck:
-            test: ["CMD", "redis-cli", "ping"]
+            test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
             interval: 5s
             timeout: 10s
             retries: 10
