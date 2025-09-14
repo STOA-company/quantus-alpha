@@ -1056,7 +1056,7 @@ class NewsService:
 
         logger.info(f"News query: {news_query_builder.build()}")
         news_response = await es_client.client.search(
-            index="quantus-news-analysis-2025.09",
+            index="quantus-news-analysis-*",
             body=news_query_builder.build()
         )
         logger.info(f"News response hits: {len(news_response['hits']['hits'])}")
@@ -1236,7 +1236,187 @@ class NewsService:
         # 조회 상태 업데이트
         result = self.check_stories_viewed_status(result, request, user)
         return result
+    
 
+    async def get_news_elasticsearch(
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
+    ) -> List[NewsRenewalItem]:
+        import logging
+        from app.elasticsearch.elasticsearch import get_elasticsearch_client
+        from app.elasticsearch.elasticsearch_service import create_news_query
+        
+        logger = logging.getLogger(__name__)
+        
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        if not tickers:
+            ticker = ",".join(tickers) if tickers else None
+            raise DataNotFoundException(ticker=ticker, data_type="news")
+
+        # Elasticsearch 클라이언트 가져오기
+        es_client = await get_elasticsearch_client()
+
+        # 언어 설정
+        lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
+        news_name = "kr_name" if lang == TranslateCountry.KO else "en_name"
+
+        # 현재 시간에 5분을 더한 시간까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+        
+        # 24시간 전부터 현재까지의 데이터 조회
+        before_24_hours = current_time - timedelta(hours=24)
+
+        # 뉴스 쿼리 빌더 생성
+        news_query_builder = create_news_query(
+            tickers=tickers,
+            start_date=before_24_hours,
+            end_date=allowed_time,
+            lang=lang_str,
+            is_exist=True,
+            is_related=True
+        ).size(100)
+
+        # 국가 필터 추가
+        if ctry:
+            ctry_value = "KR" if ctry == "kr" else "US" if ctry == "us" else None
+            if ctry_value:
+                news_query_builder.term("ctry.keyword", ctry_value)
+
+        logger.info(f"News query: {news_query_builder.build()}")
+        news_response = await es_client.client.search(
+            index="quantus-news-analysis-*",
+            body=news_query_builder.build()
+        )
+        logger.info(f"News response hits: {len(news_response['hits']['hits'])}")
+
+        # Elasticsearch 응답을 DataFrame으로 변환
+        hits = news_response['hits']['hits']
+        if not hits:
+            ticker = ",".join(tickers) if tickers else None
+            raise DataNotFoundException(ticker=ticker, data_type="news")
+
+        # Elasticsearch 결과를 DataFrame으로 변환
+        news_data_list = []
+        for hit in hits:
+            source = hit['_source']
+            news_data_list.append({
+                "id": source.get("id"),
+                "ticker": source.get("ticker"),
+                news_name: source.get(news_name),
+                "ctry": source.get("ctry"),
+                "date": source.get("date"),
+                "title": source.get("title"),
+                "summary": source.get("summary"),
+                "impact_reason": source.get("impact_reason"),
+                "key_points": source.get("key_points"),
+                "emotion": source.get("emotion"),
+            })
+
+        df_news = pd.DataFrame(news_data_list)
+
+        if df_news.empty:
+            ticker = ",".join(tickers) if tickers else None
+            raise DataNotFoundException(ticker=ticker, data_type="news")
+
+        df_news = df_news.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+        df_news = df_news[df_news["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
+        df_news = NewsService._convert_to_kst(df_news)
+
+        news_data = [] if df_news.empty else self._process_price_data(df=df_news, lang=lang)
+
+        return news_data
+
+    async def get_disclosure_elasticsearch(
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
+    ) -> List[DisclosureRenewalItem]:
+        import logging
+        from app.elasticsearch.elasticsearch import get_elasticsearch_client
+        from app.elasticsearch.elasticsearch_service import create_disclosure_query
+        
+        logger = logging.getLogger(__name__)
+        
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        if not tickers:
+            ticker = ",".join(tickers) if tickers else None
+            raise DataNotFoundException(ticker=ticker, data_type="disclosure")
+
+        # Elasticsearch 클라이언트 가져오기
+        es_client = await get_elasticsearch_client()
+
+        # 언어 설정
+        lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
+        disclosure_name = "ko_name" if lang == TranslateCountry.KO else "en_name"
+
+        # 현재 시간에 5분을 더한 시간까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+        
+        # 24시간 전부터 현재까지의 데이터 조회
+        before_24_hours = current_time - timedelta(hours=24)
+
+        # 공시 쿼리 빌더 생성
+        disclosure_query_builder = create_disclosure_query(
+            tickers=tickers,
+            start_date=before_24_hours,
+            end_date=allowed_time,
+            lang=lang_str,
+            is_exist=True
+        ).size(100)
+
+        # 국가 필터 추가
+        if ctry:
+            ctry_value = "KR" if ctry == "kr" else "US" if ctry == "us" else None
+            if ctry_value:
+                disclosure_query_builder.term("ctry.keyword", ctry_value)
+
+        logger.info(f"Disclosure query: {disclosure_query_builder.build()}")
+        disclosure_response = await es_client.client.search(
+            index="quantus-disclosure-information-*",
+            body=disclosure_query_builder.build()
+        )
+        logger.info(f"Disclosure response hits: {len(disclosure_response['hits']['hits'])}")
+
+        # Elasticsearch 응답을 DataFrame으로 변환
+        hits = disclosure_response['hits']['hits']
+        if not hits:
+            ticker = ",".join(tickers) if tickers else None
+            raise DataNotFoundException(ticker=ticker, data_type="disclosure")
+
+        # Elasticsearch 결과를 DataFrame으로 변환
+        disclosure_data_list = []
+        for hit in hits:
+            source = hit['_source']
+            disclosure_data_list.append({
+                "id": source.get("id"),
+                "ticker": source.get("ticker"),
+                disclosure_name: source.get(disclosure_name),
+                "ctry": source.get("ctry"),
+                "date": source.get("date"),
+                "url": source.get("url"),
+                "summary": source.get("summary"),
+                "impact_reason": source.get("impact_reason"),
+                "key_points": source.get("key_points"),
+                "emotion": source.get("emotion"),
+                "form_type": source.get("form_type"),
+                "category_type": source.get("category_type"),
+                "that_time_price": source.get("that_time_price"),
+            })
+
+        df_disclosure = pd.DataFrame(disclosure_data_list)
+
+        disclosure_data = (
+            []
+            if df_disclosure.empty
+            else self._process_price_data(
+                self._process_dataframe_disclosure(df_disclosure), lang=lang, is_disclosure=True
+            )
+        )
+
+        return disclosure_data
 
 def get_news_service() -> NewsService:
     return NewsService()

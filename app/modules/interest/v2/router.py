@@ -550,7 +550,7 @@ async def interest_disclosure_elasticsearch(
             message="Successfully retrieved disclosure data",
             data=InterestDisclosureResponse(disclosure=[], has_next=False),
         )
-    total_disclosure_data = news_service.get_disclosure(lang=lang, tickers=tickers)
+    total_disclosure_data = await news_service.get_disclosure_elasticsearch(lang=lang, tickers=tickers)
 
     # 레벨 3 미만 사용자의 경우 데이터 마스킹 적용
     # if user.subscription_level < 3:
