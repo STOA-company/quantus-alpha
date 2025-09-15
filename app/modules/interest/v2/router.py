@@ -461,6 +461,7 @@ async def top_stories_elasticsearch(
     service: InterestService = Depends(get_interest_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
 ):
+    logger.info(f"Starting top_stories_elasticsearch for group_id {group_id}")
     tickers = await service.get_interest_tickers(group_id)
     if len(tickers) == 0:
         return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
@@ -478,6 +479,7 @@ async def get_interest_price_elasticsearch(
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
     service: InterestService = Depends(get_interest_service),
 ):
+    logger.info(f"Starting get_interest_price_elasticsearch for group_id {group_id}")
     tickers = await service.get_interest_tickers(group_id)
     ticker_price_data = await service.get_interest_price_elasticsearch(tickers=tickers, group_id=group_id, lang=lang)
     return BaseResponse(status_code=200, message="Successfully retrieved interest price data", data=ticker_price_data)
@@ -492,6 +494,7 @@ async def interest_news_elasticsearch(
     service: InterestService = Depends(get_interest_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
 ):
+    logger.info(f"Starting interest_news_elasticsearch for group_id {group_id}")
     tickers = await service.get_interest_tickers(group_id)
     if len(tickers) == 0:
         return BaseResponse(
@@ -543,6 +546,7 @@ async def interest_disclosure_elasticsearch(
     service: InterestService = Depends(get_interest_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
 ):
+    logger.info(f"Starting interest_disclosure_elasticsearch for group_id {group_id}")
     tickers = await service.get_interest_tickers(group_id)
     if len(tickers) == 0:
         return BaseResponse(

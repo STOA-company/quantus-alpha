@@ -27,13 +27,23 @@ from app.modules.news.v2.schemas import (
     TopStoriesItem,
     TopStoriesResponse,
 )
+from app.elasticsearch.elasticsearch import get_elasticsearch_client
+from app.elasticsearch.elasticsearch_service import create_news_query, create_disclosure_query
 from app.utils.ctry_utils import check_ticker_country_len_2
 from app.utils.date_utils import now_utc
+from app.core.logger.logger.base import setup_logger
 
+logger = setup_logger(__name__)
 
 class NewsService:
     def __init__(self):
         self.db = database
+        self.es_client = None
+
+    async def _init_elasticsearch(self):
+        """엘라스틱서치 클라이언트 초기화"""
+        if self.es_client is None:
+            self.es_client = await get_elasticsearch_client()
 
     @staticmethod
     def _count_emotion(df: pd.DataFrame) -> dict:
@@ -997,11 +1007,8 @@ class NewsService:
         stories_count: int = 30,
         user: Optional[AlphafinderUser] = None,
     ):
-        import logging
-        from app.elasticsearch.elasticsearch import get_elasticsearch_client
-        
-        logger = logging.getLogger(__name__)
-        
+        await self._init_elasticsearch()
+
         if lang is None:
             lang = TranslateCountry.KO
 
@@ -1017,17 +1024,16 @@ class NewsService:
         if not top_stories_tickers:
             return []
 
-        # Elasticsearch 클라이언트 가져오기
-        es_client = await get_elasticsearch_client()
-
         # 주식 가격 데이터 조회 (Elasticsearch) - 쿼리 빌더 사용
         from app.elasticsearch.elasticsearch_service import create_stock_price_query
         
         price_query_builder = create_stock_price_query(tickers).size(len(tickers) if tickers else 10)
-        price_response = await es_client.client.search(
+        logger.info(f"Starting price query for tickers: {tickers}")
+        price_response = await self.es_client.client.search(
             index="quantus-stock-trend-*",
             body=price_query_builder.build()
         )
+        logger.info(f"Price query completed, found {len(price_response['hits']['hits'])} results")
         
         ticker_to_price_data = {}
         for hit in price_response["hits"]["hits"]:
@@ -1040,8 +1046,6 @@ class NewsService:
 
 
         # 뉴스 데이터 조회 - 쿼리 빌더 사용
-        from app.elasticsearch.elasticsearch_service import create_news_query
-        
         lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
         news_name = "kr_name" if lang == TranslateCountry.KO else "en_name"
         
@@ -1054,15 +1058,16 @@ class NewsService:
             is_related=True
         ).size(1000)
 
+        logger.info(f"Starting news query for tickers: {top_stories_tickers}")
         logger.info(f"News query: {news_query_builder.build()}")
-        news_response = await es_client.client.search(
+        news_response = await self.es_client.client.search(
             index="quantus-news-analysis-*",
             body=news_query_builder.build()
         )
-        logger.info(f"News response hits: {len(news_response['hits']['hits'])}")
+        logger.info(f"News query completed, found {len(news_response['hits']['hits'])} results")
 
         # 공시 데이터 조회 - 쿼리 빌더 사용
-        from app.elasticsearch.elasticsearch_service import create_disclosure_query
+        
         
         lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
         disclosure_name = "ko_name" if lang == TranslateCountry.KO else "en_name"
@@ -1076,8 +1081,8 @@ class NewsService:
         ).size(1000)
 
         logger.info(f"Disclosure query: {disclosure_query_builder.build()}")
-        disclosure_response = await es_client.client.search(
-            index="quantus-disclosure-information-2025.09", 
+        disclosure_response = await self.es_client.client.search(
+            index="quantus-disclosure-information-*", 
             body=disclosure_query_builder.build()
         )
         logger.info(f"Disclosure response hits: {len(disclosure_response['hits']['hits'])}")
@@ -1240,13 +1245,7 @@ class NewsService:
 
     async def get_news_elasticsearch(
         self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
-    ) -> List[NewsRenewalItem]:
-        import logging
-        from app.elasticsearch.elasticsearch import get_elasticsearch_client
-        from app.elasticsearch.elasticsearch_service import create_news_query
-        
-        logger = logging.getLogger(__name__)
-        
+    ) -> List[NewsRenewalItem]:        
         if lang is None:
             lang = TranslateCountry.KO
 
@@ -1255,7 +1254,7 @@ class NewsService:
             raise DataNotFoundException(ticker=ticker, data_type="news")
 
         # Elasticsearch 클라이언트 가져오기
-        es_client = await get_elasticsearch_client()
+        await self._init_elasticsearch()
 
         # 언어 설정
         lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
@@ -1285,7 +1284,7 @@ class NewsService:
                 news_query_builder.term("ctry.keyword", ctry_value)
 
         logger.info(f"News query: {news_query_builder.build()}")
-        news_response = await es_client.client.search(
+        news_response = await self.es_client.client.search(
             index="quantus-news-analysis-*",
             body=news_query_builder.build()
         )
@@ -1331,11 +1330,8 @@ class NewsService:
     async def get_disclosure_elasticsearch(
         self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
     ) -> List[DisclosureRenewalItem]:
-        import logging
-        from app.elasticsearch.elasticsearch import get_elasticsearch_client
-        from app.elasticsearch.elasticsearch_service import create_disclosure_query
-        
-        logger = logging.getLogger(__name__)
+
+        await self._init_elasticsearch()
         
         if lang is None:
             lang = TranslateCountry.KO
@@ -1343,9 +1339,6 @@ class NewsService:
         if not tickers:
             ticker = ",".join(tickers) if tickers else None
             raise DataNotFoundException(ticker=ticker, data_type="disclosure")
-
-        # Elasticsearch 클라이언트 가져오기
-        es_client = await get_elasticsearch_client()
 
         # 언어 설정
         lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
@@ -1374,7 +1367,7 @@ class NewsService:
                 disclosure_query_builder.term("ctry.keyword", ctry_value)
 
         logger.info(f"Disclosure query: {disclosure_query_builder.build()}")
-        disclosure_response = await es_client.client.search(
+        disclosure_response = await self.es_client.client.search(
             index="quantus-disclosure-information-*",
             body=disclosure_query_builder.build()
         )
