@@ -310,116 +310,92 @@ class ChatService:
             return {"success": False, "error": f"복구 실패: {str(e)}"}
     
     async def polling_temp(self, conversation_id: int, job_id: str) -> dict:
-        """임시 폴링 메서드 - 기존 폴링 로직을 단순화"""
+        """통합 폴링 메서드 - llm_client의 poll_job_with_heartbeat 사용"""
         import time
         
         heartbeat_key = f"chat_heartbeat:{conversation_id}"
+        start_time = time.time()
+        message_count = 0
+        
+        def heartbeat_callback():
+            """하트비트 갱신 콜백"""
+            self.redis_client.setex(heartbeat_key, 30, "running")
         
         try:
-            logger.info(f"임시 폴링 시작: conversation_id={conversation_id}, job_id={job_id}")
+            logger.info(f"통합 폴링 시작: conversation_id={conversation_id}, job_id={job_id}")
             
-            # 임시 폴링 heartbeat 설정
+            # 초기 heartbeat 설정
             self.redis_client.setex(heartbeat_key, 30, "running")
             
-            polling_interval = 3.0
-            max_timeout = 300  # 5분 타임아웃
-            start_time = time.time()
-            previous_result = ""
-            message_count = 0
+            # llm_client의 통합 폴링 메서드 사용
+            async for poll_result in llm_client.poll_job_with_heartbeat(
+                job_id=job_id,
+                heartbeat_callback=heartbeat_callback,
+                max_timeout=300,  # 5분 타임아웃
+                polling_interval=3.0
+            ):
+                status = poll_result.get("status")
+                
+                logger.info(f"통합 폴링 상태: {status}")
+                
+                # 오류 처리
+                if status == "failed":
+                    error_msg = poll_result.get("error", poll_result.get("content", "알 수 없는 오류"))
+                    logger.error(f"통합 폴링 중 오류: {error_msg}")
+                    return {
+                        "success": False, 
+                        "error": error_msg,
+                        "message_count": message_count,
+                        "elapsed_time": time.time() - start_time
+                    }
+                
+                # 진행 상황 저장
+                elif status == "progress":
+                    title = poll_result.get("title", "")
+                    content = poll_result.get("content", "")
+                    
+                    if content:
+                        # DB에 progress 메시지 저장
+                        message_content = f"[{title}] {content}" if title else content
+                        message = self.add_message(
+                            conversation_id=conversation_id,
+                            content=message_content,
+                            role="system"
+                        )
+                        
+                        if message:
+                            message_count += 1
+                            logger.info(f"통합 폴링 메시지 저장: {message_content[:50]}...")
+                
+                # 완료 처리
+                elif status == "success":
+                    logger.info(f"통합 폴링 완료: conversation_id={conversation_id}, 저장된 메시지: {message_count}개")
+                    return {
+                        "success": True, 
+                        "status": "completed",
+                        "message_count": message_count,
+                        "elapsed_time": time.time() - start_time
+                    }
             
-            while (time.time() - start_time) < max_timeout:
-                # 폴링 간격 조정
-                elapsed_time = time.time() - start_time
-                if elapsed_time > 60:
-                    polling_interval = 4.0
-                if elapsed_time > 180:
-                    polling_interval = 5.0
-                
-                await asyncio.sleep(polling_interval)
-                
-                # heartbeat 갱신
-                self.redis_client.setex(heartbeat_key, 30, "running")
-                
-                # AI 서버 상태 확인
-                try:
-                    response = httpx.get(
-                        f"{llm_config.base_url}/{job_id}", 
-                        headers={"Access-Key": llm_config.api_key},
-                        timeout=10.0
-                    )
-                    
-                    if response.status_code != 200:
-                        logger.warning(f"임시 폴링 중 오류: {response.status_code}")
-                        continue
-                        
-                    status_data = response.json()
-                    status = status_data.get("status")
-                    
-                    logger.info(f"임시 폴링 상태: {status}")
-                    
-                    # 오류 체크
-                    if status == "ERROR" or status_data.get("error"):
-                        error_msg = status_data.get("error", "알 수 없는 오류")
-                        logger.error(f"임시 폴링 중 AI 오류: {error_msg}")
-                        return {"success": False, "error": f"AI 서버 오류: {error_msg}"}
-                    
-                    # 진행 상황 저장
-                    step_info = status_data.get("step_info", {})
-                    if step_info and isinstance(step_info, dict):
-                        step_title = step_info.get("title", "")
-                        step_message = step_info.get("message", "")
-                        
-                        if step_message and step_message != previous_result:
-                            previous_result = step_message
-                            
-                            # DB에 progress 메시지 저장
-                            content = f"[{step_title}] {step_message}" if step_title else step_message
-                            message = self.add_message(
-                                conversation_id=conversation_id,
-                                content=content,
-                                role="system"
-                            )
-                            
-                            if message:
-                                message_count += 1
-                                logger.info(f"임시 폴링 메시지 저장: {content[:50]}...")
-                    
-                    # 완료 체크
-                    if status in ["SUCCESS", "COMPLETED"]:
-                        logger.info(f"임시 폴링 완료: conversation_id={conversation_id}, 저장된 메시지: {message_count}개")
-                        return {
-                            "success": True, 
-                            "status": "completed",
-                            "message_count": message_count,
-                            "elapsed_time": time.time() - start_time
-                        }
-                        
-                except httpx.RequestError as e:
-                    logger.error(f"임시 폴링 네트워크 오류: {str(e)}")
-                    continue
-                except Exception as e:
-                    logger.error(f"임시 폴링 중 예외: {str(e)}")
-                    continue
-            
-            # 타임아웃
-            logger.warning(f"임시 폴링 타임아웃: conversation_id={conversation_id}")
+            # 폴링이 정상적으로 완료되지 않은 경우
+            logger.warning(f"통합 폴링 비정상 종료: conversation_id={conversation_id}")
             return {
                 "success": False, 
-                "error": "타임아웃",
+                "error": "폴링이 비정상적으로 종료되었습니다",
                 "message_count": message_count,
                 "elapsed_time": time.time() - start_time
             }
             
         except Exception as e:
-            logger.error(f"임시 폴링 중 오류: {str(e)}")
+            logger.error(f"통합 폴링 중 오류: {str(e)}")
             return {"success": False, "error": f"폴링 실패: {str(e)}"}
         finally:
             # heartbeat 정리
             try:
                 self.redis_client.delete(heartbeat_key)
-                logger.info(f"임시 폴링 heartbeat 정리: {heartbeat_key}")
+                logger.info(f"통합 폴링 heartbeat 정리: {heartbeat_key}")
             except Exception as e:
-                logger.error(f"임시 폴링 heartbeat 정리 실패: {str(e)}")
+                logger.error(f"통합 폴링 heartbeat 정리 실패: {str(e)}")
 
     def get_final_response(self, conversation_id: int) -> tuple[str, str]:
         latest_job_id = conversation_repository.get_latest_job_id(conversation_id)
