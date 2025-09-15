@@ -301,7 +301,7 @@ async def move_interest(
 ########################################################
 # 관심 종목 주요소식 모아보기 / 스토리
 @router.get(
-    "/stories/{group_id}/old",
+    "/stories/{group_id}",
     summary="관심 종목 주요소식 모아보기 / 스토리",
     response_model=BaseResponse[List[TopStoriesResponse]],
 )
@@ -326,7 +326,7 @@ async def top_stories(
 
 
 # 관심 종목 가격 조회
-@router.get("/{group_id}/price/old", summary="관심 종목 가격 조회", response_model=BaseResponse[List[InterestPriceResponse]])
+@router.get("/{group_id}/price", summary="관심 종목 가격 조회", response_model=BaseResponse[List[InterestPriceResponse]])
 async def get_interest_price(
     group_id: int,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
@@ -339,7 +339,7 @@ async def get_interest_price(
 
 # 관심 종목 뉴스
 ## v1과 response가 다름!!!
-@router.get("/news/{group_id}/old", summary="관심 종목 뉴스")
+@router.get("/news/{group_id}", summary="관심 종목 뉴스")
 async def interest_news(
     group_id: int,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
@@ -393,7 +393,7 @@ async def interest_news(
 
 # 관심 종목 공시
 ## v1과 response가 다름!!!
-@router.get("/disclosure/{group_id}/old", summary="관심 종목 공시")
+@router.get("/disclosure/{group_id}", summary="관심 종목 공시")
 async def interest_disclosure(
     group_id: int,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
@@ -449,7 +449,7 @@ async def interest_disclosure(
 ########################################################
 # elasticsearch test
 @router.get(
-    "/stories/{group_id}",
+    "/stories/{group_id}/elasticsearch",
     summary="관심 종목 주요소식 모아보기 / 스토리",
     response_model=BaseResponse[List[TopStoriesResponse]],
 )
@@ -473,7 +473,7 @@ async def top_stories_elasticsearch(
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
 # 관심 종목 가격 조회
-@router.get("/{group_id}/price", summary="관심 종목 가격 조회", response_model=BaseResponse[List[InterestPriceResponse]])
+@router.get("/{group_id}/price/elasticsearch", summary="관심 종목 가격 조회", response_model=BaseResponse[List[InterestPriceResponse]])
 async def get_interest_price_elasticsearch(
     group_id: int,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
@@ -486,7 +486,7 @@ async def get_interest_price_elasticsearch(
     logger.info(f"Completed get_interest_price_elasticsearch for group_id {group_id}, found {len(ticker_price_data)} results")
     return BaseResponse(status_code=200, message="Successfully retrieved interest price data", data=ticker_price_data)
 
-@router.get("/news/{group_id}", summary="관심 종목 뉴스")
+@router.get("/news/{group_id}/elasticsearch", summary="관심 종목 뉴스")
 async def interest_news_elasticsearch(
     group_id: int,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
@@ -538,7 +538,7 @@ async def interest_news_elasticsearch(
         size=size,
     )
 
-@router.get("/disclosure/{group_id}", summary="관심 종목 공시")
+@router.get("/disclosure/{group_id}/elasticsearch", summary="관심 종목 공시")
 async def interest_disclosure_elasticsearch(
     group_id: int,
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = "ko",
