@@ -481,7 +481,9 @@ async def get_interest_price_elasticsearch(
 ):
     logger.info(f"Starting get_interest_price_elasticsearch for group_id {group_id}")
     tickers = await service.get_interest_tickers(group_id)
+    logger.info(f"Retrieved tickers for group_id {group_id}: {tickers}")
     ticker_price_data = await service.get_interest_price_elasticsearch(tickers=tickers, group_id=group_id, lang=lang)
+    logger.info(f"Completed get_interest_price_elasticsearch for group_id {group_id}, found {len(ticker_price_data)} results")
     return BaseResponse(status_code=200, message="Successfully retrieved interest price data", data=ticker_price_data)
 
 @router.get("/news/{group_id}", summary="관심 종목 뉴스")
