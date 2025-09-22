@@ -890,7 +890,7 @@ class PriceService:
             return {
                 "week_52_high": getattr(stock_factors, 'week_52_high', 0.0) or 0.0,
                 "week_52_low": getattr(stock_factors, 'week_52_low', 0.0) or 0.0,
-                "last_close": getattr(stock_factors, 'prev_close', 0.0) or 0.0,
+                "last_close": getattr(stock_factors, 'last_close', 0.0) or 0.0,
                 "market_cap": getattr(stock_factors, 'market_cap', None),
             }
         else:

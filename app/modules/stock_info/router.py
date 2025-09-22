@@ -206,7 +206,7 @@ async def get_combined_new(
         async def fetch_price():
             try:
                 result = await price_service.get_real_time_price_data(ticker)
-                return result.data if hasattr(result, 'data') else None
+                return result if hasattr(result, 'data') else None
             except Exception as e:
                 logger.error(f"Error fetching price: {e}")
                 return None
