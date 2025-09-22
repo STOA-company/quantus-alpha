@@ -1075,7 +1075,7 @@ class NewsService:
         
         disclosure_query_builder = create_disclosure_query(
             tickers=top_stories_tickers,
-            start_date=before_1_year,
+            start_date=before_24_hours,
             end_date=allowed_time,
             lang=lang_str,
             is_exist=True
@@ -1086,7 +1086,7 @@ class NewsService:
             index="quantus-disclosure-information-*", 
             body=disclosure_query_builder.build()
         )
-        logger.info(f"Disclosure response hits: {len(disclosure_response['hits']['hits'])}")
+        # logger.info(f"Disclosure response hits: {len(disclosure_response['hits']['hits'])}")
 
         # 뉴스 데이터 처리
         news_data = []
@@ -1373,12 +1373,12 @@ class NewsService:
             if ctry_value:
                 disclosure_query_builder.term("ctry.keyword", ctry_value)
 
-        logger.info(f"Disclosure query: {disclosure_query_builder.build()}")
+        # logger.info(f"Disclosure query: {disclosure_query_builder.build()}")
         disclosure_response = await self.es_client.client.search(
             index="quantus-disclosure-information-*",
             body=disclosure_query_builder.build()
         )
-        logger.info(f"Disclosure response hits: {len(disclosure_response['hits']['hits'])}")
+        # logger.info(f"Disclosure response hits: {len(disclosure_response['hits']['hits'])}")
 
         # Elasticsearch 응답을 DataFrame으로 변환
         hits = disclosure_response['hits']['hits']

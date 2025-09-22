@@ -32,8 +32,8 @@ class BaseSQLAlchemy:
 
         async_database_url = database_url.replace("mysql://", "mysql+aiomysql://")
         pool_recycle = kwargs.setdefault("DB_POOL_RECYCLE", 3600)
-        pool_size = kwargs.setdefault("DB_POOL_SIZE", 20)
-        max_overflow = kwargs.setdefault("DB_MAX_OVERFLOW", 10)
+        pool_size = kwargs.setdefault("DB_POOL_SIZE", 50)  # 병렬 처리 증가에 맞춰 풀 크기 증가
+        max_overflow = kwargs.setdefault("DB_MAX_OVERFLOW", 20)  # 오버플로우도 증가
         echo = kwargs.setdefault("DB_ECHO", True)
 
         # 동기 엔진 설정
@@ -91,8 +91,8 @@ class BaseSQLAlchemy:
 
         async_database_url = database_url.replace("mysql://", "mysql+aiomysql://")
         pool_recycle = kwargs.setdefault("DB_POOL_RECYCLE", 3600)
-        pool_size = kwargs.setdefault("DB_POOL_SIZE", 20)
-        max_overflow = kwargs.setdefault("DB_MAX_OVERFLOW", 10)
+        pool_size = kwargs.setdefault("DB_POOL_SIZE", 50)  # 병렬 처리 증가에 맞춰 풀 크기 증가
+        max_overflow = kwargs.setdefault("DB_MAX_OVERFLOW", 20)  # 오버플로우도 증가
         echo = kwargs.setdefault("DB_ECHO", True)
 
         self._engine = create_engine(
