@@ -244,16 +244,46 @@ async def get_combined_new(
         logger.info(f"Starting parallel execution for {ticker}")
         parallel_start_time = time.time()
         
+        # 각 태스크의 시작 시간을 개별적으로 기록
+        task_start_times = {}
+        
+        async def timed_fetch_stock_or_etf_info():
+            task_start_times['stock_or_etf'] = time.time()
+            return await fetch_stock_or_etf_info()
+            
+        async def timed_fetch_indicators():
+            task_start_times['indicators'] = time.time()
+            return await fetch_indicators()
+            
+        async def timed_fetch_summary():
+            task_start_times['summary'] = time.time()
+            return await fetch_summary()
+            
+        async def timed_fetch_latest_news():
+            task_start_times['latest_news'] = time.time()
+            return await fetch_latest_news()
+            
+        async def timed_fetch_price():
+            task_start_times['price'] = time.time()
+            return await fetch_price()
+        
         (stock_or_etf_result, indicators, summary, latest, price) = await asyncio.gather(
-            fetch_stock_or_etf_info(),
-            fetch_indicators(),
-            fetch_summary(),
-            fetch_latest_news(),
-            fetch_price(),
+            timed_fetch_stock_or_etf_info(),
+            timed_fetch_indicators(),
+            timed_fetch_summary(),
+            timed_fetch_latest_news(),
+            timed_fetch_price(),
             return_exceptions=False  # 개별 함수에서 예외 처리하므로 False
         )
         
         parallel_elapsed_time = time.time() - parallel_start_time
+        
+        # 각 태스크의 실제 시작 시간 분석
+        logger.info(f"Task start times analysis:")
+        for task_name, start_time in task_start_times.items():
+            delay = start_time - parallel_start_time
+            logger.info(f"  {task_name}: started after {delay:.3f}s delay")
+        
         logger.info(f"All parallel tasks completed in {parallel_elapsed_time:.3f}s")
         
         # 결과 할당
