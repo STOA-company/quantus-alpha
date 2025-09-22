@@ -1081,7 +1081,7 @@ class NewsService:
             is_exist=True
         ).size(1000)
 
-        logger.info(f"Disclosure query: {disclosure_query_builder.build()}")
+        # logger.info(f"Disclosure query: {disclosure_query_builder.build()}")
         disclosure_response = await self.es_client.client.search(
             index="quantus-disclosure-information-*", 
             body=disclosure_query_builder.build()
@@ -1284,7 +1284,7 @@ class NewsService:
             if ctry_value:
                 news_query_builder.term("ctry.keyword", ctry_value)
 
-        logger.info(f"News query: {news_query_builder.build()}")
+        # logger.info(f"News query: {news_query_builder.build()}")
         news_response = await self.es_client.client.search(
             index="quantus-news-analysis-*",
             body=news_query_builder.build()
