@@ -1245,7 +1245,7 @@ class NewsService:
     
 
     async def get_news_elasticsearch(
-        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None, size: int = 100
     ) -> List[NewsRenewalItem]:        
         if lang is None:
             lang = TranslateCountry.KO
@@ -1276,7 +1276,7 @@ class NewsService:
             lang=lang_str,
             is_exist=True,
             is_related=True
-        ).size(100)
+        ).size(size)
 
         # 국가 필터 추가
         if ctry:
@@ -1329,7 +1329,7 @@ class NewsService:
         return news_data
 
     async def get_disclosure_elasticsearch(
-        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None, size: int = 100
     ) -> List[DisclosureRenewalItem]:
 
         await self._init_elasticsearch()
@@ -1360,7 +1360,7 @@ class NewsService:
             end_date=allowed_time,
             lang=lang_str,
             is_exist=True
-        ).size(100)
+        ).size(size)
 
         # 국가 필터 추가
         if ctry:
@@ -1511,13 +1511,13 @@ class NewsService:
         
     async def get_latest_news_v2(self, ticker: str, lang: TranslateCountry) -> LatestNewsResponse:
         try:
-            disclosure_info = await self.get_disclosure_elasticsearch(tickers=[ticker], lang=lang)
+            disclosure_info = await self.get_disclosure_elasticsearch(tickers=[ticker], lang=lang, size=1)
             if disclosure_info:
                 latest_disclosure_info = disclosure_info[0]
             else:
                 latest_disclosure_info = None
 
-            news_info = await self.get_news_elasticsearch(tickers=[ticker], lang=lang)
+            news_info = await self.get_news_elasticsearch(tickers=[ticker], lang=lang, size=1)
             if news_info:
                 latest_news_info = news_info[0]
             else:
@@ -1540,14 +1540,15 @@ class NewsService:
                 # 둘 다 존재하는 경우 날짜 비교
                 if latest_news_info.date > latest_disclosure_info.date:
                     final_latest_info = latest_news_info
+                    content = latest_news_info.impact_reason
                     type = "news"
                 else:
                     final_latest_info = latest_disclosure_info
+                    content = latest_disclosure_info.impact_reason
                     type = "disclosure"
             
             date = final_latest_info.date
             date = date.replace(tzinfo=UTC).astimezone(KST).strftime("%Y-%m-%d %H:%M:%S")
-            content = final_latest_info.key_points
 
             return LatestNewsResponse(
                 date=date,

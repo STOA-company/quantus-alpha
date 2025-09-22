@@ -247,12 +247,15 @@ class StockInfoService:
     async def get_related_sectors(self, ticker: str) -> List[StockInformation]:
         # 섹터 조회
         query = select(StockInformation.sector_2).where(StockInformation.ticker == ticker)
-        result = self.db._execute(query)
+        result = await self.db._execute_async(query)
         sector = result.scalars().first()
+
+        if not sector:
+            return []
 
         # 관련 섹터의 ticker 조회
         query = select(StockInformation).where(StockInformation.sector_2 == sector)
-        result = self.db._execute(query)
+        result = await self.db._execute_async(query)
         related_sectors = result.scalars().all()
 
         return related_sectors
@@ -410,19 +413,29 @@ class StockInfoService:
         
         # 캐시 키 생성
         cache_key = f"{sector_ticker}_{ctry}_{table_name}"
+        logger.info(f"[CACHE] Looking for cache key: {cache_key}")
+        logger.info(f"[CACHE] Current cache keys: {list(self._sector_metrics_cache.keys())}")
         
         # 캐시에서 확인
         if cache_key in self._sector_metrics_cache:
-            logger.info(f"Using cached sector metrics for {cache_key}")
+            logger.info(f"[CACHE] Using cached sector metrics for {cache_key}")
             return self._sector_metrics_cache[cache_key]
         
         try:
             sector_tickers = await self.get_related_sectors(sector_ticker)
-
-            if ctry == "us":
-                sector_tickers = [f"{t.ticker}-US" for t in sector_tickers]
+            
+            # sector_tickers가 이미 문자열 리스트인 경우
+            if sector_tickers and isinstance(sector_tickers[0], str):
+                # 이미 문자열 리스트이므로 그대로 사용
+                if ctry == "us":
+                    sector_tickers = [f"{t}-US" for t in sector_tickers]
+                # else: 이미 올바른 형태
             else:
-                sector_tickers = [t.ticker for t in sector_tickers]
+                # StockInformation 객체 리스트인 경우
+                if ctry == "us":
+                    sector_tickers = [f"{t.ticker}-US" for t in sector_tickers if hasattr(t, 'ticker') and t.ticker]
+                else:
+                    sector_tickers = [t.ticker for t in sector_tickers if hasattr(t, 'ticker') and t.ticker]
 
             if not sector_tickers:
                 result = {metric: 0 for metric in columns}

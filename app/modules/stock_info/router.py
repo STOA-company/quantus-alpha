@@ -1,5 +1,6 @@
 import asyncio
 import random
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -227,8 +228,6 @@ async def get_combined_new(
             stock_info = stock_or_etf_result
         else:
             etf_info = stock_or_etf_result
-            
-        logger.info(f"Parallel execution completed for {ticker}")
 
         if type == "stock":
             data = {
