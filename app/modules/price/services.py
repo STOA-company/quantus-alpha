@@ -502,7 +502,7 @@ class PriceService:
             }
 
             change_rate_column = "change_rt"
-            query_result = self.database._select(
+            query_result = await self.database._select_async(
                 table="stock_trend",
                 join_info=JoinInfo(
                     primary_table="stock_trend",
