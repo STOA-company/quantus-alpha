@@ -1411,5 +1411,102 @@ class NewsService:
 
         return disclosure_data
 
+    async def news_detail_elasticsearch(
+        self,
+        ticker: str,
+        date: str = None,
+        end_date: str = None,
+        page: int = 1,
+        size: int = 6,
+        lang: TranslateCountry | None = None,
+    ):
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        if lang == TranslateCountry.KO:
+            lang = "ko-KR"
+        else:
+            lang = "en-US"
+
+        kst = pytz.timezone("Asia/Seoul")
+        utc = pytz.timezone("UTC")
+
+        # 시작 날짜 설정
+        if not date:
+            kst_date = datetime.now(kst).replace(tzinfo=None)
+        else:
+            kst_date = datetime.strptime(date, "%Y%m%d")
+
+        # 종료 날짜 설정
+        if end_date:
+            kst_end_date = datetime.strptime(end_date, "%Y%m%d")
+        else:
+            kst_end_date = kst_date
+
+        # 시작 / 종료 시간 localize
+        kst_start_datetime = kst.localize(datetime.combine(kst_date, datetime.min.time()))
+        kst_end_datetime = kst.localize(datetime.combine(kst_end_date, time(23, 59, 59)))
+
+        # 시작 / 종료 시간 UTC로 변환
+        utc_start_datetime = kst_start_datetime.astimezone(utc)
+        utc_end_datetime = kst_end_datetime.astimezone(utc)
+
+        # 현재 시간 + 5분까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+
+        if end_date:
+            end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
+
+        ctry = check_ticker_country_len_2(ticker)
+
+        await self._init_elasticsearch()
+
+        news_query_builder = create_news_query(
+            tickers=[ticker],
+            start_date=utc_start_datetime,
+            end_date=utc_end_datetime,
+            lang=lang,
+            is_exist=True,
+            is_related=True
+        ).size(size).from_(page)
+
+        news_query_builder.aggregation("emotion_counts", "terms", field="emotion.keyword")
+
+        news_response = await self.es_client.client.search(
+            index="quantus-news-analysis-*",
+            body=news_query_builder.build()
+        )
+        logger.info(f"News response hits: {len(news_response['hits']['hits'])}")
+
+        hits = news_response["hits"]["hits"]
+        total_count = news_response["hits"]["total"]["value"]
+        total_page = math.ceil(total_count / size)
+
+
+        emotion_count = {}
+        if "aggregations" in news_response:
+            for bucket in news_response["aggregations"]["emotion_counts"]["buckets"]:
+                emotion_count[bucket["key"]] = bucket["doc_count"]
+        
+        # 데이터 변환 (pandas 없이)
+        data = []
+        for hit in hits:
+            source = hit["_source"]
+            data.append(NewsDetailItemV2(
+                id=source["id"],
+                ctry=source["ctry"].lower(),
+                name=source["kr_name"],
+                ticker=source["ticker"],
+                date=datetime.fromisoformat(source["date"].replace("Z", "+00:00")),
+                title=source["title"],
+                summary=source["summary"],
+                impact_reason=source["impact_reason"],
+                key_points=source["key_points"],
+                emotion=source["emotion"].lower(),
+            ))
+        return data, total_count, total_page, (page - 1) * size, emotion_count, ctry
+
+
 def get_news_service() -> NewsService:
     return NewsService()
