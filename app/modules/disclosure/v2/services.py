@@ -3,8 +3,11 @@ from datetime import datetime, timedelta
 from typing import Dict
 
 import pandas as pd
+import pytz
+import math
+from datetime import time
 
-from app.common.constants import KST
+from app.common.constants import KST, UTC
 from app.core.exception.custom import DataNotFoundException
 from app.core.logger import setup_logger
 from app.database.crud import JoinInfo, database
@@ -12,6 +15,8 @@ from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.utils import check_ticker_country_len_2, check_ticker_country_len_3
 from app.utils.date_utils import now_kr
+from app.elasticsearch.elasticsearch import get_elasticsearch_client
+from app.elasticsearch.elasticsearch_service import create_disclosure_query
 
 from .mapping import CATEGORY_TYPE_MAPPING_EN, DOCUMENT_TYPE_MAPPING, DOCUMENT_TYPE_MAPPING_EN, FORM_TYPE_MAPPING
 
@@ -21,6 +26,12 @@ logger = setup_logger(__name__)
 class DisclosureService:
     def __init__(self):
         self.db = database
+        self.es_client = None
+
+    async def _init_elasticsearch(self):
+        """엘라스틱서치 클라이언트 초기화"""
+        if self.es_client is None:
+            self.es_client = await get_elasticsearch_client()
 
     async def get_disclosure(
         self, ticker: str, year: str = None, language: TranslateCountry = "ko", page: int = 1, size: int = 6
@@ -460,6 +471,116 @@ class DisclosureService:
 
         return data, total_count, total_pages, offset, emotion_counts
 
+    async def get_disclosure_detail_elasticsearch(
+        self, ticker: str, date: str, page: int, size: int, lang: TranslateCountry
+    ):
+        if not date:
+            year = datetime.now().strftime("%Y")
+        elif len(date) == 8:
+            year = date[:4]  # YYYYMMDD에서 YYYY 추출
+        else:
+            year = date
+
+        ctry = check_ticker_country_len_2(ticker)
+
+        if lang == TranslateCountry.KO:
+            name = "ko_name"
+            lang_str = "ko-KR"
+            document_type_mapping = DOCUMENT_TYPE_MAPPING
+
+            def category_type_mapping(x):
+                return x
+        elif lang == TranslateCountry.EN:
+            name = "en_name"
+            document_type_mapping = FORM_TYPE_MAPPING if ctry == "kr" else DOCUMENT_TYPE_MAPPING_EN
+            lang_str = "en-US"
+
+            def category_type_mapping(x):
+                return CATEGORY_TYPE_MAPPING_EN.get(x, x)
+        else:
+            raise ValueError("Invalid language")
+
+        # 1년 범위 설정 (해당 연도 전체)
+        kst = pytz.timezone("Asia/Seoul")
+        utc = pytz.timezone("UTC")
+        
+        # 해당 연도의 시작일과 종료일
+        year_start = datetime.strptime(f"{year}0101", "%Y%m%d")  # 2024-01-01
+        year_end = datetime.strptime(f"{year}1231", "%Y%m%d")    # 2024-12-31
+        
+        kst_start_datetime = kst.localize(datetime.combine(year_start, datetime.min.time()))
+        kst_end_datetime = kst.localize(datetime.combine(year_end, time(23, 59, 59)))
+        
+        utc_start_datetime = kst_start_datetime.astimezone(utc)
+        utc_end_datetime = kst_end_datetime.astimezone(utc)
+        
+        # 현재 시간 + 5분까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+
+        await self._init_elasticsearch()
+
+        disclosure_query_builder = create_disclosure_query(
+            tickers=[ticker],
+            start_date=utc_start_datetime,
+            end_date=min(utc_end_datetime, allowed_time),  # 현재 시간이 더 이르면 현재 시간까지만
+            lang=lang_str,
+            is_exist=True
+        ).size(size).from_((page - 1) * size)
+
+        disclosure_query_builder.aggregation("emotion_counts", "terms", field="emotion.keyword")
+
+        disclosure_response = await self.es_client.client.search(
+            index="quantus-disclosure-information-*",
+            body=disclosure_query_builder.build()
+        )
+
+        hits = disclosure_response["hits"]["hits"]
+        if not hits:
+            raise DataNotFoundException(ticker=ticker, data_type="disclosure")
+
+        total_count = disclosure_response["hits"]["total"]["value"]
+        total_pages = math.ceil(total_count / size)
+
+        emotion_count = {}
+        if "aggregations" in disclosure_response:
+            for bucket in disclosure_response["aggregations"]["emotion_counts"]["buckets"]:
+                emotion_count[bucket["key"]] = bucket["doc_count"]
+
+        emotion_counts = {
+            "positive_count": emotion_count.get("positive", 0),
+            "negative_count": emotion_count.get("negative", 0),
+            "neutral_count": emotion_count.get("neutral", 0),
+        }
+
+        # 데이터 변환 (pandas 없이)
+        data = []
+        for hit in hits:
+            source = hit["_source"]
+            
+            # form_type 매핑
+            form_type = document_type_mapping.get(source["form_type"], source["form_type"])
+            res_name = source.get(name, "") or ""
+            category_type = (
+                "[" + category_type_mapping(source["category_type"]) + "]" 
+                if source.get("category_type", "") else ""
+            )
+            
+            data.append({
+                "id": source["id"],
+                "name": res_name,
+                "ticker": source["ticker"],
+                "ctry": source["ctry"],
+                "title": f"{res_name} {form_type} {category_type}".strip(),
+                "date": datetime.fromisoformat(source["date"].replace("Z", "+00:00")),
+                "emotion": source["emotion"].lower(),
+                "impact_reason": source["impact_reason"],
+                "key_points": source["key_points"],
+                "summary": source["summary"],
+                "document_url": source["url"],
+            })
+
+        return data, total_count, total_pages, (page - 1) * size, emotion_counts
 
 def get_disclosure_service() -> DisclosureService:
     return DisclosureService()
