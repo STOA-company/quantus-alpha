@@ -42,7 +42,7 @@ async def get_indicators(
     return BaseResponse(status_code=200, message="지표 정보를 성공적으로 조회했습니다.", data=data)
 
 
-@router.get("/combined", summary="종목 정보, 지표, 기업 정보 전체 조회")
+@router.get("/combined_old", summary="종목 정보, 지표, 기업 정보 전체 조회")
 async def get_combined(
     ticker: str,
     lang: TranslateCountry = TranslateCountry.KO,
@@ -135,7 +135,7 @@ async def get_combined(
     )
 
 ########################################################################################################################################
-@router.get("/combined_new", summary="종목 정보, 지표, 기업 정보 전체 조회")
+@router.get("/combined", summary="종목 정보, 지표, 기업 정보 전체 조회")
 async def get_combined_new(
     ticker: str,
     lang: TranslateCountry = TranslateCountry.KO,
