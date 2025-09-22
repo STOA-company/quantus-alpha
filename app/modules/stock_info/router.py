@@ -216,9 +216,9 @@ async def get_combined_new(
         async def fetch_latest_news():
             start_time = time.time()
             try:
-                if type == "stock":
-                    result = await news_service.get_latest_news_v2(ticker=ticker, lang=lang)
-                # result = LatestNewsResponse(date="2000-01-01 00:00:00", content="", type="")
+                # if type == "stock":
+                #     result = await news_service.get_latest_news_v2(ticker=ticker, lang=lang)
+                result = LatestNewsResponse(date="2000-01-01 00:00:00", content="", type="")
                 elapsed_time = time.time() - start_time
                 logger.info(f"fetch_latest_news completed in {elapsed_time:.3f}s")
                 return result
