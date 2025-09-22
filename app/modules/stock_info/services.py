@@ -413,8 +413,8 @@ class StockInfoService:
         
         # 캐시 키 생성
         cache_key = f"{sector_ticker}_{ctry}_{table_name}"
-        logger.info(f"[CACHE] Looking for cache key: {cache_key}")
-        logger.info(f"[CACHE] Current cache keys: {list(self._sector_metrics_cache.keys())}")
+        # logger.info(f"[CACHE] Looking for cache key: {cache_key}")
+        # logger.info(f"[CACHE] Current cache keys: {list(self._sector_metrics_cache.keys())}")
         
         # 캐시에서 확인
         if cache_key in self._sector_metrics_cache:
