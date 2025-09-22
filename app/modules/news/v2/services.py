@@ -1075,7 +1075,7 @@ class NewsService:
         
         disclosure_query_builder = create_disclosure_query(
             tickers=top_stories_tickers,
-            start_date=before_1_year,
+            start_date=before_24_hours,
             end_date=allowed_time,
             lang=lang_str,
             is_exist=True
