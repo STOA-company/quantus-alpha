@@ -165,54 +165,84 @@ async def get_combined_new(
 
         # 병렬 처리: 모든 독립적인 데이터 조회를 동시에 실행
         async def fetch_stock_or_etf_info():
+            start_time = time.time()
             try:
                 if type == "stock":
-                    return await stock_service.get_stock_info_v2(ctry, ticker, lang, stock_info_db)
+                    result = await stock_service.get_stock_info_v2(ctry, ticker, lang, stock_info_db)
                 elif type == "etf":
                     if ctry == "us":
-                        return await stock_service.get_us_etf_info(ticker)
+                        result = await stock_service.get_us_etf_info(ticker)
                     else:
-                        return await stock_service.get_etf_info(ticker)
-                return None
+                        result = await stock_service.get_etf_info(ticker)
+                else:
+                    result = None
+                
+                elapsed_time = time.time() - start_time
+                logger.info(f"fetch_stock_or_etf_info completed in {elapsed_time:.3f}s")
+                return result
             except Exception as e:
-                logger.error(f"Error fetching {type}_info: {e}")
+                elapsed_time = time.time() - start_time
+                logger.error(f"Error fetching {type}_info after {elapsed_time:.3f}s: {e}")
                 return None
 
         async def fetch_indicators():
+            start_time = time.time()
             try:
                 if type == "stock":
-                    return await stock_service.get_indicators_v2(ctry, ticker, stock_factors)
-                return None
+                    result = await stock_service.get_indicators_v2(ctry, ticker, stock_factors)
+                else:
+                    result = None
+                
+                elapsed_time = time.time() - start_time
+                logger.info(f"fetch_indicators completed in {elapsed_time:.3f}s")
+                return result
             except Exception as e:
-                logger.error(f"Error fetching indicators: {e}")
+                elapsed_time = time.time() - start_time
+                logger.error(f"Error fetching indicators after {elapsed_time:.3f}s: {e}")
                 return None
 
         async def fetch_summary():
+            start_time = time.time()
             try:
-                return await summary_service.get_price_data_summary_v2(ctry, type, ticker, lang, stock_factors, stock_info_db)
+                result = await summary_service.get_price_data_summary_v2(ctry, type, ticker, lang, stock_factors, stock_info_db)
+                elapsed_time = time.time() - start_time
+                logger.info(f"fetch_summary completed in {elapsed_time:.3f}s")
+                return result
             except Exception as e:
-                logger.error(f"Error fetching summary: {e}")
+                elapsed_time = time.time() - start_time
+                logger.error(f"Error fetching summary after {elapsed_time:.3f}s: {e}")
                 return None
 
         async def fetch_latest_news():
+            start_time = time.time()
             try:
                 if type == "stock":
-                    return await news_service.get_latest_news_v2(ticker=ticker, lang=lang)
-                return LatestNewsResponse(date="2000-01-01 00:00:00", content="", type="")
+                    result = await news_service.get_latest_news_v2(ticker=ticker, lang=lang)
+                # result = LatestNewsResponse(date="2000-01-01 00:00:00", content="", type="")
+                elapsed_time = time.time() - start_time
+                logger.info(f"fetch_latest_news completed in {elapsed_time:.3f}s")
+                return result
             except Exception as e:
-                logger.error(f"Error fetching latest news: {e}")
+                elapsed_time = time.time() - start_time
+                logger.error(f"Error fetching latest news after {elapsed_time:.3f}s: {e}")
                 return LatestNewsResponse(date="2000-01-01 00:00:00", content="", type="")
 
         async def fetch_price():
+            start_time = time.time()
             try:
                 result = await price_service.get_real_time_price_data(ticker)
-                return result if hasattr(result, 'data') else None
+                final_result = result if hasattr(result, 'data') else None
+                elapsed_time = time.time() - start_time
+                logger.info(f"fetch_price completed in {elapsed_time:.3f}s")
+                return final_result
             except Exception as e:
-                logger.error(f"Error fetching price: {e}")
+                elapsed_time = time.time() - start_time
+                logger.error(f"Error fetching price after {elapsed_time:.3f}s: {e}")
                 return None
 
         # 모든 태스크를 병렬로 실행
         logger.info(f"Starting parallel execution for {ticker}")
+        parallel_start_time = time.time()
         
         (stock_or_etf_result, indicators, summary, latest, price) = await asyncio.gather(
             fetch_stock_or_etf_info(),
@@ -222,6 +252,9 @@ async def get_combined_new(
             fetch_price(),
             return_exceptions=False  # 개별 함수에서 예외 처리하므로 False
         )
+        
+        parallel_elapsed_time = time.time() - parallel_start_time
+        logger.info(f"All parallel tasks completed in {parallel_elapsed_time:.3f}s")
         
         # 결과 할당
         if type == "stock":

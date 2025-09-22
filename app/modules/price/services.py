@@ -533,7 +533,7 @@ class PriceService:
             price_change = record.current_price - record.prev_close
             price_change_rate = record.change_rt if change_rate_column == "change_rt" else record.change_1d
 
-            logger.info(f"[LOG] price_change: {price_change}, price_change_rate: {price_change_rate}")
+            # logger.info(f"[LOG] price_change: {price_change}, price_change_rate: {price_change_rate}")
 
             result = RealTimePriceDataItem(
                 ctry=ctry,
@@ -822,7 +822,7 @@ class PriceService:
             return PriceSummaryItem(**cached_data)
 
         if type == "stock":
-            logger.info(f"[get_price_data_summary_v2] Stock factors: {stock_factors}")
+            # logger.info(f"[get_price_data_summary_v2] Stock factors: {stock_factors}")
             # 최적화된 데이터 조회 (pandas 사용 제거, DB 접근 최소화)
             data = await self._fetch_52week_data_v2(ctry, ticker, stock_factors)
             week_52_high = data["week_52_high"]

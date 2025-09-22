@@ -48,7 +48,7 @@ class StockInfoService:
                         str(row['Code']): row.to_dict() 
                         for _, row in df.iterrows()
                     }
-                    logger.info(f"Loaded summary data for {ctry}: {len(self._summary_cache[ctry])} records")
+                    # logger.info(f"Loaded summary data for {ctry}: {len(self._summary_cache[ctry])} records")
                 else:
                     logger.warning(f"Summary file not found: {intro_file_path}")
                     self._summary_cache[ctry] = {}
