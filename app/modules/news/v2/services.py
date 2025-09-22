@@ -1329,7 +1329,7 @@ class NewsService:
         return news_data
 
     async def get_disclosure_elasticsearch(
-        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None, size: int = 100
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None, size: int = 100, type: str = None
     ) -> List[DisclosureRenewalItem]:
 
         await self._init_elasticsearch()
@@ -1353,10 +1353,15 @@ class NewsService:
         before_24_hours = current_time - timedelta(hours=24)
         before_1_year = current_time - timedelta(days=365)
 
+        if type == "latest":
+            start_date = before_24_hours
+        else:
+            start_date = before_1_year
+
         # 공시 쿼리 빌더 생성
         disclosure_query_builder = create_disclosure_query(
             tickers=tickers,
-            start_date=before_1_year,
+            start_date=start_date,
             end_date=allowed_time,
             lang=lang_str,
             is_exist=True
@@ -1511,15 +1516,15 @@ class NewsService:
         
     async def get_latest_news_v2(self, ticker: str, lang: TranslateCountry) -> LatestNewsResponse:
         try:
-            disclosure_info = await self.get_disclosure_elasticsearch(tickers=[ticker], lang=lang, size=1)
+            disclosure_info = await self.get_disclosure_elasticsearch(tickers=[ticker], lang=lang, size=1, type="latest")
             if disclosure_info:
-                latest_disclosure_info = disclosure_info[0]
+                latest_disclosure_info = disclosure_info
             else:
                 latest_disclosure_info = None
 
             news_info = await self.get_news_elasticsearch(tickers=[ticker], lang=lang, size=1)
             if news_info:
-                latest_news_info = news_info[0]
+                latest_news_info = news_info
             else:
                 latest_news_info = None
 

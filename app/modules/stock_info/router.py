@@ -196,8 +196,8 @@ async def get_combined_new(
 
         async def fetch_latest_news():
             try:
-                # if type == "stock":
-                #     return await news_service.get_latest_news_v2(ticker=ticker, lang=lang)
+                if type == "stock":
+                    return await news_service.get_latest_news_v2(ticker=ticker, lang=lang)
                 return LatestNewsResponse(date="2000-01-01 00:00:00", content="", type="")
             except Exception as e:
                 logger.error(f"Error fetching latest news: {e}")
