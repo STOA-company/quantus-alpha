@@ -1,4 +1,6 @@
+import asyncio
 import random
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,7 @@ from app.modules.common.enum import FearAndGreedIndex, TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.common.utils import check_ticker_country_len_2
 from app.modules.news.old_services import NewsService, get_news_service
+from app.modules.news.v2.services import NewsService as NewsServiceV2, get_news_service as get_news_service_v2
 from app.modules.news.schemas import LatestNewsResponse
 from app.modules.price.services import PriceService, get_price_service
 from app.modules.stock_info.schemas import FearGreedIndexItem, FearGreedIndexResponse, Indicators
@@ -42,14 +45,14 @@ async def get_indicators(
     return BaseResponse(status_code=200, message="지표 정보를 성공적으로 조회했습니다.", data=data)
 
 
-@router.get("/combined", summary="종목 정보, 지표, 기업 정보 전체 조회")
+@router.get("/combined_old", summary="종목 정보, 지표, 기업 정보 전체 조회")
 async def get_combined(
     ticker: str,
     lang: TranslateCountry = TranslateCountry.KO,
     stock_service: StockInfoService = Depends(get_stock_info_service),
     summary_service: PriceService = Depends(get_price_service),
     news_service: NewsService = Depends(get_news_service),
-    price_service: PriceService = Depends(get_price_service),
+    price_service: PriceService = Depends(get_price_service),    
 ):
     type = await stock_service.get_type(ticker)
     ctry = await stock_service.get_ctry_by_ticker(ticker)
@@ -135,13 +138,13 @@ async def get_combined(
     )
 
 ########################################################################################################################################
-@router.get("/combined_new", summary="종목 정보, 지표, 기업 정보 전체 조회")
+@router.get("/combined", summary="종목 정보, 지표, 기업 정보 전체 조회")
 async def get_combined_new(
     ticker: str,
     lang: TranslateCountry = TranslateCountry.KO,
     stock_service: StockInfoService = Depends(get_stock_info_service),
     summary_service: PriceService = Depends(get_price_service),
-    news_service: NewsService = Depends(get_news_service),
+    news_service: NewsServiceV2 = Depends(get_news_service_v2),
     price_service: PriceService = Depends(get_price_service),
 ):
     # 변수 초기화
@@ -154,47 +157,77 @@ async def get_combined_new(
     data = {}
 
     try: 
-        stock_info_db = await stock_service.get_stock_info_db(ticker)
+        # DB 접근 최소화: 종목 정보와 지표를 한 번에 조회
+        stock_info_db, stock_factors = await stock_service.get_stock_info_with_factors_db(ticker)
         type, ctry = stock_info_db.type, stock_info_db.ctry
-        stock_factors = await stock_service.get_stock_factors_db(ctry, ticker)
         
         logger.info(f"Processing combined data for {ticker} ({ctry})")
 
-        try:
-            if type == "stock":
-                stock_info = await stock_service.get_stock_info_v2(ctry, ticker, lang, stock_info_db)
-                logger.info("Successfully fetched stock_info")
+        # 병렬 처리: 모든 독립적인 데이터 조회를 동시에 실행
+        async def fetch_stock_or_etf_info():
+            try:
+                if type == "stock":
+                    return await stock_service.get_stock_info_v2(ctry, ticker, lang, stock_info_db)
+                elif type == "etf":
+                    if ctry == "us":
+                        return await stock_service.get_us_etf_info(ticker)
+                    else:
+                        return await stock_service.get_etf_info(ticker)
+                return None
+            except Exception as e:
+                logger.error(f"Error fetching {type}_info: {e}")
+                return None
 
-            if type == "etf":
-                if ctry == "us":
-                    etf_info = await stock_service.get_us_etf_info(ticker)
-                else:
-                    etf_info = await stock_service.get_etf_info(ticker)
-                logger.info("Successfully fetched etf_info")
+        async def fetch_indicators():
+            try:
+                if type == "stock":
+                    return await stock_service.get_indicators_v2(ctry, ticker, stock_factors)
+                return None
+            except Exception as e:
+                logger.error(f"Error fetching indicators: {e}")
+                return None
 
-            if type == "stock":
-                indicators = await stock_service.get_indicators_v2(ctry, ticker, stock_factors)
-                logger.info("Successfully fetched indicators")
+        async def fetch_summary():
+            try:
+                return await summary_service.get_price_data_summary_v2(ctry, type, ticker, lang, stock_factors, stock_info_db)
+            except Exception as e:
+                logger.error(f"Error fetching summary: {e}")
+                return None
 
-            summary = await summary_service.get_price_data_summary_v2(ctry, type, ticker, lang, stock_factors, stock_info_db)
-            logger.info("Successfully fetched summary")
-        except Exception as e:
-            logger.error(f"Error fetching stock data: {e}")
+        async def fetch_latest_news():
+            try:
+                if type == "stock":
+                    return await news_service.get_latest_news_v2(ticker=ticker, lang=lang)
+                return LatestNewsResponse(date="2000-01-01 00:00:00", content="", type="")
+            except Exception as e:
+                logger.error(f"Error fetching latest news: {e}")
+                return LatestNewsResponse(date="2000-01-01 00:00:00", content="", type="")
 
-        try:
-            if type == "stock":
-                latest = await news_service.get_latest_news_v2(ticker=ticker, lang=lang)
-            elif type == "etf":
-                latest = await news_service.get_etf_latest_news(ticker=ticker, lang=lang)
-            logger.info("Successfully fetched latest news")
-        except Exception as e:
-            logger.error(f"Error fetching latest news: {e}")
+        async def fetch_price():
+            try:
+                result = await price_service.get_real_time_price_data(ticker)
+                return result if hasattr(result, 'data') else None
+            except Exception as e:
+                logger.error(f"Error fetching price: {e}")
+                return None
 
-        try:
-            price = await price_service.get_real_time_price_data(ticker)
-            logger.info("Successfully fetched price")
-        except Exception as e:
-            logger.error(f"Error fetching price: {e}")
+        # 모든 태스크를 병렬로 실행
+        logger.info(f"Starting parallel execution for {ticker}")
+        
+        (stock_or_etf_result, indicators, summary, latest, price) = await asyncio.gather(
+            fetch_stock_or_etf_info(),
+            fetch_indicators(),
+            fetch_summary(),
+            fetch_latest_news(),
+            fetch_price(),
+            return_exceptions=False  # 개별 함수에서 예외 처리하므로 False
+        )
+        
+        # 결과 할당
+        if type == "stock":
+            stock_info = stock_or_etf_result
+        else:
+            etf_info = stock_or_etf_result
 
         if type == "stock":
             data = {
@@ -223,6 +256,8 @@ async def get_combined_new(
     return BaseResponse(
         type=type, status_code=200, message="종목 정보, 지표, 기업 정보를 성공적으로 조회했습니다.", data=data
     )
+
+
 ########################################################################################################################################
 
 @router.get("/holdings", summary="ETF 종목 조회")

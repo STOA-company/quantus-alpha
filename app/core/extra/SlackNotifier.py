@@ -9,11 +9,11 @@ from app.core.config import settings
 
 
 class SlackNotifier:
-    SLACK_USER_IDS = {"고경민": "U08011KHGJK", "김광윤": "U089KGFM9CG"}
+    SLACK_USER_IDS = {"이건학": "U098B4XTJH5"}
 
     def __init__(self, webhook_url=None, mention_ids: Union[list[str], None] = None):
         if not webhook_url:  # DEFAULT WEBHOOK URL SETTING
-            webhook_url = "https://hooks.slack.com/services/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"
+            webhook_url = "https://hooks.slack.com/services/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"
         self.webhook_url = webhook_url
         self.mention_ids = mention_ids if mention_ids is not None else []
         self.server_info = self.__get_server_info()

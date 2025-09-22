@@ -122,6 +122,12 @@ jobs:
             sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o ./quantus-alpha/docker-compose.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/docker-compose.yml
             sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o ./quantus-alpha/deploy.sh https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/scripts/deploy.sh
             sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o ./quantus-alpha/nginx.conf https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/nginx.conf
+            
+            # summary_kr.parquet 다운로드
+            sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o ./quantus-alpha/statics/summary_kr.parquet https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/static/summary_kr.parquet
+
+            # summary_us.parquet 다운로드  
+            sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o ./quantus-alpha/static/summary_us.parquet https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/static/summary_us.parquet
 
             # 실행 권한 부여
             sudo chmod +x ./quantus-alpha/deploy.sh

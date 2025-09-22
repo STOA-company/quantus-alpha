@@ -410,16 +410,63 @@ async def stream_chat_detail(
         """상태 조회 기반 SSE 이벤트 생성기"""
         try:
             last_message_count = 0
+            recovery_attempted = False  # 복구 시도 플래그
             
             # 초기 연결 확인 메시지
             initial_data = {"status": "connected", "content": "SSE 연결 성공", "conversation_id": conversation_id}
             # yield f"data: {json.dumps(initial_data, ensure_ascii=False)}\n\n"
-            # logger.info(f"SSE 초기 메시지 전송: {initial_data}")
+            logger.info(f"SSE 초기 메시지 전송: {initial_data}")
             
             while True:
                 # 현재 상태 조회
                 status = chat_service.get_status(conversation_id)
-                # logger.info(f"SSE 상태 확인: conversation_id={conversation_id}, status={status}")
+                logger.info(f"SSE 상태 확인: conversation_id={conversation_id}, status={status}")
+
+                # 연결 상태 확인 (progress 상태일 때만)
+                if status == "progress":
+                    health_check = chat_service.check_polling_health(conversation_id)
+                    logger.info(f"SSE 폴링 상태 확인: {health_check}")
+                    
+                    if health_check.get("needs_recovery") and not recovery_attempted:
+                        recovery_attempted = True  # 복구 시도 플래그 설정
+                        
+                        # 연결 복구 필요 알림
+                        # recovery_data = {
+                        #     "status": "connection_recovery",
+                        #     "content": "AI 서버와의 연결이 끊어져 복구를 시도하고 있습니다...",
+                        #     "ai_server_status": health_check.get("ai_server_status"),
+                        #     "is_stale": health_check.get("is_stale")
+                        # }
+                        # yield f"data: {json.dumps(recovery_data, ensure_ascii=False)}\n\n"
+                        
+                        # 자동 복구 시도
+                        try:
+                            recovery_result = await chat_service.recover_polling_connection(conversation_id)
+                            logger.info(f"SSE 폴링 복구 결과: {recovery_result}")
+                            
+                            if recovery_result.get("success"):
+                                recovery_success_data = {
+                                    "status": "recovery_success",
+                                    "content": recovery_result.get("message", "연결이 복구되었습니다."),
+                                    "recovery_status": recovery_result.get("status")
+                                }
+                                yield f"data: {json.dumps(recovery_success_data, ensure_ascii=False)}\n\n"
+                                # 복구 성공 시 플래그 리셋 (새로운 메시지가 오면 다시 복구 가능)
+                                recovery_attempted = False
+                            else:
+                                recovery_failed_data = {
+                                    "status": "recovery_failed", 
+                                    "content": f"복구 실패: {recovery_result.get('error', '알 수 없는 오류')}",
+                                    "error": recovery_result.get("error")
+                                }
+                                yield f"data: {json.dumps(recovery_failed_data, ensure_ascii=False)}\n\n"
+                        except Exception as recovery_error:
+                            logger.error(f"SSE 복구 중 예외: {str(recovery_error)}")
+                            recovery_error_data = {
+                                "status": "recovery_error",
+                                "content": f"복구 중 오류 발생: {str(recovery_error)}"
+                            }
+                            yield f"data: {json.dumps(recovery_error_data, ensure_ascii=False)}\n\n" 
                 
                 # 새로운 메시지 조회
                 messages = chat_service.get_progress_messages(conversation_id, last_message_count)
@@ -436,6 +483,8 @@ async def stream_chat_detail(
                     # logger.info(f"SSE 메시지 전송: {data}")
                     yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
                     last_message_count += 1
+                    # 새로운 메시지가 오면 복구 플래그 리셋 (연결이 정상 작동 중)
+                    recovery_attempted = False
 
                 # 완료 상태면 최종 응답 전송
                 if status == "success":
@@ -453,6 +502,48 @@ async def stream_chat_detail(
                     data = {"status": "failed", "content": "처리 중 오류가 발생했습니다."}
                     yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
                     break
+                elif status == "connection_error":
+                    # AI 서버 연결 오류 상태
+                    if not recovery_attempted:
+                        # 자동 복구 시도
+                        recovery_attempted = True
+                        recovery_data = {
+                            "status": "connection_recovery",
+                            "content": "AI 서버 연결 오류가 발생했습니다. 자동 복구를 시도하고 있습니다..."
+                        }
+                        yield f"data: {json.dumps(recovery_data, ensure_ascii=False)}\n\n"
+                        
+                        try:
+                            recovery_result = await chat_service.recover_polling_connection(conversation_id)
+                            if recovery_result.get("success"):
+                                recovery_success_data = {
+                                    "status": "recovery_success",
+                                    "content": "연결이 복구되었습니다. 처리를 계속합니다."
+                                }
+                                yield f"data: {json.dumps(recovery_success_data, ensure_ascii=False)}\n\n"
+                                recovery_attempted = False
+                            else:
+                                connection_error_data = {
+                                    "status": "connection_error",
+                                    "content": f"AI 서버 연결을 복구할 수 없습니다: {recovery_result.get('error', '알 수 없는 오류')}"
+                                }
+                                yield f"data: {json.dumps(connection_error_data, ensure_ascii=False)}\n\n"
+                                break
+                        except Exception as e:
+                            connection_error_data = {
+                                "status": "connection_error", 
+                                "content": f"연결 복구 중 오류 발생: {str(e)}"
+                            }
+                            yield f"data: {json.dumps(connection_error_data, ensure_ascii=False)}\n\n"
+                            break
+                    else:
+                        # 이미 복구 시도했지만 여전히 연결 오류
+                        persistent_error_data = {
+                            "status": "persistent_connection_error",
+                            "content": "AI 서버 연결 문제가 지속되고 있습니다. 잠시 후 다시 시도해주세요."
+                        }
+                        yield f"data: {json.dumps(persistent_error_data, ensure_ascii=False)}\n\n"
+                        break
 
                 # 하트비트 메시지 (연결 유지용)
                 heartbeat_data = {"status": "heartbeat", "timestamp": str(asyncio.get_event_loop().time())}

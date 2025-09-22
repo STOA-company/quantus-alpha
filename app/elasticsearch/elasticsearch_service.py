@@ -1,147 +1,257 @@
-# from typing import Dict, List, Any, Optional
-# from app.elasticsearch.elasticsearch import get_elasticsearch_client
-# import logging
+from typing import Dict, List, Any, Optional, Union
+from datetime import datetime, timedelta
+from enum import Enum
+import logging
 
-# logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
-# class SearchService:
+class QueryOperator(Enum):
+    """쿼리 연산자"""
+    AND = "must"
+    OR = "should"
+    NOT = "must_not"
+
+
+class ElasticsearchQueryBuilder:
+    """엘라스틱서치 쿼리 빌더"""
     
-#     @staticmethod
-#     async def search_stocks(
-#         query_text: str = "",
-#         filters: Optional[Dict[str, Any]] = None,
-#         size: int = 20,
-#         from_: int = 0
-#     ) -> Dict[str, Any]:
-#         """
-#         주식 데이터 통합 검색
-#         """
-#         es_client = await get_elasticsearch_client()
-        
-#         # 기본 검색 쿼리 구성
-#         if query_text:
-#             search_query = {
-#                 "bool": {
-#                     "should": [
-#                         {"match": {"ticker.keyword": {"query": query_text, "boost": 3}}},
-#                         {"match": {"kr_name": {"query": query_text, "boost": 2}}},
-#                         {"match": {"en_name": {"query": query_text, "boost": 2}}},
-#                         {"wildcard": {"ticker.keyword": f"*{query_text.upper()}*"}},
-#                         {"wildcard": {"kr_name": f"*{query_text}*"}},
-#                         {"wildcard": {"en_name": f"*{query_text}*"}}
-#                     ],
-#                     "minimum_should_match": 1
-#                 }
-#             }
-#         else:
-#             search_query = {"match_all": {}}
-        
-#         # 필터 추가
-#         if filters:
-#             if "bool" not in search_query:
-#                 search_query = {"bool": {"must": [search_query]}}
-            
-#             filter_conditions = []
-            
-#             if "market" in filters:
-#                 filter_conditions.append({"term": {"market.keyword": filters["market"]}})
-            
-#             if "ctry" in filters:
-#                 filter_conditions.append({"term": {"ctry.keyword": filters["ctry"]}})
-            
-#             if "price_range" in filters:
-#                 price_range = filters["price_range"]
-#                 filter_conditions.append({
-#                     "range": {
-#                         "current_price": {
-#                             "gte": price_range.get("min", 0),
-#                             "lte": price_range.get("max", 999999)
-#                         }
-#                     }
-#                 })
-            
-#             if filter_conditions:
-#                 search_query["bool"]["filter"] = filter_conditions
-        
-#         # 정렬 기본값: 거래량 기준
-#         sort = [
-#             {"volume_rt": {"order": "desc", "missing": "_last"}},
-#             {"current_price": {"order": "desc", "missing": "_last"}}
-#         ]
-        
-#         try:
-#             response = await es_client.search_all_quantus_indices(
-#                 query=search_query,
-#                 size=size,
-#                 from_=from_,
-#                 sort=sort
-#             )
-            
-#             return {
-#                 "total": response["hits"]["total"]["value"],
-#                 "results": [hit["_source"] for hit in response["hits"]["hits"]],
-#                 "query_info": {
-#                     "query_text": query_text,
-#                     "filters": filters,
-#                     "size": size,
-#                     "from": from_
-#                 }
-#             }
-            
-#         except Exception as e:
-#             logger.error(f"Search error: {e}")
-#             return {
-#                 "total": 0,
-#                 "results": [],
-#                 "error": str(e)
-#             }
+    def __init__(self):
+        self.reset()
     
-#     @staticmethod
-#     async def get_stock_by_ticker(ticker: str) -> Optional[Dict[str, Any]]:
-#         """
-#         티커로 특정 주식 조회
-#         """
-#         es_client = await get_elasticsearch_client()
-        
-#         query = {
-#             "term": {
-#                 "ticker.keyword": ticker.upper()
-#             }
-#         }
-        
-#         try:
-#             response = await es_client.search_all_quantus_indices(
-#                 query=query,
-#                 size=1
-#             )
-            
-#             hits = response["hits"]["hits"]
-#             return hits[0]["_source"] if hits else None
-            
-#         except Exception as e:
-#             logger.error(f"Get stock error: {e}")
-#             return None
+    def reset(self) -> 'ElasticsearchQueryBuilder':
+        """쿼리 빌더 초기화"""
+        self._query = {"bool": {"must": [], "should": [], "must_not": []}}
+        self._size = 10
+        self._from_ = 0
+        self._sort = []
+        self._aggs = {}
+        return self
     
-#     @staticmethod
-#     async def get_trending_stocks(limit: int = 10) -> List[Dict[str, Any]]:
-#         """
-#         거래량 기준 인기 주식 조회
-#         """
-#         es_client = await get_elasticsearch_client()
+    def must(self, *conditions: Dict[str, Any]) -> 'ElasticsearchQueryBuilder':
+        """AND 조건 추가"""
+        self._query["bool"]["must"].extend(conditions)
+        return self
+    
+    def should(self, *conditions: Dict[str, Any]) -> 'ElasticsearchQueryBuilder':
+        """OR 조건 추가"""
+        self._query["bool"]["should"].extend(conditions)
+        return self
+    
+    def must_not(self, *conditions: Dict[str, Any]) -> 'ElasticsearchQueryBuilder':
+        """NOT 조건 추가"""
+        self._query["bool"]["must_not"].extend(conditions)
+        return self
+    
+    def terms(self, field: str, values: List[str]) -> 'ElasticsearchQueryBuilder':
+        """terms 쿼리 추가 (여러 값 중 하나와 일치)"""
+        condition = {"terms": {field: values}}
+        return self.must(condition)
+    
+    def term(self, field: str, value: Any) -> 'ElasticsearchQueryBuilder':
+        """term 쿼리 추가 (정확한 값과 일치)"""
+        condition = {"term": {field: value}}
+        return self.must(condition)
+    
+    def range_query(self, field: str, **kwargs) -> 'ElasticsearchQueryBuilder':
+        """range 쿼리 추가"""
+        condition = {"range": {field: kwargs}}
+        return self.must(condition)
+    
+    def date_range(self, field: str, gte: Optional[datetime] = None, 
+                   lte: Optional[datetime] = None, 
+                   gt: Optional[datetime] = None, 
+                   lt: Optional[datetime] = None) -> 'ElasticsearchQueryBuilder':
+        """날짜 범위 쿼리 추가"""
+        range_params = {}
+        if gte:
+            range_params["gte"] = gte.isoformat()
+        if lte:
+            range_params["lte"] = lte.isoformat()
+        if gt:
+            range_params["gt"] = gt.isoformat()
+        if lt:
+            range_params["lt"] = lt.isoformat()
         
-#         query = {"match_all": {}}
-#         sort = [{"volume_rt": {"order": "desc", "missing": "_last"}}]
+        return self.range_query(field, **range_params)
+    
+    def match(self, field: str, query: str, **kwargs) -> 'ElasticsearchQueryBuilder':
+        """match 쿼리 추가"""
+        condition = {"match": {field: {"query": query, **kwargs}}}
+        return self.must(condition)
+    
+    def multi_match(self, query: str, fields: List[str], **kwargs) -> 'ElasticsearchQueryBuilder':
+        """multi_match 쿼리 추가"""
+        condition = {"multi_match": {"query": query, "fields": fields, **kwargs}}
+        return self.must(condition)
+    
+    def exists(self, field: str) -> 'ElasticsearchQueryBuilder':
+        """exists 쿼리 추가 (필드가 존재하는지 확인)"""
+        condition = {"exists": {"field": field}}
+        return self.must(condition)
+    
+    def wildcard(self, field: str, value: str) -> 'ElasticsearchQueryBuilder':
+        """wildcard 쿼리 추가"""
+        condition = {"wildcard": {field: value}}
+        return self.must(condition)
+    
+    def regexp(self, field: str, value: str) -> 'ElasticsearchQueryBuilder':
+        """regexp 쿼리 추가"""
+        condition = {"regexp": {field: value}}
+        return self.must(condition)
+    
+    def nested(self, path: str, query: Dict[str, Any]) -> 'ElasticsearchQueryBuilder':
+        """nested 쿼리 추가"""
+        condition = {"nested": {"path": path, "query": query}}
+        return self.must(condition)
+    
+    def size(self, size: int) -> 'ElasticsearchQueryBuilder':
+        """결과 개수 설정"""
+        self._size = size
+        return self
+    
+    def from_(self, from_: int) -> 'ElasticsearchQueryBuilder':
+        """시작 위치 설정"""
+        self._from_ = from_
+        return self
+    
+    def sort(self, field: str, order: str = "desc") -> 'ElasticsearchQueryBuilder':
+        """정렬 설정"""
+        self._sort.append({field: {"order": order}})
+        return self
+    
+    def sort_by_date(self, order: str = "desc") -> 'ElasticsearchQueryBuilder':
+        """날짜로 정렬"""
+        return self.sort("date", order)
+    
+    def aggregation(self, name: str, agg_type: str, **kwargs) -> 'ElasticsearchQueryBuilder':
+        """집계 추가"""
+        self._aggs[name] = {agg_type: kwargs}
+        return self
+    
+    def build(self) -> Dict[str, Any]:
+        """최종 쿼리 빌드"""
+        query_body = {"query": self._query}
         
-#         try:
-#             response = await es_client.search_all_quantus_indices(
-#                 query=query,
-#                 size=limit,
-#                 sort=sort
-#             )
-            
-#             return [hit["_source"] for hit in response["hits"]["hits"]]
-            
-#         except Exception as e:
-#             logger.error(f"Trending stocks error: {e}")
-#             return []
+        if self._size != 10:
+            query_body["size"] = self._size
+        
+        if self._from_ != 0:
+            query_body["from"] = self._from_
+        
+        if self._sort:
+            query_body["sort"] = self._sort
+        
+        if self._aggs:
+            query_body["aggs"] = self._aggs
+        
+        return query_body
+    
+    def build_query_only(self) -> Dict[str, Any]:
+        """쿼리 부분만 반환"""
+        return self._query
+
+
+class ElasticsearchService:
+    """엘라스틱서치 서비스 클래스"""
+    
+    def __init__(self, client):
+        self.client = client
+    
+    def create_query_builder(self) -> ElasticsearchQueryBuilder:
+        """쿼리 빌더 생성"""
+        return ElasticsearchQueryBuilder()
+    
+    async def search_with_builder(
+        self, 
+        index: str, 
+        query_builder: ElasticsearchQueryBuilder
+    ) -> Dict[str, Any]:
+        """쿼리 빌더를 사용한 검색"""
+        query_body = query_builder.build()
+        return await self.client.search(index=index, body=query_body)
+    
+    async def search_multiple_indices_with_builder(
+        self,
+        indices: List[str],
+        query_builder: ElasticsearchQueryBuilder
+    ) -> Dict[str, Any]:
+        """여러 인덱스에서 쿼리 빌더를 사용한 검색"""
+        query_body = query_builder.build()
+        index_pattern = ",".join(indices)
+        return await self.client.search(index=index_pattern, body=query_body)
+    
+
+
+# 편의 함수들
+def create_stock_price_query(tickers: List[str]) -> ElasticsearchQueryBuilder:
+    """주식 가격 조회용 쿼리 생성"""
+    return ElasticsearchQueryBuilder().terms("ticker.keyword", tickers)
+
+
+def create_news_query(
+    tickers: List[str],
+    start_date: datetime,
+    end_date: datetime,
+    lang: str = "ko-KR",
+    is_exist: bool = True,
+    is_related: bool = True
+) -> ElasticsearchQueryBuilder:
+    """뉴스 조회용 쿼리 생성"""
+    builder = ElasticsearchQueryBuilder()
+    
+    if is_exist:
+        builder.term("is_exist", True)
+    
+    if is_related:
+        builder.term("is_related", True)
+    
+    builder.terms("ticker.keyword", tickers)
+    builder.date_range("date", gte=start_date, lte=end_date)
+    builder.term("lang.keyword", lang)
+    builder.sort_by_date("desc")
+    
+    return builder
+
+
+def create_disclosure_query(
+    tickers: List[str],
+    start_date: datetime,
+    end_date: datetime,
+    lang: str = "ko-KR",
+    is_exist: bool = True
+) -> ElasticsearchQueryBuilder:
+    """공시 조회용 쿼리 생성"""
+    builder = ElasticsearchQueryBuilder()
+    
+    if is_exist:
+        builder.term("is_exist", True)
+    
+    builder.terms("ticker.keyword", tickers)
+    builder.date_range("date", gte=start_date, lte=end_date)
+    builder.term("lang.keyword", lang)
+    builder.sort_by_date("desc")
+    
+    return builder
+
+
+def create_ticker_search_query(ticker: str) -> ElasticsearchQueryBuilder:
+    """티커 검색용 쿼리 생성"""
+    return ElasticsearchQueryBuilder().term("ticker.keyword", ticker)
+
+
+def create_company_name_search_query(company_name: str, lang: str = "ko") -> ElasticsearchQueryBuilder:
+    """회사명 검색용 쿼리 생성"""
+    builder = ElasticsearchQueryBuilder()
+    
+    if lang == "ko":
+        builder.multi_match(company_name, ["kr_name", "company_name"])
+    else:
+        builder.multi_match(company_name, ["en_name", "company_name"])
+    
+    return builder
+
+
+def create_stock_price_query(tickers: List[str]) -> ElasticsearchQueryBuilder:
+    """주식 가격 조회용 쿼리 생성"""
+    return ElasticsearchQueryBuilder().terms("ticker.keyword", tickers)

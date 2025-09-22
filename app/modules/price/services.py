@@ -823,21 +823,25 @@ class PriceService:
 
         if type == "stock":
             logger.info(f"[get_price_data_summary_v2] Stock factors: {stock_factors}")
-            # Convert SQLAlchemy Row object to dict first, then to DataFrame
-            df = await self._fetch_52week_data_v2(ctry, ticker, stock_factors)
+            # 최적화된 데이터 조회 (pandas 사용 제거, DB 접근 최소화)
+            data = await self._fetch_52week_data_v2(ctry, ticker, stock_factors)
+            week_52_high = data["week_52_high"]
+            week_52_low = data["week_52_low"]
+            last_day_close = data["last_close"]
+            market_cap = data["market_cap"]
         elif type == "etf":
+            # ETF는 기존 방식 유지 (pandas DataFrame 반환)
             df = self._fetch_etf_52week_data(ctry, ticker)
-
-        if not df.empty:
-            week_52_high = df["week_52_high"].iloc[0] or 0.0
-            week_52_low = df["week_52_low"].iloc[0] or 0.0
-            last_day_close = df["last_close"].iloc[0] or 0.0
-            market_cap = df["market_cap"].iloc[0] or None
-        else:
-            week_52_high = None
-            week_52_low = None
-            last_day_close = None
-            market_cap = None
+            if not df.empty:
+                week_52_high = df["week_52_high"].iloc[0] or 0.0
+                week_52_low = df["week_52_low"].iloc[0] or 0.0
+                last_day_close = df["last_close"].iloc[0] or 0.0
+                market_cap = df["market_cap"].iloc[0] or None
+            else:
+                week_52_high = None
+                week_52_low = None
+                last_day_close = None
+                market_cap = None
 
         if lang == TranslateCountry.KO:
             columns = ["sector_ko", "kr_name", "market"]
@@ -877,43 +881,56 @@ class PriceService:
 
         return PriceSummaryItem(**response_data)
 
-    async def _fetch_52week_data_v2(self, ctry: str, ticker: str, stock_factors) -> pd.DataFrame:
+    async def _fetch_52week_data_v2(self, ctry: str, ticker: str, stock_factors) -> Dict[str, float]:
         """
-        52주 데이터 조회
+        52주 데이터 조회 - 최적화된 버전 (pandas 사용 제거, DB 접근 최소화)
         """
-        ctry_3 = contry_mapping[ctry]
-        ticker_with_suffix = ticker
-        if ctry_3 == "USA":
-            ticker_with_suffix = f"{ticker}-US"
-
-        result = stock_factors
-        if not result:
-            kst_now = datetime.now(KST)
-            one_year_ago = kst_now - timedelta(days=365)
-            next_result = pd.DataFrame(
-                await self.database._select_async(
+        if stock_factors:
+            # stock_factors에서 직접 데이터 추출 (추가 DB 쿼리 불필요)
+            return {
+                "week_52_high": getattr(stock_factors, 'week_52_high', 0.0) or 0.0,
+                "week_52_low": getattr(stock_factors, 'week_52_low', 0.0) or 0.0,
+                "last_close": getattr(stock_factors, 'last_close', 0.0) or 0.0,
+                "market_cap": getattr(stock_factors, 'market_cap', None),
+            }
+        else:
+            # stock_factors가 없는 경우에만 DB에서 조회 (fallback)
+            try:
+                kst_now = datetime.now(KST)
+                one_year_ago = kst_now - timedelta(days=365)
+                price_data = await self.database._select_async(
                     table=f"stock_{ctry}_1d",
                     columns=["Date", "High", "Low", "Close"],
                     Ticker=ticker,
                     Date__gte=one_year_ago,
                 )
-            )
-            week_52_high, week_52_low, last_close = self._process_price_data(next_result)
-            if next_result.empty:
-                week_52_high, week_52_low, last_close = 0.0, 0.0, 0.0
-                return pd.DataFrame(
-                    [{"week_52_high": week_52_high, "week_52_low": week_52_low, "last_close": last_close}]
-                )
-
-        last_close = await self.database._select_async(table="stock_trend", columns=["prev_close"], ticker=ticker)
-        combined_data = {
-            "week_52_high": getattr(result, 'week_52_high', 0.0) if result else week_52_high,
-            "week_52_low": getattr(result, 'week_52_low', 0.0) if result else week_52_low,
-            "last_close": last_close[0][0] if last_close else last_close,
-            "market_cap": getattr(result, 'market_cap', None) if result else None,
-        }
-
-        return pd.DataFrame([combined_data])
+                
+                if price_data:
+                    # pandas 없이 직접 계산
+                    highs = [float(row.High) for row in price_data if row.High is not None]
+                    lows = [float(row.Low) for row in price_data if row.Low is not None]
+                    closes = [float(row.Close) for row in price_data if row.Close is not None]
+                    
+                    week_52_high = max(highs) if highs else 0.0
+                    week_52_low = min(lows) if lows else 0.0
+                    last_close = closes[-1] if closes else 0.0
+                else:
+                    week_52_high, week_52_low, last_close = 0.0, 0.0, 0.0
+                
+                return {
+                    "week_52_high": week_52_high,
+                    "week_52_low": week_52_low,
+                    "last_close": last_close,
+                    "market_cap": None,
+                }
+            except Exception as e:
+                logger.error(f"Error fetching 52week data for {ticker}: {str(e)}")
+                return {
+                    "week_52_high": 0.0,
+                    "week_52_low": 0.0,
+                    "last_close": 0.0,
+                    "market_cap": None,
+                }
 
 def get_price_service() -> PriceService:
     """PriceService 인스턴스 생성"""

@@ -4,6 +4,7 @@ import re
 from datetime import datetime, time, timedelta
 from typing import List, Optional, Union
 
+from app.modules import disclosure
 import pandas as pd
 import pytz
 from fastapi import Request, Response
@@ -27,13 +28,24 @@ from app.modules.news.v2.schemas import (
     TopStoriesItem,
     TopStoriesResponse,
 )
+from app.elasticsearch.elasticsearch import get_elasticsearch_client
+from app.elasticsearch.elasticsearch_service import create_news_query, create_disclosure_query
 from app.utils.ctry_utils import check_ticker_country_len_2
 from app.utils.date_utils import now_utc
+from app.core.logger.logger.base import setup_logger
+from app.modules.news.schemas import LatestNewsResponse
 
+logger = setup_logger(__name__)
 
 class NewsService:
     def __init__(self):
         self.db = database
+        self.es_client = None
+
+    async def _init_elasticsearch(self):
+        """엘라스틱서치 클라이언트 초기화"""
+        if self.es_client is None:
+            self.es_client = await get_elasticsearch_client()
 
     @staticmethod
     def _count_emotion(df: pd.DataFrame) -> dict:
@@ -224,7 +236,7 @@ class NewsService:
             )
         return data, total_count, total_page, offset, emotion_count, ctry
 
-    def get_news(
+    async def get_news(
         self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
     ) -> List[NewsRenewalItem]:
         if lang is None:
@@ -251,7 +263,7 @@ class NewsService:
         news_condition["date__lte"] = allowed_time
 
         df_news = pd.DataFrame(
-            self.db._select(
+            await self.db._select_async(
                 table="news_analysis",
                 columns=[
                     "id",
@@ -310,7 +322,7 @@ class NewsService:
         # 마스킹되지 않은 아이템과 마스킹된 아이템 결합
         return unmasked_items + masked_items
 
-    def get_disclosure(
+    async def get_disclosure(
         self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None
     ) -> List[DisclosureRenewalItem]:
         if lang is None:
@@ -335,7 +347,7 @@ class NewsService:
         disclosure_condition["date__lte"] = allowed_time
 
         df_disclosure = pd.DataFrame(
-            self.db._select(
+            await self.db._select_async(
                 table="disclosure_information",
                 columns=[
                     "id",
@@ -478,286 +490,6 @@ class NewsService:
         # 최신 아이템과 마스킹된 오래된 아이템 결합
         return recent_items + masked_older_items
 
-    async def top_stories_elasticsearch(
-        self,
-        request: Request,
-        tickers: Optional[List[str]] = None,
-        lang: TranslateCountry | None = None,
-        stories_count: int = 30,
-        user: Optional[AlphafinderUser] = None,
-    ):
-        import logging
-        from app.elasticsearch.elasticsearch import get_elasticsearch_client
-        
-        logger = logging.getLogger(__name__)
-        
-        if lang is None:
-            lang = TranslateCountry.KO
-
-        current_datetime = now_utc()
-        before_24_hours = current_datetime - timedelta(hours=24)
-        allowed_time = current_datetime + timedelta(minutes=5)
-
-        top_stories_tickers = tickers
-        
-        logger.info(f"Elasticsearch top_stories - tickers: {top_stories_tickers}")
-        logger.info(f"Date range: {before_24_hours} to {allowed_time}")
-
-        if not top_stories_tickers:
-            return []
-
-        # Elasticsearch 클라이언트 가져오기
-        es_client = await get_elasticsearch_client()
-
-        # 주식 가격 데이터 조회 (Elasticsearch)
-        price_query = {
-            "bool": {
-                "must": [
-                    {"terms": {"ticker.keyword": tickers}}
-                ]
-            }
-        }
-        
-        price_response = await es_client.client.search(
-            index="quantus-stock-trend-2025.09",
-            body={
-                "query": price_query,
-                "size": len(tickers) if tickers else 10
-            }
-        )
-        
-        ticker_to_price_data = {}
-        for hit in price_response["hits"]["hits"]:
-            source = hit["_source"]
-            ticker = source["ticker"]
-            ticker_to_price_data[ticker] = {
-                "current_price": source.get("current_price"),
-                "change_rt": source.get("change_rt")
-            }
-
-        # 날짜 범위 필터 설정
-        date_filter = {
-            "range": {
-                "date": {
-                    "gte": before_24_hours.isoformat(),
-                    "lte": allowed_time.isoformat()
-                }
-            }
-        }
-
-        # 뉴스 데이터 조회
-        news_query = {
-            "bool": {
-                "must": [
-                    {"term": {"is_exist": True}},
-                    {"term": {"is_related": True}},
-                    {"terms": {"ticker.keyword": top_stories_tickers}},
-                    date_filter
-                ]
-            }
-        }
-
-        if lang == TranslateCountry.KO:
-            news_query["bool"]["must"].append({"term": {"lang.keyword": "ko-KR"}})
-            news_name = "kr_name"
-        else:
-            news_query["bool"]["must"].append({"term": {"lang.keyword": "en-US"}})
-            news_name = "en_name"
-
-        logger.info(f"News query: {news_query}")
-        news_response = await es_client.client.search(
-            index="quantus-news-analysis-2025.09",
-            body={
-                "query": news_query,
-                "sort": [{"date": {"order": "desc"}}],
-                "size": 1000
-            }
-        )
-        logger.info(f"News response hits: {len(news_response['hits']['hits'])}")
-
-        # 공시 데이터 조회  
-        disclosure_query = {
-            "bool": {
-                "must": [
-                    {"term": {"is_exist": True}},
-                    {"terms": {"ticker.keyword": top_stories_tickers}},
-                    date_filter
-                ]
-            }
-        }
-
-        if lang == TranslateCountry.KO:
-            disclosure_query["bool"]["must"].append({"term": {"lang.keyword": "ko-KR"}})
-            disclosure_name = "ko_name"
-        else:
-            disclosure_query["bool"]["must"].append({"term": {"lang.keyword": "en-US"}})
-            disclosure_name = "en_name"
-
-        logger.info(f"Disclosure query: {disclosure_query}")
-        disclosure_response = await es_client.client.search(
-            index="quantus-disclosure-information-2025.09", 
-            body={
-                "query": disclosure_query,
-                "sort": [{"date": {"order": "desc"}}],
-                "size": 1000
-            }
-        )
-        logger.info(f"Disclosure response hits: {len(disclosure_response['hits']['hits'])}")
-
-        # 뉴스 데이터 처리
-        news_data = []
-        for hit in news_response["hits"]["hits"]:
-            source = hit["_source"]
-            if source.get("emotion") and source.get("title", "").strip():
-                news_data.append({
-                    "id": source["id"],
-                    "ticker": source["ticker"],
-                    news_name: source[news_name],
-                    "ctry": source["ctry"],
-                    "date": source["date"],
-                    "title": source["title"],
-                    "summary": source["summary"],
-                    "impact_reason": source["impact_reason"],
-                    "key_points": source["key_points"],
-                    "emotion": source["emotion"],
-                    "that_time_price": source.get("that_time_price", 0.0),
-                    "type": "news"
-                })
-
-        df_news = pd.DataFrame(news_data)
-        if not df_news.empty:
-            df_news = df_news.sort_values(by=["date"], ascending=[False])
-            df_news = NewsService._convert_to_kst(df_news)
-            if lang == TranslateCountry.KO:
-                df_news = df_news.rename(columns={"kr_name": "ko_name"})
-
-        # 공시 데이터 처리
-        disclosure_data = []
-        for hit in disclosure_response["hits"]["hits"]:
-            source = hit["_source"]
-            if source.get("emotion"):
-                disclosure_item = {
-                    "id": source["id"],
-                    "ticker": source["ticker"],
-                    disclosure_name: source[disclosure_name],
-                    "ctry": source["ctry"],
-                    "date": source["date"],
-                    "summary": source.get("summary", source.get("en_summary", "")),
-                    "impact_reason": source.get("impact_reason", source.get("en_impact_reason", "")),
-                    "key_points": source.get("key_points", source.get("en_key_points", "")),
-                    "emotion": source["emotion"],
-                    "form_type": source.get("form_type", ""),
-                    "that_time_price": source.get("that_time_price", 0.0),
-                    "type": "disclosure"
-                }
-                disclosure_data.append(disclosure_item)
-
-        df_disclosure = pd.DataFrame(disclosure_data)
-        if not df_disclosure.empty:
-            if lang != TranslateCountry.KO:
-                df_disclosure = df_disclosure.rename(
-                    columns={"en_summary": "summary", "en_impact_reason": "impact_reason", "en_key_points": "key_points"}
-                )
-            df_disclosure = self._process_dataframe_disclosure(df_disclosure)
-
-            # form_type 매핑 로직
-            def get_form_type_mapping(row):
-                ctry = row["ctry"]
-                if ctry == "kr":
-                    if lang == TranslateCountry.KO:
-                        return row["form_type"]
-                    else:
-                        return FORM_TYPE_MAPPING.get(row["form_type"].strip().split()[0], row["form_type"])
-                else:  # ctry == "us"
-                    if lang == TranslateCountry.KO:
-                        return DOCUMENT_TYPE_MAPPING.get(row["form_type"], row["form_type"])
-                    else:
-                        return DOCUMENT_TYPE_MAPPING_EN.get(row["form_type"], row["form_type"])
-
-            df_disclosure["mapped_form_type"] = df_disclosure.apply(get_form_type_mapping, axis=1)
-            df_disclosure["title"] = df_disclosure[disclosure_name] + " " + df_disclosure["mapped_form_type"]
-            df_disclosure.drop(columns=["form_type", "mapped_form_type"], inplace=True)
-
-        # 데이터 통합 및 정렬
-        total_df = pd.DataFrame()
-        if not df_news.empty and not df_disclosure.empty:
-            total_df = pd.concat([df_news, df_disclosure], ignore_index=True)
-            total_df = total_df.sort_values(by=["date"], ascending=[False])
-        elif not df_news.empty:
-            total_df = df_news
-        elif not df_disclosure.empty:
-            total_df = df_disclosure
-
-        if total_df.empty:
-            return []
-
-        unique_tickers = total_df["ticker"].unique().tolist()
-        total_df["price_impact"] = 0.0
-
-        if not total_df.empty:
-            # 가격 데이터 추가
-            total_df["current_price"] = total_df["ticker"].map(
-                lambda x: ticker_to_price_data.get(x, {}).get("current_price")
-            )
-            total_df["change_rt"] = total_df["ticker"].map(
-                lambda x: ticker_to_price_data.get(x, {}).get("change_rt")
-            )
-
-            total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"]).fillna(0.0)
-            total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
-            total_df["change_rt"] = total_df["change_rt"].fillna(0.0)
-            total_df["price_impact"] = 0.0
-            total_df = NewsService._convert_to_kst(total_df)
-
-        # 결과 생성
-        result = []
-        for ticker in unique_tickers:
-            ticker_news = total_df[total_df["ticker"] == ticker]
-            if ticker_news.empty:
-                continue
-
-            news_items = []
-            for _, row in ticker_news.iterrows():
-                if len(news_items) >= stories_count:
-                    break
-
-                price_impact = float(row["price_impact"]) if pd.notnull(row["price_impact"]) else 0.0
-                news_items.append(
-                    TopStoriesItem(
-                        id=row["id"],
-                        price_impact=price_impact,
-                        date=row["date"],
-                        title=row["title"],
-                        summary=row["summary"],
-                        emotion=row["emotion"],
-                        type=row["type"],
-                        is_viewed=False,
-                    )
-                )
-
-            if lang == TranslateCountry.KO:
-                name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
-            else:
-                name = self.remove_parentheses(ticker_news.iloc[0]["en_name"])
-
-            result.append(
-                TopStoriesResponse(
-                    name=name,
-                    ticker=ticker,
-                    ctry=ticker_news.iloc[0]["ctry"],
-                    current_price=ticker_news.iloc[0]["current_price"]
-                    if ticker_news.iloc[0].get("current_price")
-                    else 0.0,
-                    change_rate=ticker_news.iloc[0]["change_rt"],
-                    items_count=len(news_items),
-                    news=news_items,
-                    is_viewed=False,
-                )
-            )
-
-        # 조회 상태 업데이트
-        result = self.check_stories_viewed_status(result, request, user)
-        return result
 
     async def top_stories(
         self,
@@ -1269,6 +1001,573 @@ class NewsService:
 
         return True
 
+    async def top_stories_elasticsearch(
+        self,
+        request: Request,
+        tickers: Optional[List[str]] = None,
+        lang: TranslateCountry | None = None,
+        stories_count: int = 30,
+        user: Optional[AlphafinderUser] = None,
+    ):
+        await self._init_elasticsearch()
+
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        current_datetime = now_utc()
+        before_24_hours = current_datetime - timedelta(hours=24)
+        before_1_year = current_datetime - timedelta(days=365)
+        allowed_time = current_datetime + timedelta(minutes=5)
+
+        top_stories_tickers = tickers
+        
+        logger.info(f"Elasticsearch top_stories - tickers: {top_stories_tickers}")
+        logger.info(f"Date range: {before_24_hours} to {allowed_time}")
+
+        if not top_stories_tickers:
+            return []
+
+        # 주식 가격 데이터 조회 (Elasticsearch) - 쿼리 빌더 사용
+        from app.elasticsearch.elasticsearch_service import create_stock_price_query
+        
+        price_query_builder = create_stock_price_query(tickers).size(len(tickers) if tickers else 10)
+        logger.info(f"Starting price query for tickers: {tickers}")
+        price_response = await self.es_client.client.search(
+            index="quantus-stock-trend-*",
+            body=price_query_builder.build()
+        )
+        logger.info(f"Price query completed, found {len(price_response['hits']['hits'])} results")
+        
+        ticker_to_price_data = {}
+        for hit in price_response["hits"]["hits"]:
+            source = hit["_source"]
+            ticker = source["ticker"]
+            ticker_to_price_data[ticker] = {
+                "current_price": source.get("current_price"),
+                "change_rt": source.get("change_rt")
+            }
+
+
+        # 뉴스 데이터 조회 - 쿼리 빌더 사용
+        lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
+        news_name = "kr_name" if lang == TranslateCountry.KO else "en_name"
+        
+        news_query_builder = create_news_query(
+            tickers=top_stories_tickers,
+            start_date=before_24_hours,
+            end_date=allowed_time,
+            lang=lang_str,
+            is_exist=True,
+            is_related=True
+        ).size(1000)
+
+        logger.info(f"Starting news query for tickers: {top_stories_tickers}")
+        logger.info(f"News query: {news_query_builder.build()}")
+        news_response = await self.es_client.client.search(
+            index="quantus-news-analysis-*",
+            body=news_query_builder.build()
+        )
+        logger.info(f"News query completed, found {len(news_response['hits']['hits'])} results")
+
+        # 공시 데이터 조회 - 쿼리 빌더 사용
+        lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
+        disclosure_name = "ko_name" if lang == TranslateCountry.KO else "en_name"
+        
+        disclosure_query_builder = create_disclosure_query(
+            tickers=top_stories_tickers,
+            start_date=before_1_year,
+            end_date=allowed_time,
+            lang=lang_str,
+            is_exist=True
+        ).size(1000)
+
+        # logger.info(f"Disclosure query: {disclosure_query_builder.build()}")
+        disclosure_response = await self.es_client.client.search(
+            index="quantus-disclosure-information-*", 
+            body=disclosure_query_builder.build()
+        )
+        logger.info(f"Disclosure response hits: {len(disclosure_response['hits']['hits'])}")
+
+        # 뉴스 데이터 처리
+        news_data = []
+        for hit in news_response["hits"]["hits"]:
+            source = hit["_source"]
+            if source.get("emotion") and source.get("title", "").strip():
+                news_data.append({
+                    "id": source["id"],
+                    "ticker": source["ticker"],
+                    news_name: source[news_name],
+                    "ctry": source["ctry"],
+                    "date": source["date"],
+                    "title": source["title"],
+                    "summary": source["summary"],
+                    "impact_reason": source["impact_reason"],
+                    "key_points": source["key_points"],
+                    "emotion": source["emotion"],
+                    "that_time_price": source.get("that_time_price", 0.0),
+                    "type": "news"
+                })
+
+        df_news = pd.DataFrame(news_data)
+        if not df_news.empty:
+            df_news = df_news.sort_values(by=["date"], ascending=[False])
+            df_news = NewsService._convert_to_kst(df_news)
+            if lang == TranslateCountry.KO:
+                df_news = df_news.rename(columns={"kr_name": "ko_name"})
+
+        # 공시 데이터 처리
+        disclosure_data = []
+        for hit in disclosure_response["hits"]["hits"]:
+            source = hit["_source"]
+            if source.get("emotion"):
+                disclosure_item = {
+                    "id": source["id"],
+                    "ticker": source["ticker"],
+                    disclosure_name: source[disclosure_name],
+                    "ctry": source["ctry"],
+                    "date": source["date"],
+                    "summary": source.get("summary", source.get("en_summary", "")),
+                    "impact_reason": source.get("impact_reason", source.get("en_impact_reason", "")),
+                    "key_points": source.get("key_points", source.get("en_key_points", "")),
+                    "emotion": source["emotion"],
+                    "form_type": source.get("form_type", ""),
+                    "that_time_price": source.get("that_time_price", 0.0),
+                    "type": "disclosure"
+                }
+                disclosure_data.append(disclosure_item)
+
+        df_disclosure = pd.DataFrame(disclosure_data)
+        if not df_disclosure.empty:
+            if lang != TranslateCountry.KO:
+                df_disclosure = df_disclosure.rename(
+                    columns={"en_summary": "summary", "en_impact_reason": "impact_reason", "en_key_points": "key_points"}
+                )
+            df_disclosure = self._process_dataframe_disclosure(df_disclosure)
+
+            # form_type 매핑 로직
+            def get_form_type_mapping(row):
+                ctry = row["ctry"]
+                if ctry == "kr":
+                    if lang == TranslateCountry.KO:
+                        return row["form_type"]
+                    else:
+                        return FORM_TYPE_MAPPING.get(row["form_type"].strip().split()[0], row["form_type"])
+                else:  # ctry == "us"
+                    if lang == TranslateCountry.KO:
+                        return DOCUMENT_TYPE_MAPPING.get(row["form_type"], row["form_type"])
+                    else:
+                        return DOCUMENT_TYPE_MAPPING_EN.get(row["form_type"], row["form_type"])
+
+            df_disclosure["mapped_form_type"] = df_disclosure.apply(get_form_type_mapping, axis=1)
+            df_disclosure["title"] = df_disclosure[disclosure_name] + " " + df_disclosure["mapped_form_type"]
+            df_disclosure.drop(columns=["form_type", "mapped_form_type"], inplace=True)
+
+        # 데이터 통합 및 정렬
+        total_df = pd.DataFrame()
+        if not df_news.empty and not df_disclosure.empty:
+            total_df = pd.concat([df_news, df_disclosure], ignore_index=True)
+            total_df = total_df.sort_values(by=["date"], ascending=[False])
+        elif not df_news.empty:
+            total_df = df_news
+        elif not df_disclosure.empty:
+            total_df = df_disclosure
+
+        if total_df.empty:
+            return []
+
+        unique_tickers = total_df["ticker"].unique().tolist()
+        total_df["price_impact"] = 0.0
+
+        if not total_df.empty:
+            # 가격 데이터 추가
+            total_df["current_price"] = total_df["ticker"].map(
+                lambda x: ticker_to_price_data.get(x, {}).get("current_price")
+            )
+            total_df["change_rt"] = total_df["ticker"].map(
+                lambda x: ticker_to_price_data.get(x, {}).get("change_rt")
+            )
+
+            total_df["current_price"] = total_df["current_price"].fillna(total_df["that_time_price"]).fillna(0.0)
+            total_df["that_time_price"] = total_df["that_time_price"].fillna(0.0)
+            total_df["change_rt"] = total_df["change_rt"].fillna(0.0)
+            total_df["price_impact"] = 0.0
+            total_df = NewsService._convert_to_kst(total_df)
+
+        # 결과 생성
+        result = []
+        for ticker in unique_tickers:
+            ticker_news = total_df[total_df["ticker"] == ticker]
+            if ticker_news.empty:
+                continue
+
+            news_items = []
+            for _, row in ticker_news.iterrows():
+                if len(news_items) >= stories_count:
+                    break
+
+                price_impact = float(row["price_impact"]) if pd.notnull(row["price_impact"]) else 0.0
+                news_items.append(
+                    TopStoriesItem(
+                        id=row["id"],
+                        price_impact=price_impact,
+                        date=row["date"],
+                        title=row["title"],
+                        summary=row["summary"],
+                        emotion=row["emotion"],
+                        type=row["type"],
+                        is_viewed=False,
+                    )
+                )
+
+            if lang == TranslateCountry.KO:
+                name = self.remove_parentheses(ticker_news.iloc[0]["ko_name"])
+            else:
+                name = self.remove_parentheses(ticker_news.iloc[0]["en_name"])
+
+            result.append(
+                TopStoriesResponse(
+                    name=name,
+                    ticker=ticker,
+                    ctry=ticker_news.iloc[0]["ctry"],
+                    current_price=ticker_news.iloc[0]["current_price"]
+                    if ticker_news.iloc[0].get("current_price")
+                    else 0.0,
+                    change_rate=ticker_news.iloc[0]["change_rt"],
+                    items_count=len(news_items),
+                    news=news_items,
+                    is_viewed=False,
+                )
+            )
+
+        # 조회 상태 업데이트
+        result = self.check_stories_viewed_status(result, request, user)
+        return result
+    
+
+    async def get_news_elasticsearch(
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None, size: int = 100
+    ) -> List[NewsRenewalItem]:        
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        if not tickers:
+            ticker = ",".join(tickers) if tickers else None
+            raise DataNotFoundException(ticker=ticker, data_type="news")
+
+        # Elasticsearch 클라이언트 가져오기
+        await self._init_elasticsearch()
+
+        # 언어 설정
+        lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
+        news_name = "kr_name" if lang == TranslateCountry.KO else "en_name"
+
+        # 현재 시간에 5분을 더한 시간까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+        
+        # 24시간 전부터 현재까지의 데이터 조회
+        before_24_hours = current_time - timedelta(hours=24)
+
+        # 뉴스 쿼리 빌더 생성
+        news_query_builder = create_news_query(
+            tickers=tickers,
+            start_date=before_24_hours,
+            end_date=allowed_time,
+            lang=lang_str,
+            is_exist=True,
+            is_related=True
+        ).size(size)
+
+        # 국가 필터 추가
+        if ctry:
+            ctry_value = "KR" if ctry == "kr" else "US" if ctry == "us" else None
+            if ctry_value:
+                news_query_builder.term("ctry.keyword", ctry_value)
+
+        # logger.info(f"News query: {news_query_builder.build()}")
+        news_response = await self.es_client.client.search(
+            index="quantus-news-analysis-*",
+            body=news_query_builder.build()
+        )
+        logger.info(f"News response hits: {len(news_response['hits']['hits'])}")
+
+        # Elasticsearch 응답을 DataFrame으로 변환
+        hits = news_response['hits']['hits']
+        if not hits:
+            ticker = ",".join(tickers) if tickers else None
+            raise DataNotFoundException(ticker=ticker, data_type="news")
+
+        # Elasticsearch 결과를 DataFrame으로 변환
+        news_data_list = []
+        for hit in hits:
+            source = hit['_source']
+            news_data_list.append({
+                "id": source.get("id"),
+                "ticker": source.get("ticker"),
+                news_name: source.get(news_name),
+                "ctry": source.get("ctry"),
+                "date": source.get("date"),
+                "title": source.get("title"),
+                "summary": source.get("summary"),
+                "impact_reason": source.get("impact_reason"),
+                "key_points": source.get("key_points"),
+                "emotion": source.get("emotion"),
+            })
+
+        df_news = pd.DataFrame(news_data_list)
+
+        if df_news.empty:
+            ticker = ",".join(tickers) if tickers else None
+            raise DataNotFoundException(ticker=ticker, data_type="news")
+
+        df_news = df_news.dropna(subset=["emotion"]).sort_values(by=["date"], ascending=[False])
+        df_news = df_news[df_news["title"].str.strip() != ""]  # titles가 "" 인 경우 행 삭제
+        df_news = NewsService._convert_to_kst(df_news)
+
+        news_data = [] if df_news.empty else self._process_price_data(df=df_news, lang=lang)
+
+        return news_data
+
+    async def get_disclosure_elasticsearch(
+        self, ctry: str = None, lang: TranslateCountry | None = None, tickers: Optional[List[str]] = None, size: int = 100, type: str = None
+    ) -> List[DisclosureRenewalItem]:
+
+        await self._init_elasticsearch()
+        
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        if not tickers:
+            ticker = ",".join(tickers) if tickers else None
+            raise DataNotFoundException(ticker=ticker, data_type="disclosure")
+
+        # 언어 설정
+        lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
+        disclosure_name = "ko_name" if lang == TranslateCountry.KO else "en_name"
+
+        # 현재 시간에 5분을 더한 시간까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+        
+        # 24시간 전부터 현재까지의 데이터 조회
+        before_24_hours = current_time - timedelta(hours=24)
+        before_1_year = current_time - timedelta(days=365)
+
+        if type == "latest":
+            start_date = before_24_hours
+        else:
+            start_date = before_1_year
+
+        # 공시 쿼리 빌더 생성
+        disclosure_query_builder = create_disclosure_query(
+            tickers=tickers,
+            start_date=start_date,
+            end_date=allowed_time,
+            lang=lang_str,
+            is_exist=True
+        ).size(size)
+
+        # 국가 필터 추가
+        if ctry:
+            ctry_value = "KR" if ctry == "kr" else "US" if ctry == "us" else None
+            if ctry_value:
+                disclosure_query_builder.term("ctry.keyword", ctry_value)
+
+        logger.info(f"Disclosure query: {disclosure_query_builder.build()}")
+        disclosure_response = await self.es_client.client.search(
+            index="quantus-disclosure-information-*",
+            body=disclosure_query_builder.build()
+        )
+        logger.info(f"Disclosure response hits: {len(disclosure_response['hits']['hits'])}")
+
+        # Elasticsearch 응답을 DataFrame으로 변환
+        hits = disclosure_response['hits']['hits']
+        if not hits:
+            ticker = ",".join(tickers) if tickers else None
+            raise DataNotFoundException(ticker=ticker, data_type="disclosure")
+
+        # Elasticsearch 결과를 DataFrame으로 변환
+        disclosure_data_list = []
+        for hit in hits:
+            source = hit['_source']
+            disclosure_data_list.append({
+                "id": source.get("id"),
+                "ticker": source.get("ticker"),
+                disclosure_name: source.get(disclosure_name),
+                "ctry": source.get("ctry"),
+                "date": source.get("date"),
+                "url": source.get("url"),
+                "summary": source.get("summary"),
+                "impact_reason": source.get("impact_reason"),
+                "key_points": source.get("key_points"),
+                "emotion": source.get("emotion"),
+                "form_type": source.get("form_type"),
+                "category_type": source.get("category_type"),
+                "that_time_price": source.get("that_time_price"),
+            })
+
+        df_disclosure = pd.DataFrame(disclosure_data_list)
+
+        disclosure_data = (
+            []
+            if df_disclosure.empty
+            else self._process_price_data(
+                self._process_dataframe_disclosure(df_disclosure), lang=lang, is_disclosure=True
+            )
+        )
+
+        return disclosure_data
+
+    async def news_detail_elasticsearch(
+        self,
+        ticker: str,
+        date: str = None,
+        end_date: str = None,
+        page: int = 1,
+        size: int = 6,
+        lang: TranslateCountry | None = None,
+    ):
+        if lang is None:
+            lang = TranslateCountry.KO
+
+        if lang == TranslateCountry.KO:
+            lang = "ko-KR"
+        else:
+            lang = "en-US"
+
+        kst = pytz.timezone("Asia/Seoul")
+        utc = pytz.timezone("UTC")
+
+        # 시작 날짜 설정
+        if not date:
+            kst_date = datetime.now(kst).replace(tzinfo=None)
+        else:
+            kst_date = datetime.strptime(date, "%Y%m%d")
+
+        # 종료 날짜 설정
+        if end_date:
+            kst_end_date = datetime.strptime(end_date, "%Y%m%d")
+        else:
+            kst_end_date = kst_date
+
+        # 시작 / 종료 시간 localize
+        kst_start_datetime = kst.localize(datetime.combine(kst_date, datetime.min.time()))
+        kst_end_datetime = kst.localize(datetime.combine(kst_end_date, time(23, 59, 59)))
+
+        # 시작 / 종료 시간 UTC로 변환
+        utc_start_datetime = kst_start_datetime.astimezone(utc)
+        utc_end_datetime = kst_end_datetime.astimezone(utc)
+
+        # 현재 시간 + 5분까지 허용
+        current_time = datetime.now(UTC)
+        allowed_time = current_time + timedelta(minutes=5)
+
+        if end_date:
+            end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
+
+        ctry = check_ticker_country_len_2(ticker)
+
+        await self._init_elasticsearch()
+
+        news_query_builder = create_news_query(
+            tickers=[ticker],
+            start_date=utc_start_datetime,
+            end_date=utc_end_datetime,
+            lang=lang,
+            is_exist=True,
+            is_related=True
+        ).size(size).from_(page)
+
+        news_query_builder.aggregation("emotion_counts", "terms", field="emotion.keyword")
+
+        news_response = await self.es_client.client.search(
+            index="quantus-news-analysis-*",
+            body=news_query_builder.build()
+        )
+        logger.info(f"News response hits: {len(news_response['hits']['hits'])}")
+
+        hits = news_response["hits"]["hits"]
+        total_count = news_response["hits"]["total"]["value"]
+        total_page = math.ceil(total_count / size)
+
+
+        emotion_count = {}
+        if "aggregations" in news_response:
+            for bucket in news_response["aggregations"]["emotion_counts"]["buckets"]:
+                emotion_count[bucket["key"]] = bucket["doc_count"]
+        
+        # 데이터 변환 (pandas 없이)
+        data = []
+        for hit in hits:
+            source = hit["_source"]
+            data.append(NewsDetailItemV2(
+                id=source["id"],
+                ctry=source["ctry"].lower(),
+                name=source["kr_name"],
+                ticker=source["ticker"],
+                date=datetime.fromisoformat(source["date"].replace("Z", "+00:00")),
+                title=source["title"],
+                summary=source["summary"],
+                impact_reason=source["impact_reason"],
+                key_points=source["key_points"],
+                emotion=source["emotion"].lower(),
+            ))
+        return data, total_count, total_page, (page - 1) * size, emotion_count, ctry
+        
+    async def get_latest_news_v2(self, ticker: str, lang: TranslateCountry) -> LatestNewsResponse:
+        try:
+            disclosure_info = await self.get_disclosure_elasticsearch(tickers=[ticker], lang=lang, size=1, type="latest")
+            if disclosure_info:
+                latest_disclosure_info = disclosure_info
+            else:
+                latest_disclosure_info = None
+
+            news_info = await self.get_news_elasticsearch(tickers=[ticker], lang=lang, size=1)
+            if news_info:
+                latest_news_info = news_info
+            else:
+                latest_news_info = None
+
+            # 둘 다 None인 경우 기본값 반환
+            if latest_disclosure_info is None and latest_news_info is None:
+                return LatestNewsResponse(
+                    date="2000-01-01 00:00:00",
+                    content="",
+                    type=""
+                )
+
+            # 하나만 None인 경우 처리
+            if latest_disclosure_info is None:
+                final_latest_info = latest_news_info
+            elif latest_news_info is None:
+                final_latest_info = latest_disclosure_info
+            else:
+                # 둘 다 존재하는 경우 날짜 비교
+                if latest_news_info.date > latest_disclosure_info.date:
+                    final_latest_info = latest_news_info
+                    content = latest_news_info.impact_reason
+                    type = "news"
+                else:
+                    final_latest_info = latest_disclosure_info
+                    content = latest_disclosure_info.impact_reason
+                    type = "disclosure"
+            
+            date = final_latest_info.date
+            date = date.replace(tzinfo=UTC).astimezone(KST).strftime("%Y-%m-%d %H:%M:%S")
+
+            return LatestNewsResponse(
+                date=date,
+                content=content,
+                type=type,
+            )
+        
+        except Exception as e:
+            logger.error(f"Error in get_latest_news_v2 for {ticker}: {str(e)}")
+            return LatestNewsResponse(
+                date="2000-01-01 00:00:00",
+                content="",
+                type=""
+            )
 
 def get_news_service() -> NewsService:
     return NewsService()

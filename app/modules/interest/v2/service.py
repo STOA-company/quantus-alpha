@@ -9,6 +9,8 @@ from app.cache.leaderboard import DisclosureLeaderboard, NewsLeaderboard
 from app.core.exception.base import DuplicateException, NotFoundException
 from app.core.logger.logger.base import setup_logger
 from app.database.crud import database, database_service
+from app.elasticsearch.elasticsearch import get_elasticsearch_client
+from app.elasticsearch.elasticsearch_service import create_stock_price_query
 from app.modules.common.enum import TranslateCountry
 from app.modules.news.schemas import DisclosureRenewalItem, NewsRenewalItem
 from app.modules.news.services import get_news_service
@@ -22,6 +24,12 @@ class InterestService:
     def __init__(self):
         self.db = database_service
         self.data_db = database
+        self.es_client = None
+
+    async def _init_elasticsearch(self):
+        """엘라스틱서치 클라이언트 초기화"""
+        if self.es_client is None:
+            self.es_client = await get_elasticsearch_client()
 
     def get_name(self, row, lang: TranslateCountry) -> str:
         """
@@ -780,6 +788,45 @@ class InterestService:
         ticker_price_data = sorted(ticker_price_data, key=lambda x: interest_order_data[x["ticker"]])
         return ticker_price_data
 
+    async def get_interest_price_elasticsearch(self, tickers: List[str], group_id: int, lang: TranslateCountry = TranslateCountry.KO):
+        """엘라스틱서치에서 관심 종목 가격 데이터 조회"""
+        # 엘라스틱서치 클라이언트 초기화
+        await self._init_elasticsearch()
+        
+        # 주식 가격 데이터 조회 (Elasticsearch) - 쿼리 빌더 사용
+        price_query_builder = create_stock_price_query(tickers).size(len(tickers) if tickers else 10)
+        price_response = await self.es_client.client.search(
+            index="quantus-stock-trend-*",
+            body=price_query_builder.build()
+        )
+        
+        # 결과를 딕셔너리 형태로 변환
+        ticker_price_data = []
+        for hit in price_response["hits"]["hits"]:
+            source = hit["_source"]
+            name = source.get("kr_name") if lang == TranslateCountry.KO else source.get("en_name")
+            ticker_price_data.append({
+                "ctry": source.get("ctry"),
+                "ticker": source.get("ticker"),
+                "name": name,
+                "current_price": source.get("current_price"),
+                "change_rt": source.get("change_rt"),
+            })
+        
+        # 순서 정렬
+        interest_order_data = await self.db._select_async(
+            table="alphafinder_interest_stock", columns=["ticker", "order"], group_id=group_id, ticker__in=tickers
+        )
+        interest_order_data = {row.ticker: row.order for row in interest_order_data}
+
+        # interest_order_data가 비어있는 경우 원래 순서대로 반환
+        if not interest_order_data:
+            return ticker_price_data
+
+        ticker_price_data = sorted(ticker_price_data, key=lambda x: interest_order_data[x["ticker"]])
+        return ticker_price_data
+
+        
 
 def get_interest_service() -> InterestService:
     return InterestService()

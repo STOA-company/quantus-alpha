@@ -65,98 +65,21 @@ class LLMClient:
                     }
                     yield json.dumps(initial_msg, ensure_ascii=False)
 
-                    polling_interval = 3.0  # 기본 폴링 간격
+                    # 통합 폴링 메서드 사용
                     max_timeout = self.timeout - 50  # nginx 설정과 동기화 (1800 약간 적게 설정)
-
-                    start_time = time.time()
-                    previous_result = ""  # 이전 결과 저장
-
-                    while (time.time() - start_time) < max_timeout:
-                        # 폴링 간격 조정 - 시간이 지날수록 간격 늘림
-                        elapsed_time = time.time() - start_time
-                        if elapsed_time > 60:  # 1분 이상 지난 경우
-                            polling_interval = 4.0
-                        if elapsed_time > 180:  # 3분 이상 지난 경우
-                            polling_interval = 5.0
-
-                        await asyncio.sleep(polling_interval)
-
-                        # 상태 확인 요청
-                        status_response = await client.get(
-                            f"{self.base_url}/{job_id}", headers={"Access-Key": self.api_key}
-                        )
-
-                        if status_response.status_code != 200:
-                            logger.warning(f"폴링 중 오류 발생: {status_response.status_code}")
-                            continue
-
-                        status_data = status_response.json()
-                        status = status_data.get("status")
-
-                        # 응답 상세 로깅 추가
-                        logger.debug(f"LLM 응답 상태: {status}, 데이터: {json.dumps(status_data)[:200]}...")
-
-                        # 오류 체크
-                        if status == "ERROR" or status_data.get("error"):
-                            error_msg = status_data.get("error", "알 수 없는 오류")
-                            logger.error(f"LLM 작업 처리 중 오류: {error_msg}")
-                            msg = {"status": "failed", "content": f"LLM 서비스 오류: {error_msg}"}
-                            yield json.dumps(msg, ensure_ascii=False)
+                    
+                    async for poll_result in self.poll_job_with_heartbeat(
+                        job_id=job_id,
+                        heartbeat_callback=None,  # process_query에서는 하트비트 불필요
+                        max_timeout=max_timeout,
+                        polling_interval=3.0
+                    ):
+                        # 결과를 JSON 문자열로 변환하여 yield
+                        yield json.dumps(poll_result, ensure_ascii=False)
+                        
+                        # 완료되면 종료
+                        if poll_result.get("status") in ["success", "failed"]:
                             return
-
-                        # 진행 중인 경우 부분 결과 확인
-                        step_info = status_data.get("step_info", {})
-                        if step_info and isinstance(step_info, dict):
-                            step_title = step_info.get("title", "")
-                            step_message = step_info.get("message", "")
-                            if step_message and step_message != previous_result:
-                                previous_result = step_message
-                                progress_msg = {
-                                    "status": "progress", 
-                                    "title": step_title,
-                                    "content": step_message}
-                                yield json.dumps(progress_msg, ensure_ascii=False)
-
-                        # 완료 체크
-                        if status == "SUCCESS" or status == "COMPLETED":
-                            # result 객체 내의 result 필드에서 최종 답변 추출
-                            result_obj = status_data.get("result", {})
-                            if isinstance(result_obj, dict):
-                                final_result = result_obj.get("result", "")
-                                logger.info(
-                                    f"LLM 응답 완료: job_id={job_id}, 결과 길이={len(final_result) if final_result else 0}"
-                                )
-
-                                if result_obj.get("status") == "error":
-                                    final_result = "error"
-
-                                if not final_result:
-                                    logger.warning("완료 상태이지만 결과가 비어있습니다")
-                                    final_result = "응답을 생성하는 중 문제가 발생했습니다. 다시 시도해주세요."
-
-                                # 최종 결과가 이전 결과와 다른 경우에만 반환
-                                if final_result != previous_result:
-                                    final_msg = {"status": "success", "content": final_result}
-                                    yield json.dumps(final_msg, ensure_ascii=False)
-                                else:
-                                    logger.warning("이전 결과와 동일한 결과를 수신했습니다")
-
-                                # 결과 전송 후 종료
-                                return
-                            else:
-                                logger.warning(f"예상치 못한 result 형식: {type(result_obj)}")
-                                if result_obj:  # 문자열이거나 다른 형식인 경우
-                                    final_msg = {"status": "success", "content": str(result_obj)}
-                                    yield json.dumps(final_msg, ensure_ascii=False)
-                                    return
-
-                        logger.debug(f"폴링 지속 중 (경과 시간: {int(elapsed_time)}초)")
-
-                    # 최대 시간을 초과한 경우
-                    logger.warning(f"최대 대기 시간 초과: {job_id}")
-                    timeout_msg = {"status": "failed", "content": "응답이 생성이 길어지고 있습니다. 잠시만 기다려주세요."}
-                    yield json.dumps(timeout_msg, ensure_ascii=False)
-                    return
 
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
                 retry_count += 1
@@ -212,6 +135,128 @@ class LLMClient:
         await asyncio.sleep(1.5)
         final_msg = {"status": "success", "content": final_content}
         yield json.dumps(final_msg, ensure_ascii=False)
+
+    async def poll_job_with_heartbeat(
+        self, 
+        job_id: str, 
+        heartbeat_callback=None,
+        max_timeout: int = 300,
+        polling_interval: float = 3.0
+    ) -> AsyncGenerator[dict, None]:
+        """하트비트 기능이 포함된 통합 폴링 메서드"""
+        start_time = time.time()
+        previous_result = ""
+        
+        while (time.time() - start_time) < max_timeout:
+            # 폴링 간격 조정 - 시간이 지날수록 간격 늘림
+            elapsed_time = time.time() - start_time
+            current_interval = polling_interval
+            if elapsed_time > 60:  # 1분 이상 지난 경우
+                current_interval = 4.0
+            if elapsed_time > 180:  # 3분 이상 지난 경우
+                current_interval = 5.0
+
+            await asyncio.sleep(current_interval)
+
+            # 하트비트 갱신 (콜백이 제공된 경우)
+            if heartbeat_callback:
+                heartbeat_callback()
+
+            # 상태 확인 요청
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    status_response = await client.get(
+                        f"{self.base_url}/{job_id}", 
+                        headers={"Access-Key": self.api_key}
+                    )
+
+                    if status_response.status_code != 200:
+                        logger.warning(f"폴링 중 오류 발생: {status_response.status_code}")
+                        continue
+
+                    status_data = status_response.json()
+                    status = status_data.get("status")
+
+                    # 응답 상세 로깅 추가
+                    logger.debug(f"LLM 응답 상태: {status}, 데이터: {json.dumps(status_data)[:200]}...")
+
+                    # 오류 체크
+                    if status == "ERROR" or status_data.get("error"):
+                        error_msg = status_data.get("error", "알 수 없는 오류")
+                        logger.error(f"LLM 작업 처리 중 오류: {error_msg}")
+                        yield {
+                            "status": "failed", 
+                            "content": f"LLM 서비스 오류: {error_msg}",
+                            "error": error_msg
+                        }
+                        return
+
+                    # 진행 중인 경우 부분 결과 확인
+                    step_info = status_data.get("step_info", {})
+                    if step_info and isinstance(step_info, dict):
+                        step_title = step_info.get("title", "")
+                        step_message = step_info.get("message", "")
+                        if step_message and step_message != previous_result:
+                            previous_result = step_message
+                            yield {
+                                "status": "progress", 
+                                "title": step_title,
+                                "content": step_message,
+                                "step_info": step_info
+                            }
+
+                    # 완료 체크
+                    if status == "SUCCESS" or status == "COMPLETED":
+                        # result 객체 내의 result 필드에서 최종 답변 추출
+                        result_obj = status_data.get("result", {})
+                        if isinstance(result_obj, dict):
+                            final_result = result_obj.get("result", "")
+                            logger.info(
+                                f"LLM 응답 완료: job_id={job_id}, 결과 길이={len(final_result) if final_result else 0}"
+                            )
+
+                            if not final_result:
+                                logger.warning("완료 상태이지만 결과가 비어있습니다")
+                                final_result = "응답을 생성하는 중 문제가 발생했습니다. 다시 시도해주세요."
+
+                            # 최종 결과가 이전 결과와 다른 경우에만 반환
+                            if final_result != previous_result:
+                                yield {
+                                    "status": "success", 
+                                    "content": final_result,
+                                    "result": result_obj
+                                }
+                            else:
+                                logger.warning("이전 결과와 동일한 결과를 수신했습니다")
+
+                            # 결과 전송 후 종료
+                            return
+                        else:
+                            logger.warning(f"예상치 못한 result 형식: {type(result_obj)}")
+                            if result_obj:  # 문자열이거나 다른 형식인 경우
+                                yield {
+                                    "status": "success", 
+                                    "content": str(result_obj),
+                                    "result": result_obj
+                                }
+                                return
+
+                    logger.debug(f"폴링 지속 중 (경과 시간: {int(elapsed_time)}초)")
+
+            except httpx.RequestError as e:
+                logger.error(f"폴링 네트워크 오류: {str(e)}")
+                continue
+            except Exception as e:
+                logger.error(f"폴링 중 예외: {str(e)}")
+                continue
+
+        # 최대 시간을 초과한 경우
+        logger.warning(f"최대 대기 시간 초과: {job_id}")
+        yield {
+            "status": "failed", 
+            "content": "응답이 생성이 길어지고 있습니다. 잠시만 기다려주세요.",
+            "timeout": True
+        }
 
     def get_final_response(self, job_id: str) -> tuple[str, list[str]]:
         response = httpx.get(f"{self.base_url}/{job_id}", headers={"Access-Key": self.api_key})

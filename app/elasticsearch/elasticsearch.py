@@ -12,6 +12,9 @@ class ElasticsearchClient:
         self.client = AsyncElasticsearch(
             hosts=[settings.ELASTICSEARCH_URL],
             # basic_auth=(settings.ELASTICSEARCH_USER, settings.ELASTICSEARCH_PASSWORD) if hasattr(settings, 'ELASTICSEARCH_USER') else None,
+            timeout=30,  # 30초 타임아웃
+            max_retries=3,  # 최대 3번 재시도
+            retry_on_timeout=True,  # 타임아웃 시 재시도
         )
     
     async def close(self):
