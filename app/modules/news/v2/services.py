@@ -1014,6 +1014,7 @@ class NewsService:
 
         current_datetime = now_utc()
         before_24_hours = current_datetime - timedelta(hours=24)
+        before_1_year = current_datetime - timedelta(days=365)
         allowed_time = current_datetime + timedelta(minutes=5)
 
         top_stories_tickers = tickers
@@ -1067,14 +1068,12 @@ class NewsService:
         logger.info(f"News query completed, found {len(news_response['hits']['hits'])} results")
 
         # 공시 데이터 조회 - 쿼리 빌더 사용
-        
-        
         lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
         disclosure_name = "ko_name" if lang == TranslateCountry.KO else "en_name"
         
         disclosure_query_builder = create_disclosure_query(
             tickers=top_stories_tickers,
-            start_date=before_24_hours,
+            start_date=before_1_year,
             end_date=allowed_time,
             lang=lang_str,
             is_exist=True
@@ -1350,11 +1349,12 @@ class NewsService:
         
         # 24시간 전부터 현재까지의 데이터 조회
         before_24_hours = current_time - timedelta(hours=24)
+        before_1_year = current_time - timedelta(days=365)
 
         # 공시 쿼리 빌더 생성
         disclosure_query_builder = create_disclosure_query(
             tickers=tickers,
-            start_date=before_24_hours,
+            start_date=before_1_year,
             end_date=allowed_time,
             lang=lang_str,
             is_exist=True
