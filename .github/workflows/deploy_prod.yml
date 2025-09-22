@@ -12,7 +12,7 @@ on:
       - 'nginx.conf'
 
     branches:
-      - 'dev'
+      - 'master'
 jobs:
   notify-start:
     runs-on: ubuntu-latest
@@ -91,7 +91,7 @@ jobs:
           OWNER: "${{ github.repository_owner }}"
       - name: .env 파일 생성
         env:
-          ENV_CONTENT: ${{ secrets.ENV_DEV }}
+          ENV_CONTENT: ${{ secrets.ENV_PROD }}
         run: |
           echo "$ENV_CONTENT" > .env.${{ github.ref_name }}
       - name: 빌드 앤 푸시
@@ -109,7 +109,7 @@ jobs:
       - name: SSH to Azure server
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.AZURE_HOST_DEV }}
+          host: ${{ secrets.AZURE_HOST_PROD }}
           username: ${{ secrets.AZURE_USERNAME }}
           key: ${{ secrets.AZURE_SSH_PRIVATE_KEY }}
 
@@ -128,7 +128,6 @@ jobs:
 
             # summary_us.parquet 다운로드  
             sudo curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o ./quantus-alpha/static/summary_us.parquet https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/static/summary_us.parquet
-
             # 실행 권한 부여
             sudo chmod +x ./quantus-alpha/deploy.sh
             
@@ -137,7 +136,7 @@ jobs:
             
             # 블루-그린 배포 실행
             cd ./quantus-alpha
-            sudo GITHUB_REPOSITORY_OWNER=${OWNER_LC} IMAGE_TAG=${{ needs.makeTagAndRelease.outputs.tag_name }} ./deploy.sh ${{ needs.makeTagAndRelease.outputs.tag_name }}
+            sudo GITHUB_REPOSITORY_OWNER=${OWNER_LC} IMAGE_TAG=${{ needs.makeTagAndRelease.outputs.tag_name }} ENV=${{ github.ref_name }} ./deploy.sh ${{ needs.makeTagAndRelease.outputs.tag_name }}
 
   notify-success:
     runs-on: ubuntu-latest

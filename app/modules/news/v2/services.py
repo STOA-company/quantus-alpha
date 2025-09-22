@@ -4,6 +4,7 @@ import re
 from datetime import datetime, time, timedelta
 from typing import List, Optional, Union
 
+from app.modules import disclosure
 import pandas as pd
 import pytz
 from fastapi import Request, Response
@@ -32,6 +33,7 @@ from app.elasticsearch.elasticsearch_service import create_news_query, create_di
 from app.utils.ctry_utils import check_ticker_country_len_2
 from app.utils.date_utils import now_utc
 from app.core.logger.logger.base import setup_logger
+from app.modules.news.schemas import LatestNewsResponse
 
 logger = setup_logger(__name__)
 
@@ -1506,7 +1508,60 @@ class NewsService:
                 emotion=source["emotion"].lower(),
             ))
         return data, total_count, total_page, (page - 1) * size, emotion_count, ctry
+        
+    async def get_latest_news_v2(self, ticker: str, lang: TranslateCountry) -> LatestNewsResponse:
+        try:
+            disclosure_info = await self.get_disclosure_elasticsearch(tickers=[ticker], lang=lang)
+            if disclosure_info:
+                latest_disclosure_info = disclosure_info[0]
+            else:
+                latest_disclosure_info = None
 
+            news_info = await self.get_news_elasticsearch(tickers=[ticker], lang=lang)
+            if news_info:
+                latest_news_info = news_info[0]
+            else:
+                latest_news_info = None
+
+            # 둘 다 None인 경우 기본값 반환
+            if latest_disclosure_info is None and latest_news_info is None:
+                return LatestNewsResponse(
+                    date="2000-01-01 00:00:00",
+                    content="",
+                    type=""
+                )
+
+            # 하나만 None인 경우 처리
+            if latest_disclosure_info is None:
+                final_latest_info = latest_news_info
+            elif latest_news_info is None:
+                final_latest_info = latest_disclosure_info
+            else:
+                # 둘 다 존재하는 경우 날짜 비교
+                if latest_news_info.date > latest_disclosure_info.date:
+                    final_latest_info = latest_news_info
+                    type = "news"
+                else:
+                    final_latest_info = latest_disclosure_info
+                    type = "disclosure"
+            
+            date = final_latest_info.date
+            date = date.replace(tzinfo=UTC).astimezone(KST).strftime("%Y-%m-%d %H:%M:%S")
+            content = final_latest_info.key_points
+
+            return LatestNewsResponse(
+                date=date,
+                content=content,
+                type=type,
+            )
+        
+        except Exception as e:
+            logger.error(f"Error in get_latest_news_v2 for {ticker}: {str(e)}")
+            return LatestNewsResponse(
+                date="2000-01-01 00:00:00",
+                content="",
+                type=""
+            )
 
 def get_news_service() -> NewsService:
     return NewsService()
