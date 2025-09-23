@@ -470,12 +470,26 @@ class StockInfoService:
             self._sector_metrics_cache[cache_key] = result
             return result
 
-    def increment_search_score(self, ticker: str) -> None:
-        redis = StockLeaderboard()
-        stock_info = self.db._select(table="stock_information", columns=["kr_name", "en_name"], **{"ticker": ticker})
-        kr_name = stock_info[0].kr_name
-        en_name = stock_info[0].en_name
-        redis.increment_score(ticker, kr_name, en_name)
+    async def increment_search_score(self, ticker: str) -> None:
+        """비동기적으로 검색 점수 증가"""
+        try:
+            # 비동기 DB 쿼리로 변경
+            stock_info = await self.db._select_async(table="stock_information", columns=["kr_name", "en_name"], **{"ticker": ticker})
+            if not stock_info:
+                logger.warning(f"No stock info found for ticker: {ticker}")
+                return
+                
+            kr_name = stock_info[0].kr_name
+            en_name = stock_info[0].en_name
+            
+            # Redis 연결 재사용을 위해 인스턴스 변수로 관리
+            if not hasattr(self, '_redis_leaderboard'):
+                self._redis_leaderboard = StockLeaderboard()
+            
+            self._redis_leaderboard.increment_score(ticker, kr_name, en_name)
+        except Exception as e:
+            logger.error(f"Error incrementing search score for {ticker}: {e}")
+            # 예외가 발생해도 메인 로직에 영향을 주지 않도록 함
 
     async def get_type(self, ticker: str) -> str:
         """

@@ -132,7 +132,11 @@ async def get_combined(
     if all(v is None for v in data.values()):
         raise HTTPException(status_code=404, detail="No data found for the given ticker")
 
-    stock_service.increment_search_score(ticker)
+    # 검색 점수 증가 (비동기 처리, 예외 발생 시에도 응답은 반환)
+    try:
+        await stock_service.increment_search_score(ticker)
+    except Exception as e:
+        logger.error(f"Error incrementing search score for {ticker}: {e}")
     return BaseResponse(
         type=type, status_code=200, message="종목 정보, 지표, 기업 정보를 성공적으로 조회했습니다.", data=data
     )
@@ -315,7 +319,11 @@ async def get_combined_new(
     if all(v is None for v in data.values()):
         raise HTTPException(status_code=404, detail="No data found for the given ticker")
 
-    stock_service.increment_search_score(ticker)
+    # 검색 점수 증가 (비동기 처리, 예외 발생 시에도 응답은 반환)
+    try:
+        await stock_service.increment_search_score(ticker)
+    except Exception as e:
+        logger.error(f"Error incrementing search score for {ticker}: {e}")
     return BaseResponse(
         type=type, status_code=200, message="종목 정보, 지표, 기업 정보를 성공적으로 조회했습니다.", data=data
     )
