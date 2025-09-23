@@ -104,24 +104,44 @@ def is_business_day(country: Literal["KR", "US"]) -> bool:
     return calendar.is_session(now_utc(is_date=True))
 
 
+# 전역 캐시 변수
+_market_status_cache = {}
+_cache_timestamp = 0
+_cache_ttl = 600  # 10분 캐시
+
 def check_market_status(country: Literal["KR", "US"]) -> bool:
     """
-    시장 상태 확인
+    시장 상태 확인 - 캐시된 버전 (기존 정확한 로직 유지)
     1. 거래일 여부 확인
     2. 거래 시간 확인
     """
+    import time
+    
+    current_time = time.time()
+    
+    # 캐시가 유효한지 확인 (10분 TTL)
+    if (current_time - _cache_timestamp) < _cache_ttl and country in _market_status_cache:
+        return _market_status_cache[country]
+    
+    # 캐시가 만료되었거나 없으면 기존 정확한 로직으로 새로 계산
     try:
         # 휴장 여부 확인
         if not is_business_day(country):
             logger.info(f"{country} market is not a business day")
-            return False
-
-        # 개장 여부 확인
-        if not get_time_checker(country):
-            logger.info(f"{country} market is not open")
-            return False
-
-        return True
+            result = False
+        else:
+            # 개장 여부 확인
+            if not get_time_checker(country):
+                logger.info(f"{country} market is not open")
+                result = False
+            else:
+                result = True
+        
+        # 캐시 업데이트
+        _market_status_cache[country] = result
+        _cache_timestamp = current_time
+        
+        return result
 
     except Exception as e:
         logger.error(f"Error checking market status: {str(e)}")
