@@ -11,7 +11,7 @@ from app.utils.quantus_auth_utils import get_current_user
 router = APIRouter()
 
 
-@router.get("", response_model=DisclosureResponse, summary="상세페이지 공시 데이터")
+@router.get("/old", response_model=DisclosureResponse, summary="상세페이지 공시 데이터")
 async def renewal_disclosure(
     ticker: Annotated[str, Query(..., description="종목 코드, 예시: CACI")] = None,
     lang: Annotated[TranslateCountry, Query(description="언어, 기본값: ko")] = TranslateCountry.KO,
@@ -43,7 +43,7 @@ async def renewal_disclosure(
         neutral_count=emotion_counts["neutral_count"],
     )
 
-@router.get("/elasticsearch", summary="상세페이지 공시 데이터", response_model=DisclosureResponse)
+@router.get("", summary="상세페이지 공시 데이터", response_model=DisclosureResponse)
 async def renewal_disclosure_elasticsearch(
     ticker: Annotated[str, Query(..., description="종목 코드, 예시: CACI")] = None,
     lang: Annotated[TranslateCountry, Query(description="언어, 기본값: ko")] = TranslateCountry.KO,
