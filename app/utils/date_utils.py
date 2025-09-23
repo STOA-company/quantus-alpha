@@ -104,27 +104,28 @@ def is_business_day(country: Literal["KR", "US"]) -> bool:
     return calendar.is_session(now_utc(is_date=True))
 
 
-# 전역 캐시 변수
-_market_status_cache = {}
-_cache_timestamp = 0
-_cache_ttl = 600  # 10분 캐시
-
 def check_market_status(country: Literal["KR", "US"]) -> bool:
     """
-    시장 상태 확인 - 캐시된 버전 (기존 정확한 로직 유지)
+    시장 상태 확인 - Redis 캐시 사용 (기존 redis.py 활용)
     1. 거래일 여부 확인
     2. 거래 시간 확인
     """
-    import time
+    import json
+    from app.core.redis import redis_client
     
-    current_time = time.time()
-    
-    # 캐시가 유효한지 확인 (10분 TTL)
-    if (current_time - _cache_timestamp) < _cache_ttl and country in _market_status_cache:
-        return _market_status_cache[country]
-    
-    # 캐시가 만료되었거나 없으면 기존 정확한 로직으로 새로 계산
     try:
+        # 기존 redis.py의 클라이언트 사용
+        client = redis_client()
+        
+        cache_key = f"market_status:{country}"
+        cache_ttl = 600  # 10분 캐시
+        
+        # Redis에서 캐시 확인
+        cached_result = client.get(cache_key)
+        if cached_result is not None:
+            return json.loads(cached_result)
+        
+        # 캐시가 없으면 기존 정확한 로직으로 새로 계산
         # 휴장 여부 확인
         if not is_business_day(country):
             logger.info(f"{country} market is not a business day")
@@ -137,15 +138,21 @@ def check_market_status(country: Literal["KR", "US"]) -> bool:
             else:
                 result = True
         
-        # 캐시 업데이트
-        _market_status_cache[country] = result
-        _cache_timestamp = current_time
+        # Redis에 캐시 저장
+        client.setex(cache_key, cache_ttl, json.dumps(result))
         
         return result
 
     except Exception as e:
         logger.error(f"Error checking market status: {str(e)}")
-        return False
+        # Redis 에러 시 기존 로직으로 fallback
+        try:
+            if not is_business_day(country):
+                return False
+            return get_time_checker(country)
+        except Exception as fallback_error:
+            logger.error(f"Fallback error: {str(fallback_error)}")
+            return False
 
 
 def is_holiday(country: Literal["KR", "US"], date_str: str) -> bool:
