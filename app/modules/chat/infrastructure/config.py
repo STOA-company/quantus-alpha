@@ -8,8 +8,6 @@ load_dotenv(f".env.{ENV}")
 
 class LLMConfig(BaseModel):
     """LLM API 설정"""
-
-
     base_url: str = os.getenv("LLM_API_BASE_URL", "https://ai.quantus.kr/ai/research")
     api_key: str = os.getenv("LLM_API_KEY", "")
     timeout: int = int(os.getenv("LLM_API_TIMEOUT", "1800"))

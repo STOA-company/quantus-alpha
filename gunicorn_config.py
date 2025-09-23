@@ -5,7 +5,7 @@ from datetime import datetime
 
 # Gunicorn 설정
 bind = f"0.0.0.0:{os.getenv('PORT', '8000')}"
-workers = 4
+workers = 8
 worker_class = "uvicorn.workers.UvicornWorker"
 timeout = 90
 keepalive = 2
