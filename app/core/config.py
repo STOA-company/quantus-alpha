@@ -51,6 +51,10 @@ class Settings(BaseSettings):
 
     CELERY_CONCURRENCY: int = os.getenv("CELERY_CONCURRENCY", 7)
 
+    # Database connection pool settings
+    DB_POOL_SIZE: int = os.getenv("DB_POOL_SIZE", 50)
+    DB_MAX_OVERFLOW: int = os.getenv("DB_MAX_OVERFLOW", 20)
+
     KIS_APP_KEY: str = os.getenv("KIS_APP_KEY", "")
     KIS_SECRET: str = os.getenv("KIS_SECRET", "")
     KIS_ACCOUNT_NO: str = os.getenv("KIS_ACCOUNT_NO", "")
@@ -122,6 +126,8 @@ class DatabaseConfig:
     DB_USER_URL: str
     DB_POOL_RECYCLE: int = 3600
     DB_ECHO: bool = True
+    DB_POOL_SIZE: int = 100
+    DB_MAX_OVERFLOW: int = 50
 
 
 class DevConfig(DatabaseConfig):
@@ -132,6 +138,8 @@ class DevConfig(DatabaseConfig):
             DB_USER_URL=f"mysql://{settings.USER_DB_USER}:{settings.USER_DB_PASSWORD}@{settings.USER_DB_HOST}:{settings.USER_DB_PORT}/{settings.USER_DB_NAME}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=False,
+            DB_POOL_SIZE=settings.DB_POOL_SIZE,  # 환경변수 사용
+            DB_MAX_OVERFLOW=settings.DB_MAX_OVERFLOW,  # 환경변수 사용
         )
 
 
@@ -143,6 +151,8 @@ class StageConfig(DatabaseConfig):
             DB_USER_URL=f"mysql://{settings.USER_DB_USER}:{settings.USER_DB_PASSWORD}@{settings.USER_DB_HOST}:{settings.USER_DB_PORT}/{settings.USER_DB_NAME}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=True,
+            DB_POOL_SIZE=settings.DB_POOL_SIZE,  # 환경변수 사용
+            DB_MAX_OVERFLOW=settings.DB_MAX_OVERFLOW,  # 환경변수 사용
         )
 
 
@@ -154,6 +164,8 @@ class ProdConfig(DatabaseConfig):
             DB_USER_URL=f"mysql://{settings.USER_DB_USER}:{settings.USER_DB_PASSWORD}@{settings.USER_DB_HOST}:{settings.USER_DB_PORT}/{settings.USER_DB_NAME}",
             DB_POOL_RECYCLE=3600,
             DB_ECHO=False,
+            DB_POOL_SIZE=settings.DB_POOL_SIZE,  # 환경변수 사용
+            DB_MAX_OVERFLOW=settings.DB_MAX_OVERFLOW,  # 환경변수 사용
         )
 
 
