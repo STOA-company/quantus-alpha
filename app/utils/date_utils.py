@@ -106,26 +106,53 @@ def is_business_day(country: Literal["KR", "US"]) -> bool:
 
 def check_market_status(country: Literal["KR", "US"]) -> bool:
     """
-    시장 상태 확인
+    시장 상태 확인 - Redis 캐시 사용 (기존 redis.py 활용)
     1. 거래일 여부 확인
     2. 거래 시간 확인
     """
+    import json
+    from app.core.redis import redis_client
+    
     try:
+        # 기존 redis.py의 클라이언트 사용
+        client = redis_client()
+        
+        cache_key = f"market_status:{country}"
+        cache_ttl = 600  # 10분 캐시
+        
+        # Redis에서 캐시 확인
+        cached_result = client.get(cache_key)
+        if cached_result is not None:
+            return json.loads(cached_result)
+        
+        # 캐시가 없으면 기존 정확한 로직으로 새로 계산
         # 휴장 여부 확인
         if not is_business_day(country):
             logger.info(f"{country} market is not a business day")
-            return False
-
-        # 개장 여부 확인
-        if not get_time_checker(country):
-            logger.info(f"{country} market is not open")
-            return False
-
-        return True
+            result = False
+        else:
+            # 개장 여부 확인
+            if not get_time_checker(country):
+                logger.info(f"{country} market is not open")
+                result = False
+            else:
+                result = True
+        
+        # Redis에 캐시 저장
+        client.setex(cache_key, cache_ttl, json.dumps(result))
+        
+        return result
 
     except Exception as e:
         logger.error(f"Error checking market status: {str(e)}")
-        return False
+        # Redis 에러 시 기존 로직으로 fallback
+        try:
+            if not is_business_day(country):
+                return False
+            return get_time_checker(country)
+        except Exception as fallback_error:
+            logger.error(f"Fallback error: {str(fallback_error)}")
+            return False
 
 
 def is_holiday(country: Literal["KR", "US"], date_str: str) -> bool:

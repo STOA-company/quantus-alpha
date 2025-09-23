@@ -814,13 +814,23 @@ class PriceService:
         """
         종목 요약 데이터 조회
         """
+        import time
+        method_start_time = time.time()
+        
         cache_key = f"summary_{ctry}_{ticker}"
 
+        # 캐시 확인 시간 측정
+        cache_check_start = time.time()
         cached_data = self._cache.get(cache_key)
+        cache_check_time = time.time() - cache_check_start
+        logger.info(f"[get_price_data_summary_v2] Cache check took {cache_check_time:.3f}s")
+        
         if cached_data:
             logger.info(f"Cache hit for {cache_key}")
             return PriceSummaryItem(**cached_data)
 
+        # 52주 데이터 조회 시간 측정
+        data_fetch_start = time.time()
         if type == "stock":
             # logger.info(f"[get_price_data_summary_v2] Stock factors: {stock_factors}")
             # 최적화된 데이터 조회 (pandas 사용 제거, DB 접근 최소화)
@@ -842,7 +852,12 @@ class PriceService:
                 week_52_low = None
                 last_day_close = None
                 market_cap = None
+        
+        data_fetch_time = time.time() - data_fetch_start
+        logger.info(f"[get_price_data_summary_v2] Data fetch took {data_fetch_time:.3f}s")
 
+        # 데이터 처리 시간 측정
+        data_processing_start = time.time()
         if lang == TranslateCountry.KO:
             columns = ["sector_ko", "kr_name", "market"]
         elif lang == TranslateCountry.EN:
@@ -858,8 +873,19 @@ class PriceService:
                 market = MARKET_MAP[market] if lang == TranslateCountry.KO else MARKET_MAP_EN[market]
             elif type == "etf":
                 market = ETF_MARKET_MAP[market] if lang == TranslateCountry.KO else ETF_MARKET_MAP_EN[market]
+        
+        # 시장 상태 확인 시간 측정
+        market_status_start = time.time()
         is_market_close = check_market_status(ctry.upper())
+        logger.info(f"[get_price_data_summary_v2] Market status: {is_market_close}")
+        market_status_time = time.time() - market_status_start
+        logger.info(f"[get_price_data_summary_v2] Market status check took {market_status_time:.3f}s")
+        
+        data_processing_time = time.time() - data_processing_start
+        logger.info(f"[get_price_data_summary_v2] Data processing took {data_processing_time:.3f}s")
 
+        # 응답 데이터 생성 시간 측정
+        response_build_start = time.time()
         response_data = {
             "name": name,
             "ticker": ticker,
@@ -873,13 +899,29 @@ class PriceService:
             "week_52_high": week_52_high,
             "is_market_close": is_market_close,
         }
+        response_build_time = time.time() - response_build_start
+        logger.info(f"[get_price_data_summary_v2] Response data build took {response_build_time:.3f}s")
 
+        # 캐시 저장 시간 측정
+        cache_save_start = time.time()
         try:
             self._cache.set(cache_key, response_data, self.config.CACHE_TTL["ONE_DAY"])
         except Exception as e:
             logger.error(f"Failed to set cache for {cache_key}: {e}")
+        cache_save_time = time.time() - cache_save_start
+        logger.info(f"[get_price_data_summary_v2] Cache save took {cache_save_time:.3f}s")
 
-        return PriceSummaryItem(**response_data)
+        # 객체 생성 시간 측정
+        object_creation_start = time.time()
+        result = PriceSummaryItem(**response_data)
+        object_creation_time = time.time() - object_creation_start
+        logger.info(f"[get_price_data_summary_v2] Object creation took {object_creation_time:.3f}s")
+        
+        # 전체 메서드 시간 측정
+        total_time = time.time() - method_start_time
+        logger.info(f"[get_price_data_summary_v2] Total method time: {total_time:.3f}s")
+        
+        return result
 
     async def _fetch_52week_data_v2(self, ctry: str, ticker: str, stock_factors) -> Dict[str, float]:
         """
@@ -887,6 +929,7 @@ class PriceService:
         """
         if stock_factors:
             # stock_factors에서 직접 데이터 추출 (추가 DB 쿼리 불필요)
+            logger.info(f"[_fetch_52week_data_v2] Using stock_factors for {ticker}")
             return {
                 "week_52_high": getattr(stock_factors, 'week_52_high', 0.0) or 0.0,
                 "week_52_low": getattr(stock_factors, 'week_52_low', 0.0) or 0.0,
@@ -895,6 +938,7 @@ class PriceService:
             }
         else:
             # stock_factors가 없는 경우에만 DB에서 조회 (fallback)
+            logger.info(f"[_fetch_52week_data_v2] No stock_factors for {ticker}, querying DB")
             try:
                 kst_now = datetime.now(KST)
                 one_year_ago = kst_now - timedelta(days=365)
