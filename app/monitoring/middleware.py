@@ -53,10 +53,10 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
 
         # 제외 경로 목록에 있으면 메트릭 수집 없이 바로 처리
         if any(path.startswith(excluded) for excluded in self.exclude_paths):
-            print(f"[DEBUG] 메트릭 제외 경로: {path}")
+            # print(f"[DEBUG] 메트릭 제외 경로: {path}")
             return await call_next(request)
 
-        print(f"[DEBUG] 메트릭 수집 경로: {path}, 메서드: {method}, IP: {client_ip}")
+        # print(f"[DEBUG] 메트릭 수집 경로: {path}, 메서드: {method}, IP: {client_ip}")
 
         # 스트리밍 연결 처리
         is_streaming = self._is_streaming_request(request)
@@ -100,9 +100,9 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
             REQUEST_COUNT.labels(app_name=self.app_name, method=method, path=path, status_code=str(status_code)).inc()
             CLIENT_REQUEST_COUNT.labels(client_ip=client_ip, endpoint=path, method=method).inc()
 
-            print(
-                f"[DEBUG] 메트릭 카운터 증가: app_name={self.app_name}, method={method}, path={path}, status_code={status_code}"
-            )
+            # print(
+            #     f"[DEBUG] 메트릭 카운터 증가: app_name={self.app_name}, method={method}, path={path}, status_code={status_code}"
+            # )
 
             # 시스템 메트릭 업데이트 (주기적으로)
             current_time = time.time()

@@ -707,11 +707,11 @@ class NewsService:
                 )
             )
         # Update the viewed status using Redis
-        result = self.check_stories_viewed_status(result, request, user)
+        result = await self.check_stories_viewed_status(result, request, user)
 
         return result
 
-    def check_stories_viewed_status(
+    async def check_stories_viewed_status(
         self, stories_data: List[TopStoriesResponse], request: Request, user: Optional[AlphafinderUser] = None
     ) -> List[TopStoriesResponse]:
         """
@@ -738,8 +738,12 @@ class NewsService:
                 return stories_data  # 그대로 반환, 모두 미조회로 표시됨
             user_id = f"anon_{anonymous_id}"
 
-        # 해당 사용자의 모든 조회된 스토리 가져오기
-        viewed_stories = story_cache.get_viewed_stories(user_id)
+        # 해당 사용자의 모든 조회된 스토리 가져오기 (동기 Redis 호출)
+        try:
+            viewed_stories = story_cache.get_viewed_stories(user_id)
+        except Exception as e:
+            logger.error(f"Error getting viewed stories for user {user_id}: {e}")
+            viewed_stories = set()  # 오류 시 빈 세트로 처리
 
         # 각 티커 그룹 내의 아이템에 대해 조회 상태 업데이트 및 정렬
         for story_group in stories_data:
@@ -1021,22 +1025,25 @@ class NewsService:
 
         top_stories_tickers = tickers
         
-        logger.info(f"Elasticsearch top_stories - tickers: {top_stories_tickers}")
-        logger.info(f"Date range: {before_24_hours} to {allowed_time}")
+        # logger.info(f"Elasticsearch top_stories - tickers: {top_stories_tickers}")
+        # logger.info(f"Date range: {before_24_hours} to {allowed_time}")
 
         if not top_stories_tickers:
             return []
 
         # 주식 가격 데이터 조회 (Elasticsearch) - 쿼리 빌더 사용
+        import time
         from app.elasticsearch.elasticsearch_service import create_stock_price_query
         
+        price_start_time = time.time()
         price_query_builder = create_stock_price_query(tickers).size(len(tickers) if tickers else 10)
-        logger.info(f"Starting price query for tickers: {tickers}")
+        # logger.info(f"Starting price query for tickers: {tickers}")
         price_response = await self.es_client.client.search(
             index="quantus-stock-trend-*",
             body=price_query_builder.build()
         )
-        logger.info(f"Price query completed, found {len(price_response['hits']['hits'])} results")
+        price_elapsed = time.time() - price_start_time
+        logger.info(f"[top_stories] Price query completed in {price_elapsed:.3f}s, found {len(price_response['hits']['hits'])} results")
         
         ticker_to_price_data = {}
         for hit in price_response["hits"]["hits"]:
@@ -1049,6 +1056,7 @@ class NewsService:
 
 
         # 뉴스 데이터 조회 - 쿼리 빌더 사용
+        news_start_time = time.time()
         lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
         news_name = "kr_name" if lang == TranslateCountry.KO else "en_name"
         
@@ -1061,15 +1069,17 @@ class NewsService:
             is_related=True
         ).size(1000)
 
-        logger.info(f"Starting news query for tickers: {top_stories_tickers}")
-        logger.info(f"News query: {news_query_builder.build()}")
+        # logger.info(f"Starting news query for tickers: {top_stories_tickers}")
+        # logger.info(f"News query: {news_query_builder.build()}")
         news_response = await self.es_client.client.search(
             index="quantus-news-analysis-*",
             body=news_query_builder.build()
         )
-        logger.info(f"News query completed, found {len(news_response['hits']['hits'])} results")
+        news_elapsed = time.time() - news_start_time
+        logger.info(f"[top_stories] News query completed in {news_elapsed:.3f}s, found {len(news_response['hits']['hits'])} results")
 
         # 공시 데이터 조회 - 쿼리 빌더 사용
+        disclosure_start_time = time.time()
         lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
         disclosure_name = "ko_name" if lang == TranslateCountry.KO else "en_name"
         
@@ -1086,9 +1096,11 @@ class NewsService:
             index="quantus-disclosure-information-*", 
             body=disclosure_query_builder.build()
         )
-        # logger.info(f"Disclosure response hits: {len(disclosure_response['hits']['hits'])}")
+        disclosure_elapsed = time.time() - disclosure_start_time
+        logger.info(f"[top_stories] Disclosure query completed in {disclosure_elapsed:.3f}s, found {len(disclosure_response['hits']['hits'])} results")
 
         # 뉴스 데이터 처리
+        processing_start_time = time.time()
         news_data = []
         for hit in news_response["hits"]["hits"]:
             source = hit["_source"]
@@ -1193,7 +1205,11 @@ class NewsService:
             total_df["price_impact"] = 0.0
             total_df = NewsService._convert_to_kst(total_df)
 
+        processing_elapsed = time.time() - processing_start_time
+        logger.info(f"[top_stories] Data processing completed in {processing_elapsed:.3f}s, processed {len(total_df)} total items")
+
         # 결과 생성
+        result_start_time = time.time()
         result = []
         for ticker in unique_tickers:
             ticker_news = total_df[total_df["ticker"] == ticker]
@@ -1240,7 +1256,14 @@ class NewsService:
             )
 
         # 조회 상태 업데이트
-        result = self.check_stories_viewed_status(result, request, user)
+        view_status_start_time = time.time()
+        result = await self.check_stories_viewed_status(result, request, user)
+        view_status_elapsed = time.time() - view_status_start_time
+        logger.info(f"[top_stories] View status check completed in {view_status_elapsed:.3f}s")
+        
+        result_elapsed = time.time() - result_start_time
+        logger.info(f"[top_stories] Result generation completed in {result_elapsed:.3f}s, generated {len(result)} ticker groups")
+        
         return result
     
 

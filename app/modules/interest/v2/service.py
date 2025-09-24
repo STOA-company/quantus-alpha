@@ -790,17 +790,24 @@ class InterestService:
 
     async def get_interest_price_elasticsearch(self, tickers: List[str], group_id: int, lang: TranslateCountry = TranslateCountry.KO):
         """엘라스틱서치에서 관심 종목 가격 데이터 조회"""
+        import time
+        total_start_time = time.time()
+        
         # 엘라스틱서치 클라이언트 초기화
         await self._init_elasticsearch()
         
         # 주식 가격 데이터 조회 (Elasticsearch) - 쿼리 빌더 사용
+        price_start_time = time.time()
         price_query_builder = create_stock_price_query(tickers).size(len(tickers) if tickers else 10)
         price_response = await self.es_client.client.search(
             index="quantus-stock-trend-*",
             body=price_query_builder.build()
         )
+        price_elapsed = time.time() - price_start_time
+        logger.info(f"[get_interest_price_elasticsearch] Price query completed in {price_elapsed:.3f}s, found {len(price_response['hits']['hits'])} results")
         
         # 결과를 딕셔너리 형태로 변환
+        processing_start_time = time.time()
         ticker_price_data = []
         for hit in price_response["hits"]["hits"]:
             source = hit["_source"]
@@ -812,18 +819,29 @@ class InterestService:
                 "current_price": source.get("current_price"),
                 "change_rt": source.get("change_rt"),
             })
+        processing_elapsed = time.time() - processing_start_time
+        logger.info(f"[get_interest_price_elasticsearch] Data processing completed in {processing_elapsed:.3f}s, processed {len(ticker_price_data)} items")
         
         # 순서 정렬
+        order_start_time = time.time()
         interest_order_data = await self.db._select_async(
             table="alphafinder_interest_stock", columns=["ticker", "order"], group_id=group_id, ticker__in=tickers
         )
         interest_order_data = {row.ticker: row.order for row in interest_order_data}
+        order_elapsed = time.time() - order_start_time
+        logger.info(f"[get_interest_price_elasticsearch] Order query completed in {order_elapsed:.3f}s, found {len(interest_order_data)} order items")
 
         # interest_order_data가 비어있는 경우 원래 순서대로 반환
         if not interest_order_data:
+            total_elapsed = time.time() - total_start_time
+            logger.info(f"[get_interest_price_elasticsearch] Total completed in {total_elapsed:.3f}s (no ordering)")
             return ticker_price_data
 
+        sort_start_time = time.time()
         ticker_price_data = sorted(ticker_price_data, key=lambda x: interest_order_data[x["ticker"]])
+        sort_elapsed = time.time() - sort_start_time
+        total_elapsed = time.time() - total_start_time
+        logger.info(f"[get_interest_price_elasticsearch] Sorting completed in {sort_elapsed:.3f}s, Total: {total_elapsed:.3f}s")
         return ticker_price_data
 
         

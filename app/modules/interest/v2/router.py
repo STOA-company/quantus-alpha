@@ -461,15 +461,28 @@ async def top_stories_elasticsearch(
     service: InterestService = Depends(get_interest_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
 ):
-    logger.info(f"Starting top_stories_elasticsearch for group_id {group_id}")
+    import time
+    total_start_time = time.time()
+    
+    # logger.info(f"Starting top_stories_elasticsearch for group_id {group_id}")
+    tickers_start_time = time.time()
     tickers = await service.get_interest_tickers(group_id)
+    tickers_elapsed = time.time() - tickers_start_time
+    
     if len(tickers) == 0:
         return BaseResponse(status_code=200, message="Successfully retrieved news data", data=[])
+    
     # subscription_level = user.subscription_level if user else 1 # TODO :: 유저 테이블 통합 후 주석 해제
     # stories_count = 30 if subscription_level >= 3 else 10
+    stories_start_time = time.time()
     data = await news_service.top_stories_elasticsearch(
         request=request, tickers=tickers, lang=lang, stories_count=30, user=user
     )  # TODO :: stories_count 변경 필요
+    stories_elapsed = time.time() - stories_start_time
+    
+    total_elapsed = time.time() - total_start_time
+    logger.info(f"[top_stories_elasticsearch router] Total: {total_elapsed:.3f}s | get_interest_tickers: {tickers_elapsed:.3f}s | top_stories_elasticsearch: {stories_elapsed:.3f}s")
+    
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
 # 관심 종목 가격 조회
