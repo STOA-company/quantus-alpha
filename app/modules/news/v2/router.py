@@ -97,16 +97,12 @@ async def top_stories(
     data = await news_service.top_stories_elasticsearch(request=request, lang=lang, user=user, tickers=tickers)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
-@router.get("/renewal/real_time", summary="실시간 뉴스", response_model=BaseResponse[NewsRenewalResponse])
-async def renewal_real_time(
-    ctry: Annotated[str, Query(description="국가 코드, 예시: kr, us")] = None,
-    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
-    news_service: NewsService = Depends(get_news_service),
-):
-    
-
-
-
+# @router.get("/renewal/real_time", summary="실시간 뉴스", response_model=BaseResponse[NewsRenewalResponse])
+# async def renewal_real_time(
+#     ctry: Annotated[str, Query(description="국가 코드, 예시: kr, us")] = None,
+#     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
+#     news_service: NewsService = Depends(get_news_service),
+# ):
 
 
 @router.get("/renewal/detail/v2", summary="상세 페이지 뉴스", response_model=NewsResponse[List[NewsDetailItemV2]])
