@@ -1,8 +1,9 @@
 import asyncio
 import math
+from pydoc import doc
 import re
 from datetime import datetime, time, timedelta
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 
 from app.modules import disclosure
 import pandas as pd
@@ -23,13 +24,16 @@ from app.modules.disclosure.mapping import (
 )
 from app.modules.news.v2.schemas import (
     DisclosureRenewalItem,
+    DisclosureRenewalItemWeb,
     NewsDetailItemV2,
     NewsRenewalItem,
     TopStoriesItem,
     TopStoriesResponse,
+    NewsRenewalItemWeb,
+    DisclosureRenewalItemWeb,
 )
 from app.elasticsearch.elasticsearch import get_elasticsearch_client
-from app.elasticsearch.elasticsearch_service import create_news_query, create_disclosure_query
+from app.elasticsearch.elasticsearch_service import create_news_query, create_disclosure_query, create_stock_price_query
 from app.utils.ctry_utils import check_ticker_country_len_2
 from app.utils.date_utils import now_utc
 from app.core.logger.logger.base import setup_logger
@@ -1005,6 +1009,29 @@ class NewsService:
 
         return True
 
+    async def get_stock_trend_elasticsearch(self, tickers: Optional[List[str]] = None):
+
+        # tickers가 None이거나 빈 리스트면 빈 딕셔너리 반환
+        if not tickers:
+            return {}
+
+        price_query_builder = create_stock_price_query(tickers).size(len(tickers))
+        price_response = await self.es_client.client.search(
+            index="quantus-stock-trend-*",
+            body=price_query_builder.build()
+        )
+
+        ticker_to_price_data = {}
+        for hit in price_response["hits"]["hits"]:
+            source = hit["_source"]
+            ticker = source["ticker"]
+            ticker_to_price_data[ticker] = {
+                "current_price": source.get("current_price"),
+                "change_rt": source.get("change_rt")
+            }
+
+        return ticker_to_price_data
+
     async def top_stories_elasticsearch(
         self,
         request: Request,
@@ -1033,27 +1060,12 @@ class NewsService:
 
         # 주식 가격 데이터 조회 (Elasticsearch) - 쿼리 빌더 사용
         import time
-        from app.elasticsearch.elasticsearch_service import create_stock_price_query
         
         price_start_time = time.time()
-        price_query_builder = create_stock_price_query(tickers).size(len(tickers) if tickers else 10)
+        ticker_to_price_data = await self.get_stock_trend_elasticsearch(tickers=tickers)
         # logger.info(f"Starting price query for tickers: {tickers}")
-        price_response = await self.es_client.client.search(
-            index="quantus-stock-trend-*",
-            body=price_query_builder.build()
-        )
         price_elapsed = time.time() - price_start_time
-        logger.info(f"[top_stories] Price query completed in {price_elapsed:.3f}s, found {len(price_response['hits']['hits'])} results")
-        
-        ticker_to_price_data = {}
-        for hit in price_response["hits"]["hits"]:
-            source = hit["_source"]
-            ticker = source["ticker"]
-            ticker_to_price_data[ticker] = {
-                "current_price": source.get("current_price"),
-                "change_rt": source.get("change_rt")
-            }
-
+        logger.info(f"[top_stories] Price query completed in {price_elapsed:.3f}s, found {len(ticker_to_price_data)} results")
 
         # 뉴스 데이터 조회 - 쿼리 빌더 사용
         news_start_time = time.time()
@@ -1273,9 +1285,10 @@ class NewsService:
         if lang is None:
             lang = TranslateCountry.KO
 
-        if not tickers:
-            ticker = ",".join(tickers) if tickers else None
-            raise DataNotFoundException(ticker=ticker, data_type="news")
+        # tickers가 None이면 모든 뉴스 데이터를 조회 (get_renewal_data에서 사용)
+        # if not tickers:
+        #     ticker = ",".join(tickers) if tickers else None
+        #     raise DataNotFoundException(ticker=ticker, data_type="news")
 
         # Elasticsearch 클라이언트 가져오기
         await self._init_elasticsearch()
@@ -1307,7 +1320,7 @@ class NewsService:
             if ctry_value:
                 news_query_builder.term("ctry.keyword", ctry_value)
 
-        # logger.info(f"News query: {news_query_builder.build()}")
+        logger.info(f"News query: {news_query_builder.build()}")
         news_response = await self.es_client.client.search(
             index="quantus-news-analysis-*",
             body=news_query_builder.build()
@@ -1360,9 +1373,10 @@ class NewsService:
         if lang is None:
             lang = TranslateCountry.KO
 
-        if not tickers:
-            ticker = ",".join(tickers) if tickers else None
-            raise DataNotFoundException(ticker=ticker, data_type="disclosure")
+        # tickers가 None이면 모든 공시 데이터를 조회 (get_renewal_data에서 사용)
+        # if not tickers:
+        #     ticker = ",".join(tickers) if tickers else None
+        #     raise DataNotFoundException(ticker=ticker, data_type="disclosure")
 
         # 언어 설정
         lang_str = "ko-KR" if lang == TranslateCountry.KO else "en-US"
@@ -1591,6 +1605,57 @@ class NewsService:
                 content="",
                 type=""
             )
+
+
+    async def get_renewal_data(
+        self, ctry: str = None, lang: TranslateCountry | None = None
+        ) -> Tuple[List[NewsRenewalItemWeb], List[DisclosureRenewalItemWeb]]:
+
+        news_data = await self.get_news_elasticsearch(ctry=ctry, lang=lang, tickers=None)
+        disclosure_data = await self.get_disclosure_elasticsearch(ctry=ctry, lang=lang, tickers=None)
+        tickers = [news.ticker for news in news_data] + [disclosure.ticker for disclosure in disclosure_data]
+        
+        # tickers가 비어있으면 빈 딕셔너리 반환
+        if not tickers:
+            news_data = [NewsRenewalItemWeb(NewsRenewalItem=news, change_rate=0.0, price_impact=0.0) for news in news_data]
+            disclosure_data = [DisclosureRenewalItemWeb(DisclosureRenewalItem=disclosure, change_rate=0.0, price_impact=0.0) for disclosure in disclosure_data]
+            return news_data, disclosure_data
+        
+        stock_trend_data = await self.get_stock_trend_elasticsearch(tickers=tickers)
+
+        news_data = [
+            NewsRenewalItemWeb(
+                id=news.id,
+                date=news.date,
+                ctry=news.ctry,
+                ticker=news.ticker,
+                title=news.title,
+                summary=news.summary,
+                impact_reason=news.impact_reason,
+                key_points=news.key_points,
+                emotion=news.emotion,
+                name=news.name,
+                change_rate=stock_trend_data.get(news.ticker, {}).get("change_rt", 0.0),
+                price_impact=stock_trend_data.get(news.ticker, {}).get("current_price", 0.0)) for news in news_data]
+        
+        disclosure_data = [
+            DisclosureRenewalItemWeb(
+                id=disclosure.id,
+                date=disclosure.date,
+                ctry=disclosure.ctry,
+                ticker=disclosure.ticker,
+                title=disclosure.title,
+                summary=disclosure.summary,
+                impact_reason=disclosure.impact_reason,
+                key_points=disclosure.key_points,
+                emotion=disclosure.emotion,
+                name=disclosure.name,
+                document_url=disclosure.document_url,
+                change_rate=stock_trend_data.get(disclosure.ticker, {}).get("change_rt", 0.0),
+                price_impact=stock_trend_data.get(disclosure.ticker, {}).get("current_price", 0.0))for disclosure in disclosure_data]
+
+        return news_data, disclosure_data
+
 
 def get_news_service() -> NewsService:
     return NewsService()

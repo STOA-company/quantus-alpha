@@ -103,11 +103,10 @@ async def renewal_real_time(
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
     news_service: NewsService = Depends(get_news_service),
 ):
+    news_data, disclosure_data = await news_service.get_renewal_data(ctry=ctry, lang=lang)
     
-
-
-
-
+    response_data = NewsRenewalResponse(news=news_data, disclosure=disclosure_data)
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data)
 
 @router.get("/renewal/detail/v2", summary="상세 페이지 뉴스", response_model=NewsResponse[List[NewsDetailItemV2]])
 async def news_detail_elasticsearch(

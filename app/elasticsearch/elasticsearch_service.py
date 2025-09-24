@@ -180,19 +180,13 @@ class ElasticsearchService:
         query_body = query_builder.build()
         index_pattern = ",".join(indices)
         return await self.client.search(index=index_pattern, body=query_body)
-    
 
 
 # 편의 함수들
-def create_stock_price_query(tickers: List[str]) -> ElasticsearchQueryBuilder:
-    """주식 가격 조회용 쿼리 생성"""
-    return ElasticsearchQueryBuilder().terms("ticker.keyword", tickers)
-
-
 def create_news_query(
-    tickers: List[str],
     start_date: datetime,
     end_date: datetime,
+    tickers: Optional[List[str]] = None,
     lang: str = "ko-KR",
     is_exist: bool = True,
     is_related: bool = True
@@ -206,18 +200,20 @@ def create_news_query(
     if is_related:
         builder.term("is_related", True)
     
-    builder.terms("ticker.keyword", tickers)
+    if tickers is not None and len(tickers) > 0:
+        builder.terms("ticker.keyword", tickers)
+    # tickers가 None이거나 빈 리스트면 모든 티커를 조회 (조건 추가하지 않음)
+    
     builder.date_range("date", gte=start_date, lte=end_date)
     builder.term("lang.keyword", lang)
     builder.sort_by_date("desc")
     
     return builder
 
-
 def create_disclosure_query(
-    tickers: List[str],
-    start_date: datetime,
-    end_date: datetime,
+    tickers: Optional[List[str]] = None,
+    start_date: datetime = None,
+    end_date: datetime = None,
     lang: str = "ko-KR",
     is_exist: bool = True
 ) -> ElasticsearchQueryBuilder:
@@ -227,8 +223,13 @@ def create_disclosure_query(
     if is_exist:
         builder.term("is_exist", True)
     
-    builder.terms("ticker.keyword", tickers)
-    builder.date_range("date", gte=start_date, lte=end_date)
+    if tickers is not None and len(tickers) > 0:
+        builder.terms("ticker.keyword", tickers)
+    # tickers가 None이거나 빈 리스트면 모든 티커를 조회 (조건 추가하지 않음)
+    
+    if start_date and end_date:
+        builder.date_range("date", gte=start_date, lte=end_date)
+    
     builder.term("lang.keyword", lang)
     builder.sort_by_date("desc")
     
@@ -324,6 +325,8 @@ def create_trending_tickers_query() -> ElasticsearchQueryBuilder:
     return builder
 
 
-def create_stock_price_query(tickers: List[str]) -> ElasticsearchQueryBuilder:
+def create_stock_price_query(tickers: Optional[List[str]] = None) -> ElasticsearchQueryBuilder:
     """주식 가격 조회용 쿼리 생성"""
+    if not tickers:
+        return ElasticsearchQueryBuilder()  # 빈 쿼리 빌더 반환
     return ElasticsearchQueryBuilder().terms("ticker.keyword", tickers)
