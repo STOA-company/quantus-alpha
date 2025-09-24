@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -49,7 +49,7 @@ class InterestService:
         if not group:
             raise NotFoundException(message="관심 종목 그룹이 존재하지 않습니다.")
 
-        if group[0].name == "실시간 인기":
+        if group[0].name == "실시간 인기" :
             current_datetime = now_utc()
             before_24_hours = current_datetime - timedelta(hours=24)
             allowed_time = current_datetime + timedelta(minutes=5)

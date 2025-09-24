@@ -72,13 +72,27 @@ class BaseDatabase:
 
     @asynccontextmanager
     async def get_async_connection(self):
-        """비동기 컨텍스트 매니저로 connection 관리"""
+        """비동기 컨텍스트 매니저로 connection 관리 (트랜잭션 포함)"""
+        async with self.db.async_engine.connect() as connection:
+            try:
+                yield connection
+                await connection.commit()
+            except Exception as e:
+                await connection.rollback()
+                raise e
+            finally:
+                await connection.close()
+
+    @asynccontextmanager
+    async def get_async_connection_readonly(self):
+        """비동기 컨텍스트 매니저로 조회 전용 connection 관리"""
         async with self.db.async_engine.connect() as connection:
             try:
                 yield connection
             except Exception as e:
-                # connect()를 사용하므로 rollback 불필요
                 raise e
+            finally:
+                await connection.close()
 
     def check_connection(self) -> bool:
         """데이터베이스 연결 상태를 확인하는 메서드"""
@@ -92,7 +106,7 @@ class BaseDatabase:
 
     async def check_connection_async(self) -> bool:
       try:
-          async with self.get_async_connection() as connection:
+          async with self.get_async_connection_readonly() as connection:
               await connection.execute(select(1))
           return True
       except Exception as e:
@@ -423,7 +437,7 @@ class BaseDatabase:
             if offset:
                 stmt = stmt.offset(offset)
 
-            async with self.get_async_connection() as connection:
+            async with self.get_async_connection_readonly() as connection:
                 result = await connection.execute(stmt)
                 return result.fetchall()
 
@@ -582,7 +596,7 @@ class BaseDatabase:
                 join_condition = self._join(join_info)
                 stmt = stmt.select_from(join_condition)
 
-            async with self.get_async_connection() as connection:
+            async with self.get_async_connection_readonly() as connection:
                 result = await connection.execute(stmt)
                 return result.scalar() or 0
 

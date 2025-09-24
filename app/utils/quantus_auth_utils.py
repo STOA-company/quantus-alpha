@@ -268,6 +268,7 @@ def get_current_user(
             "/coin/backtest/check_task_status",
             "/coin/strategy/get_rec_strategy",
             "/coin/admin/coin_trader_reassignment",
+            "/news/v2/top_stories",
         ]
         if request.url.path in exempt_paths:
             return None
@@ -284,6 +285,38 @@ def get_current_user(
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def get_optional_user(
+    request: Request,
+) -> Optional[Dict]:
+    """Get current user from token validation without raising errors"""
+    try:
+        # Authorization 헤더에서 토큰 추출
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return None
+            
+        token = auth_header.split(" ")[1]
+        sns_type = request.headers.get("Sns-Type")
+        client_type = request.headers.get("Client-Type")
+        
+        if not token:
+            return None
+
+        # token validation
+        res = await validate_token_async(token=token, sns_type=sns_type, client_type=client_type)
+        if res is None:
+            return None
+            
+        status_code = res.status_code
+        if status_code != 200:
+            return None
+
+        return res.json()["userInfo"]
+
+    except Exception:
+        return None
 
 async def get_current_user_async(
     request: Request,

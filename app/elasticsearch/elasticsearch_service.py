@@ -252,6 +252,78 @@ def create_company_name_search_query(company_name: str, lang: str = "ko") -> Ela
     return builder
 
 
+def create_trending_tickers_query() -> ElasticsearchQueryBuilder:
+    """실시간 인기 티커 조회용 쿼리 생성 (US 6개, KR 5개)"""
+    builder = ElasticsearchQueryBuilder()
+    builder.term("is_related", True)
+    builder.term("is_exist", True)
+    builder.range_query("date", gte="now-24h", lte="now+5m")
+    builder.size(0)  # 집계만 사용하므로 문서는 반환하지 않음
+
+    # US 티커 집계 (A로 시작하지 않는 것들)
+    us_agg = {
+        "filter": {
+            "bool": {
+                "must_not": {
+                    "prefix": {
+                        "ticker.keyword": "A"
+                    }
+                }
+            }
+        },
+        "aggs": {
+            "top_us": {
+                "terms": {
+                    "field": "ticker.keyword",
+                    "size": 6,
+                    "order": {
+                        "latest_date": "desc"
+                    }
+                },
+                "aggs": {
+                    "latest_date": {
+                        "max": {
+                            "field": "date"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    # KR 티커 집계 (A로 시작하는 것들)
+    kr_agg = {
+        "filter": {
+            "prefix": {
+                "ticker.keyword": "A"
+            }
+        },
+        "aggs": {
+            "top_kr": {
+                "terms": {
+                    "field": "ticker.keyword",
+                    "size": 5,
+                    "order": {
+                        "latest_date": "desc"
+                    }
+                },
+                "aggs": {
+                    "latest_date": {
+                        "max": {
+                            "field": "date"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    builder._aggs["us_tickers"] = us_agg
+    builder._aggs["kr_tickers"] = kr_agg
+
+    return builder
+
+
 def create_stock_price_query(tickers: List[str]) -> ElasticsearchQueryBuilder:
     """주식 가격 조회용 쿼리 생성"""
     return ElasticsearchQueryBuilder().terms("ticker.keyword", tickers)

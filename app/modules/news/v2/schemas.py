@@ -71,10 +71,40 @@ class DisclosureRenewalItem(BaseModel):
     name: str | None
     document_url: str | None
 
+class NewsRenewalItemWeb(BaseModel):
+    id: int
+    date: datetime
+    ctry: str | None
+    ticker: str | None
+    title: str
+    summary: str | None
+    impact_reason: str | None
+    key_points: str | None
+    emotion: str | None
+    name: str | None
+    change_rate: float | None
+    price_impact: float | None
+
+class DisclosureRenewalItemWeb(BaseModel):
+    id: int
+    date: datetime
+    ctry: str | None
+    ticker: str | None
+    title: str
+    summary: str | None
+    impact_reason: str | None
+    key_points: str | None
+    emotion: str | None
+    name: str | None
+    change_rate: float | None
+    price_impact: float | None
+    document_url: str | None
+
+
 
 class NewsRenewalResponse(BaseModel):
-    news: list[NewsRenewalItem]
-    disclosure: list[DisclosureRenewalItem]
+    news: list[NewsRenewalItemWeb]
+    disclosure: list[DisclosureRenewalItemWeb]
 
 
 class InterestNewsResponse(BaseModel):
