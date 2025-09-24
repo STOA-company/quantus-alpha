@@ -38,7 +38,9 @@ class WorkerTimeoutTracker(BaseHTTPMiddleware):
         path = request.url.path
         client_ip = request.client.host if request.client else "Unknown"
         
-        logger.info(f"Request started: {method} {path} from {client_ip}")
+        # 헬스 체크 요청은 로그에서 제외
+        if path not in ["/health-check", "/health", "/metrics"]:
+            logger.info(f"Request started: {method} {path} from {client_ip}")
         
         try:
             response = await call_next(request)
@@ -50,7 +52,9 @@ class WorkerTimeoutTracker(BaseHTTPMiddleware):
                 logger.info(f"Request Long Timeout: {method} {path} - {response.status_code} - {duration:.2f}s")
                 await self._notify_long_request(request, duration, "COMPLETED")
             
-            logger.info(f"Request completed: {method} {path} - {response.status_code} - {duration:.2f}s")
+            # 헬스 체크 요청은 로그에서 제외
+            if path not in ["/health-check", "/health", "/metrics"]:
+                logger.info(f"Request completed: {method} {path} - {response.status_code} - {duration:.2f}s")
             return response
             
         except Exception as exc:

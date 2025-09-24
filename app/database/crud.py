@@ -73,11 +73,11 @@ class BaseDatabase:
     @asynccontextmanager
     async def get_async_connection(self):
         """비동기 컨텍스트 매니저로 connection 관리"""
-        async with self.db.async_engine.begin() as connection:
+        async with self.db.async_engine.connect() as connection:
             try:
                 yield connection
             except Exception as e:
-                await connection.rollback()
+                # connect()를 사용하므로 rollback 불필요
                 raise e
 
     def check_connection(self) -> bool:
