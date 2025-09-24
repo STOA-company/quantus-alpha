@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 @router.get("", summary="실시간 차트", response_model=BaseResponse[List[TrendingStock]])
-# @one_minute_cache(prefix="trending")
+@one_minute_cache(prefix="trending")
 async def get_trending_stocks(
     request: TrendingStockRequest = Depends(),
     service: TrendingService = Depends(get_trending_service),

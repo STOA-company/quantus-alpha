@@ -1316,7 +1316,7 @@ class NewsService:
 
         # 국가 필터 추가
         if ctry:
-            ctry_value = "KR" if ctry == "kr" else "US" if ctry == "us" else None
+            ctry_value = "kr" if ctry.lower() == "kr" else "us" if ctry.lower() == "us" else None
             if ctry_value:
                 news_query_builder.term("ctry.keyword", ctry_value)
 
@@ -1406,7 +1406,7 @@ class NewsService:
 
         # 국가 필터 추가
         if ctry:
-            ctry_value = "KR" if ctry == "kr" else "US" if ctry == "us" else None
+            ctry_value = "kr" if ctry.lower() == "kr" else "us" if ctry.lower() == "us" else None
             if ctry_value:
                 disclosure_query_builder.term("ctry.keyword", ctry_value)
 
