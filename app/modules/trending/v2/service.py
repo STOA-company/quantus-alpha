@@ -4,12 +4,13 @@ import logging
 
 from app.database.conn import db
 from app.database.crud import JoinInfo, database
+from app.core.logger.logger.base import setup_logger
 from app.modules.common.enum import TranslateCountry
 from app.modules.trending.schemas import TrendingStock, TrendingStockRequest, TrendingType
 from app.elasticsearch.elasticsearch import get_elasticsearch_client
 from app.elasticsearch.elasticsearch_service import create_stock_price_query
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 class TrendingService:
     def __init__(self):
