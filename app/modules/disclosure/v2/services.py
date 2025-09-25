@@ -566,6 +566,14 @@ class DisclosureService:
                 if source.get("category_type", "") else ""
             )
             
+            # key_points JSON 문자열을 파싱
+            key_points_list = []
+            if source["key_points"]:
+                try:
+                    key_points_list = json.loads(source["key_points"])
+                except (json.JSONDecodeError, TypeError):
+                    key_points_list = []
+            
             data.append({
                 "id": source["id"],
                 "name": res_name,
@@ -575,7 +583,11 @@ class DisclosureService:
                 "date": datetime.fromisoformat(source["date"].replace("Z", "+00:00")),
                 "emotion": source["emotion"].lower(),
                 "impact_reason": source["impact_reason"],
-                "key_points": source["key_points"],
+                "key_points_1": key_points_list[0] if len(key_points_list) > 0 else "",
+                "key_points_2": key_points_list[1] if len(key_points_list) > 1 else "",
+                "key_points_3": key_points_list[2] if len(key_points_list) > 2 else "",
+                "key_points_4": key_points_list[3] if len(key_points_list) > 3 else "",
+                "key_points_5": key_points_list[4] if len(key_points_list) > 4 else "",
                 "summary": source["summary"],
                 "document_url": source["url"],
             })
