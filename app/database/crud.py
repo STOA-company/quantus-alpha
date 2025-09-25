@@ -105,13 +105,19 @@ class BaseDatabase:
             return False
 
     async def check_connection_async(self) -> bool:
-      try:
-          async with self.get_async_connection_readonly() as connection:
-              await connection.execute(select(1))
-          return True
-      except Exception as e:
-          logger.error(f"Async database connection check failed: {str(e)}")
-          return False
+        try:
+            import asyncio
+            # 간단한 연결 테스트 - 5초 타임아웃 설정
+            async with asyncio.timeout(5):
+                async with self.db.async_engine.connect() as connection:
+                    await connection.execute(select(1))
+            return True
+        except asyncio.TimeoutError:
+            logger.error("Database connection check timed out after 5 seconds")
+            return False
+        except Exception as e:
+            logger.error(f"Async database connection check failed: {str(e)}")
+            return False
 
     def _execute(self, query, *args):
         """쿼리 실행을 위한 메서드"""

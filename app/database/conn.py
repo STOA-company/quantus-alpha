@@ -58,6 +58,11 @@ class BaseSQLAlchemy:
             pool_pre_ping=True,
             pool_size=pool_size,
             max_overflow=max_overflow,
+            connect_args={
+                "connect_timeout": 10,  # 연결 타임아웃 10초
+                "read_timeout": 30,     # 읽기 타임아웃 30초
+                "write_timeout": 30,    # 쓰기 타임아웃 30초
+            }
         )
 
         self._async_session = sessionmaker(
