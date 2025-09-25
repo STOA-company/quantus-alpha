@@ -378,9 +378,23 @@ class InterestService:
         groups = await self.db._select_async(table="alphafinder_interest_group", user_id=user_id, order="order", ascending=True)
         if not groups or not any(group.name in ["실시간 인기"] for group in groups):
             return await self.init_interest_group(user_id)
+        
+        # 모든 그룹의 카운트를 한 번에 조회 (JOIN 쿼리 사용)
+        group_ids = [group.id for group in groups]
+        count_query = f"""
+        SELECT group_id, COUNT(*) as count 
+        FROM alphafinder_interest_stock 
+        WHERE group_id IN ({','.join(map(str, group_ids))})
+        GROUP BY group_id
+        """
+        count_results = await self.db._execute_async(text(count_query))
+        
+        # 카운트 결과를 딕셔너리로 변환
+        count_dict = {row.group_id: row.count for row in count_results}
+        
         result = []
         for group in groups:
-            count = 11 if group.name == "실시간 인기" else await self.get_interest_count(group.id)
+            count = 11 if group.name == "실시간 인기" else count_dict.get(group.id, 0)
             result.append({
                 "id": group.id,
                 "name": group.name,
