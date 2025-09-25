@@ -76,6 +76,10 @@ class DataNotFoundException(FinancialException):
             error_code="DATA_NOT_FOUND",
         )
 
+class DividendNotFoundException(FinancialException):
+    def __init__(self, ticker: str, data_type: str = "dividend"):
+        super().__init__(message=f"{ticker} 종목에 대한 {data_type} 데이터가 존재하지 않습니다.", status_code=404, error_code="DIVIDEND_NOT_FOUND")
+
 
 class AnalysisException(FinancialException):
     """분석 중 발생하는 예외"""
