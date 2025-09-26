@@ -92,7 +92,7 @@ async def renewal_real_time(
     response_data = NewsRenewalResponse(news=news_data, disclosure=disclosure_data)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data)
 
-@router.get("/renewal/detail/v2", summary="상세 페이지 뉴스", response_model=NewsResponse[List[NewsDetailItemV2]])
+@router.get("/renewal/detail", summary="상세 페이지 뉴스", response_model=NewsResponse[List[NewsDetailItemV2]])
 async def news_detail_elasticsearch(
     ticker: Annotated[str, Query(..., description="종목 코드, 예시: AAPL, A110090")],
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
