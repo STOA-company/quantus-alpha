@@ -375,7 +375,14 @@ class InterestService:
             - 사용자가 처음 접속하는 경우, 기본 그룹("실시간 인기")이 자동으로 생성됨
             - "실시간 인기" 그룹은 필수 그룹으로, 삭제할 수 없음
         """
-        groups = await self.db._select_async(table="alphafinder_interest_group", user_id=user_id, order="order", ascending=True)
+        logger.info(f"[get_interest_group] Starting DB query for user_id: {user_id}")
+        try:
+            groups = await self.db._select_async(table="alphafinder_interest_group", user_id=user_id, order="order", ascending=True)
+            logger.info(f"[get_interest_group] DB query completed for user_id: {user_id}, found {len(groups) if groups else 0} groups")
+        except Exception as e:
+            logger.error(f"[get_interest_group] DB query failed for user_id: {user_id}, error: {str(e)}")
+            raise
+        
         if not groups or not any(group.name in ["실시간 인기"] for group in groups):
             return await self.init_interest_group(user_id)
         

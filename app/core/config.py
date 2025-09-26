@@ -52,8 +52,8 @@ class Settings(BaseSettings):
     CELERY_CONCURRENCY: int = os.getenv("CELERY_CONCURRENCY", 7)
 
     # Database connection pool settings
-    DB_POOL_SIZE: int = os.getenv("DB_POOL_SIZE", 50)
-    DB_MAX_OVERFLOW: int = os.getenv("DB_MAX_OVERFLOW", 20)
+    DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "100"))  # 기본값 100으로 증가
+    DB_MAX_OVERFLOW: int = int(os.getenv("DB_MAX_OVERFLOW", "50"))  # 기본값 50으로 증가
 
     KIS_APP_KEY: str = os.getenv("KIS_APP_KEY", "")
     KIS_SECRET: str = os.getenv("KIS_SECRET", "")
