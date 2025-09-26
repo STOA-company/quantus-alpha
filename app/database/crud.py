@@ -134,16 +134,23 @@ class BaseDatabase:
 
     async def _execute_async(self, query, *args):
         """비동기 쿼리 실행을 위한 메서드"""
-        async with self.get_async_connection() as connection:
-            try:
-                result = await connection.execute(query, *args)
-                return result
-            except IntegrityError as e:
-                logger.error(f"Integrity Error in async query execution: {str(e)}")
-                raise
-            except Exception as e:
-                logger.error(f"Error in async query execution: {str(e)}")
-                raise
+        try:
+            import asyncio
+            # 5초 타임아웃 설정
+            async with asyncio.timeout(5):
+                async with self.get_async_connection() as connection:
+                    try:
+                        result = await connection.execute(query, *args)
+                        return result
+                    except IntegrityError as e:
+                        logger.error(f"Integrity Error in async query execution: {str(e)}")
+                        raise
+                    except Exception as e:
+                        logger.error(f"Error in async query execution: {str(e)}")
+                        raise
+        except asyncio.TimeoutError:
+            logger.error("Database query execution timed out after 5 seconds")
+            raise
 
     def get_condition(self, obj: object, **kwargs) -> list:
         """조건절 생성 메서드"""
@@ -443,9 +450,16 @@ class BaseDatabase:
             if offset:
                 stmt = stmt.offset(offset)
 
-            async with self.get_async_connection_readonly() as connection:
-                result = await connection.execute(stmt)
-                return result.fetchall()
+            try:
+                import asyncio
+                # 5초 타임아웃 설정
+                async with asyncio.timeout(5):
+                    async with self.get_async_connection_readonly() as connection:
+                        result = await connection.execute(stmt)
+                        return result.fetchall()
+            except asyncio.TimeoutError:
+                logger.error(f"Database select query timed out after 5 seconds for table: {table}")
+                raise
 
         except Exception as e:
             logger.error(f"Error in async select operation: {str(e)}")

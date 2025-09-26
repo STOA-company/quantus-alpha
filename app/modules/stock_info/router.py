@@ -162,6 +162,7 @@ async def get_combined_new(
 
     try: 
         # DB 접근 최소화: 종목 정보와 지표를 한 번에 조회
+        logger.info(f"Starting get_stock_info_with_factors_db for {ticker}")
         stock_info_db, stock_factors = await stock_service.get_stock_info_with_factors_db(ticker)
         type, ctry = stock_info_db.type, stock_info_db.ctry
         
