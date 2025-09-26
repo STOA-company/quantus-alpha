@@ -112,3 +112,4 @@ class FinancialCrud:
         except Exception as e:
             logger.error(f"업종 평균 {ratio_type} 비율 조회 중 오류 발생: {str(e)}")
             return 0.0
+

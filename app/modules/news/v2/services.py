@@ -1553,16 +1553,16 @@ class NewsService:
         
     async def get_latest_news_v2(self, ticker: str, lang: TranslateCountry) -> LatestNewsResponse:
         try:
-            disclosure_info = await self.get_disclosure_elasticsearch(tickers=[ticker], lang=lang, size=1, type="latest")
-            if disclosure_info:
-                latest_disclosure_info = disclosure_info
-            else:
+            try:
+                disclosure_info = await self.get_disclosure_elasticsearch(tickers=[ticker], lang=lang, size=1, type="latest")
+                latest_disclosure_info = disclosure_info[0] if disclosure_info else None
+            except DataNotFoundException:
                 latest_disclosure_info = None
 
-            news_info = await self.get_news_elasticsearch(tickers=[ticker], lang=lang, size=1)
-            if news_info:
-                latest_news_info = news_info
-            else:
+            try:
+                news_info = await self.get_news_elasticsearch(tickers=[ticker], lang=lang, size=1)
+                latest_news_info = news_info[0] if news_info else None
+            except DataNotFoundException:
                 latest_news_info = None
 
             # 둘 다 None인 경우 기본값 반환
@@ -1576,18 +1576,22 @@ class NewsService:
             # 하나만 None인 경우 처리
             if latest_disclosure_info is None:
                 final_latest_info = latest_news_info
+                content = latest_news_info.summary
+                news_type = "news"
             elif latest_news_info is None:
                 final_latest_info = latest_disclosure_info
+                content = latest_disclosure_info.summary
+                news_type = "disclosure"
             else:
                 # 둘 다 존재하는 경우 날짜 비교
                 if latest_news_info.date > latest_disclosure_info.date:
                     final_latest_info = latest_news_info
-                    content = latest_news_info.impact_reason
-                    type = "news"
+                    content = latest_news_info.summary
+                    news_type = "news"
                 else:
                     final_latest_info = latest_disclosure_info
-                    content = latest_disclosure_info.impact_reason
-                    type = "disclosure"
+                    content = latest_disclosure_info.summary
+                    news_type = "disclosure"
             
             date = final_latest_info.date
             date = date.replace(tzinfo=UTC).astimezone(KST).strftime("%Y-%m-%d %H:%M:%S")
@@ -1595,7 +1599,7 @@ class NewsService:
             return LatestNewsResponse(
                 date=date,
                 content=content,
-                type=type,
+                type=news_type,
             )
         
         except Exception as e:

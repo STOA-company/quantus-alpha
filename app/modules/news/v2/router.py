@@ -6,7 +6,7 @@ from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.news.v2.schemas import TopStoriesResponse
-from app.modules.news.v2.schemas import NewsDetailItemV2, NewsResponse, NewsRenewalResponse
+from app.modules.news.v2.schemas import NewsDetailItemV2, NewsResponse, NewsRenewalResponse, LatestNewsResponse
 from app.modules.news.v2.services import NewsService, get_news_service
 from app.modules.stock_info.v2.services import StockInfoService, get_stock_info_service
 from app.utils.quantus_auth_utils import get_optional_user, get_current_user_redis as get_current_user
@@ -65,22 +65,6 @@ async def mark_story_as_viewed(
     news_service: NewsService = Depends(get_news_service),
     user: Optional[AlphafinderUser] = Depends(get_current_user),
 ):
-    """
-    Mark a story as viewed by the current user using Redis.
-    Works for both authenticated and anonymous users.
-
-    Args:
-        ticker: The stock ticker symbol
-        type: The type of story ('news' or 'disclosure')
-        id: The ID of the story
-        response: FastAPI response object
-        request: FastAPI request object
-        news_service: NewsService instance
-        user: Optional authenticated user
-
-    Returns:
-        A response indicating success
-    """
     news_service.mark_story_as_viewed(ticker=ticker, type=type, id=id, request=request, response=response, user=user)
     return BaseResponse(status_code=200, message="Successfully updated story view status")
 
@@ -147,3 +131,12 @@ async def news_detail_elasticsearch(
         neutral_count=emotion_count.get("neutral", 0),
         ctry=ctry,
     )
+
+@router.get("/latest", response_model=BaseResponse[LatestNewsResponse])
+async def latest_news(
+    ticker: Annotated[str, Query(..., description="종목 코드, 예시: AAPL, A110090")],
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
+    news_service: NewsService = Depends(get_news_service),
+):
+    data = await news_service.get_latest_news_v2(ticker=ticker, lang=lang)
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
