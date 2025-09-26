@@ -137,7 +137,7 @@ class BaseDatabase:
         try:
             import asyncio
             # 5초 타임아웃 설정
-            async with asyncio.timeout(5):
+            async with asyncio.timeout(10):
                 async with self.get_async_connection() as connection:
                     try:
                         result = await connection.execute(query, *args)
