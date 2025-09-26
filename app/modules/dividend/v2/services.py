@@ -36,7 +36,18 @@ class DividendService:
 
         # ticker가 없는 경우 체크
         if not dividend_data:
-            raise DividendNotFoundException(ticker=ticker, data_type="dividend")
+            return DividendItem(
+                ticker=ticker,
+                name="",
+                ctry=ctry,
+                last_year_dividend_count=0,
+                last_year_dividend_date=[],
+                last_dividend_per_share=None,
+                last_dividend_ratio=None,
+                last_dividend_growth_rate=None,
+                detail=[],
+            )
+            # raise DividendNotFoundException(ticker=ticker, data_type="dividend")
 
         # 순수 Python으로 데이터 처리
         processed_data = self._process_dividend_data(dividend_data, current_year)

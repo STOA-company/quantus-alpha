@@ -1,6 +1,7 @@
 import math
 from typing import Annotated, List
 
+from app.modules import price
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.core.exception.base import DuplicateException, NotFoundException
@@ -447,6 +448,69 @@ async def interest_disclosure(
     )
 
 ########################################################
+
+@router.get("/mobile/{group_id}", summary="모바일용 스토리 조회", response_model=BaseResponse)
+async def top_stories_mobile(
+    group_id: int,
+    request: Request,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
+    page: Annotated[int, Query(description="페이지 번호, 기본값: 1")] = 1,
+    size: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 10,
+    news_service: NewsService = Depends(get_news_service),
+    interest_service: InterestService = Depends(get_interest_service),
+    user: AlphafinderUser = Depends(get_current_user),  # noqa
+):
+    tickers = await interest_service.get_interest_tickers(group_id)
+    
+    if len(tickers) == 0:
+        return BaseResponse(status_code=404, message="관심 종목이 없습니다", data=[])
+
+    # 병렬로 데이터 가져오기
+    interest_top_stories = await news_service.top_stories_elasticsearch(request=request, tickers=tickers, lang=lang, stories_count=30, user=user)
+    interest_price_data = await interest_service.get_interest_price_elasticsearch(tickers=tickers, group_id=group_id, lang=lang)
+    total_news_data = await news_service.get_news_elasticsearch(lang=lang, tickers=tickers)
+
+    offset = (page - 1) * size
+    news_data = total_news_data[offset : offset + size]
+
+    # if user.subscription_level >= 3: # TODO :: 유저 테이블 통합 후 주석 해제
+    has_next = len(total_news_data) > page * size
+    # else:
+    #     current_position = offset * limit + len(news_data)
+    #     has_next = current_position < len(total_news_data)
+
+    total_count = len(total_news_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
+    total_count = len(total_news_data)
+    total_pages = math.ceil(total_count / size)
+    current_page = page
+
+    interest_news_data = InterestNewsResponse(news=news_data, has_next=has_next)
+
+    # 모바일용 통합 응답 데이터 구성
+    mobile_data = {
+        "top_stories": interest_top_stories,  # TopStoriesResponse 리스트
+        "price_data": interest_price_data,    # InterestPriceResponse 리스트  
+        "news_data": NewsDisclosureResponse(
+            status_code=200,
+            message="Successfully retrieved news data",
+            data=interest_news_data,
+            total_count=total_count,
+            total_pages=total_pages,
+            current_page=current_page,
+            offset=offset,
+            size=size,
+        )
+    }
+
+    return BaseResponse(
+        status_code=200,
+        message="모바일용 관심 종목 데이터를 성공적으로 조회했습니다",
+        data=mobile_data
+    )
+
 # elasticsearch test
 @router.get(
     "/stories/{group_id}",
