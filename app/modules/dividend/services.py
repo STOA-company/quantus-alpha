@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from app.common.constants import UTC
-from app.core.exception.custom import DataNotFoundException
+from app.core.exception.custom import DividendNotFoundException
 from app.database.crud import database
 from app.modules.common.enum import Country, FinancialCountry
 from app.modules.common.utils import contry_mapping
@@ -198,7 +198,7 @@ class DividendService:
 
         # ticker가 없는 경우 체크
         if df1.empty:
-            raise DataNotFoundException(ticker=ticker, data_type="dividend")
+            raise DividendNotFoundException(ticker=ticker, data_type="dividend")
 
         # 데이터 타입 확인 및 변환
         df1["per_share"] = pd.to_numeric(df1["per_share"], errors="coerce")

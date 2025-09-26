@@ -58,6 +58,7 @@ class BaseSQLAlchemy:
             pool_pre_ping=True,
             pool_size=pool_size,
             max_overflow=max_overflow,
+            pool_timeout=10,  # 연결 대기 타임아웃 5초
         )
 
         self._async_session = sessionmaker(
@@ -115,6 +116,7 @@ class BaseSQLAlchemy:
             pool_pre_ping=True,
             pool_size=pool_size,
             max_overflow=max_overflow,
+            pool_timeout=5,  # 연결 대기 타임아웃 5초
         )
 
         self._async_session = sessionmaker(

@@ -96,9 +96,10 @@ class DisclosureRenewalItemWeb(BaseModel):
     key_points: str | None
     emotion: str | None
     name: str | None
+    document_url: str | None
     change_rate: float | None
     price_impact: float | None
-    document_url: str | None
+
 
 
 

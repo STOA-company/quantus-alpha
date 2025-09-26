@@ -45,7 +45,14 @@ class InterestService:
         return row.kr_name if lang == TranslateCountry.KO else row.en_name
 
     async def get_interest_tickers(self, group_id: int):
-        group = await self.db._select_async(table="alphafinder_interest_group", columns=["name"], id=group_id)
+        logger.info(f"[get_interest_tickers] Starting DB query for group_id: {group_id}")
+        try:
+            group = await self.db._select_async(table="alphafinder_interest_group", columns=["name"], id=group_id)
+            logger.info(f"[get_interest_tickers] DB query completed for group_id: {group_id}, found {len(group) if group else 0} groups")
+        except Exception as e:
+            logger.error(f"[get_interest_tickers] DB query failed for group_id: {group_id}, error: {str(e)}")
+            raise
+        
         if not group:
             raise NotFoundException(message="관심 종목 그룹이 존재하지 않습니다.")
 
@@ -375,12 +382,38 @@ class InterestService:
             - 사용자가 처음 접속하는 경우, 기본 그룹("실시간 인기")이 자동으로 생성됨
             - "실시간 인기" 그룹은 필수 그룹으로, 삭제할 수 없음
         """
-        groups = await self.db._select_async(table="alphafinder_interest_group", user_id=user_id, order="order", ascending=True)
+        logger.info(f"[get_interest_group] Starting DB query for user_id: {user_id}")
+        try:
+            groups = await self.db._select_async(table="alphafinder_interest_group", user_id=user_id, order="order", ascending=True)
+            logger.info(f"[get_interest_group] DB query completed for user_id: {user_id}, found {len(groups) if groups else 0} groups")
+        except Exception as e:
+            logger.error(f"[get_interest_group] DB query failed for user_id: {user_id}, error: {str(e)}")
+            raise
+        
         if not groups or not any(group.name in ["실시간 인기"] for group in groups):
             return await self.init_interest_group(user_id)
+        
+        # 모든 그룹의 카운트를 한 번에 조회 (JOIN 쿼리 사용)
+        group_ids = [group.id for group in groups]
+        
+        # group_ids가 비어있으면 빈 결과 반환
+        if not group_ids:
+            count_results = []
+        else:
+            count_query = f"""
+            SELECT group_id, COUNT(*) as count 
+            FROM alphafinder_interest_stock 
+            WHERE group_id IN ({','.join(map(str, group_ids))})
+            GROUP BY group_id
+            """
+            count_results = await self.db._execute_async(text(count_query))
+        
+        # 카운트 결과를 딕셔너리로 변환
+        count_dict = {row.group_id: row.count for row in count_results}
+        
         result = []
         for group in groups:
-            count = 11 if group.name == "실시간 인기" else await self.get_interest_count(group.id)
+            count = 11 if group.name == "실시간 인기" else count_dict.get(group.id, 0)
             result.append({
                 "id": group.id,
                 "name": group.name,
@@ -793,6 +826,7 @@ class InterestService:
         import time
         total_start_time = time.time()
         
+
         # 엘라스틱서치 클라이언트 초기화
         await self._init_elasticsearch()
         

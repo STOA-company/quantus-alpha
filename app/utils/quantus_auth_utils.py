@@ -27,23 +27,15 @@ BASE_URL = os.getenv("QUANTUS_BASE_URL")
 security = HTTPBearer(auto_error=False)
 
 TOKEN_CACHE_PREFIX = "auth_token:"
-TOKEN_CACHE_TTL = 3600  # 1시간 (초 단위)
+TOKEN_CACHE_TTL = 30  # 1시간 (초 단위)
 LOCK_PREFIX = "auth_lock:"
 LOCK_TTL = 30  # 락 타임아웃 30초
 
-async def validate_token_async(token, sns_type, client_type):
+async def validate_token_async(token, sns_type, client_type, max_retries=3):
     try:
         # None 값 체크
         if not all([token, sns_type, client_type]):
             return None
-
-        # tracer = trace.get_tracer(__name__)
-        # with tracer.start_as_current_span("validate_token_external_async") as span:
-        #     span.set_attribute("http.url", urljoin(BASE_URL, "user_info"))
-        #     span.set_attribute("http.method", "POST")
-        #     span.set_attribute("http.target", "/user_info")
-        #     span.set_attribute("service.name", "quantus-alpha")
-        #     span.set_attribute("operation", "token_validation")
 
         headers = {
             "Authorization": f"Bearer {token}",
@@ -51,33 +43,46 @@ async def validate_token_async(token, sns_type, client_type):
             "Client-Type": client_type,
         }
 
-
         async with httpx.AsyncClient(
             limits=httpx.Limits(
                 max_keepalive_connections=30,
                 keepalive_expiry=45.0
             )
         ) as client:
-            try:
-                response_data = await client.post(
-                    urljoin(BASE_URL, "user_info"),
-                    headers=headers,
-                    timeout=httpx.Timeout(
-                        connect=5.0,    # 연결 타임아웃
-                        read=30.0,      # 읽기 타임아웃 증가
-                        write=5.0,      # 쓰기 타임아웃
-                        pool=30.0       # 풀 타임아웃
+            # 최대 3번까지 재시도
+            for attempt in range(max_retries):
+                try:
+                    print(f"토큰 검증 시도 {attempt + 1}/{max_retries}: {sns_type}:{client_type}")
+                    response_data = await client.post(
+                        urljoin(BASE_URL, "user_info"),
+                        headers=headers,
+                        timeout=httpx.Timeout(
+                            connect=5.0,    # 연결 타임아웃
+                            read=10.0,      # 읽기 타임아웃 (10초로 단축)
+                            write=5.0,      # 쓰기 타임아웃
+                            pool=10.0       # 풀 타임아웃 (10초로 단축)
+                        )
                     )
-                )
-            except httpx.ReadTimeout:
-                print("토큰 검증 서버 응답 타임아웃 - 기본 사용자로 처리")
-                return None
-            except httpx.RequestError as e:
-                print(f"토큰 검증 요청 실패: {e}")
-                return None
-                
-                # span.set_attribute("http.status_code", response_data.status_code)
-            return response_data
+                    print(f"토큰 검증 성공: {sns_type}:{client_type}")
+                    return response_data
+                    
+                except httpx.ReadTimeout:
+                    print(f"토큰 검증 서버 응답 타임아웃 (시도 {attempt + 1}/{max_retries}): {sns_type}:{client_type}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1)  # 1초 대기 후 재시도
+                        continue
+                    else:
+                        print(f"토큰 검증 최종 실패 - 타임아웃: {sns_type}:{client_type}")
+                        return None
+                        
+                except httpx.RequestError as e:
+                    print(f"토큰 검증 요청 실패 (시도 {attempt + 1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1)  # 1초 대기 후 재시도
+                        continue
+                    else:
+                        print(f"토큰 검증 최종 실패 - 요청 오류: {sns_type}:{client_type}")
+                        return None
                 
     except Exception as e:
         print(f"비동기 함수 상세 오류: {type(e).__name__}: {e}")  # 더 자세한 오류
@@ -407,10 +412,16 @@ async def get_current_user_redis(
                 res = await validate_token_async(token=token, sns_type=sns_type, client_type=client_type)
                 
                 if res is None:
+                    # 외부 API 호출 실패 시에도 캐시에 실패 정보 저장 (다른 요청들이 재시도하지 않도록)
+                    print(f"외부 API 호출 실패, 실패 캐시 저장: {sns_type}:{client_type}")
+                    _cache_token_validation(token, sns_type, client_type, {"error": "validation_failed"}, ttl=60)  # 1분간 실패 캐시
                     raise HTTPException(status_code=500, detail="Token validation failed")
                     
                 status_code = res.status_code
                 if status_code != 200:
+                    # 상태 코드가 200이 아닌 경우에도 캐시에 실패 정보 저장
+                    print(f"외부 API 응답 실패 ({status_code}), 실패 캐시 저장: {sns_type}:{client_type}")
+                    _cache_token_validation(token, sns_type, client_type, {"error": "validation_failed", "status_code": status_code}, ttl=60)
                     raise HTTPException(status_code=status_code)
 
                 user_info = res.json()["userInfo"]
@@ -527,6 +538,12 @@ async def _wait_for_cache_or_timeout(token: str, sns_type: str, client_type: str
                 expires_at = datetime.fromisoformat(data["expires_at"])
                 if datetime.utcnow() < expires_at:
                     user_info = data["user_info"]
+                    
+                    # 실패 캐시인 경우 None 반환
+                    if user_info.get("error") == "validation_failed":
+                        print(f"대기 중 실패 캐시 발견: {cache_key}")
+                        return None
+                    
                     if user_info.get("email") and "@" in user_info.get("email", ""):
                         print(f"대기 중 캐시 발견: {cache_key}")
                         return user_info
@@ -576,6 +593,12 @@ def _get_cached_token_validation(token: str, sns_type: str, client_type: str) ->
             expires_at = datetime.fromisoformat(data["expires_at"])
             if datetime.utcnow() < expires_at:
                 user_info = data["user_info"]
+                
+                # 실패 캐시인 경우 None 반환 (다른 요청들이 재시도하지 않도록)
+                if user_info.get("error") == "validation_failed":
+                    print(f"실패 캐시 발견, 재시도 방지: {cache_key}")
+                    return None
+                
                 # 캐시된 사용자 정보의 email 필드 유효성 검사
                 if not user_info.get("email") or "@" not in user_info.get("email", ""):
                     print(f"캐시된 사용자 정보에 유효하지 않은 email: {user_info.get('email')}")

@@ -91,7 +91,6 @@ class TrendingService:
             )
             for idx, stock in enumerate(trending_stocks, 1)
         ]
-
-
+        
 def get_trending_service():
     return TrendingService()

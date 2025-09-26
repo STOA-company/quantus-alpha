@@ -6,7 +6,7 @@ from app.models.models_users import AlphafinderUser
 from app.modules.common.enum import TranslateCountry
 from app.modules.common.schemas import BaseResponse
 from app.modules.news.v2.schemas import TopStoriesResponse
-from app.modules.news.v2.schemas import NewsDetailItemV2, NewsResponse, NewsRenewalResponse
+from app.modules.news.v2.schemas import NewsDetailItemV2, NewsResponse, NewsRenewalResponse, LatestNewsResponse
 from app.modules.news.v2.services import NewsService, get_news_service
 from app.modules.stock_info.v2.services import StockInfoService, get_stock_info_service
 from app.utils.quantus_auth_utils import get_optional_user, get_current_user_redis as get_current_user
@@ -65,22 +65,6 @@ async def mark_story_as_viewed(
     news_service: NewsService = Depends(get_news_service),
     user: Optional[AlphafinderUser] = Depends(get_current_user),
 ):
-    """
-    Mark a story as viewed by the current user using Redis.
-    Works for both authenticated and anonymous users.
-
-    Args:
-        ticker: The stock ticker symbol
-        type: The type of story ('news' or 'disclosure')
-        id: The ID of the story
-        response: FastAPI response object
-        request: FastAPI request object
-        news_service: NewsService instance
-        user: Optional authenticated user
-
-    Returns:
-        A response indicating success
-    """
     news_service.mark_story_as_viewed(ticker=ticker, type=type, id=id, request=request, response=response, user=user)
     return BaseResponse(status_code=200, message="Successfully updated story view status")
 
@@ -97,15 +81,18 @@ async def top_stories(
     data = await news_service.top_stories_elasticsearch(request=request, lang=lang, user=user, tickers=tickers)
     return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
 
-# @router.get("/renewal/real_time", summary="실시간 뉴스", response_model=BaseResponse[NewsRenewalResponse])
-# async def renewal_real_time(
-#     ctry: Annotated[str, Query(description="국가 코드, 예시: kr, us")] = None,
-#     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
-#     news_service: NewsService = Depends(get_news_service),
-# ):
+@router.get("/renewal/real_time", summary="실시간 뉴스", response_model=BaseResponse[NewsRenewalResponse])
+async def renewal_real_time(
+    ctry: Annotated[str, Query(description="국가 코드, 예시: kr, us")] = None,
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
+    news_service: NewsService = Depends(get_news_service),
+):
+    news_data, disclosure_data = await news_service.get_renewal_data(ctry=ctry, lang=lang)
+    
+    response_data = NewsRenewalResponse(news=news_data, disclosure=disclosure_data)
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=response_data)
 
-
-@router.get("/renewal/detail/v2", summary="상세 페이지 뉴스", response_model=NewsResponse[List[NewsDetailItemV2]])
+@router.get("/renewal/detail", summary="상세 페이지 뉴스", response_model=NewsResponse[List[NewsDetailItemV2]])
 async def news_detail_elasticsearch(
     ticker: Annotated[str, Query(..., description="종목 코드, 예시: AAPL, A110090")],
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
@@ -144,3 +131,12 @@ async def news_detail_elasticsearch(
         neutral_count=emotion_count.get("neutral", 0),
         ctry=ctry,
     )
+
+@router.get("/latest", response_model=BaseResponse[LatestNewsResponse])
+async def latest_news(
+    ticker: Annotated[str, Query(..., description="종목 코드, 예시: AAPL, A110090")],
+    lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en")] = None,
+    news_service: NewsService = Depends(get_news_service),
+):
+    data = await news_service.get_latest_news_v2(ticker=ticker, lang=lang)
+    return BaseResponse(status_code=200, message="Successfully retrieved news data", data=data)
