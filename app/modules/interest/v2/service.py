@@ -45,7 +45,14 @@ class InterestService:
         return row.kr_name if lang == TranslateCountry.KO else row.en_name
 
     async def get_interest_tickers(self, group_id: int):
-        group = await self.db._select_async(table="alphafinder_interest_group", columns=["name"], id=group_id)
+        logger.info(f"[get_interest_tickers] Starting DB query for group_id: {group_id}")
+        try:
+            group = await self.db._select_async(table="alphafinder_interest_group", columns=["name"], id=group_id)
+            logger.info(f"[get_interest_tickers] DB query completed for group_id: {group_id}, found {len(group) if group else 0} groups")
+        except Exception as e:
+            logger.error(f"[get_interest_tickers] DB query failed for group_id: {group_id}, error: {str(e)}")
+            raise
+        
         if not group:
             raise NotFoundException(message="관심 종목 그룹이 존재하지 않습니다.")
 

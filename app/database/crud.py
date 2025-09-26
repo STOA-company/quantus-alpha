@@ -108,7 +108,7 @@ class BaseDatabase:
         try:
             import asyncio
             # 간단한 연결 테스트 - 5초 타임아웃 설정
-            async with asyncio.timeout(5):
+            async with asyncio.timeout(10):
                 async with self.db.async_engine.connect() as connection:
                     await connection.execute(select(1))
             return True
@@ -453,7 +453,7 @@ class BaseDatabase:
             try:
                 import asyncio
                 # 5초 타임아웃 설정
-                async with asyncio.timeout(5):
+                async with asyncio.timeout(10):
                     async with self.get_async_connection_readonly() as connection:
                         result = await connection.execute(stmt)
                         return result.fetchall()

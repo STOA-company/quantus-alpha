@@ -460,7 +460,13 @@ async def top_stories_mobile(
     interest_service: InterestService = Depends(get_interest_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
 ):
-    tickers = await interest_service.get_interest_tickers(group_id)
+    logger.info(f"[top_stories_mobile] Starting request for group_id: {group_id}")
+    try:
+        tickers = await interest_service.get_interest_tickers(group_id)
+        logger.info(f"[top_stories_mobile] Retrieved {len(tickers)} tickers for group_id: {group_id}")
+    except Exception as e:
+        logger.error(f"[top_stories_mobile] Failed to get tickers for group_id: {group_id}, error: {str(e)}")
+        raise
     
     if len(tickers) == 0:
         return BaseResponse(status_code=404, message="관심 종목이 없습니다", data=[])
