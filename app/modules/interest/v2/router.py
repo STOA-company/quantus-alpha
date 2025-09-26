@@ -465,6 +465,9 @@ async def top_stories_mobile(
     if len(tickers) == 0:
         return BaseResponse(status_code=404, message="관심 종목이 없습니다", data=[])
 
+    if lang is None:
+        lang = TranslateCountry.KO
+
     # 병렬로 데이터 가져오기
     interest_top_stories = await news_service.top_stories_elasticsearch(request=request, tickers=tickers, lang=lang, stories_count=30, user=user)
     interest_price_data = await interest_service.get_interest_price_elasticsearch(tickers=tickers, group_id=group_id, lang=lang)

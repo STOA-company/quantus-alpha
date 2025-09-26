@@ -807,6 +807,7 @@ class InterestService:
         import time
         total_start_time = time.time()
         
+
         # 엘라스틱서치 클라이언트 초기화
         await self._init_elasticsearch()
         
