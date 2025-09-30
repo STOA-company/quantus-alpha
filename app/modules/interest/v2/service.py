@@ -58,7 +58,7 @@ class InterestService:
 
         if group[0].name == "실시간 인기" :
             current_datetime = now_utc()
-            before_24_hours = current_datetime - timedelta(hours=24)
+            before_24_hours = current_datetime - timedelta(hours=48)
             allowed_time = current_datetime + timedelta(minutes=5)
             query_us = f"""
                 SELECT st.ticker
