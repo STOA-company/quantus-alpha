@@ -63,7 +63,9 @@ class FinancialService:
                 sector_tickers = await self.data_db._select_async(table="stock_information", columns=["ticker"], **{sector_name: company_sector})
                 sector_tickers = [row.ticker for row in sector_tickers]
             else:
-                sector_tickers = [ticker]
+                # USA 티커의 경우 -US 접미사를 제거한 티커를 사용
+                clean_ticker = ticker[:-3] if ticker.endswith("-US") else ticker
+                sector_tickers = [clean_ticker]
 
             company_name = company_name if company_name else ticker
 
@@ -73,6 +75,7 @@ class FinancialService:
             else:
                 ticker = ticker
                 tickers_condition = sector_tickers
+            
             ##################################################################################################################################
 
             ######################################################### 발행수식 정보 로드 #########################################################
@@ -173,9 +176,11 @@ class FinancialService:
 ######################################################## 데이터 계산 헬퍼 메서드############################################################
 
     async def _get_stock_info_by_ticker(self, ticker: str) -> StockInformation:
-        stock_info = await self.data_db._select_async(table="stock_information", ticker=ticker)
+        # USA 티커의 경우 -US 접미사를 제거하여 stock_information 테이블에서 조회
+        clean_ticker = ticker[:-3] if ticker.endswith("-US") else ticker
+        stock_info = await self.data_db._select_async(table="stock_information", ticker=clean_ticker)
         if not stock_info:
-            raise HTTPException(status_code=404, detail=f"Stock not found: {ticker}")
+            raise HTTPException(status_code=404, detail=f"Stock not found: {clean_ticker}")
         return stock_info[0]
 
     async def _get_date_conditions_ten(self, start_date: Optional[str], end_date: Optional[str]) -> Dict:
