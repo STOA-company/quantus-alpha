@@ -58,7 +58,7 @@ class InterestService:
 
         if group[0].name == "실시간 인기" :
             current_datetime = now_utc()
-            before_24_hours = current_datetime - timedelta(hours=48)
+            before_24_hours = current_datetime - timedelta(hours=24)
             allowed_time = current_datetime + timedelta(minutes=5)
             query_us = f"""
                 SELECT st.ticker
@@ -855,6 +855,10 @@ class InterestService:
             })
         processing_elapsed = time.time() - processing_start_time
         logger.info(f"[get_interest_price_elasticsearch] Data processing completed in {processing_elapsed:.3f}s, processed {len(ticker_price_data)} items")
+
+
+        if group_id == 451:
+            return ticker_price_data
         
         # 순서 정렬
         order_start_time = time.time()

@@ -258,8 +258,8 @@ def create_trending_tickers_query() -> ElasticsearchQueryBuilder:
     builder = ElasticsearchQueryBuilder()
     builder.term("is_related", True)
     builder.term("is_exist", True)
-    # builder.range_query("date", gte="now-24h", lte="now+5m")
-    
+    builder.range_query("date", gte="now-24h", lte="now+5m")
+
     builder.size(0)  # 집계만 사용하므로 문서는 반환하지 않음
 
     # US 티커 집계 (A로 시작하지 않는 것들)

@@ -20,7 +20,6 @@ from app.modules.interest.v2.response import InterestGroupResponse, InterestPric
 from app.modules.interest.v2.service import InterestService, get_interest_service
 from app.modules.news.v2.schemas import InterestDisclosureResponse, InterestNewsResponse, TopStoriesResponse
 from app.modules.news.v2.services import NewsService, get_news_service
-from app.modules.stock_info.v2.services import StockInfoService, get_stock_info_service
 from app.utils.quantus_auth_utils import get_current_user_redis as get_current_user
 
 logger = setup_logger(__name__)
@@ -461,13 +460,12 @@ async def top_stories_mobile(
     # size: Annotated[int, Query(description="페이지 사이즈, 기본값: 10")] = 10,
     news_service: NewsService = Depends(get_news_service),
     interest_service: InterestService = Depends(get_interest_service),
-    stock_service: StockInfoService = Depends(get_stock_info_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
 ):
     logger.info(f"[top_stories_mobile] Starting request for group_id: {group_id}")
     try:
-        tickers = await stock_service.get_trending_stock_ticker()
-        # tickers = await interest_service.get_interest_tickers(group_id)
+        
+        tickers = await interest_service.get_interest_tickers(group_id)
         logger.info(f"[top_stories_mobile] Retrieved {len(tickers)} tickers for group_id: {group_id}")
     except Exception as e:
         logger.error(f"[top_stories_mobile] Failed to get tickers for group_id: {group_id}, error: {str(e)}")
@@ -537,7 +535,6 @@ async def top_stories_elasticsearch(
     lang: Annotated[TranslateCountry | None, Query(description="언어 코드, 예시: ko, en", optional=True)] = None,
     news_service: NewsService = Depends(get_news_service),
     service: InterestService = Depends(get_interest_service),
-    stock_service: StockInfoService = Depends(get_stock_info_service),
     user: AlphafinderUser = Depends(get_current_user),  # noqa
 ):
     import time
@@ -545,8 +542,7 @@ async def top_stories_elasticsearch(
     
     # logger.info(f"Starting top_stories_elasticsearch for group_id {group_id}")
     tickers_start_time = time.time()
-    tickers = await stock_service.get_trending_stock_ticker()
-    # tickers = await service.get_interest_tickers(group_id)
+    tickers = await service.get_interest_tickers(group_id)
     tickers_elapsed = time.time() - tickers_start_time
     
     if len(tickers) == 0:
