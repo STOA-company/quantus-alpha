@@ -468,6 +468,7 @@ async def top_stories_mobile(
     try:
         if group_id == 451:
             tickers = await stock_service.get_trending_stock_ticker()
+            logger.info(f"[top_stories_mobile] Retrieved {tickers} tickers for group_id: {group_id}")
         else:
             tickers = await interest_service.get_interest_tickers(group_id)
         logger.info(f"[top_stories_mobile] Retrieved {len(tickers)} tickers for group_id: {group_id}")

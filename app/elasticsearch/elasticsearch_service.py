@@ -262,15 +262,11 @@ def create_trending_tickers_query() -> ElasticsearchQueryBuilder:
 
     builder.size(0)  # 집계만 사용하므로 문서는 반환하지 않음
 
-    # US 티커 집계 (A로 시작하지 않는 것들)
+    # US 티커 집계 (ctry: "us")
     us_agg = {
         "filter": {
-            "bool": {
-                "must_not": {
-                    "prefix": {
-                        "ticker.keyword": "A"
-                    }
-                }
+            "term": {
+                "ctry.keyword": "us"
             }
         },
         "aggs": {
@@ -293,11 +289,11 @@ def create_trending_tickers_query() -> ElasticsearchQueryBuilder:
         }
     }
 
-    # KR 티커 집계 (A로 시작하는 것들)
+    # KR 티커 집계 (ctry: "kr")
     kr_agg = {
         "filter": {
-            "prefix": {
-                "ticker.keyword": "A"
+            "term": {
+                "ctry.keyword": "kr"
             }
         },
         "aggs": {
