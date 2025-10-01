@@ -832,7 +832,7 @@ class InterestService:
         
         # 주식 가격 데이터 조회 (Elasticsearch) - 쿼리 빌더 사용
         price_start_time = time.time()
-        price_query_builder = create_stock_price_query(tickers).size(len(tickers) if tickers else 10)
+        price_query_builder = create_stock_price_query(tickers).size(len(tickers) if tickers else 10).sort("last_updated", "desc")
         price_response = await self.es_client.client.search(
             index="quantus-stock-trend-*",
             body=price_query_builder.build()

@@ -1015,7 +1015,7 @@ class NewsService:
         if not tickers:
             return {}
 
-        price_query_builder = create_stock_price_query(tickers).size(len(tickers))
+        price_query_builder = create_stock_price_query(tickers).size(len(tickers)).sort("last_updated", "desc")
         price_response = await self.es_client.client.search(
             index="quantus-stock-trend-*",
             body=price_query_builder.build()
