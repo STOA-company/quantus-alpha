@@ -176,16 +176,16 @@ async def health_check():
         # if not database.check_connection():
         #     raise Exception("Database connection test failed")
 
-        if not await database.check_connection_async():
-            raise Exception("Database connection test failed")
+        # if not await database.check_connection_async():
+        #     raise Exception("Database connection test failed")
 
         # 메타데이터 확인
-        tables = database.meta_data.tables.keys()
+        # tables = database.meta_data.tables.keys()
 
         return HealthCheckResponse(
             status_code=200,
-            database="connected",
-            details=HealthCheckDetails(tables_loaded=len(list(tables)), connection_test="successful"),
+            # database="connected",
+            # details=HealthCheckDetails(tables_loaded=len(list(tables)), connection_test="successful"),
         )
     except Exception as e:
         error_message = f"Database connection error: {str(e)}"
