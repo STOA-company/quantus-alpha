@@ -136,7 +136,7 @@ class BaseDatabase:
         """비동기 쿼리 실행을 위한 메서드"""
         try:
             import asyncio
-            # 5초 타임아웃 설정
+            # 10초 타임아웃 설정
             async with asyncio.timeout(10):
                 async with self.get_async_connection() as connection:
                     try:
@@ -149,7 +149,7 @@ class BaseDatabase:
                         logger.error(f"Error in async query execution: {str(e)}")
                         raise
         except asyncio.TimeoutError:
-            logger.error("Database query execution timed out after 5 seconds")
+            logger.error("Database query execution timed out after 10 seconds")
             raise
 
     def get_condition(self, obj: object, **kwargs) -> list:
@@ -452,13 +452,38 @@ class BaseDatabase:
 
             try:
                 import asyncio
-                # 5초 타임아웃 설정
+                import time
+                
+                overall_start = time.time()
+                
+                # 10초 타임아웃 설정
                 async with asyncio.timeout(10):
+                    conn_start = time.time()
                     async with self.get_async_connection_readonly() as connection:
+                        conn_time = time.time() - conn_start
+                        
+                        exec_start = time.time()
                         result = await connection.execute(stmt)
-                        return result.fetchall()
+                        exec_time = time.time() - exec_start
+                        
+                        fetch_start = time.time()
+                        data = result.fetchall()
+                        fetch_time = time.time() - fetch_start
+                        
+                        total_time = time.time() - overall_start
+                        
+                        # 1초 이상 걸린 쿼리만 로그
+                        if total_time > 1.0:
+                            logger.warning(
+                                f"[PERF] Slow query on table '{table}': "
+                                f"total={total_time:.3f}s (conn={conn_time:.3f}s, "
+                                f"exec={exec_time:.3f}s, fetch={fetch_time:.3f}s), "
+                                f"conditions={kwargs}"
+                            )
+                        
+                        return data
             except asyncio.TimeoutError:
-                logger.error(f"Database select query timed out after 5 seconds for table: {table}")
+                logger.error(f"Database select query timed out after 10 seconds for table: {table}, conditions: {kwargs}")
                 raise
 
         except Exception as e:

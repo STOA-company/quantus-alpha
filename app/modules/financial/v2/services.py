@@ -138,6 +138,7 @@ class FinancialService:
             raise AnalysisException(analysis_type="실적 조회", detail=str(e))
 
     async def get_financial_ratio(self, ctry: str, ticker: str, stock_info: StockInformation) -> Tuple[DebtRatioResponse, LiquidityRatioResponse, InterestCoverageRatioResponse]:
+        import asyncio
         country = FinancialCountry(ctry)
 
         if ctry == "USA":
@@ -145,20 +146,22 @@ class FinancialService:
 
         logger.info(f"get_financial_ratio: {ctry}, {ticker}")
 
-        finpos_info = await self.data_db._select_async(
-            table=f"{country.value}_finpos", 
-            Code=ticker, 
-            order="period_q", 
-            ascending=False, 
-            limit=4
-        )
-
-        income_info = await self.data_db._select_async(
-            table=f"{country.value}_income", 
-            Code=ticker, 
-            order="period_q", 
-            ascending=False, 
-            limit=4
+        # finpos와 income 데이터를 병렬로 조회
+        finpos_info, income_info = await asyncio.gather(
+            self.data_db._select_async(
+                table=f"{country.value}_finpos", 
+                Code=ticker, 
+                order="period_q", 
+                ascending=False, 
+                limit=4
+            ),
+            self.data_db._select_async(
+                table=f"{country.value}_income", 
+                Code=ticker, 
+                order="period_q", 
+                ascending=False, 
+                limit=4
+            )
         )
 
         if not finpos_info:
@@ -166,9 +169,12 @@ class FinancialService:
         elif len(finpos_info) < 4:
             raise HTTPException(status_code=404, detail=f"Financial position data not found: {ticker}")
         
-        debt_ratio_data = await self._get_debt_ratio_data(country, ticker, finpos_info, stock_info)
-        liquidity_ratio_data = await self._get_liquidity_ratio_data(country, ticker, finpos_info, stock_info)
-        interest_coverage_ratio_data = await self._get_interest_coverage_ratio_data(country, ticker, income_info, stock_info)
+        # 3개의 ratio 계산을 병렬로 실행
+        debt_ratio_data, liquidity_ratio_data, interest_coverage_ratio_data = await asyncio.gather(
+            self._get_debt_ratio_data(country, ticker, finpos_info, stock_info),
+            self._get_liquidity_ratio_data(country, ticker, finpos_info, stock_info),
+            self._get_interest_coverage_ratio_data(country, ticker, income_info, stock_info)
+        )
         
         return debt_ratio_data, liquidity_ratio_data, interest_coverage_ratio_data
 
@@ -176,9 +182,18 @@ class FinancialService:
 ######################################################## 데이터 계산 헬퍼 메서드############################################################
 
     async def _get_stock_info_by_ticker(self, ticker: str) -> StockInformation:
+        import time
+        start_time = time.time()
+        
         # USA 티커의 경우 -US 접미사를 제거하여 stock_information 테이블에서 조회
         clean_ticker = ticker[:-3] if ticker.endswith("-US") else ticker
+        logger.info(f"[PERF] Starting stock_info query for ticker: {clean_ticker}")
+        
         stock_info = await self.data_db._select_async(table="stock_information", ticker=clean_ticker)
+        
+        elapsed = time.time() - start_time
+        logger.info(f"[PERF] stock_info query completed in {elapsed:.3f}s for ticker: {clean_ticker}")
+        
         if not stock_info:
             raise HTTPException(status_code=404, detail=f"Stock not found: {clean_ticker}")
         return stock_info[0]
@@ -689,8 +704,31 @@ class FinancialService:
     async def get_financial_industry_avg_data(
         self, table_name: str, base_ticker: str, is_usa: bool, ratio_type: str
     ) -> float:
-        """업종 평균 재무비율 조회"""
+        """업종 평균 재무비율 조회 (Redis 캐싱 적용)"""
         from sqlalchemy import text
+        import json
+        
+        # 캐시 키 생성 (sector_2 기반)
+        cache_key = f"industry_avg:{table_name}:{base_ticker}:{ratio_type}"
+        
+        try:
+            # Redis 캐시 확인
+            from app.database.conn import db
+            if hasattr(db, '_async_session') and db._async_session:
+                # Redis client가 있으면 캐시 확인
+                try:
+                    import redis.asyncio as aioredis
+                    from app.core.config import settings
+                    redis_client = aioredis.from_url(f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}")
+                    cached_value = await redis_client.get(cache_key)
+                    if cached_value:
+                        logger.info(f"[CACHE HIT] Industry avg for {ratio_type}: {cached_value}")
+                        await redis_client.close()
+                        return float(cached_value)
+                except Exception:
+                    pass  # 캐시 실패시 쿼리 실행
+        except Exception:
+            pass
         
         ratio_calculations = {
             "debt": """WHEN CAST(f.total_asset AS DECIMAL) != 0
@@ -737,10 +775,21 @@ class FinancialService:
         """)
 
         try:
-            logger.info(f"Executing industry avg query for {ratio_type}: base_ticker={base_ticker}, is_usa={is_usa}, table={table_name}")
+            logger.info(f"[CACHE MISS] Executing industry avg query for {ratio_type}: base_ticker={base_ticker}")
             result = await self.data_db._execute_async(query, {"base_ticker": base_ticker, "is_usa": is_usa})
             industry_avg = result.scalar_one_or_none() or 0.0
             logger.info(f"Industry avg query result: {industry_avg}")
+            
+            # Redis에 캐시 저장 (1시간)
+            try:
+                import redis.asyncio as aioredis
+                from app.core.config import settings
+                redis_client = aioredis.from_url(f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}")
+                await redis_client.setex(cache_key, 3600, str(industry_avg))  # 1시간 캐시
+                await redis_client.close()
+            except Exception:
+                pass  # 캐시 저장 실패해도 결과는 반환
+            
             return industry_avg
         except Exception as e:
             logger.error(f"업종 평균 {ratio_type} 비율 조회 중 오류 발생: {str(e)}")
