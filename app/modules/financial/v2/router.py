@@ -46,7 +46,7 @@ async def get_income_performance_data(
 
 @router.get(
     "/financial-ratio",
-    summary="재무 api - debt_ratio 테스트용",
+    summary="재무 api",
 )
 async def get_financial_ratio(
     request: Request,
