@@ -196,7 +196,7 @@ class StockInfoService:
         ctry_3 = contry_mapping[ctry]
 
         # 현재 종목의 지표 조회
-        table_name = f"{ctry_3}_stock_factors"
+        table_name = f"{ctry_3}_stock_factors".lower()
         logger.info(f"[get_indicators] Querying {table_name} for ticker: {ticker}")
         basic_columns = ["per", "pbr", "roe"]
         stability_columns = [info.db_column for info in STABILITY_INFO.values()]
@@ -677,8 +677,8 @@ class StockInfoService:
                 elif ctry == "USA":
                     factors_ticker = f"{ticker}-US"
                 
-                # ctry 3자리 코드로 변환
-                ctry_3 = contry_mapping[ctry]
+                # ctry 3자리 코드로 변환 (소문자로)
+                ctry_3 = contry_mapping[ctry].lower()
                 table_name = f"{ctry_3}_stock_factors"
                 
                 logger.info(f"[get_stock_info_with_factors_db] Querying {table_name} for ticker: {factors_ticker}")
