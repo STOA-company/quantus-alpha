@@ -35,7 +35,7 @@ async def get_income_performance_data(
 ):
     try: 
         ctry = await async_check_ticker_country_len_3(ticker)
-        ctry = ctry.upper()
+        ctry = ctry.lower()
         result = await financial_service.get_income_performance_data(
             ctry=ctry, ticker=ticker, lang=lang, start_date=start_date, end_date=end_date
         )
@@ -55,7 +55,7 @@ async def get_financial_ratio(
     financial_service: FinancialService = Depends(get_financial_service),
 ):
     try:
-        ctry = check_ticker_country_len_3(ticker).upper()
+        ctry = check_ticker_country_len_3(ticker).lower()
         
         stock_info = await financial_service._get_stock_info_by_ticker(ticker=ticker)
         debt_ratio_data, liquidity_ratio_data, interest_coverage_ratio_data = await financial_service.get_financial_ratio(ctry=ctry, ticker=ticker, stock_info=stock_info)
