@@ -80,7 +80,7 @@ class FinancialService:
 
             ######################################################### 발행수식 정보 로드 #########################################################
             country_enum = FinancialCountry(country)
-            table_name = f"{country_enum.value}_stock_factors"
+            table_name = f"{country_enum.value.lower()}_stock_factors"
 
             stock_factors = await self.data_db._select_async(table=table_name, columns=["ticker", "shared_outstanding"], **{"ticker__in": tickers_condition}, limit=len(tickers_condition))
             if not stock_factors:
@@ -93,7 +93,7 @@ class FinancialService:
             ##################################################################################################################################
 
             ######################################################### 실적테이블 생성 ############################################################
-            table_name = f"{country.value}_income"
+            table_name = f"{country.value.lower()}_income"
             income_conditions = {
                 "Code__in": tickers_condition,
                 **date_conditions,
@@ -149,14 +149,14 @@ class FinancialService:
         # finpos와 income 데이터를 병렬로 조회
         finpos_info, income_info = await asyncio.gather(
             self.data_db._select_async(
-                table=f"{country.value}_finpos", 
+                table=f"{country.value.lower()}_finpos", 
                 Code=ticker, 
                 order="period_q", 
                 ascending=False, 
                 limit=4
             ),
             self.data_db._select_async(
-                table=f"{country.value}_income", 
+                table=f"{country.value.lower()}_income", 
                 Code=ticker, 
                 order="period_q", 
                 ascending=False, 
