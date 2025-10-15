@@ -30,18 +30,46 @@ class BaseSQLAlchemy:
         if not database_url:
             raise ValueError(f"{self.url_key} must be provided")
 
+        # Azure MySQL 체크
+        is_azure = 'azure.com' in str(database_url)
+        
+        # Azure MySQL의 경우 URL에 SSL 파라미터 추가
+        if is_azure:
+            # URL에 charset이 없으면 추가
+            if '?' not in database_url:
+                database_url = f"{database_url}?charset=utf8mb4"
+            elif 'charset' not in database_url:
+                database_url = f"{database_url}&charset=utf8mb4"
+        
         async_database_url = database_url.replace("mysql://", "mysql+aiomysql://")
         pool_recycle = kwargs.setdefault("DB_POOL_RECYCLE", 3600)
         pool_size = kwargs.get("DB_POOL_SIZE", 50)  # kwargs에서 직접 가져오기
         max_overflow = kwargs.get("DB_MAX_OVERFLOW", 20)  # kwargs에서 직접 가져오기
         echo = kwargs.setdefault("DB_ECHO", True)
 
+        # 엔진 설정
+        engine_kwargs = {
+            'echo': echo,
+            'pool_recycle': pool_recycle,
+            'pool_pre_ping': True,
+        }
+        
+        # Azure MySQL SSL 설정 (pymysql용)
+        if is_azure:
+            engine_kwargs['connect_args'] = {
+                'ssl': {'check_hostname': False, 'verify_mode': 0},
+                'ssl_verify_cert': False,
+                'charset': 'utf8mb4',
+                'connect_timeout': 30,
+                'read_timeout': 30,
+                'write_timeout': 30
+            }
+            logger.info("Azure MySQL SSL configuration applied")
+
         # 동기 엔진 설정
         self._engine = create_engine(
             database_url,
-            echo=echo,
-            pool_recycle=pool_recycle,
-            pool_pre_ping=True,
+            **engine_kwargs
         )
 
         self._session = sessionmaker(
@@ -51,14 +79,32 @@ class BaseSQLAlchemy:
         )
 
         # 비동기 엔진 설정
+        async_engine_kwargs = {
+            'echo': echo,
+            'pool_recycle': pool_recycle,
+            'pool_pre_ping': True,
+            'pool_size': pool_size,
+            'max_overflow': max_overflow,
+            'pool_timeout': 10,  # 연결 대기 타임아웃 10초
+        }
+        
+        # Azure MySQL SSL 설정 (aiomysql용)
+        if is_azure:
+            import ssl as ssl_module
+            ssl_context = ssl_module.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl_module.CERT_NONE
+            
+            async_engine_kwargs['connect_args'] = {
+                'ssl': ssl_context,
+                'charset': 'utf8mb4',
+                'connect_timeout': 30,
+            }
+            logger.info("Azure MySQL async SSL configuration applied")
+        
         self._async_engine = create_async_engine(
             async_database_url,
-            echo=echo,
-            pool_recycle=pool_recycle,
-            pool_pre_ping=True,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=10,  # 연결 대기 타임아웃 10초
+            **async_engine_kwargs
         )
 
         self._async_session = sessionmaker(
@@ -90,17 +136,45 @@ class BaseSQLAlchemy:
         if not database_url:
             raise ValueError(f"{self.url_key} must be provided")
 
+        # Azure MySQL 체크
+        is_azure = 'azure.com' in str(database_url)
+        
+        # Azure MySQL의 경우 URL에 SSL 파라미터 추가
+        if is_azure:
+            # URL에 charset이 없으면 추가
+            if '?' not in database_url:
+                database_url = f"{database_url}?charset=utf8mb4"
+            elif 'charset' not in database_url:
+                database_url = f"{database_url}&charset=utf8mb4"
+        
         async_database_url = database_url.replace("mysql://", "mysql+aiomysql://")
         pool_recycle = kwargs.setdefault("DB_POOL_RECYCLE", 3600)
         pool_size = kwargs.get("DB_POOL_SIZE", 50)  # kwargs에서 직접 가져오기
         max_overflow = kwargs.get("DB_MAX_OVERFLOW", 20)  # kwargs에서 직접 가져오기
         echo = kwargs.setdefault("DB_ECHO", True)
 
+        # 엔진 설정
+        engine_kwargs = {
+            'echo': echo,
+            'pool_recycle': pool_recycle,
+            'pool_pre_ping': True,
+        }
+        
+        # Azure MySQL SSL 설정 (pymysql용)
+        if is_azure:
+            engine_kwargs['connect_args'] = {
+                'ssl': {'check_hostname': False, 'verify_mode': 0},
+                'ssl_verify_cert': False,
+                'charset': 'utf8mb4',
+                'connect_timeout': 30,
+                'read_timeout': 30,
+                'write_timeout': 30
+            }
+            logger.info("Azure MySQL SSL configuration applied (init_db)")
+
         self._engine = create_engine(
             database_url,
-            echo=echo,
-            pool_recycle=pool_recycle,
-            pool_pre_ping=True,
+            **engine_kwargs
         )
 
         self._session = sessionmaker(
@@ -109,14 +183,33 @@ class BaseSQLAlchemy:
             bind=self._engine,
         )
 
+        # 비동기 엔진 설정
+        async_engine_kwargs = {
+            'echo': echo,
+            'pool_recycle': pool_recycle,
+            'pool_pre_ping': True,
+            'pool_size': pool_size,
+            'max_overflow': max_overflow,
+            'pool_timeout': 10,  # 연결 대기 타임아웃 10초
+        }
+        
+        # Azure MySQL SSL 설정 (aiomysql용)
+        if is_azure:
+            import ssl as ssl_module
+            ssl_context = ssl_module.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl_module.CERT_NONE
+            
+            async_engine_kwargs['connect_args'] = {
+                'ssl': ssl_context,
+                'charset': 'utf8mb4',
+                'connect_timeout': 30,
+            }
+            logger.info("Azure MySQL async SSL configuration applied (init_db)")
+        
         self._async_engine = create_async_engine(
             async_database_url,
-            echo=echo,
-            pool_recycle=pool_recycle,
-            pool_pre_ping=True,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=10,  # 연결 대기 타임아웃 10초
+            **async_engine_kwargs
         )
 
         self._async_session = sessionmaker(
