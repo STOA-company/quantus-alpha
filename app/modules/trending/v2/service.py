@@ -1,6 +1,7 @@
 from typing import List
 import time
 import logging
+from datetime import datetime
 
 from app.database.conn import db
 from app.database.crud import JoinInfo, database
@@ -55,11 +56,14 @@ class TrendingService:
             columns=["ticker"],
             ctry=request.ctry.value,
             is_activate=1,
+            is_trading_stopped=0,
+            is_delisted=0,
         )
         db_time = time.time() - db_start
         logger.info(f"[trending] Database query completed in {db_time:.3f}s, found {len(activate_tickers_data)} active tickers")
-
         activate_tickers = [row[0] for row in activate_tickers_data]
+        
+        # logger.info(f"stock list: {activate_tickers}")
 
         # 2. Elasticsearch 초기화
         es_init_start = time.time()
@@ -75,12 +79,24 @@ class TrendingService:
                                         .size(100)
                                         .build())
 
+        current_month = datetime.now().strftime("%Y.%m")
         trending_stock_response = await self.es_client.client.search(
-            index="quantus-stock-trend-*",
+            index=f"quantus-stock-trend-{current_month}",
             body=trending_stock_query_builder
         )
         es_query_time = time.time() - es_query_start
         logger.info(f"[trending] Elasticsearch query completed in {es_query_time:.3f}s, found {len(trending_stock_response['hits']['hits'])} results")
+        
+        # ES 결과에서 티커 목록 추출 및 비교
+        es_tickers = [hit["_source"]["ticker"] for hit in trending_stock_response["hits"]["hits"]]
+        logger.info(f"[trending] ES result tickers: {es_tickers}")
+        
+        # activate_tickers에 없는 종목이 있는지 확인
+        unexpected_tickers = [ticker for ticker in es_tickers if ticker not in activate_tickers]
+        if unexpected_tickers:
+            logger.warning(f"[trending] Found unexpected tickers not in activate_tickers: {unexpected_tickers}")
+        # else:
+        #     logger.info(f"[trending] All ES tickers are in activate_tickers ✓")
 
         # 4. 데이터 변환
         transform_start = time.time()

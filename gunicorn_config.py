@@ -92,8 +92,8 @@ def when_ready(_server):
             f"*타임아웃*: {timeout}초\n"
             f"*시작 시간*: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
-        result = send_slack_message(message, color="#36a64f")
-        print(f"Slack notification result: {result}")
+        # result = send_slack_message(message, color="#36a64f")
+        print(f"Slack notification result: {message}")
     except Exception as e:
         print(f"Failed to send startup notification: {e}")
         import traceback
@@ -117,8 +117,8 @@ def worker_timeout(worker):
             f"🔄 워커가 재시작됩니다."
         )
         
-        result = send_slack_message(message, color="#ff0000")
-        print(f"✅ Slack notification result: {result} for worker {worker_pid}")
+        # result = send_slack_message(message, color="#ff0000")
+        print(f"✅ Slack notification result: {message} for worker {worker_pid}")
     except Exception as e:
         print(f"❌ Failed to send worker timeout notification: {e}")
         # 예외 상세 정보도 출력
@@ -157,7 +157,7 @@ def worker_abort(worker):
             f"💀 워커가 비정상 종료되었습니다."
         )
         
-        send_slack_message(message)
+        # send_slack_message(message)
     except Exception as e:
         print(f"Failed to send worker abort notification: {e}")
     
@@ -177,7 +177,7 @@ def on_exit(_server):
             f"*환경*: {ENV}\n"
             f"*종료 시간*: {current_time}"
         )
-        send_slack_message(message)
+        # send_slack_message(message)
     except Exception as e:
         print(f"Failed to send shutdown notification: {e}")
 
@@ -208,7 +208,7 @@ def handle_worker_signal(signum, _frame):
                 f"*시그널*: {signal_name}\n"
                 f"*시간*: {current_time}"
             )
-            send_slack_message(message)
+            # send_slack_message(message)
         except Exception as e:
             print(f"Failed to send signal notification: {e}")
 
