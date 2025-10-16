@@ -421,7 +421,7 @@ class FinancialService:
         손익계산서 데이터 조회
         """
         try:
-            table_name = self.income_tables.get(ctry)
+            table_name = self.income_tables.get(ctry).lower()
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
                 raise InvalidCountryException(country=ctry)
@@ -502,7 +502,7 @@ class FinancialService:
         현금흐름표 데이터 조회
         """
         try:
-            table_name = self.cashflow_tables.get(ctry)
+            table_name = self.cashflow_tables.get(ctry).lower()
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
                 raise InvalidCountryException(country=ctry)
@@ -574,7 +574,7 @@ class FinancialService:
         재무상태표 데이터 조회
         """
         try:
-            table_name = self.finpos_tables.get(ctry)
+            table_name = self.finpos_tables.get(ctry).lower()
             if not table_name:
                 logger.warning(f"Invalid country code: {ctry}")
                 raise InvalidCountryException(country=ctry)
