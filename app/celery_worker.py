@@ -1,6 +1,8 @@
 import logging
 from functools import wraps
 
+from exchange_calendars.errors import DateOutOfBounds
+
 from app.batches.check_stock_status import check_warned_stock_us_batch, iscd_stat_cls_code_batch
 from app.batches.run_disclosure import run_disclosure_batch
 from app.batches.run_dividend import insert_dividend
@@ -301,10 +303,15 @@ def kr_stock_indices_collect():
     now_kr_datetime = now_kr()
     now_kr_date = now_kr_datetime.strftime("%Y-%m-%d")
     now_kr_time = now_kr_datetime.strftime("%H:%M:%S")
-    if (
-        get_session_checker(country="KR", start_date=now_kr_date).is_session(now_kr_date)
-        and "09:00:00" <= now_kr_time <= "15:40:00"
-    ):
+
+    try:
+        is_session = get_session_checker(country="KR", start_date=now_kr_date).is_session(now_kr_date)
+    except DateOutOfBounds:
+        # 날짜가 캘린더 범위를 벗어난 경우 (주말/휴일 등) 비거래일로 처리
+        logger.info("KR market is not open (date out of bounds). KR_stock_indices_collect process skipped.")
+        return
+
+    if is_session and "09:00:00" <= now_kr_time <= "15:40:00":
         try:
             notifier.notify_info("KR_stock_indices_collect process started")
             get_stock_indices_data("KOSPI")

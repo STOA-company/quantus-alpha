@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Literal
 
 import exchange_calendars as ecals
+from exchange_calendars.errors import DateOutOfBounds
 
 from app.core.config import korea_tz, us_eastern_tz, utc_tz
 from app.core.logger import setup_logger
@@ -101,7 +102,11 @@ def is_business_day(country: Literal["KR", "US"]) -> bool:
         "US": "XNYS",  # 뉴욕 증권거래소
     }
     calendar = ecals.get_calendar(calendar_map[country])
-    return calendar.is_session(now_utc(is_date=True))
+    try:
+        return calendar.is_session(now_utc(is_date=True))
+    except DateOutOfBounds:
+        # 날짜가 캘린더 범위를 벗어난 경우 (주말/휴일 등) 비거래일로 처리
+        return False
 
 
 def check_market_status(country: Literal["KR", "US"]) -> bool:
@@ -207,7 +212,11 @@ def is_us_market_open_or_recently_closed(extra_hours=1):
 
         # 오늘이 거래일인지 확인
         today_date = current_time.date()
-        if not calendar.is_session(today_date):
+        try:
+            if not calendar.is_session(today_date):
+                return False
+        except DateOutOfBounds:
+            # 날짜가 캘린더 범위를 벗어난 경우 (주말/휴일 등) False 반환
             return False
 
         # 현재 시장이 열려있는지 확인
