@@ -1,10 +1,10 @@
 set -e
 
 ENVIRONMENT=${1:-batch}
+BRANCH=${2:-dev}
 
 ENV_FILE=.env.batch
 ENV=batch
-BRANCH=dev
 COMPOSE_FILE="docker-compose.batch.yml"
 RUN_CELERY=true
 
