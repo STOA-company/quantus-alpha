@@ -19,7 +19,28 @@ services:
             - .:/app
         ports:
             - "8000:8000"
-
+    
+    flower:
+        build:
+            context: .
+            dockerfile: Dockerfile.batch
+        command: python -m celery -A app.common.celery_config:CELERY_APP flower --port=5555
+        mem_limit: 512m
+        restart: unless-stopped
+        env_file:
+            - .env.${ENV:-dev}
+        environment:
+            - IN_DOCKER=true
+            - ENV=${ENV:-dev}
+        depends_on:
+            - rabbitmq
+            - redis
+            - celery_worker
+        volumes:
+            - .:/app
+        ports:
+            - "5555:5555"
+    
     rabbitmq:
         image: rabbitmq:3.11.1-management
         expose:
@@ -28,14 +49,14 @@ services:
         environment:
             - RABBITMQ_DEFAULT_USER=admin
             - RABBITMQ_DEFAULT_PASS=admin
-
+    
     redis:
         image: redis:6.0.6
         expose:
             - 6379
-
+    
     pushgateway:
         image: prom/pushgateway:latest
         ports:
-        - "9091:9091"
+            - "9091:9091"
         restart: unless-stopped
