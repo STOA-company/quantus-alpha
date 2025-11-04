@@ -1,9 +1,7 @@
 set -e
 
-# batch-deploy.sh는 항상 batch 환경을 사용하므로 첫 번째 인자를 브랜치로 받습니다
-# 사용법: ./batch-deploy.sh [BRANCH]
-# 예: ./batch-deploy.sh fix/batch
-BRANCH=${1:-dev}
+ENVIRONMENT=${1:-batch}
+BRANCH=${2:-dev}
 
 ENV_FILE=.env.batch
 ENV=batch
