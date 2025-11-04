@@ -57,7 +57,7 @@ attempt=1
 while [ $attempt -le $max_attempts ]; do
     echo "Health check attempt $attempt of $max_attempts..."
 
-    celery_status=$(docker compose -f $COMPOSE_FILE exec -T celery_worker celery -A app.common.celery_config:CELERY_APP inspect ping 2>/dev/null | grep "pong" || echo "")
+    celery_status=$(docker compose -f $COMPOSE_FILE exec -T celery_worker python -m celery -A app.common.celery_config:CELERY_APP inspect ping 2>/dev/null | grep "pong" || echo "")
     rabbitmq_status=$(docker compose -f $COMPOSE_FILE exec -T rabbitmq rabbitmq-diagnostics -q ping 2>/dev/null || echo "")
     redis_status=$(docker compose -f $COMPOSE_FILE exec -T redis redis-cli ping 2>/dev/null || echo "")
 
