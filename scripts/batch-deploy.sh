@@ -1,7 +1,6 @@
 set -e
 
-ENVIRONMENT=${1:-batch}
-BRANCH=${2:-dev}
+BRANCH=${1:-dev}
 
 ENV_FILE=.env.batch
 ENV=batch
