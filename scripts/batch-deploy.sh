@@ -24,6 +24,9 @@ git fetch origin || exit 1
 git checkout $BRANCH || exit 1
 git pull origin $BRANCH || exit 1
 
+echo "Updating git submodules..."
+git submodule update --init --recursive || exit 1
+
 echo "Installing dependencies with Poetry..."
 poetry install || { echo "Poetry installation failed!"; exit 1; }
 
