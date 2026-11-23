@@ -5,7 +5,7 @@ import socket
 class SlackNotifier:
     def __init__(self, webhook_url=None):
         if not webhook_url:  # DEFAULT WEBHOOK URL SETTING
-            webhook_url = "https://hooks.slack.com/services/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"
+            webhook_url = "REMOVED_CX1123_08"
         self.webhook_url = webhook_url
         self.server_info = self.__get_server_info()
 
