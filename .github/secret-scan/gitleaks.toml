@@ -1,0 +1,60 @@
+# CI 비밀 키 검사 관문(대표 결정 CX1123-08 = B, D26556) — 새 커밋에 비밀 키 꼴이 들어오면 이 검사가 실패해 머지 막음.
+# 기본 규칙 + 거래소·증권사 키 꼴. 가짜 값(시험)이면 그 줄 끝에 «gitleaks:allow» 주석. 진짜 값은 금고(Key Vault)·환경 변수로.
+# 정본: mwork2 ~/runs/armada/secgate-1123/template (주인·Armada)
+title = "quantus secret-scan gate"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "q-upbit-key"
+description = "업비트 access/secret key 대입"
+regex = '''(?i)upbit[\w.\-]{0,30}(?:access|secret)[\w\-]{0,12}["']?\s*[:=]\s*["']([A-Za-z0-9]{32,64})["']'''
+keywords = ["upbit"]
+secretGroup = 1
+
+[[rules]]
+id = "q-exchange-key"
+description = "거래소(바이낸스·OKX·바이비트·빗썸·코인원·코빗) key/secret/passphrase 대입"
+regex = '''(?i)(?:binance|okx|bybit|bithumb|coinone|korbit|gateio|kucoin)[\w.\-]{0,30}(?:key|secret|passphrase)\w{0,12}["']?\s*[:=]\s*["']([A-Za-z0-9+/=_\-]{16,128})["']'''
+keywords = ["binance", "okx", "bybit", "bithumb", "coinone", "korbit", "gateio", "kucoin"]
+secretGroup = 1
+
+[[rules]]
+id = "q-kis-appkey"
+description = "한국투자증권 등 appkey/appsecret 대입"
+regex = '''(?i)(?:app_?key|app_?secret)["']?\s*[:=]\s*["']([A-Za-z0-9+/=]{30,300})["']'''
+keywords = ["appkey", "app_key", "appsecret", "app_secret"]
+secretGroup = 1
+
+[[rules]]
+id = "q-url-password"
+description = "주소 안 비밀번호(scheme://user:pass@host)"
+regex = '''[a-zA-Z][a-zA-Z0-9+.\-]{1,20}://[^/\s:@'"]{1,100}:([^/\s@'"$<{%*]{4,200})@[A-Za-z0-9.\-]{3,}'''
+keywords = ["://"]
+secretGroup = 1
+entropy = 2.5
+
+[[rules]]
+id = "q-password-assign"
+description = "비밀번호 문자열 대입"
+regex = '''(?i)(?:password|passwd|db_pass\w{0,10}|pwd)["']?\s*[:=]\s*["']([^"'\s$<{%*]{8,100})["']'''
+keywords = ["password", "passwd", "db_pass", "pwd"]
+secretGroup = 1
+entropy = 3.0
+[[rules.allowlists]]
+description = "HTML autocomplete 속성값(비밀 아님) — 주인·Synex 11-23 12:40 synex-frontend account-form.tsx 오탐"
+regexTarget = "secret"
+regexes = ['''^(new|current)-password$''']
+
+[allowlist]
+description = "의존성·빌드 산출물·잠금 파일"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|poetry\.lock|Cargo\.lock|uv\.lock)$''',
+  '''\.min\.js$''',
+  '''(^|/)\.next/''',
+  '''(^|/)\.yarn/releases/''',
+  '''(^|/)crates/qc-server/(assets/terminal/xterm\.js|src/terminal_assets\.rs)$''',   # quantus-cloud 공식 @xterm/xterm 5.5.0 축약 한 줄(sha256 고정, 275KB 한 줄이라 줄 주석 안 들음 — TF·퀀터스 클라우드 11-23 12:43 실측)
+]
+stopwords = ["REMOVED_CX1123_08"]   # CX1123-08 키 빼기 자리표시(비밀 아님)
